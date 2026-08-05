@@ -389,4 +389,237 @@ export const SAMPLE_PROJECTS: SampleProject[] = [
         members: [MEMBERS.maya],
         lists: [],
     },
+    {
+        id: 'project-mobile-v2',
+        name: 'Mobile App v2',
+        color: '#0d9488',
+        members: [MEMBERS.maya, MEMBERS.jonas],
+        lists: [
+            {
+                id: 'mobile-backlog',
+                name: 'Backlog',
+                cards: [
+                    {
+                        id: 'card-widgets',
+                        title: 'Home screen widgets',
+                        labels: [LABELS.engineering],
+                    },
+                    {
+                        id: 'card-haptics',
+                        title: 'Haptic feedback pass on board interactions',
+                        labels: [LABELS.design],
+                    },
+                ],
+            },
+            {
+                id: 'mobile-building',
+                name: 'Building',
+                cards: [
+                    {
+                        id: 'card-offline',
+                        title: 'Offline mode — queue mutations while disconnected',
+                        labels: [LABELS.engineering],
+                        due: daysFromNow(9),
+                        assignees: [MEMBERS.maya],
+                    },
+                ],
+            },
+            {
+                id: 'mobile-shipped',
+                name: 'Shipped',
+                isDone: true,
+                cards: [{ id: 'card-push', title: 'Push notification preferences' }],
+            },
+        ],
+    },
+    {
+        id: 'project-feedback',
+        name: 'Customer Feedback',
+        color: '#ec4899',
+        members: [MEMBERS.tara, MEMBERS.eli],
+        lists: [
+            {
+                id: 'feedback-new',
+                name: 'New',
+                cards: [
+                    {
+                        id: 'card-csv-export',
+                        title: 'Request: export boards to CSV',
+                        comments: comments('card-csv-export', [
+                            [MEMBERS.tara, 'Mon', 'Third request this month — worth scoping.'],
+                        ]),
+                    },
+                    {
+                        id: 'card-slow-search',
+                        title: 'Search feels slow on large workspaces',
+                        labels: [LABELS.bug],
+                    },
+                ],
+            },
+            {
+                id: 'feedback-reviewing',
+                name: 'Reviewing',
+                cards: [
+                    {
+                        id: 'card-guest-role',
+                        title: 'Guests want comment-only access',
+                        labels: [LABELS.decision],
+                        assignees: [MEMBERS.eli],
+                    },
+                ],
+            },
+            { id: 'feedback-actioned', name: 'Actioned', isDone: true, cards: [] },
+        ],
+    },
+    {
+        id: 'project-bugs',
+        name: 'Bug Tracker',
+        color: '#ef4444',
+        members: [MEMBERS.maya, MEMBERS.tara],
+        lists: [
+            {
+                id: 'bugs-reported',
+                name: 'Reported',
+                cards: [
+                    {
+                        id: 'card-dupe-invite',
+                        title: 'Duplicate invite email when resending quickly',
+                        labels: [LABELS.bug],
+                    },
+                ],
+            },
+            {
+                id: 'bugs-fixing',
+                name: 'Fixing',
+                cards: [
+                    {
+                        id: 'card-tz-dst',
+                        title: 'Due dates shift an hour across DST',
+                        labels: [LABELS.bug, LABELS.engineering],
+                        due: daysFromNow(2),
+                        assignees: [MEMBERS.maya],
+                    },
+                ],
+            },
+            {
+                id: 'bugs-verified',
+                name: 'Verified',
+                isDone: true,
+                cards: [{ id: 'card-avatar-cache', title: 'Stale avatars after profile update' }],
+            },
+        ],
+    },
+    {
+        id: 'project-blog',
+        name: 'Blog Pipeline',
+        color: '#3b82f6',
+        members: [MEMBERS.eli],
+        lists: [
+            {
+                id: 'blog-ideas',
+                name: 'Ideas',
+                cards: [
+                    { id: 'card-post-selfhost', title: 'Why we bet on self-hosting' },
+                    {
+                        id: 'card-post-shortcuts',
+                        title: 'Keyboard-first design, a field guide',
+                        labels: [LABELS.content],
+                    },
+                ],
+            },
+            {
+                id: 'blog-drafting',
+                name: 'Drafting',
+                cards: [
+                    {
+                        id: 'card-post-launch-recap',
+                        title: 'Launch week recap',
+                        labels: [LABELS.content],
+                        due: daysFromNow(4),
+                        assignees: [MEMBERS.eli],
+                    },
+                ],
+            },
+            { id: 'blog-published', name: 'Published', isDone: true, cards: [] },
+        ],
+    },
+    {
+        id: 'project-hiring',
+        name: 'Hiring',
+        color: '#10b981',
+        members: [MEMBERS.jonas, MEMBERS.eli],
+        lists: [
+            {
+                id: 'hiring-sourcing',
+                name: 'Sourcing',
+                cards: [{ id: 'card-jd-mobile', title: 'Write mobile engineer job description' }],
+            },
+            {
+                id: 'hiring-interviewing',
+                name: 'Interviewing',
+                cards: [
+                    {
+                        id: 'card-loop-design',
+                        title: 'Design the interview loop',
+                        checklist: checklist('card-loop-design', [
+                            ['Screening questions', true],
+                            ['Take-home exercise', false],
+                            ['Panel schedule', false],
+                        ]),
+                        assignees: [MEMBERS.jonas],
+                    },
+                ],
+            },
+            { id: 'hiring-offer', name: 'Offer', cards: [] },
+        ],
+    },
+    {
+        id: 'project-infra',
+        name: 'Infrastructure',
+        color: '#6366f1',
+        members: [MEMBERS.maya],
+        lists: [
+            {
+                id: 'infra-planned',
+                name: 'Planned',
+                cards: [
+                    {
+                        id: 'card-backup-drills',
+                        title: 'Quarterly restore-from-backup drill',
+                        labels: [LABELS.engineering],
+                    },
+                ],
+            },
+            {
+                id: 'infra-in-flight',
+                name: 'In flight',
+                cards: [
+                    {
+                        id: 'card-cdn-assets',
+                        title: 'Move static assets behind the CDN',
+                        labels: [LABELS.engineering],
+                        assignees: [MEMBERS.maya],
+                    },
+                ],
+            },
+            { id: 'infra-done', name: 'Done', isDone: true, cards: [] },
+        ],
+    },
+    {
+        id: 'project-office',
+        name: 'Office Move',
+        color: '#64748b',
+        members: [MEMBERS.tara],
+        lists: [
+            {
+                id: 'office-todo',
+                name: 'To do',
+                cards: [
+                    { id: 'card-lease', title: 'Sign the new lease', due: daysFromNow(12) },
+                    { id: 'card-movers', title: 'Get quotes from three movers' },
+                ],
+            },
+            { id: 'office-done', name: 'Done', isDone: true, cards: [] },
+        ],
+    },
 ]
