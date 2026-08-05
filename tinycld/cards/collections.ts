@@ -2,9 +2,13 @@ import type { CoreStores } from '@tinycld/core/lib/pocketbase'
 import type { Schema } from '@tinycld/core/types/pbSchema'
 import type { createCollection } from 'pbtsdb/core'
 import { BasicIndex } from 'pbtsdb/core'
-import type { CardsSchema } from './types'
 
-type MergedSchema = Schema & CardsSchema
+// The generated Schema already carries the cards_* collections and their
+// relations — it is produced by replaying the on-disk migrations, ours
+// included. So there is no separate package schema to intersect in; the
+// hand-written CardsSchema this used to merge was a restatement of what the
+// generator emits (and typed the multi-relations as scalars, which was wrong).
+type MergedSchema = Schema
 
 const indexed = {
     autoIndex: 'eager' as const,
