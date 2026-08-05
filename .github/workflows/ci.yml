@@ -18,39 +18,71 @@ jobs:
     name: Typecheck & Unit
     runs-on: ubuntu-latest
     steps:
-      # 1. This PR's code, checked out into the member slot.
+      # This PR's code, checked out into its member slot. The workspace root is
+      # not a committed repo — bootstrap assembles it from scratch around this
+      # checkout. `--assemble-only` clones the `tinycld` member (app shell + core
+      # + package-scripts), skipping PACKAGE's slot since it's already present,
+      # so CI tests this PR's code.
       - uses: actions/checkout@v5
         with:
           path: ws/${{ env.PACKAGE }}
-      # 2. Pin a Node that satisfies bootstrap's engines.node (>=24) so the
-      #    assemble step below doesn't depend on whatever ubuntu-latest ships.
+      - name: Resolve sibling refs
+        id: sibling
+        run: |
+          # Coordinated cross-repo work (e.g. the single-org migration) lives on
+          # the SAME branch name in every repo. Assembling siblings from their
+          # default branch then typechecks this PR against a core that predates
+          # it — the branch's own APIs are simply absent, so every consumer
+          # fails with errors that look like the PR's fault.
+          #
+          # For each sibling, prefer a branch matching this PR's HEAD and fall
+          # back to its default branch when there is none (the ordinary
+          # single-repo PR, where every sibling should be at its release state).
+          #
+          # Only `tinycld` is listed: cards declares no sibling dependencies.
+          # M6's "attach from Drive" is presence-gated, so drive joins this loop
+          # (and the --with below) when that lands — not before, since cloning it
+          # now would slow every run for a package cards never imports.
+          BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+          for repo in tinycld; do
+            if [ -n "$BRANCH" ] && \
+               git ls-remote --exit-code --heads "https://github.com/tinycld/$repo" "$BRANCH" >/dev/null 2>&1; then
+              echo "${repo}_ref=@$BRANCH" >> "$GITHUB_OUTPUT"
+              echo "$repo -> $BRANCH"
+            else
+              echo "${repo}_ref=" >> "$GITHUB_OUTPUT"
+              echo "$repo -> (default branch)"
+            fi
+          done
+      # Pin a Node that satisfies bootstrap's engines.node (>=24) so the assemble
+      # step doesn't depend on whatever ubuntu-latest ships.
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
-      # 3. Assemble the workspace root: writes package.json + tinycld.packages.ts
-      #    from bootstrap's embedded templates, clones the tinycld member (app
-      #    shell + core + package-scripts) as a sibling. The PR's PACKAGE dir is
-      #    already there and is skipped.
-      - name: Assemble workspace (tinycld + this package)
+      - name: Assemble workspace (app + core)
         working-directory: ws
-        run: TINYCLD_REPO_BASE=https://github.com/tinycld npx @tinycld/bootstrap@latest --assemble-only
-      # 4. Now switch to the version the assembled workspace pins (ws/.node-version
-      #    is written by the assemble step above).
+        run: |
+          TINYCLD_REPO_BASE=https://github.com/tinycld \
+            npx @tinycld/bootstrap@latest --assemble-only \
+            --with "tinycld${{ steps.sibling.outputs.tinycld_ref }}"
+      # Switch to the version the assembled workspace pins (ws/.node-version is
+      # written by the assemble step above).
       - uses: actions/setup-node@v5
         with:
           node-version-file: ws/.node-version
       - uses: actions/setup-go@v6
         with:
           go-version-file: ws/.go-version
-      # 5. Enable corepack so the pnpm version pinned in the workspace root's
-      #    package.json "packageManager" field is used. pnpm discovers members
-      #    from pnpm-workspace.yaml; node-linker=hoisted (set there) gives an
-      #    npm-like flat node_modules so member peerDeps resolve.
-      - name: Enable corepack (pnpm)
-        run: corepack enable
+      # corepack enables the pnpm version pinned in the workspace root's
+      # "packageManager" field. pnpm discovers members from pnpm-workspace.yaml;
+      # node-linker=hoisted (set there) gives a flat node_modules so member
+      # peerDeps resolve.
       - name: Install (workspace root)
         working-directory: ws
-        run: pnpm install --no-frozen-lockfile
+        run: corepack enable && pnpm install --no-frozen-lockfile
+      # Also the real test of the PB migrations: install runs the generator,
+      # which boots a throwaway PocketBase and replays every migration to
+      # regenerate pbSchema.ts. A migration that can't apply fails here.
       - name: Typecheck + unit
         working-directory: ws/${{ env.PACKAGE }}
         run: pnpm exec tinycld-pkg check
@@ -62,44 +94,83 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: ws/${{ env.PACKAGE }}
-      # Pin a Node that satisfies bootstrap's engines.node (>=24) so the
-      # assemble step below doesn't depend on whatever ubuntu-latest ships.
+      # Playwright exits 0 when testDir contains no specs, so without this gate
+      # the job would assemble a workspace, build a bundle and boot a server for
+      # several minutes, then report green having run nothing — a check that
+      # cannot fail, which reads as coverage on the PR page. cards has no
+      # tests/e2e yet (it arrives with M7); skip honestly until it does.
+      - name: Check for e2e specs
+        id: specs
+        run: |
+          # `find`, not a glob: specs may sit in subdirectories, and a glob that
+          # only matches the top level would silently skip them — reintroducing
+          # the false green from the other direction.
+          if [ -n "$(find "ws/${{ env.PACKAGE }}/tests/e2e" -name '*.spec.ts' -print -quit 2>/dev/null)" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No *.spec.ts under ${{ env.PACKAGE }}/tests/e2e — skipping E2E."
+          fi
+      - name: Resolve sibling refs
+        if: steps.specs.outputs.found == 'true'
+        id: sibling
+        run: |
+          # See the check job for why this exists.
+          BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+          for repo in tinycld; do
+            if [ -n "$BRANCH" ] && \
+               git ls-remote --exit-code --heads "https://github.com/tinycld/$repo" "$BRANCH" >/dev/null 2>&1; then
+              echo "${repo}_ref=@$BRANCH" >> "$GITHUB_OUTPUT"
+              echo "$repo -> $BRANCH"
+            else
+              echo "${repo}_ref=" >> "$GITHUB_OUTPUT"
+              echo "$repo -> (default branch)"
+            fi
+          done
       - uses: actions/setup-node@v5
+        if: steps.specs.outputs.found == 'true'
         with:
           node-version: '24'
-      - name: Assemble workspace (tinycld + this package)
+      - name: Assemble workspace (app + core)
+        if: steps.specs.outputs.found == 'true'
         working-directory: ws
-        run: TINYCLD_REPO_BASE=https://github.com/tinycld npx @tinycld/bootstrap@latest --assemble-only
-      # Switch to the version the assembled workspace pins.
+        run: |
+          TINYCLD_REPO_BASE=https://github.com/tinycld \
+            npx @tinycld/bootstrap@latest --assemble-only \
+            --with "tinycld${{ steps.sibling.outputs.tinycld_ref }}"
       - uses: actions/setup-node@v5
+        if: steps.specs.outputs.found == 'true'
         with:
           node-version-file: ws/.node-version
       - uses: actions/setup-go@v6
+        if: steps.specs.outputs.found == 'true'
         with:
           go-version-file: ws/.go-version
-      - name: Enable corepack (pnpm)
-        run: corepack enable
       - name: Install (workspace root)
+        if: steps.specs.outputs.found == 'true'
         working-directory: ws
-        run: pnpm install --no-frozen-lockfile
-      # Installs the Playwright browser and pre-builds the web bundle. The
-      # composite action lives in the tinycld member, assembled at ws/tinycld.
+        run: corepack enable && pnpm install --no-frozen-lockfile
+      # Shared e2e prep: installs the Playwright browser and pre-builds the
+      # static web bundle (expo export + sourcemaps). e2e serves that bundle
+      # statically — there's no Metro at runtime. The E2E step reuses the built
+      # bundle via TINYCLD_E2E_SKIP_EXPORT.
       - name: Configure test env
+        if: steps.specs.outputs.found == 'true'
         uses: ./ws/tinycld/.github/actions/configure-test-env
       - name: E2E
+        if: steps.specs.outputs.found == 'true'
         working-directory: ws/${{ env.PACKAGE }}
         env:
           # The bundle was built by the action above; reuse it (the webServer
           # still seeds + promotes + serves, just doesn't export a second time).
           TINYCLD_E2E_SKIP_EXPORT: '1'
         run: pnpm exec tinycld-pkg test:e2e
-      # Capture Playwright's per-failure artifacts (trace, screenshot,
-      # video, error-context.md) so a CI failure can be diagnosed
-      # without a re-run. `if: failure()` skips the upload on green
-      # runs to save bandwidth + retention.
+      # Capture Playwright's per-failure artifacts (trace, screenshot, video,
+      # error-context.md) so a CI failure can be diagnosed without a re-run.
+      # `if: failure()` skips the upload on green runs to save bandwidth.
       - name: Upload Playwright artifacts
-        if: failure()
-        uses: actions/upload-artifact@v4
+        if: failure() && steps.specs.outputs.found == 'true'
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-artifacts
           path: |
