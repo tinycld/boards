@@ -1,0 +1,249 @@
+export interface ProjectMember {
+    id: string
+    firstName: string
+    lastName: string
+}
+
+export interface CardLabel {
+    id: string
+    name: string
+    color: string
+}
+
+export interface ChecklistProgress {
+    done: number
+    total: number
+}
+
+export interface BoardCard {
+    id: string
+    title: string
+    labels?: CardLabel[]
+    due?: Date
+    checklist?: ChecklistProgress
+    comments?: number
+    assignees?: ProjectMember[]
+}
+
+export interface BoardList {
+    id: string
+    name: string
+    isDone?: boolean
+    cards: BoardCard[]
+}
+
+export interface SampleProject {
+    id: string
+    name: string
+    color: string
+    members: ProjectMember[]
+    lists: BoardList[]
+}
+
+const MEMBERS: Record<string, ProjectMember> = {
+    maya: { id: 'member-maya', firstName: 'Maya', lastName: 'Kim' },
+    jonas: { id: 'member-jonas', firstName: 'Jonas', lastName: 'Reyes' },
+    tara: { id: 'member-tara', firstName: 'Tara', lastName: 'Singh' },
+    eli: { id: 'member-eli', firstName: 'Eli', lastName: 'Laurent' },
+}
+
+const LABELS: Record<string, CardLabel> = {
+    marketing: { id: 'label-marketing', name: 'Marketing', color: '#ec4899' },
+    engineering: { id: 'label-engineering', name: 'Engineering', color: '#3b82f6' },
+    design: { id: 'label-design', name: 'Design', color: '#06b6d4' },
+    bug: { id: 'label-bug', name: 'Bug', color: '#ef4444' },
+    decision: { id: 'label-decision', name: 'Decision', color: '#d97706' },
+    content: { id: 'label-content', name: 'Content', color: '#8b5cf6' },
+}
+
+// Sample dates are relative to "now" so due states (overdue / soon / upcoming)
+// stay demonstrable no matter when the app is opened.
+function daysFromNow(days: number): Date {
+    return new Date(Date.now() + days * 86_400_000)
+}
+
+export const SAMPLE_PROJECTS: SampleProject[] = [
+    {
+        id: 'project-launch',
+        name: 'Product Launch',
+        color: '#8b5cf6',
+        members: [MEMBERS.maya, MEMBERS.jonas, MEMBERS.tara, MEMBERS.eli],
+        lists: [
+            {
+                id: 'launch-backlog',
+                name: 'Backlog',
+                cards: [
+                    {
+                        id: 'card-appstore',
+                        title: 'Write App Store description and keywords',
+                        labels: [LABELS.marketing],
+                    },
+                    {
+                        id: 'card-pricing',
+                        title: 'Choose launch-day pricing tier',
+                        labels: [LABELS.decision],
+                        comments: 4,
+                    },
+                    {
+                        id: 'card-waitlist',
+                        title: 'Migrate waitlist emails into the mail package',
+                        labels: [LABELS.engineering],
+                    },
+                    {
+                        id: 'card-faq',
+                        title: 'Draft FAQ topics for the help hub',
+                    },
+                    {
+                        id: 'card-demo-video',
+                        title: 'Record 30-second demo video',
+                        labels: [LABELS.marketing],
+                        due: daysFromNow(17),
+                        assignees: [MEMBERS.eli],
+                    },
+                ],
+            },
+            {
+                id: 'launch-up-next',
+                name: 'Up next',
+                cards: [
+                    {
+                        id: 'card-onboarding',
+                        title: 'Design onboarding checklist screens',
+                        labels: [LABELS.design],
+                        checklist: { done: 0, total: 4 },
+                        assignees: [MEMBERS.jonas],
+                    },
+                    {
+                        id: 'card-crash-alerts',
+                        title: 'Set up crash reporting alerts',
+                        labels: [LABELS.engineering],
+                        assignees: [MEMBERS.maya],
+                    },
+                    {
+                        id: 'card-press-kit',
+                        title: 'Press kit — logos, screenshots, boilerplate',
+                        labels: [LABELS.marketing],
+                        comments: 2,
+                    },
+                ],
+            },
+            {
+                id: 'launch-in-progress',
+                name: 'In progress',
+                cards: [
+                    {
+                        id: 'card-beta-triage',
+                        title: 'Beta feedback triage — week 32',
+                        labels: [LABELS.engineering, LABELS.bug],
+                        due: daysFromNow(1),
+                        checklist: { done: 3, total: 8 },
+                        comments: 5,
+                        assignees: [MEMBERS.maya, MEMBERS.tara],
+                    },
+                    {
+                        id: 'card-hero-copy',
+                        title: 'Landing page hero copy',
+                        labels: [LABELS.marketing],
+                        due: daysFromNow(-3),
+                        assignees: [MEMBERS.eli],
+                    },
+                    {
+                        id: 'card-payments',
+                        title: 'Payment provider sandbox testing',
+                        labels: [LABELS.engineering],
+                        checklist: { done: 5, total: 6 },
+                    },
+                    {
+                        id: 'card-localize',
+                        title: 'Localize screenshots for DE and FR',
+                        labels: [LABELS.design],
+                        comments: 1,
+                        assignees: [MEMBERS.jonas],
+                    },
+                ],
+            },
+            {
+                id: 'launch-in-review',
+                name: 'In review',
+                cards: [
+                    {
+                        id: 'card-a11y-audit',
+                        title: 'Signup flow accessibility audit',
+                        labels: [LABELS.design],
+                        checklist: { done: 6, total: 6 },
+                        comments: 3,
+                        assignees: [MEMBERS.tara],
+                    },
+                    {
+                        id: 'card-blog-post',
+                        title: 'Announcement blog post',
+                        labels: [LABELS.marketing],
+                        assignees: [MEMBERS.eli, MEMBERS.maya],
+                    },
+                ],
+            },
+            {
+                id: 'launch-done',
+                name: 'Done',
+                isDone: true,
+                cards: [
+                    { id: 'card-testflight', title: 'Set up TestFlight beta group' },
+                    { id: 'card-competitors', title: 'Competitor pricing research' },
+                    { id: 'card-app-icon', title: 'App icon final round' },
+                    { id: 'card-tos', title: 'Terms of service review' },
+                ],
+            },
+        ],
+    },
+    {
+        id: 'project-website',
+        name: 'Website Redesign',
+        color: '#0ea5e9',
+        members: [MEMBERS.jonas, MEMBERS.eli],
+        lists: [
+            {
+                id: 'website-ideas',
+                name: 'Ideas',
+                cards: [
+                    {
+                        id: 'card-docs-search',
+                        title: 'Full-text search across the docs section',
+                        labels: [LABELS.engineering],
+                    },
+                    {
+                        id: 'card-customer-stories',
+                        title: 'Customer stories page',
+                        labels: [LABELS.content],
+                        comments: 2,
+                    },
+                ],
+            },
+            {
+                id: 'website-writing',
+                name: 'Writing',
+                cards: [
+                    {
+                        id: 'card-pricing-page',
+                        title: 'Rewrite pricing page comparison table',
+                        labels: [LABELS.content],
+                        due: daysFromNow(6),
+                        assignees: [MEMBERS.eli],
+                    },
+                ],
+            },
+            {
+                id: 'website-shipped',
+                name: 'Shipped',
+                isDone: true,
+                cards: [],
+            },
+        ],
+    },
+    {
+        id: 'project-onboarding',
+        name: 'Team Onboarding',
+        color: '#d97706',
+        members: [MEMBERS.maya],
+        lists: [],
+    },
+]
