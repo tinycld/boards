@@ -1,0 +1,83 @@
+import { hexToRgba } from '@tinycld/core/lib/color-utils'
+import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
+import { Pressable, Text, View } from 'react-native'
+import type { BoardCard, BoardList, SampleProject } from '../../sample-projects'
+import { useCardsUIStore } from '../../stores/cards-ui-store'
+
+const SEGMENT_WIDTH = 20
+const SEGMENT_HEIGHT = 7
+
+interface ListStepperProps {
+    project: SampleProject
+    card: BoardCard
+    list: BoardList
+}
+
+/**
+ * The card's position on the board as a row of one-per-list segments, filled
+ * through the current list. Pressing a segment moves the card there — the
+ * board's list sequence is the card's status, so the control that shows it
+ * is the control that changes it.
+ */
+export function ListStepper({ project, card, list }: ListStepperProps) {
+    const moveCard = useCardsUIStore(s => s.moveCard)
+    const successColor = useThemeColor('success')
+    const currentIndex = project.lists.findIndex(target => target.id === list.id)
+
+    return (
+        <View className="flex-row items-center gap-2 shrink min-w-0">
+            <View className="flex-row gap-[3px]">
+                {project.lists.map((target, index) => (
+                    <StepperSegment
+                        key={target.id}
+                        name={target.name}
+                        fillColor={segmentFill(project, list, index, currentIndex, successColor)}
+                        borderColor={hexToRgba(project.color, 0.45)}
+                        onPress={() => moveCard(card.id, target.id)}
+                    />
+                ))}
+            </View>
+            <Text className="text-[12.5px] font-semibold text-foreground" numberOfLines={1}>
+                {list.name}
+            </Text>
+        </View>
+    )
+}
+
+function segmentFill(
+    project: SampleProject,
+    list: BoardList,
+    index: number,
+    currentIndex: number,
+    successColor: string
+): string | null {
+    if (index > currentIndex) return null
+    if (list.isDone && index === currentIndex) return successColor
+    return project.color
+}
+
+interface StepperSegmentProps {
+    name: string
+    fillColor: string | null
+    borderColor: string
+    onPress: () => void
+}
+
+function StepperSegment({ name, fillColor, borderColor, onPress }: StepperSegmentProps) {
+    return (
+        <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Move to ${name}`}
+            onPress={onPress}
+            hitSlop={6}
+            className="rounded-[4px] web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+            style={{
+                width: SEGMENT_WIDTH,
+                height: SEGMENT_HEIGHT,
+                borderWidth: 1.5,
+                borderColor: fillColor ?? borderColor,
+                backgroundColor: fillColor ?? 'transparent',
+            }}
+        />
+    )
+}

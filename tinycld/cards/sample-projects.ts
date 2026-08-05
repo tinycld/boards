@@ -10,18 +10,27 @@ export interface CardLabel {
     color: string
 }
 
-export interface ChecklistProgress {
-    done: number
-    total: number
+export interface ChecklistItem {
+    id: string
+    title: string
+    isDone: boolean
+}
+
+export interface CardComment {
+    id: string
+    author: ProjectMember
+    timeAgo: string
+    text: string
 }
 
 export interface BoardCard {
     id: string
     title: string
+    description?: string
     labels?: CardLabel[]
     due?: Date
-    checklist?: ChecklistProgress
-    comments?: number
+    checklist?: ChecklistItem[]
+    comments?: CardComment[]
     assignees?: ProjectMember[]
 }
 
@@ -62,6 +71,23 @@ function daysFromNow(days: number): Date {
     return new Date(Date.now() + days * 86_400_000)
 }
 
+function checklist(cardId: string, items: [string, boolean][]): ChecklistItem[] {
+    return items.map(([title, isDone], index) => ({
+        id: `${cardId}-check-${index}`,
+        title,
+        isDone,
+    }))
+}
+
+function comments(cardId: string, entries: [ProjectMember, string, string][]): CardComment[] {
+    return entries.map(([author, timeAgo, text], index) => ({
+        id: `${cardId}-comment-${index}`,
+        author,
+        timeAgo,
+        text,
+    }))
+}
+
 export const SAMPLE_PROJECTS: SampleProject[] = [
     {
         id: 'project-launch',
@@ -82,7 +108,28 @@ export const SAMPLE_PROJECTS: SampleProject[] = [
                         id: 'card-pricing',
                         title: 'Choose launch-day pricing tier',
                         labels: [LABELS.decision],
-                        comments: 4,
+                        comments: comments('card-pricing', [
+                            [
+                                MEMBERS.eli,
+                                'Mon',
+                                'Draft tiers are in the description — flat $6/mo, or $4 with a paid family add-on.',
+                            ],
+                            [
+                                MEMBERS.maya,
+                                'Mon',
+                                'The family add-on complicates the App Store listing. Flat is easier to explain.',
+                            ],
+                            [
+                                MEMBERS.jonas,
+                                'Tue',
+                                '+1 flat. We can revisit family pricing after launch.',
+                            ],
+                            [
+                                MEMBERS.eli,
+                                'Tue',
+                                'Marking this decided on Friday unless anyone objects.',
+                            ],
+                        ]),
                     },
                     {
                         id: 'card-waitlist',
@@ -109,8 +156,15 @@ export const SAMPLE_PROJECTS: SampleProject[] = [
                     {
                         id: 'card-onboarding',
                         title: 'Design onboarding checklist screens',
+                        description:
+                            'Four screens, one job each. Keep copy under two lines per screen and reuse the board empty-state illustration style.',
                         labels: [LABELS.design],
-                        checklist: { done: 0, total: 4 },
+                        checklist: checklist('card-onboarding', [
+                            ['Welcome screen', false],
+                            ['Create first board', false],
+                            ['Invite a teammate', false],
+                            ['Notifications prompt', false],
+                        ]),
                         assignees: [MEMBERS.jonas],
                     },
                     {
@@ -123,7 +177,18 @@ export const SAMPLE_PROJECTS: SampleProject[] = [
                         id: 'card-press-kit',
                         title: 'Press kit — logos, screenshots, boilerplate',
                         labels: [LABELS.marketing],
-                        comments: 2,
+                        comments: comments('card-press-kit', [
+                            [
+                                MEMBERS.eli,
+                                'Jul 29',
+                                'Logos and boilerplate are done; still need dark-mode screenshots.',
+                            ],
+                            [
+                                MEMBERS.jonas,
+                                'Jul 30',
+                                'I’ll export those together with the localized set.',
+                            ],
+                        ]),
                     },
                 ],
             },
@@ -134,15 +199,50 @@ export const SAMPLE_PROJECTS: SampleProject[] = [
                     {
                         id: 'card-beta-triage',
                         title: 'Beta feedback triage — week 32',
+                        description:
+                            'Work through beta feedback from week 32 (TestFlight build 41). Merge duplicates, file real bugs with repro steps, and reply to every reporter. Anything that can’t ship before launch moves to Backlog with a note.',
                         labels: [LABELS.engineering, LABELS.bug],
                         due: daysFromNow(1),
-                        checklist: { done: 3, total: 8 },
-                        comments: 5,
+                        checklist: checklist('card-beta-triage', [
+                            ['Merge duplicate crash reports', true],
+                            ['Reply to week-31 stragglers', true],
+                            ['File sync-conflict bug with repro steps', true],
+                            ['Triage Android keyboard reports', false],
+                            ['Confirm fix for the login loop', false],
+                            ['Tag launch-blockers', false],
+                            ['Close out resolved threads', false],
+                            ['Post summary in the beta channel', false],
+                        ]),
+                        comments: comments('card-beta-triage', [
+                            [
+                                MEMBERS.maya,
+                                '2d',
+                                'Sorted this week’s reports into the checklist — duplicates are already merged.',
+                            ],
+                            [
+                                MEMBERS.tara,
+                                '2d',
+                                'The two sync crashes are the same underlying bug. Filed as one item with both repros.',
+                            ],
+                            [
+                                MEMBERS.jonas,
+                                '1d',
+                                'Can we split the Android keyboard issue out? It doesn’t look launch-blocking.',
+                            ],
+                            [MEMBERS.maya, '1d', 'Done — moved it to Backlog with a note.'],
+                            [
+                                MEMBERS.tara,
+                                '3h',
+                                'Down to five open items. Should clear by Thursday.',
+                            ],
+                        ]),
                         assignees: [MEMBERS.maya, MEMBERS.tara],
                     },
                     {
                         id: 'card-hero-copy',
                         title: 'Landing page hero copy',
+                        description:
+                            'Three variants are drafted in the shared doc. Pick one, cut it to two sentences, and hand off to design for the landing page build.',
                         labels: [LABELS.marketing],
                         due: daysFromNow(-3),
                         assignees: [MEMBERS.eli],
@@ -150,14 +250,29 @@ export const SAMPLE_PROJECTS: SampleProject[] = [
                     {
                         id: 'card-payments',
                         title: 'Payment provider sandbox testing',
+                        description:
+                            'Run the sandbox checklist against the staging environment before we request production keys.',
                         labels: [LABELS.engineering],
-                        checklist: { done: 5, total: 6 },
+                        checklist: checklist('card-payments', [
+                            ['Test card happy path', true],
+                            ['3-D Secure challenge flow', true],
+                            ['Declined-card messaging', true],
+                            ['Webhook retries', true],
+                            ['Refund flow', true],
+                            ['Upgrade proration', false],
+                        ]),
                     },
                     {
                         id: 'card-localize',
                         title: 'Localize screenshots for DE and FR',
                         labels: [LABELS.design],
-                        comments: 1,
+                        comments: comments('card-localize', [
+                            [
+                                MEMBERS.jonas,
+                                '5h',
+                                'DE strings came back long — the hero screenshot needs a second line.',
+                            ],
+                        ]),
                         assignees: [MEMBERS.jonas],
                     },
                 ],
@@ -169,9 +284,30 @@ export const SAMPLE_PROJECTS: SampleProject[] = [
                     {
                         id: 'card-a11y-audit',
                         title: 'Signup flow accessibility audit',
+                        description:
+                            'Full audit of the signup flow against WCAG 2.2 AA, on both VoiceOver and TalkBack.',
                         labels: [LABELS.design],
-                        checklist: { done: 6, total: 6 },
-                        comments: 3,
+                        checklist: checklist('card-a11y-audit', [
+                            ['Labels on all inputs', true],
+                            ['Focus order', true],
+                            ['VoiceOver walkthrough', true],
+                            ['TalkBack walkthrough', true],
+                            ['Contrast ratios', true],
+                            ['Error announcements', true],
+                        ]),
+                        comments: comments('card-a11y-audit', [
+                            [
+                                MEMBERS.tara,
+                                'Jul 31',
+                                'Audit complete — all six items pass on VoiceOver and TalkBack.',
+                            ],
+                            [
+                                MEMBERS.maya,
+                                'Aug 1',
+                                'The contrast fix on the signup button is merged.',
+                            ],
+                            [MEMBERS.tara, 'Aug 1', 'Ready for sign-off.'],
+                        ]),
                         assignees: [MEMBERS.tara],
                     },
                     {
@@ -214,7 +350,14 @@ export const SAMPLE_PROJECTS: SampleProject[] = [
                         id: 'card-customer-stories',
                         title: 'Customer stories page',
                         labels: [LABELS.content],
-                        comments: 2,
+                        comments: comments('card-customer-stories', [
+                            [
+                                MEMBERS.eli,
+                                'Jul 22',
+                                'Two beta teams agreed to be featured — intros are in the doc.',
+                            ],
+                            [MEMBERS.jonas, 'Jul 23', 'I’ll draft the page layout this week.'],
+                        ]),
                     },
                 ],
             },

@@ -3,18 +3,11 @@ import { ScrollView, View } from 'react-native'
 import { AddListColumn } from '../components/AddListColumn'
 import { BoardColumn } from '../components/BoardColumn'
 import { BoardHeader } from '../components/BoardHeader'
+import { CardPeek } from '../components/CardPeek'
 import { EmptyBoard } from '../components/EmptyBoard'
 import { ProjectWash } from '../components/ProjectWash'
+import { useActiveBoard } from '../hooks/useActiveBoard'
 import type { SampleProject } from '../sample-projects'
-import { SAMPLE_PROJECTS } from '../sample-projects'
-import { useCardsUIStore } from '../stores/cards-ui-store'
-
-function useActiveBoard() {
-    const activeProjectId = useCardsUIStore(s => s.activeProjectId)
-    const project = SAMPLE_PROJECTS.find(p => p.id === activeProjectId) ?? SAMPLE_PROJECTS[0]
-    const cardCount = project.lists.reduce((total, list) => total + list.cards.length, 0)
-    return { project, cardCount }
-}
 
 export default function CardsIndex() {
     const { project, cardCount } = useActiveBoard()
@@ -25,6 +18,7 @@ export default function CardsIndex() {
             <ProjectWash color={project.color} />
             <BoardHeader project={project} cardCount={cardCount} />
             <BoardCanvas project={project} />
+            <CardPeek project={project} />
         </View>
     )
 }

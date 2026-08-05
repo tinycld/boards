@@ -10,9 +10,9 @@ const WASH_ALPHA = 0.08
  * without painting any component. Alpha is tuned to read over both the
  * white and near-black backgrounds.
  */
-export function ProjectWash({ color }: { color: string }) {
+export function ProjectWash({ color, height = WASH_HEIGHT }: { color: string; height?: number }) {
     return (
-        <View style={[StyleSheet.absoluteFill, { height: WASH_HEIGHT }]} pointerEvents="none">
+        <View style={[StyleSheet.absoluteFill, { height }]} pointerEvents="none">
             <Svg width="100%" height="100%">
                 <Defs>
                     <LinearGradient id="project-wash" x1="0" y1="0" x2="0" y2="1">

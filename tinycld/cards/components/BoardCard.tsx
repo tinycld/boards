@@ -3,8 +3,10 @@ import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { CalendarDays, CircleCheck, Clock, MessageSquare, SquareCheck } from 'lucide-react-native'
 import { Pressable, Text, View } from 'react-native'
+import { checklistProgress } from '../lib/board-cards'
 import { dueStateFor, formatDueDate } from '../lib/due-state'
 import type { BoardCard as BoardCardData, CardLabel, ProjectMember } from '../sample-projects'
+import { useCardsUIStore } from '../stores/cards-ui-store'
 
 const MAX_LABELS = 3
 
@@ -13,13 +15,23 @@ interface BoardCardProps {
     isDone?: boolean
 }
 
+function useCardPress(cardId: string) {
+    const openCard = useCardsUIStore(s => s.openCard)
+    const isOpen = useCardsUIStore(s => s.openCardId === cardId)
+    return { isOpen, onPress: () => openCard(cardId) }
+}
+
 export function BoardCard({ card, isDone }: BoardCardProps) {
-    if (isDone) return <DoneCard title={card.title} />
+    const { isOpen, onPress } = useCardPress(card.id)
+    if (isDone) return <DoneCard title={card.title} isOpen={isOpen} onPress={onPress} />
 
     return (
         <Pressable
             accessibilityRole="button"
-            className="bg-card border border-border rounded-[10px] px-3 py-2.5 gap-1.5 shadow-sm web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring hover:border-muted/50"
+            onPress={onPress}
+            className={`bg-card border rounded-[10px] px-3 py-2.5 gap-1.5 shadow-sm web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${
+                isOpen ? 'border-ring' : 'border-border hover:border-muted/50'
+            }`}
         >
             <CardLabels labels={card.labels ?? []} />
             <Text
@@ -33,12 +45,21 @@ export function BoardCard({ card, isDone }: BoardCardProps) {
     )
 }
 
-function DoneCard({ title }: { title: string }) {
+interface DoneCardProps {
+    title: string
+    isOpen: boolean
+    onPress: () => void
+}
+
+function DoneCard({ title, isOpen, onPress }: DoneCardProps) {
     const successColor = useThemeColor('success')
     return (
         <Pressable
             accessibilityRole="button"
-            className="bg-card border border-border rounded-[10px] px-3 py-2.5 shadow-sm web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+            onPress={onPress}
+            className={`bg-card border rounded-[10px] px-3 py-2.5 shadow-sm web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${
+                isOpen ? 'border-ring' : 'border-border'
+            }`}
         >
             <View className="flex-row items-start gap-2">
                 <View className="mt-px">
@@ -70,14 +91,14 @@ function CardLabels({ labels }: { labels: CardLabel[] }) {
 }
 
 function CardMeta({ card }: { card: BoardCardData }) {
-    const hasPills = card.due || card.checklist || card.comments
+    const hasPills = card.due || card.checklist?.length || card.comments?.length
     if (!hasPills && !card.assignees?.length) return null
 
     return (
         <View className="flex-row items-center gap-2.5 min-h-[20px]">
             <DuePill due={card.due} />
             <ChecklistPill checklist={card.checklist} />
-            <CommentsPill count={card.comments} />
+            <CommentsPill count={card.comments?.length ?? 0} />
             <View className="flex-1" />
             <CardAssignees assignees={card.assignees ?? []} />
         </View>
@@ -121,9 +142,9 @@ function DuePill({ due }: { due?: Date }) {
 function ChecklistPill({ checklist }: { checklist?: BoardCardData['checklist'] }) {
     const mutedColor = useThemeColor('muted')
     const successColor = useThemeColor('success')
-    if (!checklist) return null
+    if (!checklist?.length) return null
 
-    const isComplete = checklist.done === checklist.total
+    const { done, total, isComplete } = checklistProgress(checklist)
     const color = isComplete ? successColor : mutedColor
     return (
         <View className="flex-row items-center gap-1">
@@ -131,13 +152,13 @@ function ChecklistPill({ checklist }: { checklist?: BoardCardData['checklist'] }
             <Text
                 className={`text-[11px] font-medium ${isComplete ? 'text-success' : 'text-muted'}`}
             >
-                {checklist.done}/{checklist.total}
+                {done}/{total}
             </Text>
         </View>
     )
 }
 
-function CommentsPill({ count }: { count?: number }) {
+function CommentsPill({ count }: { count: number }) {
     const mutedColor = useThemeColor('muted')
     if (!count) return null
 

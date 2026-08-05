@@ -11,6 +11,7 @@ const manifest = {
         shortcut: 'k',
     },
     sidebar: { component: 'sidebar' },
+    help: { directory: 'help' },
 }
 
 export default manifest

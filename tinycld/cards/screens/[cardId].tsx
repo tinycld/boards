@@ -1,0 +1,136 @@
+import { DocumentTitle } from '@tinycld/core/components/DocumentTitle'
+import { useOrgHref } from '@tinycld/core/lib/org-routes'
+import { type Shortcut, useRegisterShortcuts, useShortcutScope } from '@tinycld/core/lib/shortcuts'
+import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
+import { useNavigateBack } from '@tinycld/core/lib/use-navigate-back'
+import { useLocalSearchParams, useRouter } from 'expo-router'
+import { ChevronLeft, MoreHorizontal } from 'lucide-react-native'
+import { useMemo, useRef } from 'react'
+import { Pressable, Text, View } from 'react-native'
+import { CardDetail } from '../components/detail/CardDetail'
+import { IconButton } from '../components/detail/IconButton'
+import { ListStepper } from '../components/detail/ListStepper'
+import { ProjectWash } from '../components/ProjectWash'
+import { useActiveBoard } from '../hooks/useActiveBoard'
+import { type CardEntry, findCardEntry, neighborCardId } from '../lib/board-cards'
+import type { SampleProject } from '../sample-projects'
+
+function usePageShortcuts(project: SampleProject, cardId: string, goBack: () => void) {
+    const router = useRouter()
+    const orgHref = useOrgHref()
+    // A second Escape while the back navigation is in flight slips past
+    // router.canGoBack() and surfaces a GO_BACK error toast — leave at most
+    // once per mounted card page.
+    const leavingRef = useRef(false)
+    useShortcutScope('thread')
+
+    const shortcuts = useMemo<Shortcut[]>(() => {
+        const step = (delta: number) => {
+            const next = neighborCardId(project, cardId, delta)
+            if (next) router.replace(orgHref('cards/[cardId]', { cardId: next }))
+        }
+        return [
+            {
+                id: 'cards.page.back',
+                keys: 'Escape',
+                scope: 'thread',
+                group: 'Cards',
+                description: 'Back to board',
+                run: () => {
+                    if (leavingRef.current) return
+                    leavingRef.current = true
+                    goBack()
+                },
+            },
+            {
+                id: 'cards.page.next',
+                keys: 'j',
+                scope: 'thread',
+                group: 'Cards',
+                description: 'Next card',
+                run: () => step(1),
+            },
+            {
+                id: 'cards.page.prev',
+                keys: 'k',
+                scope: 'thread',
+                group: 'Cards',
+                description: 'Previous card',
+                run: () => step(-1),
+            },
+        ]
+    }, [project, cardId, goBack, router, orgHref])
+    useRegisterShortcuts(shortcuts)
+}
+
+export default function CardDetailScreen() {
+    const { cardId = '' } = useLocalSearchParams<{ cardId: string }>()
+    const orgHref = useOrgHref()
+    const navigateBack = useNavigateBack(() => orgHref('cards'))
+    const { project } = useActiveBoard()
+    const entry = findCardEntry(project, cardId)
+
+    if (!entry) return <CardNotFound onBack={navigateBack} />
+
+    return <CardPage project={project} entry={entry} cardId={cardId} navigateBack={navigateBack} />
+}
+
+interface CardPageProps {
+    project: SampleProject
+    entry: CardEntry
+    cardId: string
+    navigateBack: () => void
+}
+
+function CardPage({ project, entry, cardId, navigateBack }: CardPageProps) {
+    const mutedColor = useThemeColor('muted')
+    usePageShortcuts(project, cardId, navigateBack)
+
+    return (
+        <View className="flex-1 bg-background">
+            <DocumentTitle pkg="Cards" title={entry.card.title} />
+            <ProjectWash color={project.color} />
+            <View className="flex-row items-center gap-2 pl-3 pr-4 pt-3 pb-2">
+                <BackButton label={project.name} onPress={navigateBack} />
+                <ListStepper project={project} card={entry.card} list={entry.list} />
+                <View className="flex-1" />
+                <IconButton label="More actions">
+                    <MoreHorizontal size={15} color={mutedColor} strokeWidth={2.2} />
+                </IconButton>
+            </View>
+            <CardDetail card={entry.card} variant="page" />
+        </View>
+    )
+}
+
+function BackButton({ label, onPress }: { label: string; onPress: () => void }) {
+    const mutedColor = useThemeColor('muted')
+    return (
+        <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to board"
+            onPress={onPress}
+            className="flex-row items-center gap-1 rounded-[7px] py-[5px] pl-1.5 pr-2.5 hover:bg-foreground/5 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+        >
+            <ChevronLeft size={14} color={mutedColor} strokeWidth={2.2} />
+            <Text className="text-[13px] font-medium text-muted">{label}</Text>
+        </Pressable>
+    )
+}
+
+function CardNotFound({ onBack }: { onBack: () => void }) {
+    return (
+        <View className="flex-1 bg-background items-center justify-center gap-3 p-6">
+            <Text className="text-[15px] font-semibold text-foreground">
+                This card doesn’t exist or was removed
+            </Text>
+            <Pressable
+                accessibilityRole="button"
+                onPress={onBack}
+                className="border border-border bg-card rounded-lg px-3.5 py-2 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+            >
+                <Text className="text-[13px] font-medium text-foreground">Back to board</Text>
+            </Pressable>
+        </View>
+    )
+}
