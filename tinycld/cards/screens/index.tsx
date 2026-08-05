@@ -5,6 +5,7 @@ import { BoardColumn } from '../components/BoardColumn'
 import { BoardHeader } from '../components/BoardHeader'
 import { CardPeek } from '../components/CardPeek'
 import { EmptyBoard } from '../components/EmptyBoard'
+import { NewBoardDialog } from '../components/NewBoardDialog'
 import { ProjectWash } from '../components/ProjectWash'
 import { useActiveBoard } from '../hooks/useActiveBoard'
 import type { SampleProject } from '../sample-projects'
@@ -19,6 +20,7 @@ export default function CardsIndex() {
             <BoardHeader project={project} cardCount={cardCount} />
             <BoardCanvas project={project} />
             <CardPeek project={project} />
+            <NewBoardDialog />
         </View>
     )
 }

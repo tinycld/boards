@@ -1,4 +1,5 @@
 import {
+    SidebarActionButton,
     SidebarDivider,
     SidebarHeading,
     SidebarItem,
@@ -12,9 +13,12 @@ import { useCardsUIStore } from './stores/cards-ui-store'
 export default function CardsSidebar() {
     const activeProjectId = useCardsUIStore(s => s.activeProjectId)
     const setActiveProject = useCardsUIStore(s => s.setActiveProject)
+    const openNewBoard = useCardsUIStore(s => s.openNewBoard)
 
     return (
         <SidebarNav>
+            <SidebarActionButton label="+ New board" onPress={openNewBoard} />
+
             <SidebarHeading>Projects</SidebarHeading>
 
             {SAMPLE_PROJECTS.map(project => (

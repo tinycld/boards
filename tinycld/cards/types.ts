@@ -16,7 +16,15 @@
 //
 // Safe because `packages:generate` runs in the workspace-root postinstall,
 // before any typecheck, so `cards_*` is always present in pbSchema by the time
-// cards compiles.
+// cards compiles. CI is likewise fine: it installs before it checks.
+//
+// THE ONE COST, and it is a local-loop cost only: pbSchema.ts is gitignored and
+// derived from the on-disk migrations, so editing a migration without
+// regenerating leaves it stale — and the error surfaces as "Property 'x' does
+// not exist on type 'CardsCards'" in a file you did not touch, pointing at a
+// type you did not write. When that happens the fix is never to edit a type:
+//
+//     cd ~/code/tinycld/tinycld && pnpm run packages:generate
 //
 // LAYER 2 — board view models, defined here.
 //
