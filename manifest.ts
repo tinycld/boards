@@ -12,6 +12,9 @@ const manifest = {
     },
     sidebar: { component: 'sidebar' },
     help: { directory: 'help' },
+    migrations: { directory: 'pb-migrations' },
+    collections: { register: 'collections', types: 'types' },
+    peerVersions: { '@tinycld/core': '>=0.0.4 <0.1.0' },
 }
 
 export default manifest

@@ -62,7 +62,7 @@ Ecosystem facts these tasks rely on:
 Blueprint: calendar (`calendar/pb-migrations/1715000000_create_calendar_collections.js`,
 `calendar/tinycld/calendar/collections.ts` + `types.ts`).
 
-- [ ] Design the schema (one doc-comment block at the top of the migration):
+- [x] Design the schema (one doc-comment block at the top of the migration):
     - `cards_projects` — name, color, created_by (relation → users), archived?
     - `cards_project_members` — project (cascadeDelete), user, role
     - `cards_lists` — project (cascadeDelete), name, position, `is_done` flag
@@ -79,24 +79,26 @@ Blueprint: calendar (`calendar/pb-migrations/1715000000_create_calendar_collecti
       (`mail/pb-migrations/1713000000...js` ~L362); add a server-generated
       thumbnail field only if core's `Thumbnail` proves too slow on originals
       (mail's `1713000019_add_attachment_thumbnails` is the precedent)
-- [ ] Write `pb-migrations/<ts>_create_cards_collections.js`: phase 1 creates
+- [x] Write `pb-migrations/<ts>_create_cards_collections.js`: phase 1 creates
       all collections with explicit stable field/collection ids and indexes
       (at minimum: cards by list, lists by project, members by project+user
       unique, checklist/comments by card); phase 2 applies rules (see M2).
       Include the `down` migration.
-- [ ] Add indexes for the calendar/mail-integration queries you know are
+- [x] Add indexes for the calendar/mail-integration queries you know are
       coming: `cards_cards (due)` and `cards_cards (project, due)`.
-- [ ] Write `tinycld/cards/collections.ts` (`registerCollections`) + `types.ts`
+- [x] Write `tinycld/cards/collections.ts` (`registerCollections`) + `types.ts`
       (record interfaces + `CardsSchema` map). Use `expand`/joins to core
       `users` where needed; evaluate `syncMode: 'on-demand'` for
       `cards_comments` if comment volume warrants it (default eager is fine
       for the rest).
-- [ ] Manifest: add `migrations`, `collections: { register: 'collections',
+- [x] Manifest: add `migrations`, `collections: { register: 'collections',
       types: 'types' }`, and `peerVersions: { '@tinycld/core': <range> }`.
-- [ ] package.json `exports`: add wildcard entries for `./collections`,
-      `./types`, `./seed` (wildcards only — Metro can't resolve literal
-      bracket subpaths).
-- [ ] Run `pnpm run packages:generate` from `tinycld/` and confirm
+- [x] package.json `exports`: add `./collections`, `./types` (and `./seed` in
+      M3) as **literal** paths — every shipped package does this. The
+      wildcards-only rule applies to *directory* subpaths (`./screens/*`,
+      `./lib/*`), which are what Metro can't resolve as literal bracket
+      subpaths; a single-file export is not one of those.
+- [x] Run `pnpm run packages:generate` from `tinycld/` and confirm
       `pbSchema.ts`/`pbZodSchema.ts` regenerate cleanly.
 
 ## M2 — RBAC: rules, roles, sharing UI
@@ -188,8 +190,10 @@ where there's a form, `captureException` context strings like
       until it works — no dead chrome.
 - [ ] Drag-and-drop cards between columns (and column reorder) — the stepper
       covers correctness; DnD is the expected kanban interaction. Check
-      calendar's event-dragging implementation for the gesture approach.
-      Fine as a late task, but before release.
+      calendar's event-dragging implementation for the gesture approach. 
+      This is a key feature and **care must be taken** to 
+      implemented properly with the very best UX
+      Fine as a late task, but before release. 
 - [ ] Delete `sample-projects.ts`; move its shapes into `types.ts` and its
       content into the seed (next task). Update the three unit tests that
       import it (`board-cards.test.ts`, `due-state.test.ts`).
@@ -197,6 +201,13 @@ where there's a form, `captureException` context strings like
       couple of projects with lists/cards/labels/checklists/comments,
       due dates relative to today (calendar's seed shows the offset
       convention). Raw PB writes are sanctioned in seeds only.
+- [ ] Keyboard shortcuts: implement complete keyboard control of all actions
+- [ ] Search: we want to implement a `/` shortcut that opens a search box
+      like vscode and github uses.  Consider sharing this in core and using
+      with drive & mail
+- [ ] Feature: add the ability to collapse columns and to toggle cards into a
+      compact representation
+
 
 ## M4 — Mail integration: create a card from an email
 
