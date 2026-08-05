@@ -35,8 +35,19 @@ export const FIRST_RANK = generateKeyBetween(null, null)
  * `before === null` means the start of the list, `after === null` the end; both
  * null yields {@link FIRST_RANK}. Throws when the two are equal or out of order,
  * which always means the caller passed unsorted or duplicate neighbours.
+ *
+ * The ordering check is OURS, not the library's. fractional-indexing 3.x threw
+ * on reversed arguments; 4.x returns a plausible-looking key instead, which
+ * would land a card in the wrong place with no error anywhere — the board just
+ * quietly reorders itself. Since the two versions disagree and both satisfy our
+ * peer range, the guarantee has to live here to hold at all.
  */
 export function rankBetween(before: string | null, after: string | null): string {
+    if (before !== null && after !== null && before >= after) {
+        throw new Error(
+            `rank: before must sort strictly before after (got '${before}', '${after}')`
+        )
+    }
     return generateKeyBetween(before, after)
 }
 
