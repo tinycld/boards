@@ -3,15 +3,14 @@ import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { CalendarDays, CircleCheck, Clock, MessageSquare, SquareCheck } from 'lucide-react-native'
 import { Pressable, Text, View } from 'react-native'
-import { checklistProgress } from '../lib/board-cards'
 import { dueStateFor, formatDueDate } from '../lib/due-state'
-import type { BoardCard as BoardCardData, CardLabel, ProjectMember } from '../sample-projects'
 import { useCardsUIStore } from '../stores/cards-ui-store'
+import type { BoardCardView, BoardLabel, BoardMember } from '../types'
 
 const MAX_LABELS = 3
 
 interface BoardCardProps {
-    card: BoardCardData
+    card: BoardCardView
     isDone?: boolean
 }
 
@@ -73,7 +72,7 @@ function DoneCard({ title, isOpen, onPress }: DoneCardProps) {
     )
 }
 
-function CardLabels({ labels }: { labels: CardLabel[] }) {
+function CardLabels({ labels }: { labels: BoardLabel[] }) {
     if (labels.length === 0) return null
 
     const visible = labels.slice(0, MAX_LABELS)
@@ -90,17 +89,17 @@ function CardLabels({ labels }: { labels: CardLabel[] }) {
     )
 }
 
-function CardMeta({ card }: { card: BoardCardData }) {
-    const hasPills = card.due || card.checklist?.length || card.comments?.length
-    if (!hasPills && !card.assignees?.length) return null
+function CardMeta({ card }: { card: BoardCardView }) {
+    const hasPills = card.due || card.checklistTotal > 0 || card.commentCount > 0
+    if (!hasPills && card.assignees.length === 0) return null
 
     return (
         <View className="flex-row items-center gap-2.5 min-h-[20px]">
             <DuePill due={card.due} />
-            <ChecklistPill checklist={card.checklist} />
-            <CommentsPill count={card.comments?.length ?? 0} />
+            <ChecklistPill done={card.checklistDone} total={card.checklistTotal} />
+            <CommentsPill count={card.commentCount} />
             <View className="flex-1" />
-            <CardAssignees assignees={card.assignees ?? []} />
+            <CardAssignees assignees={card.assignees} />
         </View>
     )
 }
@@ -139,12 +138,17 @@ function DuePill({ due }: { due?: Date }) {
     )
 }
 
-function ChecklistPill({ checklist }: { checklist?: BoardCardData['checklist'] }) {
+/**
+ * Reads the denormalized counters on the card, not its checklist rows:
+ * cards_checklist_items syncs on-demand, so the items themselves are not
+ * loaded until the card is opened. server/counters.go keeps these current.
+ */
+function ChecklistPill({ done, total }: { done: number; total: number }) {
     const mutedColor = useThemeColor('muted')
     const successColor = useThemeColor('success')
-    if (!checklist?.length) return null
+    if (total === 0) return null
 
-    const { done, total, isComplete } = checklistProgress(checklist)
+    const isComplete = done === total
     const color = isComplete ? successColor : mutedColor
     return (
         <View className="flex-row items-center gap-1">
@@ -170,7 +174,7 @@ function CommentsPill({ count }: { count: number }) {
     )
 }
 
-function CardAssignees({ assignees }: { assignees: ProjectMember[] }) {
+function CardAssignees({ assignees }: { assignees: BoardMember[] }) {
     if (assignees.length === 0) return null
 
     return (

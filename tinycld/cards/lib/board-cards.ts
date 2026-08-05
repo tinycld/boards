@@ -1,8 +1,8 @@
-import type { BoardCard, BoardList, ChecklistItem, SampleProject } from '../sample-projects'
+import type { BoardCardView, BoardListView, BoardProject } from '../types'
 
 export interface CardEntry {
-    card: BoardCard
-    list: BoardList
+    card: BoardCardView
+    list: BoardListView
 }
 
 export interface ChecklistProgress {
@@ -11,17 +11,21 @@ export interface ChecklistProgress {
     isComplete: boolean
 }
 
-export function checklistProgress(items: ChecklistItem[]): ChecklistProgress {
+/**
+ * Structural on `isDone` rather than tied to one record shape, so it serves
+ * both the board tree and the card-detail query.
+ */
+export function checklistProgress(items: { isDone: boolean }[]): ChecklistProgress {
     const done = items.filter(item => item.isDone).length
     return { done, total: items.length, isComplete: done === items.length && items.length > 0 }
 }
 
 /** Cards in board order: list by list, top to bottom — the order J/K walks. */
-export function flattenCards(project: SampleProject): CardEntry[] {
+export function flattenCards(project: BoardProject): CardEntry[] {
     return project.lists.flatMap(list => list.cards.map(card => ({ card, list })))
 }
 
-export function findCardEntry(project: SampleProject, cardId: string): CardEntry | null {
+export function findCardEntry(project: BoardProject, cardId: string): CardEntry | null {
     return flattenCards(project).find(entry => entry.card.id === cardId) ?? null
 }
 
@@ -31,7 +35,7 @@ export function findCardEntry(project: SampleProject, cardId: string): CardEntry
  * to go so callers can no-op.
  */
 export function neighborCardId(
-    project: SampleProject,
+    project: BoardProject,
     cardId: string,
     delta: number
 ): string | null {
@@ -40,37 +44,4 @@ export function neighborCardId(
     if (index === -1) return null
     const next = Math.min(Math.max(index + delta, 0), entries.length - 1)
     return next === index ? null : entries[next].card.id
-}
-
-/**
- * Rebuild the project's lists with UI-store card moves applied. A moved card
- * is prepended to its target list (most recently moved on top); a card
- * "moved" to the list it already lives in keeps its original position.
- * Moves referencing unknown cards or lists are ignored.
- */
-export function applyCardMoves(
-    project: SampleProject,
-    moves: Record<string, string>
-): SampleProject {
-    const moveIds = Object.keys(moves)
-    if (moveIds.length === 0) return project
-
-    const cardById = new Map(flattenCards(project).map(entry => [entry.card.id, entry.card]))
-    const listIds = new Set(project.lists.map(list => list.id))
-    const validMoveIds = moveIds.filter(id => cardById.has(id) && listIds.has(moves[id]))
-    if (validMoveIds.length === 0) return project
-
-    const lists = project.lists.map(list => {
-        const kept = list.cards.filter(card => (moves[card.id] ?? list.id) === list.id)
-        const incoming = validMoveIds
-            .filter(id => moves[id] === list.id && !list.cards.some(card => card.id === id))
-            .reverse()
-            .flatMap(id => {
-                const card = cardById.get(id)
-                return card ? [card] : []
-            })
-        if (incoming.length === 0 && kept.length === list.cards.length) return list
-        return { ...list, cards: [...incoming, ...kept] }
-    })
-    return { ...project, lists }
 }

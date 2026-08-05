@@ -2,10 +2,10 @@ import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { Check } from 'lucide-react-native'
 import { Text, View } from 'react-native'
 import { checklistProgress } from '../../lib/board-cards'
-import type { ChecklistItem } from '../../sample-projects'
+import type { BoardChecklistItem } from '../../types'
 
 interface DetailChecklistProps {
-    items: ChecklistItem[]
+    items: BoardChecklistItem[]
 }
 
 export function DetailChecklist({ items }: DetailChecklistProps) {
@@ -33,7 +33,7 @@ export function DetailChecklist({ items }: DetailChecklistProps) {
     )
 }
 
-function ChecklistRow({ item }: { item: ChecklistItem }) {
+function ChecklistRow({ item }: { item: BoardChecklistItem }) {
     const checkColor = useThemeColor('success-foreground')
     return (
         <View className="flex-row items-start gap-2.5 py-[5px]">

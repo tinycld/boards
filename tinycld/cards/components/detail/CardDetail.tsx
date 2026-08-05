@@ -1,5 +1,6 @@
 import { Platform, Pressable, ScrollView, Text, View } from 'react-native'
-import type { BoardCard } from '../../sample-projects'
+import { useCardDetail } from '../../hooks/useCardDetail'
+import type { BoardCardView, BoardChecklistItem } from '../../types'
 import { DetailActivity } from './DetailActivity'
 import { DetailChecklist } from './DetailChecklist'
 import { DetailProperties } from './DetailProperties'
@@ -7,7 +8,7 @@ import { DetailProperties } from './DetailProperties'
 type DetailVariant = 'peek' | 'page'
 
 interface CardDetailProps {
-    card: BoardCard
+    card: BoardCardView
     variant: DetailVariant
 }
 
@@ -19,6 +20,9 @@ interface CardDetailProps {
  */
 export function CardDetail({ card, variant }: CardDetailProps) {
     const widthClass = variant === 'page' ? 'w-full max-w-[720px] self-center' : ''
+    // Fetched here rather than threaded in as props, so the peek and the page
+    // both get it without either container knowing about on-demand collections.
+    const { checklist, comments } = useCardDetail(card.id)
 
     return (
         <>
@@ -29,8 +33,8 @@ export function CardDetail({ card, variant }: CardDetailProps) {
                     </Text>
                     <DetailProperties card={card} />
                     <DescriptionSection description={card.description} />
-                    <ChecklistSection card={card} />
-                    <DetailActivity comments={card.comments ?? []} />
+                    <ChecklistSection items={checklist} />
+                    <DetailActivity comments={comments} />
                 </View>
             </ScrollView>
             <CommentComposer widthClass={widthClass} />
@@ -63,9 +67,9 @@ function DescriptionBody({ description }: { description?: string }) {
     return <Text className="text-[14px] leading-[22px] text-foreground">{description}</Text>
 }
 
-function ChecklistSection({ card }: { card: BoardCard }) {
-    if (!card.checklist?.length) return null
-    return <DetailChecklist items={card.checklist} />
+function ChecklistSection({ items }: { items: BoardChecklistItem[] }) {
+    if (items.length === 0) return null
+    return <DetailChecklist items={items} />
 }
 
 function CommentComposer({ widthClass }: { widthClass: string }) {

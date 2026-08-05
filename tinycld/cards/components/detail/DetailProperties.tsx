@@ -5,10 +5,10 @@ import { CalendarDays, Clock } from 'lucide-react-native'
 import type { ReactNode } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { dueStateFor, formatDueDate } from '../../lib/due-state'
-import type { BoardCard } from '../../sample-projects'
+import type { BoardCardView } from '../../types'
 
 interface DetailPropertiesProps {
-    card: BoardCard
+    card: BoardCardView
 }
 
 export function DetailProperties({ card }: DetailPropertiesProps) {
@@ -49,7 +49,7 @@ function GhostChip({ label }: { label: string }) {
     )
 }
 
-function AssigneesValue({ card }: { card: BoardCard }) {
+function AssigneesValue({ card }: { card: BoardCardView }) {
     if (!card.assignees?.length) return <GhostChip label="Assign" />
 
     return (
@@ -74,7 +74,7 @@ function AssigneesValue({ card }: { card: BoardCard }) {
     )
 }
 
-function LabelsValue({ card }: { card: BoardCard }) {
+function LabelsValue({ card }: { card: BoardCardView }) {
     if (!card.labels?.length) return <GhostChip label="Add label" />
 
     return (

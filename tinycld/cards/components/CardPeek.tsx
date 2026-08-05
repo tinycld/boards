@@ -6,15 +6,15 @@ import { Maximize2, MoreHorizontal, X } from 'lucide-react-native'
 import { useMemo } from 'react'
 import { View } from 'react-native'
 import { type CardEntry, findCardEntry, neighborCardId } from '../lib/board-cards'
-import type { SampleProject } from '../sample-projects'
 import { useCardsUIStore } from '../stores/cards-ui-store'
+import type { BoardProject } from '../types'
 import { CardDetail } from './detail/CardDetail'
 import { IconButton } from './detail/IconButton'
 import { ListStepper } from './detail/ListStepper'
 import { ProjectWash } from './ProjectWash'
 
 interface CardPeekProps {
-    project: SampleProject
+    project: BoardProject
 }
 
 /**
@@ -31,7 +31,7 @@ export function CardPeek({ project }: CardPeekProps) {
     return <CardPeekPanel project={project} entry={entry} />
 }
 
-function usePeekShortcuts(project: SampleProject, cardId: string) {
+function usePeekShortcuts(project: BoardProject, cardId: string) {
     const openCard = useCardsUIStore(s => s.openCard)
     const closeCard = useCardsUIStore(s => s.closeCard)
     useShortcutScope('modal')
@@ -71,7 +71,7 @@ function usePeekShortcuts(project: SampleProject, cardId: string) {
     useRegisterShortcuts(shortcuts)
 }
 
-function CardPeekPanel({ project, entry }: { project: SampleProject; entry: CardEntry }) {
+function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardEntry }) {
     const router = useRouter()
     const orgHref = useOrgHref()
     const closeCard = useCardsUIStore(s => s.closeCard)

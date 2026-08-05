@@ -1,9 +1,10 @@
 import { NameAvatar } from '@tinycld/core/components/NameAvatar'
+import { formatRelativeDate } from '@tinycld/core/lib/format-utils'
 import { Text, View } from 'react-native'
-import type { CardComment } from '../../sample-projects'
+import type { BoardComment } from '../../types'
 
 interface DetailActivityProps {
-    comments: CardComment[]
+    comments: BoardComment[]
 }
 
 export function DetailActivity({ comments }: DetailActivityProps) {
@@ -23,7 +24,7 @@ function CommentCount({ count }: { count: number }) {
     return <Text className="text-[12px] font-medium text-muted">{count}</Text>
 }
 
-function CommentList({ comments }: { comments: CardComment[] }) {
+function CommentList({ comments }: { comments: BoardComment[] }) {
     if (comments.length === 0) {
         return (
             <Text className="text-[13px] text-muted">
@@ -41,7 +42,7 @@ function CommentList({ comments }: { comments: CardComment[] }) {
     )
 }
 
-function CommentRow({ comment }: { comment: CardComment }) {
+function CommentRow({ comment }: { comment: BoardComment }) {
     return (
         <View className="flex-row gap-2.5">
             <NameAvatar
@@ -55,9 +56,11 @@ function CommentRow({ comment }: { comment: CardComment }) {
                     <Text className="text-[13px] font-semibold text-foreground">
                         {comment.author.firstName} {comment.author.lastName}
                     </Text>
-                    <Text className="text-[11.5px] text-muted">{comment.timeAgo}</Text>
+                    <Text className="text-[11.5px] text-muted">
+                        {formatRelativeDate(comment.created)}
+                    </Text>
                 </View>
-                <Text className="text-[13.5px] leading-5 text-foreground">{comment.text}</Text>
+                <Text className="text-[13.5px] leading-5 text-foreground">{comment.body}</Text>
             </View>
         </View>
     )

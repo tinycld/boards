@@ -1,16 +1,16 @@
 import { hexToRgba } from '@tinycld/core/lib/color-utils'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { Pressable, Text, View } from 'react-native'
-import type { BoardCard, BoardList, SampleProject } from '../../sample-projects'
 import { useCardsUIStore } from '../../stores/cards-ui-store'
+import type { BoardCardView, BoardListView, BoardProject } from '../../types'
 
 const SEGMENT_WIDTH = 20
 const SEGMENT_HEIGHT = 7
 
 interface ListStepperProps {
-    project: SampleProject
-    card: BoardCard
-    list: BoardList
+    project: BoardProject
+    card: BoardCardView
+    list: BoardListView
 }
 
 /**
@@ -45,8 +45,8 @@ export function ListStepper({ project, card, list }: ListStepperProps) {
 }
 
 function segmentFill(
-    project: SampleProject,
-    list: BoardList,
+    project: BoardProject,
+    list: BoardListView,
     index: number,
     currentIndex: number,
     successColor: string

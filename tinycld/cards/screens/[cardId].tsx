@@ -1,4 +1,5 @@
 import { DocumentTitle } from '@tinycld/core/components/DocumentTitle'
+import { LoadingState } from '@tinycld/core/components/LoadingState'
 import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { type Shortcut, useRegisterShortcuts, useShortcutScope } from '@tinycld/core/lib/shortcuts'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
@@ -13,9 +14,9 @@ import { ListStepper } from '../components/detail/ListStepper'
 import { ProjectWash } from '../components/ProjectWash'
 import { useActiveBoard } from '../hooks/useActiveBoard'
 import { type CardEntry, findCardEntry, neighborCardId } from '../lib/board-cards'
-import type { SampleProject } from '../sample-projects'
+import type { BoardProject } from '../types'
 
-function usePageShortcuts(project: SampleProject, cardId: string, goBack: () => void) {
+function usePageShortcuts(project: BoardProject, cardId: string, goBack: () => void) {
     const router = useRouter()
     const orgHref = useOrgHref()
     // A second Escape while the back navigation is in flight slips past
@@ -67,16 +68,21 @@ export default function CardDetailScreen() {
     const { cardId = '' } = useLocalSearchParams<{ cardId: string }>()
     const orgHref = useOrgHref()
     const navigateBack = useNavigateBack(() => orgHref('cards'))
-    const { project } = useActiveBoard()
-    const entry = findCardEntry(project, cardId)
+    const { project, isLoading } = useActiveBoard()
+    const entry = project ? findCardEntry(project, cardId) : null
 
-    if (!entry) return <CardNotFound onBack={navigateBack} />
+    // Loading is checked BEFORE the not-found branch. findCardEntry returns
+    // null while the board query is still in flight, so without this guard
+    // every deep link and every refresh flashes "this card doesn't exist"
+    // before the card appears.
+    if (isLoading) return <LoadingState />
+    if (!project || !entry) return <CardNotFound onBack={navigateBack} />
 
     return <CardPage project={project} entry={entry} cardId={cardId} navigateBack={navigateBack} />
 }
 
 interface CardPageProps {
-    project: SampleProject
+    project: BoardProject
     entry: CardEntry
     cardId: string
     navigateBack: () => void

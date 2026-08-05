@@ -2,10 +2,10 @@ import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { Filter } from 'lucide-react-native'
 import { Text, View } from 'react-native'
-import type { SampleProject } from '../sample-projects'
+import type { BoardProject } from '../types'
 
 interface BoardHeaderProps {
-    project: SampleProject
+    project: BoardProject
     cardCount: number
 }
 
@@ -43,7 +43,7 @@ function ProjectTile({ name, color }: { name: string; color: string }) {
     )
 }
 
-function TeamAvatars({ project }: { project: SampleProject }) {
+function TeamAvatars({ project }: { project: BoardProject }) {
     if (project.members.length === 0) return null
 
     return (

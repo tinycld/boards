@@ -1,13 +1,13 @@
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { MoreHorizontal, Plus } from 'lucide-react-native'
 import { Pressable, ScrollView, Text, View } from 'react-native'
-import type { BoardList } from '../sample-projects'
+import type { BoardListView } from '../types'
 import { BoardCard } from './BoardCard'
 
 export const COLUMN_WIDTH = 284
 
 interface BoardColumnProps {
-    list: BoardList
+    list: BoardListView
 }
 
 export function BoardColumn({ list }: BoardColumnProps) {
@@ -34,7 +34,7 @@ export function BoardColumn({ list }: BoardColumnProps) {
     )
 }
 
-function ColumnCards({ list }: { list: BoardList }) {
+function ColumnCards({ list }: { list: BoardListView }) {
     if (list.cards.length === 0) {
         return <Text className="text-[12.5px] text-muted px-3 py-1.5">No cards yet</Text>
     }
