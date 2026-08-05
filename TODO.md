@@ -6,6 +6,25 @@ every stubbed interaction to live queries/mutations, and the mail + calendar
 integrations. Milestones are ordered by dependency; tasks within one are small
 and mostly independent.
 
+| | milestone | state |
+|---|---|---|
+| M0 | Decisions | ✅ resolved (one reversed — see share links) |
+| M1 | Data model: collections, migrations, types | ✅ shipped |
+| M2 | RBAC: the rules themselves | ✅ shipped |
+| **M2a** | **Prove the rules behave** | **next** |
+| M3 | Wire the UI to live data | biggest unlock; gates M3b+ |
+| M3b | Role-gated UI and sharing | needs M3's queries |
+| M4 | Mail: create a card from an email | touches `mail/` |
+| M5 | Calendar: due dates on the calendar | touches `calendar/` |
+| M6 | File attachments with previews | |
+| M6a | Public boards: the share-link flow | schema shipped, flow missing |
+| M7 | Package plumbing, tests, docs | |
+
+The lettered milestones (M2a, M3b, M6a) were split out once the data model
+landed and the real dependency order became clear: the rules are enforceable
+long before there is any live membership to gate a UI on, and the share-link
+schema had to ship with the create migration while the flow did not.
+
 Ecosystem facts these tasks rely on:
 
 - **There is no generic RBAC/sharing engine in core.** The org-wide axis is
@@ -113,7 +132,13 @@ Blueprint: calendar (`calendar/pb-migrations/1715000000_create_calendar_collecti
 - [x] Run `pnpm run packages:generate` from `tinycld/` and confirm
       `pbSchema.ts`/`pbZodSchema.ts` regenerate cleanly.
 
-## M2 — RBAC: rules, roles, sharing UI
+## M2 — RBAC: the rules themselves ✅
+
+**Done.** The access rules shipped with the M1 migration. The role-gated UI
+that was originally filed here (`useProjectRole`, affordance gating, the
+Share dialog) moved to **M3b** — it reads `cards_project_members`, so it
+cannot be built while the board still renders `SAMPLE_PROJECTS`. Proving the
+rules behave as written moved to **M2a**, which is the next thing to do.
 
 Blueprint: drive (`drive/pb-migrations/1716000000_create_drive_collections.js`
 rules section, `drive/tinycld/drive/components/ShareDialog.tsx`), mail's
@@ -151,19 +176,6 @@ rules section, `drive/tinycld/drive/components/ShareDialog.tsx`), mail's
 - [x] `cards_project_members` create rule needs mail's bootstrapFirstOwner
       shape so creating a project can insert its own first owner row.
       Shipped, with mail's `1830000003` guest pin folded in.
-- [ ] Creating a project = one mutation inserting project + owner-member row
-      (+ default lists?) — write it as a single generator mutation yielding
-      sequential transactions.
-- [ ] Client hook `useProjectRole(projectId)` (live-query own member row →
-      `role`, `canEdit`, `canComment`, `isOwner`). Follow
-      `core/lib/use-current-role.ts` shape.
-- [ ] Gate UI affordances on it: hide/disable Add list, add card, ListStepper,
-      description/checklist/comment editors, project rename/delete, Share
-      button for viewers (commentors keep the composer).
-- [ ] Sharing UI: project Share dialog — list members with roles, add member
-      (org users roster picker), change role, remove member; reuse drive's
-      `ShareDialog` structure and its contacts presence-gate. Entry point in
-      `BoardHeader` (the avatar stack is the natural anchor).
 - [x] Verify the guest story. **Resolved: guests ARE project members in v1**,
       with read and write, because public boards reachable by share link are
       a goal (this supersedes the M0 "share links deferred" decision above).
@@ -181,15 +193,60 @@ rules section, `drive/tinycld/drive/components/ShareDialog.tsx`), mail's
       exists to close.
     - still open for the share-link FLOW (below): whether a redeemed link
       mints the membership row server-side, as drive does at OTP-verify.
-- [ ] Rule tests: unit-test the intended matrix (viewer can't move a card,
-      commentor can comment but not edit, non-member sees nothing) at
-      whatever layer the other packages test rules; at minimum cover it in
-      the M7 e2e specs with two users.
+
+## M2a — Prove the rules behave — DO THIS NEXT
+
+The rules were verified STRUCTURALLY: the stored SQL was read back and
+audited for the three traps (no `?!=` against a role, `disabled != true`
+everywhere, an anti-repoint pin on every update rule that has a relation to
+pin). Nothing has yet proven the BEHAVIOUR — that a viewer is actually
+refused. Those are currently claims about strings.
+
+Worth doing before more code depends on the rules being right, and cheap
+while the design is fresh. Guests can write in this model, which raises the
+cost of a wrong rule.
+
+- [ ] Decide where these live. Cards has no `server/`, so drive's Go-side
+      RLS tests (`TestDriveCommentorRLS_CannotUpdateSharedItem`, with
+      `TestDriveEditorRLS_CanUpdateSharedItem` as the positive control) are
+      not directly copyable. Likely a vitest suite that boots a throwaway
+      PocketBase over the merged `pb_migrations` dir — the same trick
+      `scripts/export-types.ts` uses — and drives the REST API as two users.
+      Adding a `server/` just for tests is the alternative; prefer not to.
+- [ ] The matrix, each case needing a positive control so a test cannot pass
+      by everything being refused:
+    - non-member: sees nothing, cannot read a card by id
+    - viewer: reads the board, refused on card create / move / edit
+    - commentor: creates a comment, refused on card edit and on moving a card
+    - editor: full content write, refused on project rename/delete and on
+      minting a share link
+    - owner: everything, including member management
+- [ ] The two rules with no precedent elsewhere, which is exactly why they
+      need tests:
+    - **guest create**: a guest holding an editor membership CAN add a card
+      to that board, and CANNOT create a project, and CANNOT read the member
+      roster
+    - **anti-repoint**: `PATCH {"project": <other project>}` on a card the
+      caller may edit is REFUSED; the same PATCH without the field succeeds
+- [ ] `bootstrapFirstOwner`: the first owner row inserts on a fresh project,
+      and the same shape is refused once the project already has members.
+- [ ] Feed whatever this finds back into the migration — it is unreleased, so
+      a rule can still be fixed in place rather than appended to.
 
 ## M3 — Wire the UI to live data
 
 Everything currently reading `SAMPLE_PROJECTS` or writing to the
 `cardMoves`/UI-store overlay switches to `useOrgLiveQuery` + `useMutation`.
+
+**Start here** — a board you cannot create is a board you cannot test, and
+every query below returns nothing until one exists:
+
+- [ ] Creating a project = one mutation inserting the project + its owner-member
+      row (+ default lists?) — a single generator mutation yielding sequential
+      transactions. The owner row depends on `bootstrapFirstOwner`, so it must
+      be inserted by the same user, with `role: "owner"`, while the project has
+      no members. Moved here from M2: it writes only, so it is the one piece of
+      that milestone the sample data never blocked.
 
 Queries:
 
@@ -264,6 +321,37 @@ where there's a form, `captureException` context strings like
 - [ ] Feature: add the ability to collapse columns and to toggle cards into a
       compact representation
 
+## M3b — Role-gated UI and sharing
+
+Moved out of M2. These all read `cards_project_members`, so they could not be
+built while the board rendered `SAMPLE_PROJECTS` — the rules were enforceable
+long before there was any live membership to gate on. Depends on M3's queries.
+
+Blueprint: `drive/tinycld/drive/components/ShareDialog.tsx`,
+`tinycld/core/lib/use-current-role.ts`.
+
+- [ ] Client hook `useProjectRole(projectId)` (live-query own member row →
+      `role`, `canEdit`, `canComment`, `isOwner`). Follow
+      `core/lib/use-current-role.ts` shape — in particular its `isReady`
+      contract: `role` is null both while loading and when genuinely absent,
+      so a guard that acts on the transient null will bounce a legitimate
+      owner on a cold load.
+- [ ] Derive the capabilities from the role in ONE place, mirroring the rule
+      fragments (`viaWriter` = owner|editor, `viaCommenter` = +commentor), so
+      the UI and the database cannot drift on what a role means.
+- [ ] Gate UI affordances on it: hide/disable Add list, add card, ListStepper,
+      description/checklist/comment editors, project rename/delete, Share
+      button for viewers (commentors keep the composer).
+- [ ] Sharing UI: project Share dialog — list members with roles, add member
+      (org users roster picker), change role, remove member; reuse drive's
+      `ShareDialog` structure and its contacts presence-gate. Entry point in
+      `BoardHeader` (the avatar stack is the natural anchor).
+- [ ] The member picker reads the roster, which is member-AND-non-guest by
+      rule — so a guest opening a shared board sees no roster at all. Make
+      that a deliberate empty state, not a broken-looking one.
+- [ ] Last-owner protection is NOT expressible in a PB rule (a rule sees one
+      row and cannot count owners), so an owner can orphan their own project.
+      Guard it in the dialog: refuse to demote or remove the last owner.
 
 ## M4 — Mail integration: create a card from an email
 
