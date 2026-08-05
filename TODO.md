@@ -230,6 +230,24 @@ cost of a wrong rule.
       caller may edit is REFUSED; the same PATCH without the field succeeds
 - [ ] `bootstrapFirstOwner`: the first owner row inserts on a fresh project,
       and the same shape is refused once the project already has members.
+- [ ] **Clause correlation** — the property everything above rests on, and the
+      one whose failure would be silent and total. `viaWriter` conjoins two
+      separate `?=` clauses over the same back-relation
+      (`... .user ?= @request.auth.id && (... .role ?= "owner" || ...)`). If
+      PocketBase evaluated them independently, they would be satisfied by two
+      DIFFERENT member rows — so any viewer on a board that also has an editor
+      would gain write access, on all seven content collections at once.
+      It does correlate; verified in the vendored fork during review:
+      `?=` (`SignAnyEq`) is gated out of the `MultiMatchSubquery` wrapper at
+      `tools/search/filter.go:210` + `:449`, so it compiles to a bare
+      comparison, and joins dedupe by a path-derived alias
+      (`core/record_field_resolver.go:423-428`,
+      `record_field_resolver_runner.go:551`) — both clauses land on the same
+      JOIN. Note the intuition inverts: plain `=` means "ALL elements match"
+      and `?!=` is trivially true on any multi-member board (that is trap 1).
+      The test case that pins this: a project with user X as `viewer` AND user
+      Y as `editor`, asserting X is refused create and update. A single-member
+      fixture cannot catch a regression here.
 - [ ] Feed whatever this finds back into the migration — it is unreleased, so
       a rule can still be fixed in place rather than appended to.
 

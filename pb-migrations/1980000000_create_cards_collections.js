@@ -18,8 +18,8 @@
 // same gap produce the same string — so every board query must sort
 // `ORDER BY position, id`, with id as the stable tiebreaker.
 //
-// RULE NOTES — three traps this file is written to avoid, each already paid for
-// elsewhere in the ecosystem:
+// RULE NOTES — four traps this file is written to avoid, the first three
+// already paid for elsewhere in the ecosystem:
 //
 // 1. NEVER `role ?!= "viewer"` to mean "may write". It admits every role that is
 //    not viewer, so `commentor` silently gains UPDATE the moment it exists.
@@ -37,6 +37,22 @@
 //
 // 3. `@request.auth.disabled != true`, never `= false`, so a record written
 //    before the field existed — value absent rather than false — still passes.
+//
+// 4. `?=` CORRELATES, and the rules below depend on it. viaWriter asks two
+//    questions of the same back-relation in separate clauses — "is one of these
+//    members me?" and "is one of them an owner/editor?". Read naively that is
+//    satisfiable by two DIFFERENT rows, which would hand every viewer on a
+//    board that also has an editor full write access. It is not: `?=`
+//    (SignAnyEq) is gated out of the MultiMatchSubquery wrapper
+//    (tools/search/filter.go:210, :449) so it compiles to a bare comparison,
+//    and repeated joins along one path dedupe to a single alias
+//    (core/record_field_resolver.go:423-428,
+//    record_field_resolver_runner.go:551). Both clauses therefore land on the
+//    same joined row. The intuition inverts here — plain `=` is the operator
+//    meaning "ALL elements match", which is why trap 1's `?!=` is trivially
+//    true on any multi-member board. Do NOT "simplify" these rules by mixing
+//    `?=` with `=` or by collapsing the clauses; M2a's correlation test
+//    (a viewer alongside an editor) is what will catch it if someone does.
 //
 // GUESTS. A guest is a share-link visitor holding a real users record. Unlike
 // drive, cards lets a guest CREATE content, because every content row names a
@@ -750,7 +766,8 @@ migrate(
         const isMember = 'cards_project_members_via_project.user ?= @request.auth.id'
         const isOwner = `${isMember} && cards_project_members_via_project.role ?= "owner"`
 
-        // One hop out, for any row carrying a `project` relation.
+        // One hop out, for any row carrying a `project` relation. The `user` and
+        // `role` clauses below resolve against the SAME member row — see trap 4.
         const viaMember = 'project.cards_project_members_via_project.user ?= @request.auth.id'
         // The roles that may WRITE, named explicitly. See trap 1 above.
         const viaWriter =
