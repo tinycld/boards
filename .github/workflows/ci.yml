@@ -15,7 +15,7 @@ env:
 
 jobs:
   check:
-    name: Typecheck & Unit
+    name: Typecheck, Unit & Access Rules
     runs-on: ubuntu-latest
     steps:
       # This PR's code, checked out into its member slot. The workspace root is
@@ -86,6 +86,24 @@ jobs:
       - name: Typecheck + unit
         working-directory: ws/${{ env.PACKAGE }}
         run: pnpm exec tinycld-pkg check
+      # cards/server holds almost no product logic — it is the RLS suite that
+      # proves the migration's access rules against PocketBase's REAL rule
+      # engine, plus the board-face counters. A hosted multi-org tenant runs no
+      # feature Go, so those rules ARE the whole authorization and nothing else
+      # verifies them. `tinycld-pkg check` has no Go runner, so they run here.
+      #
+      # go mod download is not optional: in workspace mode the transitive
+      # /go.mod hashes live in go.work.sum, not go.sum, and `go test` fails with
+      # "missing go.sum entry for go.mod file" without it. The go.work itself
+      # was written by the generator during `pnpm install` above.
+      - name: Go build
+        working-directory: ws/${{ env.PACKAGE }}/server
+        run: |
+          go mod download
+          go build ./...
+      - name: Go test (access rules)
+        working-directory: ws/${{ env.PACKAGE }}/server
+        run: go test ./...
 
   e2e:
     name: E2E

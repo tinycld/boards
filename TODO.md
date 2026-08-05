@@ -11,8 +11,8 @@ and mostly independent.
 | M0 | Decisions | ✅ resolved (one reversed — see share links) |
 | M1 | Data model: collections, migrations, types | ✅ shipped |
 | M2 | RBAC: the rules themselves | ✅ shipped |
-| **M2a** | **Prove the rules behave** | **next** |
-| M3 | Wire the UI to live data | biggest unlock; gates M3b+ |
+| M2a | Prove the rules behave | ✅ shipped — 64 Go tests |
+| **M3** | **Wire the UI to live data** | **next** — biggest unlock; gates M3b+ |
 | M3b | Role-gated UI and sharing | needs M3's queries |
 | M4 | Mail: create a card from an email | touches `mail/` |
 | M5 | Calendar: due dates on the calendar | touches `calendar/` |
@@ -194,62 +194,74 @@ rules section, `drive/tinycld/drive/components/ShareDialog.tsx`), mail's
     - still open for the share-link FLOW (below): whether a redeemed link
       mints the membership row server-side, as drive does at OTP-verify.
 
-## M2a — Prove the rules behave — DO THIS NEXT
+## M2a — Prove the rules behave ✅
 
-The rules were verified STRUCTURALLY: the stored SQL was read back and
-audited for the three traps (no `?!=` against a role, `disabled != true`
-everywhere, an anti-repoint pin on every update rule that has a relation to
-pin). Nothing has yet proven the BEHAVIOUR — that a viewer is actually
-refused. Those are currently claims about strings.
+**Done.** 64 Go tests in `server/`, using core's `rlstest` harness to apply the
+package's SHIPPED migrations to a `tests.TestApp` and drive the real REST
+router as several users. The rules are never restated in a test — an earlier
+generation of suites in this tree did exactly that and went on passing after a
+migration dropped a clause.
 
-Worth doing before more code depends on the rules being right, and cheap
-while the design is fresh. Guests can write in this model, which raises the
-cost of a wrong rule.
+Cards gained a `server/` module to host them (manifest `server:` block + a thin
+`Register`). That was filed as a cost; it is mostly not one — M6a needs the
+module anyway for share-link token minting, and the board-face counters landed
+in it too.
 
-- [ ] Decide where these live. Cards has no `server/`, so drive's Go-side
-      RLS tests (`TestDriveCommentorRLS_CannotUpdateSharedItem`, with
-      `TestDriveEditorRLS_CanUpdateSharedItem` as the positive control) are
-      not directly copyable. Likely a vitest suite that boots a throwaway
-      PocketBase over the merged `pb_migrations` dir — the same trick
-      `scripts/export-types.ts` uses — and drives the REST API as two users.
-      Adding a `server/` just for tests is the alternative; prefer not to.
-- [ ] The matrix, each case needing a positive control so a test cannot pass
-      by everything being refused:
-    - non-member: sees nothing, cannot read a card by id
-    - viewer: reads the board, refused on card create / move / edit
-    - commentor: creates a comment, refused on card edit and on moving a card
-    - editor: full content write, refused on project rename/delete and on
-      minting a share link
-    - owner: everything, including member management
-- [ ] The two rules with no precedent elsewhere, which is exactly why they
-      need tests:
-    - **guest create**: a guest holding an editor membership CAN add a card
-      to that board, and CANNOT create a project, and CANNOT read the member
-      roster
-    - **anti-repoint**: `PATCH {"project": <other project>}` on a card the
-      caller may edit is REFUSED; the same PATCH without the field succeeds
-- [ ] `bootstrapFirstOwner`: the first owner row inserts on a fresh project,
-      and the same shape is refused once the project already has members.
-- [ ] **Clause correlation** — the property everything above rests on, and the
-      one whose failure would be silent and total. `viaWriter` conjoins two
-      separate `?=` clauses over the same back-relation
-      (`... .user ?= @request.auth.id && (... .role ?= "owner" || ...)`). If
-      PocketBase evaluated them independently, they would be satisfied by two
-      DIFFERENT member rows — so any viewer on a board that also has an editor
-      would gain write access, on all seven content collections at once.
-      It does correlate; verified in the vendored fork during review:
-      `?=` (`SignAnyEq`) is gated out of the `MultiMatchSubquery` wrapper at
-      `tools/search/filter.go:210` + `:449`, so it compiles to a bare
-      comparison, and joins dedupe by a path-derived alias
-      (`core/record_field_resolver.go:423-428`,
-      `record_field_resolver_runner.go:551`) — both clauses land on the same
-      JOIN. Note the intuition inverts: plain `=` means "ALL elements match"
-      and `?!=` is trivially true on any multi-member board (that is trap 1).
-      The test case that pins this: a project with user X as `viewer` AND user
-      Y as `editor`, asserting X is refused create and update. A single-member
-      fixture cannot catch a regression here.
-- [ ] Feed whatever this finds back into the migration — it is unreleased, so
-      a rule can still be fixed in place rather than appended to.
+- [x] Where these live: Go, not vitest. `tinycld/core/server/rlstest` already
+      does exactly this job and `drive/server/guest_rls_test.go` was directly
+      copyable, so the "cards has no `server/`" objection cost one `go.mod`
+      and a no-op-shaped `register.go`. A vitest harness booting PocketBase
+      would have been the first of its kind in the workspace.
+- [x] The matrix, each case with a positive control: `role_matrix_rls_test.go`
+      (non-member / viewer / commentor / editor / owner). Every refused
+      mutation re-reads the row and asserts it is unchanged — a status
+      assertion alone passes if PB writes and *then* 404s.
+- [x] Guest create + roster: `guest_create_rls_test.go`. A guest holding an
+      editor membership CAN add a card, CANNOT create a project, and sees
+      exactly ONE roster row (their own) — asserted with `NotExpectedContent`
+      against every co-member id, since `ExpectedContent` can only prove
+      presence.
+- [x] Anti-repoint: `anti_repoint_rls_test.go`, including `pinCard` (which the
+      project-pin cases cannot reach) and the member-row repoint, where a
+      success would carry `role: "owner"` onto the target board.
+- [x] `bootstrapFirstOwner`: `bootstrap_rls_test.go`. Cards closes the gap
+      `calendar/server/bootstrap_probe_test.go` documents — calendar needs a
+      privileged Go hook to write a first membership, so a hosted tenant (which
+      runs no feature Go) ends up with a calendar owned by nobody. Cards puts
+      the bootstrap in the RULE, so a tenant gets it too.
+- [x] **Clause correlation** — confirmed behaviourally, not just from a fork
+      source reading. `clause_correlation_rls_test.go` builds the only fixture
+      that can catch it: project P with user X as `viewer` AND user Y as
+      `editor`, so the two `?=` clauses are satisfiable only by different rows.
+      A single-member fixture passes either way.
+- [x] **Findings fed back.** Two, both about the TESTS rather than the rules —
+      the rules themselves behaved exactly as written:
+
+      1. **Trap 1's detector is the COMMENTOR case, not the viewer case.**
+         Rewriting `viaWriter` to drive's `role ?!= "viewer"` idiom and
+         re-running the suite flips exactly `CommentorCannotUpdateCard` and
+         `CommentorCannotMoveCard` — and nothing else. `?!=` still refuses a
+         *viewer*, because `cards_project_members` is UNIQUE on
+         (project, user): a viewer holds exactly one row, so there is no other
+         row for "not equal to viewer" to match. Drive's bug needed a user
+         holding two rows. That unique index is a real structural defence the
+         migration does not claim, and the correlation suite — which only ever
+         acts as a viewer — cannot see trap 1 at all.
+      2. **`go test` does not invalidate its cache when a migration changes.**
+         The migration is a data file, so a suite re-run after a rule edit
+         replays the previous result and looks green. Use `-count=1` whenever
+         you touch a rule. This nearly hid finding 1.
+- [x] CI: the `check` job now runs `go build` + `go test` in `server/`.
+      Note `drive/server` and `calendar/server` carry substantial
+      security-critical Go suites that **no CI runs today**, despite a comment
+      in the shell's CI asserting feature PRs verify their own Go. Worth
+      fixing; cards sets the pattern.
+
+Deliberately not covered behaviourally: `cards_attachments` creates need a
+multipart body, and the rule composition (`viaWriter + isUploader + pin`) is
+identical to `cards_comments`' (`viaCommenter + isAuthor + pin`), which is.
+The clauses are asserted in the shipped-rules table. Revisit with M6, when
+attachments are actually built.
 
 ## M3 — Wire the UI to live data
 
