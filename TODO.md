@@ -42,9 +42,16 @@ Ecosystem facts these tasks rely on:
       to mail**, mirroring the `sidebarContributions` generator pipeline
       (host declares `actionSlots`, contributors declare components). Other
       packages (e.g. calendar "add invite to calendar") can reuse it.
-- [x] **Card ordering:** fractional/rank string (lexo-rank style) in a
-      `position` field on lists and cards — a move is a single-row update, and
-      optimistic updates never reorder siblings.
+- [x] **Card ordering:** fractional/rank string in a `position` field on
+      lists and cards — a move is a single-row update, and optimistic updates
+      never reorder siblings. **Implemented over `fractional-indexing`**
+      (already in the tree via TanStack DB), wrapped by
+      `tinycld/cards/lib/rank.ts`. Hand-rolling it was tried and abandoned:
+      the invariants are subtler than they look, and the library's keys stay
+      far shorter under repeated prepends.
+      **Ranks are NOT unique** — two offline clients splitting the same gap
+      produce the same string, and there is deliberately no unique index on
+      `position`. Every query ordering by rank MUST sort `position, id`.
 - [x] **Attachment storage:** a PB `file` field on a `cards_attachments`
       collection — mail's attachment pattern — NOT rows in `drive_items`.
       Rationale: a cards migration cannot declare a relation to `drive_items`
@@ -55,7 +62,12 @@ Ecosystem facts these tasks rely on:
       drive tie-in is layered on top: drive's already-registered "Save to
       Drive" preview action appears automatically, plus a presence-gated
       copy-on-attach "from Drive" picker (M6).
-- [x] **Public share links:** deferred out of v1 (filed in M7 follow-ups).
+- [x] ~~**Public share links:** deferred out of v1.~~ **Reversed during M1.**
+      Public boards with read AND write via share link are a goal, and a
+      guest reaches a board only through a link — the two are one feature.
+      Since a shipped migration is frozen, `cards_share_links` and
+      `cards_projects.visibility` landed in the create migration with
+      owner-only rules; only the FLOW is deferred (see M6a).
 
 ## M1 — Data model: collections, migrations, types
 
@@ -107,20 +119,38 @@ Blueprint: drive (`drive/pb-migrations/1716000000_create_drive_collections.js`
 rules section, `drive/tinycld/drive/components/ShareDialog.tsx`), mail's
 `bootstrapFirstOwner` clause (`mail/pb-migrations/1713000000...js` ~L480).
 
-- [ ] Phase-2 PB rules on all cards collections, resolved through
-      `cards_project_members`:
+- [x] Phase-2 PB rules on all cards collections, resolved through
+      `cards_project_members`. Shipped in
+      `pb-migrations/1980000000_create_cards_collections.js`; three points
+      where the rules deviate from this list as originally written:
     - list/view: `cards_project_members_via_project.user ?= @request.auth.id`
       (on `cards_cards` etc., via the denormalized `project` relation)
-    - create/update on content (lists, cards, checklist, comments,
-      attachments): member role ?!= "viewer" (and ?!= "commentor" except for
-      `cards_comments`); attachment delete: uploader-or-owner, `uploaded_by`
-      pinned to `@request.auth.id` on create
+    - create/update on content: **the writing roles are NAMED**
+      (`role ?= "owner" || role ?= "editor"`), NOT `role ?!= "viewer"`.
+      The `?!=` idiom admits every role that is not viewer, which is how
+      drive silently granted `commentor` UPDATE — see
+      `drive/pb-migrations/1782100000_restore_guest_clause_and_settle_commentor.js`.
+      Comments use the same shape with `commentor` added.
+    - **every update rule pins its relations**:
+      `(@request.body.project:isset = false || @request.body.project = project)`
+      (and the same for `card`). Without it a rule evaluates membership
+      against the row's STORED relation and never sees the incoming body, so
+      a PATCH can move a row onto a project the caller has no access to —
+      `calendar/pb-migrations/1830000008_pin_member_update_to_stored_calendar.js`.
+      The pin belongs in the rule, not a Go hook: a hosted tenant runs no
+      feature Go, so the rule is the entire authorization.
     - project update/delete + member management: role ?= "owner"
     - comments: author pinned to `@request.auth.id` on create (see core's
-      `1920000000_pin_createrule_user.js` precedent), author-or-owner delete
-    - conjoin `@request.auth.disabled != true` (newer-migration convention)
-- [ ] `cards_project_members` create rule needs mail's bootstrapFirstOwner
+      `1920000000_pin_createrule_user.js` precedent), author-or-owner delete;
+      update requires author AND current commenter standing, so a demoted
+      user cannot keep editing old comments
+    - attachment delete: uploader-or-owner, `uploaded_by` pinned on create.
+      Note `viewRule` is what gates the file BLOB, so it carries `disabled`.
+    - conjoin `@request.auth.disabled != true` (not `= false`, so rows
+      written before the field existed still pass)
+- [x] `cards_project_members` create rule needs mail's bootstrapFirstOwner
       shape so creating a project can insert its own first owner row.
+      Shipped, with mail's `1830000003` guest pin folded in.
 - [ ] Creating a project = one mutation inserting project + owner-member row
       (+ default lists?) — write it as a single generator mutation yielding
       sequential transactions.
@@ -134,9 +164,23 @@ rules section, `drive/tinycld/drive/components/ShareDialog.tsx`), mail's
       (org users roster picker), change role, remove member; reuse drive's
       `ShareDialog` structure and its contacts presence-gate. Entry point in
       `BoardHeader` (the avatar stack is the natural anchor).
-- [ ] Verify the guest story: confirm `1870000000_exclude_guests_from_org_rls`
-      conventions — decide whether guests can be project members in v1 or
-      whether the member picker excludes `role = "guest"` users.
+- [x] Verify the guest story. **Resolved: guests ARE project members in v1**,
+      with read and write, because public boards reachable by share link are
+      a goal (this supersedes the M0 "share links deferred" decision above).
+      The rules that implement it:
+    - guests may CREATE content, unlike drive. Drive blocks guest creates
+      with `notGuest` because `drive_items` had no parent to check against;
+      every cards content row names a `project`, so the create rule requires
+      an existing editor/owner membership on it. That parent check IS the
+      backstop, and it lives in the rule (a hosted tenant runs no feature Go).
+    - `notGuest` is KEPT on `cards_projects` create — a share-link visitor
+      must never mint a board — and on the bootstrapFirstOwner branch.
+    - the member roster (`cards_project_members` list/view) is
+      member-AND-non-guest, so a guest never reads the org's member names
+      and emails. That leak is what `1870000000_exclude_guests_from_org_rls`
+      exists to close.
+    - still open for the share-link FLOW (below): whether a redeemed link
+      mints the membership row server-side, as drive does at OTP-verify.
 - [ ] Rule tests: unit-test the intended matrix (viewer can't move a card,
       commentor can comment but not edit, non-member sees nothing) at
       whatever layer the other packages test rules; at minimum cover it in
@@ -154,8 +198,20 @@ Queries:
       and fall back to first project; clear stale ids.
 - [ ] Board screen: one query joining lists + cards (+ labels, assignees via
       the collection `expand`/join — one query, not N stitched ones), ordered
-      by `position`. Replace `useActiveBoard`'s sample lookup; delete
-      `applyCardMoves` and the `cardMoves` overlay once moves are real.
+      by **`position, id`** — `id` is the tiebreaker that keeps duplicate
+      ranks rendering identically on every client instead of flickering.
+      Replace `useActiveBoard`'s sample lookup; delete `applyCardMoves` and
+      the `cardMoves` overlay once moves are real.
+      Note `cards_cards` registers with NO `expand`: assignees and labels are
+      already loaded eagerly, so expanding would ship duplicate rows per card
+      — look them up by id instead.
+- [ ] **Board-face badges vs on-demand sync.** `cards_checklist_items`,
+      `cards_comments` and `cards_attachments` register as
+      `syncMode: 'on-demand'` (they are read only for the open card), so
+      `BoardCard`'s checklist ratio, comment count and attachment count are
+      NOT available at rest. Either drop those badges, or add denormalized
+      counters on `cards_cards` maintained by a hook — `mail_threads`
+      `has_attachments` is the precedent. Decide before wiring `BoardCard`.
 - [ ] Card detail (`[cardId].tsx` + `CardPeek`): card + checklist + comments
       (comments join users for author names). Keep `findCardEntry`/
       `neighborCardId` working off the board query result so J/K still walk
@@ -300,6 +356,43 @@ file field (schema lands in M1, rules in M2).
 - [ ] Help topic: attaching files to cards (previews, save-to-drive when
       drive is present).
 
+## M6a — Public boards: the share-link flow
+
+The SCHEMA shipped in M1 (`cards_share_links`, `cards_projects.visibility`,
+owner-only rules). Nothing else exists: no token minting, no redemption, no
+public route, no UI. Drive is the working end-to-end precedent — read
+`drive/server/endpoints_public_share.go`, `endpoints_share_otp.go`, and
+`tinycld/core/server/sharelink/` before designing anything.
+
+The load-bearing insight from drive: **a redeemed link MINTS a
+`cards_project_members` row** rather than being consulted by the content
+rules. That is why every rule in M2 resolves through membership alone and
+none of them mention links.
+
+- [ ] Cards Go module (`server/`, manifest `server: { package, module }`) —
+      cards has none today. Token minting is server-side only: 32 bytes of
+      entropy, hex, into the 64-char `token` field.
+- [ ] Redemption: create the `cards_project_members` row at the link's role,
+      never upgrading an existing membership (the link's role is a ceiling,
+      not a grant). Re-resolve the link on every call so revoking
+      (`is_active = false`) takes effect immediately.
+- [ ] Decide the visitor identity model: drive has TWO — an email-OTP guest
+      with a real `users` row, and a stateless HMAC-signed anon session with
+      no account. Write boards likely need the OTP path so edits attribute
+      to someone; confirm before building.
+- [ ] Public route under a `publicRoutes` manifest directory (`/p/cards/...`),
+      plus the `PackageProviderWrapper` (drive's public route needs it or the
+      registry is empty).
+- [ ] Share-link UI in the project Share dialog: mint, pick role, copy URL,
+      revoke. Note drive's dialog hardcodes `role: 'viewer'` at both creation
+      sites — editor links exist in its schema but cannot be made from its
+      UI. Do not inherit that gap.
+- [ ] Abuse safeguards — **deliberately deferred, not forgotten**: rate
+      limiting, a default expiry, a discoverable revoke path. A write link
+      means anyone with the URL can create cards. Drive's rate limiter is
+      in-process and in-memory, so it does not hold across instances.
+- [ ] Help topic: sharing a board publicly, and what a link recipient can do.
+
 ## M7 — Package plumbing, tests, docs
 
 - [ ] Manifest completeness pass: `repository`, `tests: { directory: 'tests' }`,
@@ -321,7 +414,7 @@ file field (schema lands in M1, rules in M2).
       final.
 - [ ] Full gate: `pnpm exec tinycld-pkg check` + `test:e2e` in `cards/`,
       `pnpm run pkg:check` at the root; fix anything red.
-- [ ] Follow-ups to file, not block on: public share links (drive-style),
+- [ ] Follow-ups to file, not block on: (public share links are now M6a),
       core extraction of the members-junction + ShareDialog pattern once a
       third package needs sharing, a drive-exported file-picker component if
       the M6 attach-from-drive picker outgrows its minimal version, image
