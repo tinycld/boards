@@ -1,0 +1,32 @@
+{
+    "name": "@tinycld/cards",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "Kanban boards for tracking work across lists.",
+    "exports": {
+        "./package.json": "./package.json",
+        "./manifest": "./manifest.ts",
+        "./screens/*": "./tinycld/cards/screens/*.tsx",
+        "./sidebar": "./tinycld/cards/sidebar.tsx",
+        "./hooks/*": "./tinycld/cards/hooks/*.ts",
+        "./components/*": "./tinycld/cards/components/*.tsx"
+    },
+    "scripts": {
+        "typecheck": "tinycld-pkg typecheck",
+        "test": "tinycld-pkg test",
+        "test:e2e": "tinycld-pkg test:e2e",
+        "check": "tinycld-pkg check"
+    },
+    "devDependencies": {
+        "@tinycld/package-scripts": "*"
+    },
+    "peerDependencies": {
+        "react": ">=19",
+        "react-native": ">=0.83",
+        "expo-router": ">=55.0.0",
+        "pbtsdb": ">=0.6.3",
+        "@tanstack/react-db": ">=0.1",
+        "@tanstack/db": ">=0.6"
+    }
+}
