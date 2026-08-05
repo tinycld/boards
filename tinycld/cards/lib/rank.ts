@@ -36,11 +36,15 @@ export const FIRST_RANK = generateKeyBetween(null, null)
  * null yields {@link FIRST_RANK}. Throws when the two are equal or out of order,
  * which always means the caller passed unsorted or duplicate neighbours.
  *
- * The ordering check is OURS, not the library's. fractional-indexing 3.x threw
- * on reversed arguments; 4.x returns a plausible-looking key instead, which
- * would land a card in the wrong place with no error anywhere — the board just
- * quietly reorders itself. Since the two versions disagree and both satisfy our
- * peer range, the guarantee has to live here to hold at all.
+ * The ordering check is OURS, not the library's, and it is deliberately
+ * redundant with 3.x's own guard. 3.x throws on reversed arguments; 4.0.0
+ * silently swaps them and returns a plausible-looking key instead
+ * (`generateKeyBetween('a1', 'a0')` → `'a0V'`), which would land a card in the
+ * wrong place with no error anywhere — the board just quietly reorders itself.
+ * The peer range is pinned `<4` so that version cannot resolve, but a peer range
+ * is a request, not an enforcement: it is satisfied by whatever the consuming
+ * workspace hoists, and this repo does not own every install. Checking here
+ * makes the guarantee independent of which version actually loaded.
  */
 export function rankBetween(before: string | null, after: string | null): string {
     if (before !== null && after !== null && before >= after) {

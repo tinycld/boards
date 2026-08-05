@@ -303,10 +303,10 @@ where there's a form, `captureException` context strings like
       until it works — no dead chrome.
 - [ ] Drag-and-drop cards between columns (and column reorder) — the stepper
       covers correctness; DnD is the expected kanban interaction. Check
-      calendar's event-dragging implementation for the gesture approach. 
-      This is a key feature and **care must be taken** to 
-      implemented properly with the very best UX
-      Fine as a late task, but before release. 
+      calendar's event-dragging implementation for the gesture approach.
+      This is a key feature and **care must be taken** to implement it
+      properly, with the very best UX.
+      Fine as a late task, but before release.
 - [ ] Delete `sample-projects.ts`; move its shapes into `types.ts` and its
       content into the seed (next task). Update the three unit tests that
       import it (`board-cards.test.ts`, `due-state.test.ts`).

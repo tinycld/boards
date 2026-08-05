@@ -57,10 +57,11 @@ describe('rankBetween', () => {
     })
 
     it('rejects neighbours that are equal or out of order', () => {
-        // Asserts OUR message, not merely that something threw: fractional-indexing
-        // 3.x threw here and 4.x returns a plausible-looking key instead, so a bare
-        // .toThrow() passes or fails depending on which version resolved. The guard
-        // lives in rank.ts precisely so this holds on both.
+        // Asserts OUR message, not merely that something threw: 3.x throws here
+        // but 4.0.0 silently returns a plausible-looking key, so a bare
+        // .toThrow() would pass or fail depending on which version resolved.
+        // The peer range pins `<4`, and rank.ts guards anyway — this assertion
+        // is what proves the guard, rather than the library, is doing the work.
         const a = FIRST_RANK
         const b = rankBetween(a, null)
         expect(() => rankBetween(b, a)).toThrow(/strictly before/)
