@@ -1,10 +1,10 @@
 # Cards — path to a finished package
 
-The UI is prototyped against `tinycld/cards/sample-projects.ts`. Finishing the
-package means: real collections + migrations, per-project sharing (RBAC), wiring
-every stubbed interaction to live queries/mutations, and the mail + calendar
-integrations. Milestones are ordered by dependency; tasks within one are small
-and mostly independent.
+The UI was prototyped against `tinycld/cards/sample-projects.ts` (deleted in
+M3 once the live queries landed). Finishing the package means: real collections
++ migrations, per-project sharing (RBAC), wiring every stubbed interaction to
+live queries/mutations, and the mail + calendar integrations. Milestones are
+ordered by dependency; tasks within one are small and mostly independent.
 
 | | milestone | state |
 |---|---|---|
@@ -12,8 +12,8 @@ and mostly independent.
 | M1 | Data model: collections, migrations, types | ✅ shipped |
 | M2 | RBAC: the rules themselves | ✅ shipped |
 | M2a | Prove the rules behave | ✅ shipped — 64 Go tests |
-| **M3** | **Wire the UI to live data** | **next** — biggest unlock; gates M3b+ |
-| M3b | Role-gated UI and sharing | needs M3's queries |
+| **M3** | **Wire the UI to live data** | mostly shipped — seed, mobile, shortcuts, search remain |
+| M3b | Role-gated UI and sharing | ✅ shipped |
 | M4 | Mail: create a card from an email | touches `mail/` |
 | M5 | Calendar: due dates on the calendar | touches `calendar/` |
 | M6 | File attachments with previews | |
@@ -160,7 +160,7 @@ Blueprint: calendar (`calendar/pb-migrations/1715000000_create_calendar_collecti
 that was originally filed here (`useProjectRole`, affordance gating, the
 Share dialog) moved to **M3b** — it reads `cards_project_members`, so it
 cannot be built while the board still renders `SAMPLE_PROJECTS`. Proving the
-rules behave as written moved to **M2a**, which is the next thing to do.
+rules behave as written moved to **M2a**; both have since shipped.
 
 Blueprint: drive (`drive/pb-migrations/1716000000_create_drive_collections.js`
 rules section, `drive/tinycld/drive/components/ShareDialog.tsx`), mail's
@@ -446,10 +446,11 @@ where there's a form, `captureException` context strings like
       top-level thread (unbounded nesting in a 500px peek gives columns a few
       words wide); an ORPHAN whose parent is deleted or unsynced is promoted
       to top level rather than dropped; and a parent CYCLE terminates instead
-      of hanging the detail view. Delete is offered to the author only — a
-      project owner may also delete by rule, but the client cannot tell an
-      owner from a member until M3b's role hook, so the affordance stays
-      conservative rather than showing a button that 403s.
+      of hanging the detail view. Delete shipped author-only — the client
+      could not tell an owner from a member until M3b's role hook, so the
+      affordance stayed conservative rather than showing a button that 403s.
+      **M3b resolved this**: delete is now offered to the author OR a project
+      owner (`canModerate`), matching the rule.
 - [x] Filter button: implement (by label / assignee / due state) or remove it
       until it works — no dead chrome. **Removed.** It was a plain `View` —
       not even pressable. Board filtering stays a filed follow-up (M7).
@@ -504,48 +505,107 @@ where there's a form, `captureException` context strings like
       import it (`board-cards.test.ts`, `due-state.test.ts`). **Done** — the
       file is gone and no source or test references `SAMPLE_PROJECTS`. Its
       content did NOT reach a seed; `seed.ts` is still to write (below).
-- [ ] `tinycld/cards/seed.ts` (manifest `seed: { script: 'seed' }`): seed a
+- [x] `tinycld/cards/seed.ts` (manifest `seed: { script: 'seed' }`): seed a
       couple of projects with lists/cards/labels/checklists/comments,
       due dates relative to today (calendar's seed shows the offset
       convention). Raw PB writes are sanctioned in seeds only.
+      **Shipped** — three boards: a rich "Product launch" (labels, assignees,
+      past/today/future dues, checklists, a threaded comment), a light
+      "Home projects", and a "Team retrospective" OWNED BY THE ADMIN user
+      with the test user as commentor — so the role-gated UI (no composers,
+      display-only stepper, comment box present) is demoable right after
+      `db:reset` without any manual sharing. Every other user in the DB gets
+      a member row on the main board (cycled editor/commentor/viewer), so
+      the ShareDialog roster is populated too. The seed never writes the
+      denormalized counters — `server/counters.go` recomputes them from the
+      checklist/comment writes (verified: the REST hooks fire for
+      superusers). Idempotency probes user-owned `cards_projects` only, so
+      the admin-owned board never trips the guard.
 - [ ] Keyboard shortcuts: implement complete keyboard control of all actions
 - [ ] Search: we want to implement a `/` shortcut that opens a search box
       like vscode and github uses.  Consider sharing this in core and using
       with drive & mail
 - [ ] Feature: add the ability to collapse columns and to toggle cards into a
       compact representation
+- [ ] Full markdown editing.  Should be multi-user and show other users cursors
+      like text does, share editor framework with that pacakge and test on mobile
+- [ ] Feature: Show activity by users in real-time  If a user is viewing or editing
+      a card show their avatar highlighted like Jira.  Ask for details/screenshots
+      unclear.
+      
 
-## M3b — Role-gated UI and sharing
+## M3b — Role-gated UI and sharing ✅
 
-Moved out of M2. These all read `cards_project_members`, so they could not be
-built while the board rendered `SAMPLE_PROJECTS` — the rules were enforceable
-long before there was any live membership to gate on. Depends on M3's queries.
+**Done.** Moved out of M2. These all read `cards_project_members`, so they
+could not be built while the board rendered `SAMPLE_PROJECTS` — the rules were
+enforceable long before there was any live membership to gate on.
 
-Blueprint: `drive/tinycld/drive/components/ShareDialog.tsx`,
-`tinycld/core/lib/use-current-role.ts`.
+Blueprint as filed: `drive/tinycld/drive/components/ShareDialog.tsx`,
+`tinycld/core/lib/use-current-role.ts`. What actually got copied: **drive's
+dialog chrome but calendar's member-row mechanics** — drive's dialog cannot
+change an existing member's role (renders it as static text) and gates no
+entry point on a role, so `calendar/tinycld/calendar/components/sharing/`
+(MembersSection / MemberRow / AddMemberDialog / roles.ts) was the closer
+precedent for everything except the Modal shell.
 
-- [ ] Client hook `useProjectRole(projectId)` (live-query own member row →
-      `role`, `canEdit`, `canComment`, `isOwner`). Follow
-      `core/lib/use-current-role.ts` shape — in particular its `isReady`
-      contract: `role` is null both while loading and when genuinely absent,
-      so a guard that acts on the transient null will bounce a legitimate
-      owner on a cold load.
-- [ ] Derive the capabilities from the role in ONE place, mirroring the rule
-      fragments (`viaWriter` = owner|editor, `viaCommenter` = +commentor), so
-      the UI and the database cannot drift on what a role means.
-- [ ] Gate UI affordances on it: hide/disable Add list, add card, ListStepper,
-      description/checklist/comment editors, project rename/delete, Share
-      button for viewers (commentors keep the composer).
-- [ ] Sharing UI: project Share dialog — list members with roles, add member
-      (org users roster picker), change role, remove member; reuse drive's
-      `ShareDialog` structure and its contacts presence-gate. Entry point in
-      `BoardHeader` (the avatar stack is the natural anchor).
-- [ ] The member picker reads the roster, which is member-AND-non-guest by
-      rule — so a guest opening a shared board sees no roster at all. Make
-      that a deliberate empty state, not a broken-looking one.
-- [ ] Last-owner protection is NOT expressible in a PB rule (a rule sees one
-      row and cannot count owners), so an owner can orphan their own project.
-      Guard it in the dialog: refuse to demote or remove the last owner.
+- [x] `useProjectRole(projectId)` (`hooks/useProjectRole.ts`) — live-queries
+      the caller's OWN member row (the `ownMemberRow` disjunct guarantees it
+      is readable even for an org-guest; the roster is not), with
+      use-current-role's `isReady` contract. Capabilities default to DENY
+      while `role` is the transient null, so affordances pop in rather than
+      403; only refusal chrome gates on `isReady`.
+- [x] Capabilities derived in ONE place: `lib/permissions.ts` —
+      `capabilitiesFor` mirrors the rule fragments with the granting roles
+      NAMED (never `!== 'viewer'`, trap 1), `memberRowActionsFor` is the
+      pure last-owner/leave derivation. 11 unit tests
+      (`tests/permissions.test.ts`) pin the full truth table — the M7
+      "useProjectRole gating" tests shipped early in pure form.
+- [x] Affordances gated. Board: AddListColumn, CardComposer, ColumnMenu (also
+      the only rename entry), column/card drag sources AND the optimistic-
+      dispatch handlers (`useBoardDnd.onTransfer`, `BoardColumn.dropColumn` —
+      Drax fires receives before `acceptsDrag` settles, so the handler checks
+      are load-bearing), EmptyBoard's CTA (EmptyState grew an optional
+      `action` instead of a dead Pressable), BoardMenu owner-only. Detail:
+      EditableText `isDisabled` (title/description), DetailProperties renders
+      bare value chips with no ghost-chip invitations, checklist fully
+      read-only (and hidden when empty), CommentComposer + Reply commentor+,
+      comment delete now author-OR-owner (the DetailActivity M3b comment is
+      resolved), CardActionsMenu editor+, ListStepper stays visible as the
+      status display but its segments stop being buttons (`isInteractive`).
+- [x] Sharing UI: `components/sharing/` — ShareDialog (Modal shell, roster,
+      owner-gated Add people), AddMemberDialog (org-roster picker with
+      `.select()` projection, existing-member filter, 4-role picker),
+      MemberRow (role Menu for owners, static badge otherwise, remove ✕),
+      roles.ts (presentation only — the role union stays generated).
+      Entry point: the BoardHeader avatar stack is now a Pressable for every
+      NON-guest member — read-only for non-owners, management for owners.
+      **No contacts presence-gate**: drive's exists to invite non-user
+      emails, which requires its user-minting Go endpoint; a cards member is
+      always an existing users row, so the picker is org-users-only and the
+      add/change/remove mutations are plain `useMutation` generators
+      (`hooks/useMemberMutations.ts`, roster in `useProjectMembers.ts`).
+- [x] Guest state: a guest's roster query legally returns exactly their own
+      row; the dialog renders it plus an explicit "member list is hidden for
+      guests" note (gated on the org role being settled so it cannot flash at
+      a full member). The guest's avatar stack stays a plain display — an
+      openable-but-empty dialog would be the old Filter-button mistake.
+- [x] Last-owner protection, in BOTH halves — the dialog guard the task
+      filed, plus the server hook mail's history proves necessary
+      (`mail/server/mailbox_owner_guard_test.go`: the dialog-only version
+      shipped and the last owner could still self-demote via the API):
+      `memberRowActionsFor` never renders the sole owner's demote/remove/
+      leave, and `server/member_owner_guard.go` refuses them on
+      `OnRecordUpdate/DeleteRequest` (superuser bypass; message written for
+      the dialog's error banner, where it surfaces verbatim). 5 Go tests.
+      On a hosted tenant (no feature Go) the dialog guard is the only line —
+      both files say so, so neither gets "simplified" away.
+- [x] Added beyond the filed scope: **Leave board** — the member `del` rule
+      deliberately admits self-removal (`ownMemberRow ||`), and a rule-
+      supported capability with no affordance is dead. Confirmed via
+      ConfirmDialog; leaving the active board is safe because the
+      membership-driven project query drops it and `useActiveBoard`'s
+      render-time fallback picks the next one. Help topic:
+      `help/sharing-boards.md`.
 
 ## M4 — Mail integration: create a card from an email
 
@@ -651,9 +711,10 @@ The load-bearing insight from drive: **a redeemed link MINTS a
 rules. That is why every rule in M2 resolves through membership alone and
 none of them mention links.
 
-- [ ] Cards Go module (`server/`, manifest `server: { package, module }`) —
-      cards has none today. Token minting is server-side only: 32 bytes of
-      entropy, hex, into the 64-char `token` field.
+- [ ] Token minting — server-side only: 32 bytes of entropy, hex, into the
+      64-char `token` field. The Go module this was filed to create already
+      exists (M2a built `server/` for the RLS suites; the counters and M3b's
+      last-owner guard live there too), so this is just the endpoint.
 - [ ] Redemption: create the `cards_project_members` row at the link's role,
       never upgrading an existing membership (the link's role is a ceiling,
       not a grant). Re-resolve the link on every call so revoking
@@ -686,16 +747,28 @@ none of them mention links.
 - [ ] Decide if cards needs a `settings` screen (e.g. default board) — add
       via manifest `settings: [...]` if so.
 - [ ] Unit tests: mutations (position assignment on move, project-create
-      bootstrap), `useProjectRole` gating, due-state logic against real
-      records. Mock only via `tests/unit.helpers.tsx`.
+      bootstrap), due-state logic against real records. Mock only via
+      `tests/unit.helpers.tsx`. The `useProjectRole` gating logic is already
+      covered: M3b shipped it as the pure `lib/permissions.ts` with its full
+      truth table in `tests/permissions.test.ts`.
 - [ ] E2E (playwright, drive-the-UI only — no raw PB writes): create project →
       add list → add card → move via stepper → edit detail (due, checklist,
       comment, attach a file + open its preview) → share with second user →
       verify viewer restrictions. Navigation via `login`/`navigateToPackage`
       helpers, no `page.goto`.
+      **The sharing/role-gate portion shipped early** (pulled forward while
+      M3b was fresh): `tests/e2e/board-sharing.spec.ts` — create board →
+      share as viewer via the real invite flow (`createInvitedUser`) →
+      viewer gates (no composers, no BoardMenu, display-only stepper,
+      read-only roster) → promote to commentor via the role menu → commentor
+      posts a comment, still cannot edit → last-owner lock asserted as
+      ABSENT affordances with the other row as positive control. Remaining
+      scope here is the editor-path flow: stepper move, due, checklist,
+      attach + preview (M6).
 - [ ] Update `help/working-with-cards.md` for behavior that changed
-      (creating boards/lists/cards, sharing); add topics from M4–M6; run
-      `pnpm run packages:generate`.
+      (creating boards/lists/cards); add topics from M4–M6; run
+      `pnpm run packages:generate`. Sharing is already covered — M3b shipped
+      `help/sharing-boards.md` and cross-linked it.
 - [ ] Website docs: offer a cards page for `web/` once the feature set is
       final.
 - [ ] Full gate: `pnpm exec tinycld-pkg check` + `test:e2e` in `cards/`,
