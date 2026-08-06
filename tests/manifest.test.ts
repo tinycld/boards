@@ -11,4 +11,8 @@ describe('cards manifest', () => {
     it('has a description', () => {
         expect(manifest.description).toBe('Kanban boards for tracking work across lists.')
     })
+
+    it('declares the seed script', () => {
+        expect(manifest.seed?.script).toBe('seed')
+    })
 })

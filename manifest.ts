@@ -21,6 +21,7 @@ const manifest = {
     // board-face counters, and mint share-link tokens (M6a).
     server: { package: 'server', module: 'tinycld.org/packages/cards' },
     collections: { register: 'collections', types: 'types' },
+    seed: { script: 'seed' },
     peerVersions: { '@tinycld/core': '>=0.0.4 <0.1.0' },
 }
 
