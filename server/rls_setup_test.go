@@ -8,6 +8,7 @@ import (
 
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tests"
+	"github.com/pocketbase/pocketbase/tools/filesystem"
 	"tinycld.org/core/rlstest"
 )
 
@@ -242,6 +243,34 @@ func cardsChecklistItem(t *testing.T, app core.App, project, card *core.Record, 
 	r.Set("position", position)
 	if err := app.Save(r); err != nil {
 		t.Fatalf("save checklist item: %v", err)
+	}
+	return r
+}
+
+// cardsAttachment writes a real one-file attachment.
+//
+// The `file` field is required, so this cannot fake it with a string: PB needs
+// an actual filesystem.File to store, and a record saved without one fails
+// validation rather than landing with an empty file.
+func cardsAttachment(t *testing.T, app core.App, project, card, uploader *core.Record, name string) *core.Record {
+	t.Helper()
+	col, err := app.FindCollectionByNameOrId("cards_attachments")
+	if err != nil {
+		t.Fatalf("find cards_attachments: %v", err)
+	}
+	body := []byte("attachment body for " + name)
+	f, err := filesystem.NewFileFromBytes(body, name)
+	if err != nil {
+		t.Fatalf("build file %s: %v", name, err)
+	}
+	r := core.NewRecord(col)
+	r.Set("project", project.Id)
+	r.Set("card", card.Id)
+	r.Set("file", f)
+	r.Set("size", len(body))
+	r.Set("uploaded_by", uploader.Id)
+	if err := app.Save(r); err != nil {
+		t.Fatalf("save attachment %s: %v", name, err)
 	}
 	return r
 }

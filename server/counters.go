@@ -8,12 +8,13 @@ import (
 
 // Board-face counters.
 //
-// cards_checklist_items and cards_comments register with syncMode 'on-demand'
-// (see tinycld/cards/collections.ts): a client fetches them only for the card
-// it has open. That is right for the detail view and wrong for the board face,
-// where every card wants to show "3/7" and a comment count at rest. Rather than
-// sync those collections eagerly — which would ship every comment on every
-// board to every client — the counts are denormalized onto cards_cards here.
+// cards_checklist_items, cards_comments and cards_attachments register with
+// syncMode 'on-demand' (see tinycld/cards/collections.ts): a client fetches
+// them only for the card it has open. That is right for the detail view and
+// wrong for the board face, where every card wants to show "3/7", a comment
+// count and a paperclip at rest. Rather than sync those collections eagerly —
+// which would ship every comment on every board to every client — the counts
+// are denormalized onto cards_cards here.
 //
 // Two invariants, both learned the hard way elsewhere:
 //
@@ -30,7 +31,7 @@ import (
 // re-checked against here.
 
 func registerBoardCounters(app *pocketbase.PocketBase) {
-	for _, collection := range []string{"cards_checklist_items", "cards_comments"} {
+	for _, collection := range []string{"cards_checklist_items", "cards_comments", "cards_attachments"} {
 		app.OnRecordAfterCreateSuccess(collection).BindFunc(func(e *core.RecordEvent) error {
 			recountCard(e.App, e.Record.GetString("card"))
 			return e.Next()
@@ -38,6 +39,9 @@ func registerBoardCounters(app *pocketbase.PocketBase) {
 		app.OnRecordAfterUpdateSuccess(collection).BindFunc(func(e *core.RecordEvent) error {
 			// An is_done toggle changes checklist_done without changing
 			// checklist_total, so update counts as much as create does.
+			// Nothing an attachment update can change affects its count, but
+			// binding it anyway costs one no-op recount that exits at the
+			// unchanged check, and keeps all three collections symmetric.
 			recountCard(e.App, e.Record.GetString("card"))
 			return e.Next()
 		})
@@ -78,19 +82,26 @@ func recountCard(app core.App, cardID string) {
 		app.Logger().Warn("cards: comment recount failed", "card", cardID, "error", err)
 		return
 	}
+	attachmentCount, err := countRows(app, "cards_attachments", dbx.HashExp{"card": cardID})
+	if err != nil {
+		app.Logger().Warn("cards: attachment recount failed", "card", cardID, "error", err)
+		return
+	}
 
 	// Skip the write when nothing moved: every one of these hooks fires on
 	// cascade deletes and on unrelated field updates, and a no-op Save would
 	// bump `updated` and wake every subscribed board client for nothing.
 	if card.GetInt("checklist_total") == checklistTotal &&
 		card.GetInt("checklist_done") == checklistDone &&
-		card.GetInt("comment_count") == commentCount {
+		card.GetInt("comment_count") == commentCount &&
+		card.GetInt("attachment_count") == attachmentCount {
 		return
 	}
 
 	card.Set("checklist_total", checklistTotal)
 	card.Set("checklist_done", checklistDone)
 	card.Set("comment_count", commentCount)
+	card.Set("attachment_count", attachmentCount)
 
 	if err := app.Save(card); err != nil {
 		app.Logger().Warn("cards: counter save failed", "card", cardID, "error", err)

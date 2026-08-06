@@ -41,6 +41,66 @@ func TestCardsCounters_RecountReflectsChecklistAndComments(t *testing.T) {
 	}
 }
 
+// attachment_count is the fourth counter, added after the create migration
+// shipped. It rides the same recount, so this proves the new field is actually
+// wired into it rather than left at zero forever — which is what would happen
+// if the migration landed without the countRows call.
+func TestCardsCounters_RecountReflectsAttachments(t *testing.T) {
+	env := setupCardsEnv(t)
+
+	cardsAttachment(t, env.app, env.project, env.card, env.editor, "notes.txt")
+	second := cardsAttachment(t, env.app, env.project, env.card, env.editor, "spec.txt")
+
+	recountCard(env.app, env.card.Id)
+
+	fresh, err := env.app.FindRecordById("cards_cards", env.card.Id)
+	if err != nil {
+		t.Fatalf("re-read card: %v", err)
+	}
+	if got := fresh.GetInt("attachment_count"); got != 2 {
+		t.Fatalf("attachment_count = %d, want 2", got)
+	}
+
+	if err := env.app.Delete(second); err != nil {
+		t.Fatalf("delete attachment: %v", err)
+	}
+	recountCard(env.app, env.card.Id)
+
+	fresh, err = env.app.FindRecordById("cards_cards", env.card.Id)
+	if err != nil {
+		t.Fatalf("re-read card after delete: %v", err)
+	}
+	if got := fresh.GetInt("attachment_count"); got != 1 {
+		t.Errorf("attachment_count = %d, want 1 after delete", got)
+	}
+}
+
+// Same exposure as the comment_count case: attachment_count is not a relation,
+// so no rule pins it and a member can write it directly. The recount is what
+// corrects it.
+func TestCardsCounters_RecountOverwritesClientSuppliedAttachmentCount(t *testing.T) {
+	env := setupCardsEnv(t)
+
+	card, err := env.app.FindRecordById("cards_cards", env.card.Id)
+	if err != nil {
+		t.Fatalf("find card: %v", err)
+	}
+	card.Set("attachment_count", 42)
+	if err := env.app.Save(card); err != nil {
+		t.Fatalf("save inflated count: %v", err)
+	}
+
+	recountCard(env.app, env.card.Id)
+
+	fresh, err := env.app.FindRecordById("cards_cards", env.card.Id)
+	if err != nil {
+		t.Fatalf("re-read card: %v", err)
+	}
+	if got := fresh.GetInt("attachment_count"); got != 0 {
+		t.Errorf("attachment_count = %d, want 0 — a client-supplied value survived the recount", got)
+	}
+}
+
 // Counts must fall as well as rise — a delete-driven recount that only ever
 // grew would look correct on every create-only test.
 func TestCardsCounters_RecountFallsAfterDelete(t *testing.T) {

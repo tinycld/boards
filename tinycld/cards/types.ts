@@ -148,6 +148,8 @@ export interface BoardCardView {
     checklistTotal: number
     checklistDone: number
     commentCount: number
+    /** No board-face badge yet — M6 renders it with the attachment UI. */
+    attachmentCount: number
 }
 
 export interface BoardListView {

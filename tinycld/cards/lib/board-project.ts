@@ -77,6 +77,7 @@ export function toBoardCard(
         checklistTotal: card.checklist_total,
         checklistDone: card.checklist_done,
         commentCount: card.comment_count,
+        attachmentCount: card.attachment_count,
     }
 }
 

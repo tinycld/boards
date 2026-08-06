@@ -60,6 +60,7 @@ function card(
         checklist_total: 0,
         checklist_done: 0,
         comment_count: 0,
+        attachment_count: 0,
         created: '',
         updated: '',
         ...overrides,
@@ -152,13 +153,19 @@ describe('toBoardCard', () => {
 
     it('carries the denormalized counters through', () => {
         const result = toBoardCard(
-            card('c1', 'list1', 'a0', { checklist_total: 7, checklist_done: 3, comment_count: 2 }),
+            card('c1', 'list1', 'a0', {
+                checklist_total: 7,
+                checklist_done: 3,
+                comment_count: 2,
+                attachment_count: 4,
+            }),
             labels,
             users
         )
         expect(result.checklistTotal).toBe(7)
         expect(result.checklistDone).toBe(3)
         expect(result.commentCount).toBe(2)
+        expect(result.attachmentCount).toBe(4)
     })
 })
 
