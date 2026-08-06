@@ -471,20 +471,22 @@ where there's a form, `captureException` context strings like
       `useBoardDnd` re-measures every column (Drax `registration.measure()`)
       at drag start and on canvas scroll, and hand-rolls edge auto-scroll
       from the board monitor's `monitorOffsetRatio`.
-    - **`patches/react-native-drax@1.1.0.patch`** (workspace root): RNGH's
-      finalize emits a second, `cancelled` drag-end after a successful
-      cross-container drop (the dragged id intentionally outlives the snap),
-      and the board container's cancel branch reinjected the card at its
-      origin — every cross-column drop silently reverted. The patch ignores
-      the stale event and keeps the snap aimed at the target column.
-      **Root cause is version skew, proven by bisection**: drax's own
-      cross-list example, replicated verbatim in this stack, double-fires on
-      RNGH **3.0.1 and 3.1.0** but is clean on **3.0.0-beta.2** — the exact
-      version drax develops against and its demo site ships. The web
-      finalize semantics changed between the beta and the releases; drax
-      hasn't caught up. Upstreamable as-is; the patch lives in ROOT-repo
-      state, so a fresh bootstrap assembly needs it (or an upstream fix)
-      before cross-column drops work.
+    - **drax is consumed from a pinned fork**
+      (`github:nathanstitt/react-native-drax`, `consumer/1.1.0-finalize-fix`
+      branch — the fix plus committed `lib/`, since pnpm won't run prepare
+      for a git workspace-root dep; `fix/finalize-canceled-flag` is the
+      clean branch for the upstream PR). Root cause, found by bisecting
+      drax's own cross-list example in this stack: gesture-handler PR #3887
+      moved onFinalize's end flag from the legacy `success` parameter into
+      the event as `canceled`, and drax 1.1.0 still reads the removed
+      parameter — so on released RNGH 3.x (3.0.1, 3.1.0; the 3.0.0-beta.2
+      their demo pins is fine) every normal drag end dispatched a stale
+      cancelled drag-end, and the board container's cancel branch reverted
+      every cross-column drop. The fork reads `event.canceled` with a
+      legacy fallback (`isFinalizeCanceled`), keeps a board-level stale-
+      cancel guard as defense in depth, and adds the repo's first tests.
+      The pin lives in tinycld/package.json + the workspace override; swap
+      back to the npm release once upstream merges.
     - Drax pads monitor bounds by ~100px, so adjacent columns both "contain"
       a drag near the gap — the receiving highlight keys off
       `monitorOffsetRatio` ∈ [0,1] each frame, never enter/exit alone.
