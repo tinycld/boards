@@ -15,6 +15,14 @@ interface CardsUIState {
     isNewBoardOpen: boolean
     openNewBoard: () => void
     closeNewBoard: () => void
+    /**
+     * True while a card drag is live. Read imperatively via `.getState()` in
+     * BoardCard's onPress: on web with movement-based activation, releasing a
+     * drag can still synthesize a trailing click on the card under the
+     * pointer, which would pop the peek open the instant a drop lands.
+     */
+    isCardDragging: boolean
+    setCardDragging: (isDragging: boolean) => void
 }
 
 export const useCardsUIStore = create<CardsUIState>()(
@@ -31,6 +39,8 @@ export const useCardsUIStore = create<CardsUIState>()(
             isNewBoardOpen: false,
             openNewBoard: () => set({ isNewBoardOpen: true }),
             closeNewBoard: () => set({ isNewBoardOpen: false }),
+            isCardDragging: false,
+            setCardDragging: isDragging => set({ isCardDragging: isDragging }),
         }),
         {
             name: 'tinycld_cards_ui',
