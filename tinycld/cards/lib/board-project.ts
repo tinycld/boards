@@ -130,6 +130,9 @@ export function buildBoardProject(input: BuildBoardInput): BoardProject | null {
         name: project.name,
         color: project.color,
         members: members.map(toBoardMember),
+        // Sorted by name so the label picker has a stable order that does not
+        // depend on insertion sequence.
+        labels: [...labelsById.values()].sort((a, b) => a.name.localeCompare(b.name)),
         lists: [...lists].sort(byRank).map(list => ({
             id: list.id,
             name: list.name,

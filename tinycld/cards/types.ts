@@ -167,6 +167,11 @@ export interface BoardProject {
     color: CardsColor
     members: BoardMember[]
     lists: BoardListView[]
+    /**
+     * Every label defined on this board — what the card label picker offers,
+     * which is a superset of any one card's `labels`.
+     */
+    labels: BoardLabel[]
 }
 
 /**

@@ -2,12 +2,13 @@ import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { type Shortcut, useRegisterShortcuts, useShortcutScope } from '@tinycld/core/lib/shortcuts'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useRouter } from 'expo-router'
-import { Maximize2, MoreHorizontal, X } from 'lucide-react-native'
+import { Maximize2, X } from 'lucide-react-native'
 import { useMemo } from 'react'
 import { View } from 'react-native'
 import { type CardEntry, findCardEntry, neighborCardId } from '../lib/board-cards'
 import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardProject } from '../types'
+import { CardActionsMenu } from './detail/CardActionsMenu'
 import { CardDetail } from './detail/CardDetail'
 import { IconButton } from './detail/IconButton'
 import { ListStepper } from './detail/ListStepper'
@@ -92,14 +93,22 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
                 <IconButton label="Open full page" onPress={expandCard}>
                     <Maximize2 size={14} color={mutedColor} strokeWidth={2.2} />
                 </IconButton>
-                <IconButton label="More actions">
-                    <MoreHorizontal size={15} color={mutedColor} strokeWidth={2.2} />
-                </IconButton>
+                <CardActionsMenu
+                    cardId={entry.card.id}
+                    cardTitle={entry.card.title}
+                    onDismiss={closeCard}
+                />
                 <IconButton label="Close" onPress={closeCard}>
                     <X size={15} color={mutedColor} strokeWidth={2.2} />
                 </IconButton>
             </View>
-            <CardDetail card={entry.card} variant="peek" />
+            <CardDetail
+                card={entry.card}
+                variant="peek"
+                projectId={project.id}
+                projectLabels={project.labels}
+                projectMembers={project.members}
+            />
         </View>
     )
 }

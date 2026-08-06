@@ -2,26 +2,64 @@ import { LabelBadge } from '@tinycld/core/components/LabelBadge'
 import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { CalendarDays, Clock } from 'lucide-react-native'
-import type { ReactNode } from 'react'
+import { forwardRef, type ReactNode } from 'react'
 import { Pressable, Text, View } from 'react-native'
+import { useToggleCardRelation, useUpdateCard } from '../../hooks/useCardMutations'
 import { dueStateFor, formatDueDate } from '../../lib/due-state'
-import type { BoardCardView } from '../../types'
+import type { BoardCardView, BoardLabel, BoardMember } from '../../types'
+import { AssigneePicker } from './AssigneePicker'
+import { DuePicker } from './DuePicker'
+import { LabelPicker } from './LabelPicker'
 
 interface DetailPropertiesProps {
     card: BoardCardView
+    /** The board's labels — the picker offers these, not the card's own. */
+    projectLabels: BoardLabel[]
+    /** The board's roster, so a card is only assignable to someone who can open it. */
+    projectMembers: BoardMember[]
+    onManageLabels: () => void
 }
 
-export function DetailProperties({ card }: DetailPropertiesProps) {
+export function DetailProperties({
+    card,
+    projectLabels,
+    projectMembers,
+    onManageLabels,
+}: DetailPropertiesProps) {
+    const updateCard = useUpdateCard()
+    const toggleRelation = useToggleCardRelation()
+
+    const toggle = (field: 'labels' | 'assignees') => (id: string, isSelected: boolean) =>
+        toggleRelation.mutate({ cardId: card.id, field, id, isSelected })
+
     return (
         <View className="gap-3 mb-[22px]">
             <PropertyRow name="Assignees">
-                <AssigneesValue card={card} />
+                <AssigneePicker
+                    members={projectMembers}
+                    assignedIds={card.assignees.map(member => member.id)}
+                    onToggle={toggle('assignees')}
+                >
+                    <AssigneesValue card={card} />
+                </AssigneePicker>
             </PropertyRow>
             <PropertyRow name="Labels">
-                <LabelsValue card={card} />
+                <LabelPicker
+                    labels={projectLabels}
+                    selectedIds={card.labels.map(label => label.id)}
+                    onToggle={toggle('labels')}
+                    onManage={onManageLabels}
+                >
+                    <LabelsValue card={card} />
+                </LabelPicker>
             </PropertyRow>
             <PropertyRow name="Due">
-                <DueValue due={card.due} />
+                <DuePicker
+                    due={card.due}
+                    onChange={due => updateCard.mutate({ cardId: card.id, due })}
+                >
+                    <DueValue due={card.due} />
+                </DuePicker>
             </PropertyRow>
         </View>
     )
@@ -38,60 +76,104 @@ function PropertyRow({ name, children }: { name: string; children: ReactNode }) 
     )
 }
 
-function GhostChip({ label }: { label: string }) {
+const GhostChip = forwardRef<View, { label: string; onPress?: () => void }>(function GhostChip(
+    { label, onPress },
+    ref
+) {
     return (
         <Pressable
+            ref={ref}
             accessibilityRole="button"
+            accessibilityLabel={label}
+            onPress={onPress}
             className="border border-dashed border-border rounded-full px-2.5 py-[3px] hover:border-muted web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
         >
             <Text className="text-[12px] font-medium text-muted">{label}</Text>
         </Pressable>
     )
-}
+})
 
-function AssigneesValue({ card }: { card: BoardCardView }) {
-    if (!card.assignees?.length) return <GhostChip label="Assign" />
+/**
+ * The assignee chips, and the AssigneePicker's trigger.
+ *
+ * A populated row wraps its chips in ONE Pressable rather than returning a
+ * fragment: Menu.Trigger clones a single child to inject onPress and a ref, and
+ * a fragment has neither.
+ */
+const AssigneesValue = forwardRef<View, { card: BoardCardView; onPress?: () => void }>(
+    function AssigneesValue({ card, onPress }, ref) {
+        if (!card.assignees?.length) {
+            return <GhostChip ref={ref} label="Assign" onPress={onPress} />
+        }
 
-    return (
-        <>
-            {card.assignees.map(member => (
-                <View
-                    key={member.id}
-                    className="flex-row items-center gap-1.5 bg-foreground/[0.06] rounded-full pl-[3px] pr-2.5 py-[2px]"
-                >
-                    <NameAvatar
-                        firstName={member.firstName}
-                        lastName={member.lastName}
-                        size={20}
-                        colorKey={member.id}
-                    />
-                    <Text className="text-[12.5px] font-medium text-foreground">
-                        {member.firstName} {member.lastName}
-                    </Text>
-                </View>
-            ))}
-        </>
-    )
-}
+        return (
+            <Pressable
+                ref={ref}
+                accessibilityRole="button"
+                accessibilityLabel="Change assignees"
+                onPress={onPress}
+                className="flex-row flex-wrap items-center gap-1.5 rounded-full web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+            >
+                {card.assignees.map(member => (
+                    <View
+                        key={member.id}
+                        className="flex-row items-center gap-1.5 bg-foreground/[0.06] rounded-full pl-[3px] pr-2.5 py-[2px]"
+                    >
+                        <NameAvatar
+                            firstName={member.firstName}
+                            lastName={member.lastName}
+                            size={20}
+                            colorKey={member.id}
+                        />
+                        <Text className="text-[12.5px] font-medium text-foreground">
+                            {member.firstName} {member.lastName}
+                        </Text>
+                    </View>
+                ))}
+            </Pressable>
+        )
+    }
+)
 
-function LabelsValue({ card }: { card: BoardCardView }) {
-    if (!card.labels?.length) return <GhostChip label="Add label" />
+/** The label chips, and the LabelPicker's trigger. See AssigneesValue. */
+const LabelsValue = forwardRef<View, { card: BoardCardView; onPress?: () => void }>(
+    function LabelsValue({ card, onPress }, ref) {
+        if (!card.labels?.length) {
+            return <GhostChip ref={ref} label="Add label" onPress={onPress} />
+        }
 
-    return (
-        <>
-            {card.labels.map(label => (
-                <LabelBadge key={label.id} name={label.name} color={label.color} />
-            ))}
-            <GhostChip label="+" />
-        </>
-    )
-}
+        return (
+            <Pressable
+                ref={ref}
+                accessibilityRole="button"
+                accessibilityLabel="Change labels"
+                onPress={onPress}
+                className="flex-row flex-wrap items-center gap-1.5 rounded-full web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+            >
+                {card.labels.map(label => (
+                    <LabelBadge key={label.id} name={label.name} color={label.color} />
+                ))}
+            </Pressable>
+        )
+    }
+)
 
-function DueValue({ due }: { due?: Date }) {
+/**
+ * The due chip — and the DuePicker's trigger, which is why its root is a
+ * Pressable in both states: Menu.Trigger clones its child to inject onPress and
+ * a ref, so a plain View here would render a chip that cannot be opened.
+ */
+const DueValue = forwardRef<View, { due?: Date; onPress?: () => void }>(function DueValue(
+    { due, onPress },
+    ref
+) {
     const warningColor = useThemeColor('warning')
     const dangerColor = useThemeColor('danger')
     const mutedColor = useThemeColor('muted')
-    if (!due) return <GhostChip label="Set due date" />
+
+    if (!due) {
+        return <GhostChip ref={ref} label="Set due date" onPress={onPress} />
+    }
 
     const state = dueStateFor(due)
     const isOverdue = state === 'overdue'
@@ -103,12 +185,19 @@ function DueValue({ due }: { due?: Date }) {
         : state === 'soon'
           ? 'bg-warning/10'
           : 'bg-foreground/[0.06]'
+
     return (
-        <View className={`flex-row items-center gap-[5px] rounded-md px-2 py-[3px] ${stateClass}`}>
+        <Pressable
+            ref={ref}
+            accessibilityRole="button"
+            accessibilityLabel={`Due ${label}. Change due date`}
+            onPress={onPress}
+            className={`flex-row items-center gap-[5px] rounded-md px-2 py-[3px] web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${stateClass}`}
+        >
             <Icon size={12} color={color} strokeWidth={2.2} />
             <Text className="text-[12.5px] font-medium" style={{ color }}>
                 {label}
             </Text>
-        </View>
+        </Pressable>
     )
-}
+})

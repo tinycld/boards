@@ -255,4 +255,33 @@ describe('buildBoardProject', () => {
         buildBoardProject({ ...base, project: project(), lists, cards: [] })
         expect(lists.map(l => l.id)).toEqual(['list2', 'list1'])
     })
+
+    // The board's OWN labels, which the card label picker offers — a superset
+    // of any one card's labels, and sorted so the picker order does not depend
+    // on insertion sequence.
+    it('carries the project label set, sorted by name', () => {
+        const result = buildBoardProject({
+            ...base,
+            project: project(),
+            lists: [],
+            cards: [],
+            labels: [
+                {
+                    id: 'l2',
+                    project: 'p1',
+                    name: 'Urgent',
+                    color: '#f00',
+                    created: '',
+                    updated: '',
+                },
+                { id: 'l1', project: 'p1', name: 'Bug', color: '#0f0', created: '', updated: '' },
+            ],
+        })
+        expect(result?.labels.map(l => l.name)).toEqual(['Bug', 'Urgent'])
+    })
+
+    it('has an empty label set when the board defines none', () => {
+        const result = buildBoardProject({ ...base, project: project(), lists: [], cards: [] })
+        expect(result?.labels).toEqual([])
+    })
 })

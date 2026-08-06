@@ -5,11 +5,11 @@ import { type Shortcut, useRegisterShortcuts, useShortcutScope } from '@tinycld/
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useNavigateBack } from '@tinycld/core/lib/use-navigate-back'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { ChevronLeft, MoreHorizontal } from 'lucide-react-native'
+import { ChevronLeft } from 'lucide-react-native'
 import { useMemo, useRef } from 'react'
 import { Pressable, Text, View } from 'react-native'
+import { CardActionsMenu } from '../components/detail/CardActionsMenu'
 import { CardDetail } from '../components/detail/CardDetail'
-import { IconButton } from '../components/detail/IconButton'
 import { ListStepper } from '../components/detail/ListStepper'
 import { ProjectWash } from '../components/ProjectWash'
 import { useActiveBoard } from '../hooks/useActiveBoard'
@@ -89,7 +89,6 @@ interface CardPageProps {
 }
 
 function CardPage({ project, entry, cardId, navigateBack }: CardPageProps) {
-    const mutedColor = useThemeColor('muted')
     usePageShortcuts(project, cardId, navigateBack)
 
     return (
@@ -100,11 +99,19 @@ function CardPage({ project, entry, cardId, navigateBack }: CardPageProps) {
                 <BackButton label={project.name} onPress={navigateBack} />
                 <ListStepper project={project} card={entry.card} list={entry.list} />
                 <View className="flex-1" />
-                <IconButton label="More actions">
-                    <MoreHorizontal size={15} color={mutedColor} strokeWidth={2.2} />
-                </IconButton>
+                <CardActionsMenu
+                    cardId={entry.card.id}
+                    cardTitle={entry.card.title}
+                    onDismiss={navigateBack}
+                />
             </View>
-            <CardDetail card={entry.card} variant="page" />
+            <CardDetail
+                card={entry.card}
+                variant="page"
+                projectId={project.id}
+                projectLabels={project.labels}
+                projectMembers={project.members}
+            />
         </View>
     )
 }
