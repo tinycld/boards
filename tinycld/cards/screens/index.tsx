@@ -49,7 +49,7 @@ export default function CardsIndex() {
 }
 
 function BoardCanvas({ project }: { project: BoardProject }) {
-    if (project.lists.length === 0) return <EmptyBoard />
+    if (project.lists.length === 0) return <EmptyBoard projectId={project.id} />
 
     return (
         <ScrollView
@@ -65,9 +65,14 @@ function BoardCanvas({ project }: { project: BoardProject }) {
             }}
         >
             {project.lists.map(list => (
-                <BoardColumn key={list.id} list={list} />
+                <BoardColumn
+                    key={list.id}
+                    list={list}
+                    projectId={project.id}
+                    lists={project.lists}
+                />
             ))}
-            <AddListColumn />
+            <AddListColumn projectId={project.id} lists={project.lists} />
         </ScrollView>
     )
 }

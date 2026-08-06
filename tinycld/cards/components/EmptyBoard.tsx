@@ -1,6 +1,8 @@
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { Columns3, Plus } from 'lucide-react-native'
 import { Pressable, Text, View } from 'react-native'
+import { useCreateList } from '../hooks/useListMutations'
+import { FIRST_RANK } from '../lib/rank'
 import { useCardsUIStore } from '../stores/cards-ui-store'
 
 function EmptyState({
@@ -48,13 +50,23 @@ export function NoBoards() {
     )
 }
 
-/** A board that exists but has no columns. */
-export function EmptyBoard() {
+/**
+ * A board that exists but has no columns.
+ *
+ * The CTA creates a "To do" column outright rather than opening a composer:
+ * this state is only reachable by deleting every column of a board that shipped
+ * with three, so the user is recovering from a dead end and the fastest way out
+ * is one press. Renaming it is one more press from the column menu.
+ */
+export function EmptyBoard({ projectId }: { projectId: string }) {
+    const createList = useCreateList(projectId)
+
     return (
         <EmptyState
             title="No lists yet"
             body="Create a list to start adding cards."
-            actionLabel="Add list"
+            actionLabel={createList.isPending ? 'Adding…' : 'Add list'}
+            onPress={() => createList.mutate({ name: 'To do', position: FIRST_RANK })}
         />
     )
 }
