@@ -25,6 +25,28 @@ landed and the real dependency order became clear: the rules are enforceable
 long before there is any live membership to gate a UI on, and the share-link
 schema had to ship with the create migration while the flow did not.
 
+**A date picker now lives in core, promoted from calendar during M3.** Cards
+needed one for due dates and there was none in the workspace. Every native
+option (`@react-native-community/datetimepicker`, `react-native-date-picker`,
+`@expo/ui`) is native-module-only and would crash on web; the two web-capable
+libraries are stale, and the better-maintained one has an open
+react-native-web `classNames` bug that lands squarely on this codebase's
+Tailwind styling. Calendar already had a working, theme-aware month grid, so:
+
+- `@tinycld/core/lib/dates` — day-granular, LOCAL-TIME date helpers plus
+  `getMonthGrid`. 30 unit tests, which the originals never had.
+- `@tinycld/core/components/MiniCalendar` — the month grid component.
+- Calendar now imports both from core; its duplicates are deleted and
+  `useCalendarNavigation` re-exports the helpers so its own callers are
+  unchanged.
+
+Promoting caught a live bug: calendar's `addMonths` used bare `setMonth`, so
+**Jan 31 + 1 month returned MARCH 3** — stepping a month from a 31st skipped
+February entirely, in both the mini-calendar arrows and `useCalendarView`'s
+month paging. Core's version clamps to the target month's last day.
+`toDateString`/`fromDateString` likewise avoid the `toISOString()` UTC round
+trip that shifts a date a day west of Greenwich.
+
 Ecosystem facts these tasks rely on:
 
 - **There is no generic RBAC/sharing engine in core.** The org-wide axis is
@@ -271,75 +293,176 @@ Everything currently reading `SAMPLE_PROJECTS` or writing to the
 **Start here** — a board you cannot create is a board you cannot test, and
 every query below returns nothing until one exists:
 
-- [ ] Creating a project = one mutation inserting the project + its owner-member
+- [x] Creating a project = one mutation inserting the project + its owner-member
       row (+ default lists?) — a single generator mutation yielding sequential
       transactions. The owner row depends on `bootstrapFirstOwner`, so it must
       be inserted by the same user, with `role: "owner"`, while the project has
       no members. Moved here from M2: it writes only, so it is the one piece of
       that milestone the sample data never blocked.
+      **Shipped** as `useCreateProject` (`hooks/useProjectMutations.ts`) +
+      `NewBoardDialog`; seeds three default lists (To do / Doing / Done).
 
 Queries:
 
-- [ ] Sidebar: project list from `cards_projects` (rules already scope to
+- [x] Sidebar: project list from `cards_projects` (rules already scope to
       membership). Keep `activeProjectId` in the Zustand store, but persist it
-      and fall back to first project; clear stale ids.
-- [ ] Board screen: one query joining lists + cards (+ labels, assignees via
+      and fall back to first project; clear stale ids. **Shipped** — resolved
+      during render in `useActiveBoard`, no effect.
+- [x] Board screen: one query joining lists + cards (+ labels, assignees via
       the collection `expand`/join — one query, not N stitched ones), ordered
       by **`position, id`** — `id` is the tiebreaker that keeps duplicate
       ranks rendering identically on every client instead of flickering.
-      Replace `useActiveBoard`'s sample lookup; delete `applyCardMoves` and
-      the `cardMoves` overlay once moves are real.
       Note `cards_cards` registers with NO `expand`: assignees and labels are
       already loaded eagerly, so expanding would ship duplicate rows per card
       — look them up by id instead.
-- [ ] **Board-face badges vs on-demand sync.** `cards_checklist_items`,
-      `cards_comments` and `cards_attachments` register as
-      `syncMode: 'on-demand'` (they are read only for the open card), so
-      `BoardCard`'s checklist ratio, comment count and attachment count are
-      NOT available at rest. Either drop those badges, or add denormalized
-      counters on `cards_cards` maintained by a hook — `mail_threads`
-      `has_attachments` is the precedent. Decide before wiring `BoardCard`.
-- [ ] Card detail (`[cardId].tsx` + `CardPeek`): card + checklist + comments
+      **Shipped** as `useActiveBoard` + `lib/board-project.ts`. It is SIX
+      queries, not one: `.join()` takes a single equality, and `labels` /
+      `assignees` are `string[]` multi-relations that no `eq()` can join to a
+      table — those resolve by id in JS against the eagerly-synced collections.
+      `applyCardMoves` is already deleted; the `cardMoves` store overlay is
+      still there, write-only and unread, and dies with the move mutation.
+- [x] **Board-face badges vs on-demand sync.** Resolved: denormalized counters
+      on `cards_cards`, maintained by `server/counters.go` (always RECOMPUTED,
+      never delta'd; never fails the user's write). `checklist_total`,
+      `checklist_done` and `comment_count` shipped with the create migration;
+      **`attachment_count` was appended in
+      `1980000001_add_attachment_count_and_label_uniqueness.js`** so M6 has no
+      schema work left — no badge renders it yet, that is M6's.
+      That migration also adds a UNIQUE index on `cards_labels (project, name)`:
+      two labels named "bug" on one board are indistinguishable in the UI.
+- [x] Card detail (`[cardId].tsx` + `CardPeek`): card + checklist + comments
       (comments join users for author names). Keep `findCardEntry`/
       `neighborCardId` working off the board query result so J/K still walk
-      board order.
-- [ ] `BoardHeader` member avatars from `cards_project_members` join → users.
+      board order. **Shipped** in `useCardDetail`; J/K still walk board order.
+- [x] `BoardHeader` member avatars from `cards_project_members` join → users.
+      **Shipped** — `useActiveBoard` joins the roster to `users` rather than
+      using the registered `expand`, so an optimistically-added member renders
+      without waiting for a realtime round-trip.
 
 Mutations (all via `useMutation` generators, `handleMutationErrorsWithForm`
 where there's a form, `captureException` context strings like
 `'cards.card.move'`):
 
-- [ ] Project: create (EmptyBoard "New board" + sidebar action button),
+- [x] Project: create (EmptyBoard "New board" + sidebar action button),
       rename, change color, delete/archive (More-actions menu).
-- [ ] List: create (`AddListColumn`), rename, reorder, toggle `is_done`,
-      delete (with card handling: block, or move cards to a neighbor).
-- [ ] Card: create (per-column add + empty board), edit title, edit
-      description (the "Add a description" pressable → editor), set/clear due
-      date, delete/archive (detail "More actions" menu).
-- [ ] Move card: `ListStepper` writes `list` + new `position`; remove the
+      **Shipped** — `components/BoardMenu.tsx` on the board header, with
+      inline rename, core's `ColorPickerGrid` in a modal, and a confirmed
+      archive. **Archive is the only removal offered**: a project cascades to
+      every list, card, comment and attachment under it, and an owner saying
+      "remove this board" almost always means "get it out of my sidebar".
+      `useArchiveProject` clears the stored active id so `useActiveBoard`
+      falls back to the first remaining board.
+- [x] List: create, rename, reorder, toggle `is_done`, delete. **All shipped.**
+      `useCreateList`/`useUpdateList`/`useDeleteList`; `AddListColumn` is a real
+      composer, `EmptyBoard`'s CTA creates a "To do" column outright (that
+      state is only reachable by deleting every column, so the fastest way out
+      of the dead end is one press), and `components/ColumnMenu.tsx` carries
+      rename / move left / move right / mark-as-done / delete.
+      Reorder lives in the MENU, not behind a drag: drag-and-drop is a later
+      task and an addition, never the only way to do something.
+      **Card handling is already decided by the schema: deleting a
+      list DELETES ITS CARDS.** `cards_cards.list` ships `cascadeDelete: true`
+      (create migration ~L433), so PocketBase does it server-side in both the
+      dev shell and a hosted tenant — no hook, no migration, and no way to
+      delete a list without its cards short of moving them first.
+      **The UI therefore MUST warn.** The confirm dialog names the count —
+      "Delete 'Doing' and its 7 cards? This can't be undone." — and an empty
+      list skips the confirm entirely. A delete that silently destroys seven
+      cards because the cascade was invisible is the failure mode here.
+- [x] Card: create (per-column add + empty board), edit title, edit
+      description, set/clear due date, delete/archive. **All shipped.**
+    - `useCreateCard` + `components/CardComposer.tsx` in every column. Enter
+      submits and KEEPS THE COMPOSER OPEN — filling a column is a burst
+      activity and reopening per card triples the keystrokes.
+    - `useUpdateCard` behind `components/detail/EditableText.tsx` (title and
+      description). Saves on BLUR as well as Enter: someone who types and then
+      clicks elsewhere has finished editing, and losing that text is how a
+      field stops being trusted. Escape reverts to the value the edit started
+      from, not the latest prop — a realtime update mid-edit must not become
+      the revert target.
+    - Due date: `components/detail/DuePicker.tsx` — Today / Tomorrow / Next
+      week / Clear over a month grid. **This required a real date picker in
+      core; see the note below.**
+    - Archive + delete: `components/detail/CardActionsMenu.tsx`, replacing the
+      dead "More actions" IconButtons on BOTH the peek and the page. Archive
+      is unconfirmed (reversible, destroys nothing); delete confirms via
+      core's `ConfirmDialog` and warns that the checklist, comments and
+      attachments go with it.
+    - **Description still renders as PLAIN TEXT** though `types.ts` calls it
+      Markdown source. Editing and rendering are separate concerns and a
+      half-wired renderer is worse than none — rendering is filed in M7.
+- [x] Move card: `ListStepper` writes `list` + new `position`; remove the
       store's `moveCard` overlay. Position assignment per the M0 ordering
-      decision.
-- [ ] Labels: project-scoped label CRUD + assign/unassign on a card
-      (DetailProperties).
-- [ ] Assignees: picker over project members (not the whole org roster),
-      assign/unassign (DetailProperties).
-- [ ] Checklist: add item, toggle done, edit title, delete, reorder
-      (DetailChecklist is display-only today).
-- [ ] Comments: real composer (replace the static "Write a comment…" text),
-      render `created` timestamps instead of the sample `timeAgo` strings;
-      reply-to-comment via the `parent` field (one level of nesting in the
-      activity list is enough).
-- [ ] Filter button: implement (by label / assignee / due state) or remove it
-      until it works — no dead chrome.
+      decision. **Shipped** — `useMoveCard` (`hooks/useCardMutations.ts`)
+      writes both fields in ONE update; `cardMoves`/`moveCard` are gone from
+      the store. Rank arithmetic lives in `lib/move.ts` (`rankForAppend`,
+      `rankForPrepend`, `rankForInsert`, `rankForReorder`), 16 unit tests.
+      Two things that surfaced writing it, both of which DnD will hit:
+    - **Inserting between two EQUAL ranks throws.** `rankBetween` refuses
+      neighbours that do not sort strictly apart, and ranks are not unique, so
+      `rankForInsert` widens the window past a tied run instead. Without that,
+      a drop between two cards that split the same gap offline crashes the
+      drag. Covered by three tests.
+    - **`rankForReorder` must exclude the moving card** before indexing, or
+      every downward within-column move is off by one and a drop-in-place
+      computes the card's own rank.
+- [x] Labels: project-scoped label CRUD + assign/unassign on a card
+      (DetailProperties). **Shipped** — `useLabelMutations`,
+      `components/LabelManagerDialog.tsx` (create / rename / recolor / delete),
+      and `detail/LabelPicker.tsx` for assignment.
+      **Cards does NOT use core's label system, and that is deliberate.** Core
+      has `labels` + `label_assignments` (mail and contacts use them), but its
+      assignments are PER-USER PRIVATE and its labels workspace-global — on a
+      shared board every member would see only their own labels on cards
+      everyone can read. A kanban label belongs to the card and the team, so
+      `cards_labels` stays project-scoped with a multi-relation on the card.
+      Core's `ColorPickerGrid`, `LabelBadge` and `MenuActionItem` ARE imported;
+      only the dialog's structure is cloned.
+      Deleting a label leaves its id on cards that carried it
+      (`cascadeDelete: false`); `toBoardCard` already drops unresolvable ids,
+      which is why there is no client-side fan-out rewriting every card.
+- [x] Assignees: picker over project members (not the whole org roster),
+      assign/unassign (DetailProperties). **Shipped** —
+      `detail/AssigneePicker.tsx` over `project.members`. A guest arriving by
+      share link reads no roster at all (member-AND-non-guest by rule), so the
+      empty state is deliberate rather than broken-looking.
+      Both pickers write through `useToggleCardRelation`, which rebuilds the
+      `string[]` from the mutation DRAFT rather than the render — two rapid
+      toggles then compose instead of the second clobbering the first.
+- [x] Checklist: add item, toggle done, edit title, delete. **Shipped** —
+      `useChecklistMutations` + an interactive `DetailChecklist` (rows were not
+      even Pressables before). The section no longer hides when empty: it owns
+      the "Add item" composer, so hiding it left a card with no way to start a
+      checklist. Reorder is NOT done — the ranks are there, the UI is not; it
+      belongs with the drag-and-drop task.
+- [x] Comments: real composer (replace the static "Write a comment…" text),
+      render `created` timestamps; reply-to-comment via the `parent` field
+      (one level of nesting in the activity list is enough). **Shipped** —
+      `useCommentMutations`, `components/detail/CommentComposer.tsx` (⌘↩
+      sends; plain Enter is a newline, because a comment is prose), and
+      threading in `lib/comment-threads.ts` with 9 unit tests. Three cases the
+      tests pin, none hypothetical: a reply-to-a-reply FLATTENS onto its
+      top-level thread (unbounded nesting in a 500px peek gives columns a few
+      words wide); an ORPHAN whose parent is deleted or unsynced is promoted
+      to top level rather than dropped; and a parent CYCLE terminates instead
+      of hanging the detail view. Delete is offered to the author only — a
+      project owner may also delete by rule, but the client cannot tell an
+      owner from a member until M3b's role hook, so the affordance stays
+      conservative rather than showing a button that 403s.
+- [x] Filter button: implement (by label / assignee / due state) or remove it
+      until it works — no dead chrome. **Removed.** It was a plain `View` —
+      not even pressable. Board filtering stays a filed follow-up (M7).
 - [ ] Drag-and-drop cards between columns (and column reorder) — the stepper
       covers correctness; DnD is the expected kanban interaction. Check
       calendar's event-dragging implementation for the gesture approach.
       This is a key feature and **care must be taken** to implement it
       properly, with the very best UX.
       Fine as a late task, but before release.
-- [ ] Delete `sample-projects.ts`; move its shapes into `types.ts` and its
+- [x] Delete `sample-projects.ts`; move its shapes into `types.ts` and its
       content into the seed (next task). Update the three unit tests that
-      import it (`board-cards.test.ts`, `due-state.test.ts`).
+      import it (`board-cards.test.ts`, `due-state.test.ts`). **Done** — the
+      file is gone and no source or test references `SAMPLE_PROJECTS`. Its
+      content did NOT reach a seed; `seed.ts` is still to write (below).
 - [ ] `tinycld/cards/seed.ts` (manifest `seed: { script: 'seed' }`): seed a
       couple of projects with lists/cards/labels/checklists/comments,
       due dates relative to today (calendar's seed shows the offset
@@ -510,6 +633,10 @@ none of them mention links.
       means anyone with the URL can create cards. Drive's rate limiter is
       in-process and in-memory, so it does not hold across instances.
 - [ ] Help topic: sharing a board publicly, and what a link recipient can do.
+
+## M8 — CLI 
+
+- [ ] Integerate with CLI, add manifest fields and support CRUD on lists and cards
 
 ## M7 — Package plumbing, tests, docs
 
