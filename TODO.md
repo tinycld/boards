@@ -476,9 +476,15 @@ where there's a form, `captureException` context strings like
       cross-container drop (the dragged id intentionally outlives the snap),
       and the board container's cancel branch reinjected the card at its
       origin — every cross-column drop silently reverted. The patch ignores
-      the stale event. Upstreamable; the patch lives in ROOT-repo state, so
-      a fresh bootstrap assembly needs it (or an upstream fix) before
-      cross-column drops work.
+      the stale event and keeps the snap aimed at the target column.
+      **Root cause is version skew, proven by bisection**: drax's own
+      cross-list example, replicated verbatim in this stack, double-fires on
+      RNGH **3.0.1 and 3.1.0** but is clean on **3.0.0-beta.2** — the exact
+      version drax develops against and its demo site ships. The web
+      finalize semantics changed between the beta and the releases; drax
+      hasn't caught up. Upstreamable as-is; the patch lives in ROOT-repo
+      state, so a fresh bootstrap assembly needs it (or an upstream fix)
+      before cross-column drops work.
     - Drax pads monitor bounds by ~100px, so adjacent columns both "contain"
       a drag near the gap — the receiving highlight keys off
       `monitorOffsetRatio` ∈ [0,1] each frame, never enter/exit alone.
