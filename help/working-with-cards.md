@@ -1,7 +1,7 @@
 ---
 title: Working with cards
 summary: Opening a card, editing its details, and moving it between lists
-tags: [cards, board, kanban, detail, shortcuts]
+tags: [cards, board, kanban, detail, shortcuts, "drag and drop"]
 order: 20
 ---
 
@@ -13,6 +13,28 @@ closing anything.
 
 To give a card the whole screen, click the expand button (the arrows in the
 panel's top corner). Your browser's back button returns you to the board.
+
+## Moving cards by drag and drop
+
+To move a card, drag it anywhere you like — within its list to reorder, or
+into another list. On a computer, click and drag; on a touch screen, press and
+hold a card for a moment, then drag. While you drag, a gap opens at the exact
+spot the card will land, and the list under your pointer is outlined. Drop the
+card outside every list to cancel — it glides back to where it started.
+
+Dragging a card toward the left or right edge of the window scrolls the board,
+so you can reach lists that are off screen.
+
+## Rearranging lists
+
+To move a whole list, drag it by its name in the list header. A colored bar
+shows which side of the neighboring list it will land on. The list menu's
+**Move left** and **Move right** do the same thing one step at a time.
+
+## Reordering a checklist
+
+In an open card, drag a checklist item by the grip at the start of its row.
+On a computer the grip appears when you point at the row.
 
 ## The list stepper
 
