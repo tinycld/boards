@@ -27,6 +27,54 @@ export interface CreateProjectInput {
     color: string
 }
 
+export interface UpdateProjectInput {
+    projectId: string
+    name?: string
+    color?: string
+}
+
+/** Rename a board or change its color. Owner-only, enforced by the PB rule. */
+export function useUpdateProject() {
+    const [projectsCollection] = useStore('cards_projects')
+
+    return useMutation<void, Error, UpdateProjectInput>({
+        mutationKey: ['cards', 'project', 'update'],
+        mutationFn: mutation(function* (input: UpdateProjectInput) {
+            yield projectsCollection.update(input.projectId, draft => {
+                if (input.name !== undefined) draft.name = input.name
+                if (input.color !== undefined) draft.color = input.color
+            })
+        }),
+    })
+}
+
+/**
+ * Archive a board — the only removal the UI offers.
+ *
+ * `useActiveBoard` already filters archived projects out of the sidebar, so the
+ * board disappears without destroying its lists, cards, members or history.
+ * There is deliberately NO delete: a project cascades to everything beneath it,
+ * and an owner who wants a board gone is almost always saying "get it out of my
+ * sidebar", not "destroy six months of work".
+ */
+export function useArchiveProject() {
+    const [projectsCollection] = useStore('cards_projects')
+    const setActiveProject = useCardsUIStore(s => s.setActiveProject)
+
+    return useMutation<void, Error, string>({
+        mutationKey: ['cards', 'project', 'archive'],
+        mutationFn: mutation(function* (projectId: string) {
+            yield projectsCollection.update(projectId, draft => {
+                draft.archived = true
+            })
+        }),
+        // Clearing the stored id lets useActiveBoard fall back to the first
+        // remaining board; leaving it would point the store at a project the
+        // query no longer returns.
+        onSuccess: () => setActiveProject(''),
+    })
+}
+
 /**
  * Create a board: the project, its owner membership, and its default columns.
  *
