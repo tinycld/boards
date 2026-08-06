@@ -10,16 +10,19 @@ import (
 // injects a call to this from server/package_extensions.go once the package is
 // linked.
 //
-// Cards is deliberately rule-first: every authorization decision lives in the
+// Cards is deliberately rule-first: authorization decisions live in the
 // access rules the migrations ship (see
-// pb-migrations/1980000000_create_cards_collections.js), never in a Go hook,
+// pb-migrations/1980000000_create_cards_collections.js), not in Go hooks,
 // because a hosted multi-org tenant runs no feature Go at all — there the rule
 // IS the whole authorization. The *_rls_test.go files in this directory are
 // what hold that line; they bind no hooks and measure the rule engine alone.
 //
 // What lives here is only what a rule genuinely cannot express: the board-face
-// counters (a rule cannot aggregate) and, in M6a, share-link token minting
-// (32 bytes of entropy must come from the server).
+// counters (a rule cannot aggregate), the last-owner guard (a rule sees one
+// row and cannot count the remaining owners — and on a hosted tenant only the
+// Share dialog's client guard stands, so neither replaces the other) and, in
+// M6a, share-link token minting (32 bytes of entropy must come from the
+// server).
 func Register(app *pocketbase.PocketBase) {
 	registerShared(app)
 	// Cards binds no listener and mounts no protocol server, so this single
@@ -44,4 +47,5 @@ func registerShared(app *pocketbase.PocketBase) {
 	}
 
 	registerBoardCounters(app)
+	registerMemberLastOwnerGuard(app)
 }

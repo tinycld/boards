@@ -8,13 +8,12 @@ import { useCardsUIStore } from '../stores/cards-ui-store'
 function EmptyState({
     title,
     body,
-    actionLabel,
-    onPress,
+    action,
 }: {
     title: string
     body: string
-    actionLabel: string
-    onPress?: () => void
+    /** Omitted for roles that cannot act — no dead chrome. */
+    action?: { label: string; onPress: () => void }
 }) {
     const mutedColor = useThemeColor('muted')
     return (
@@ -22,14 +21,16 @@ function EmptyState({
             <Columns3 size={28} color={mutedColor} strokeWidth={1.6} />
             <Text className="text-[15px] font-semibold text-foreground mt-1">{title}</Text>
             <Text className="text-[13px] text-muted text-center">{body}</Text>
-            <Pressable
-                accessibilityRole="button"
-                onPress={onPress}
-                className="flex-row items-center gap-2 border-[1.5px] border-dashed border-foreground/15 rounded-[10px] px-4 py-2 mt-3 hover:bg-foreground/5 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
-            >
-                <Plus size={14} color={mutedColor} strokeWidth={2.2} />
-                <Text className="text-[13px] font-medium text-muted">{actionLabel}</Text>
-            </Pressable>
+            {action ? (
+                <Pressable
+                    accessibilityRole="button"
+                    onPress={action.onPress}
+                    className="flex-row items-center gap-2 border-[1.5px] border-dashed border-foreground/15 rounded-[10px] px-4 py-2 mt-3 hover:bg-foreground/5 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+                >
+                    <Plus size={14} color={mutedColor} strokeWidth={2.2} />
+                    <Text className="text-[13px] font-medium text-muted">{action.label}</Text>
+                </Pressable>
+            ) : null}
         </View>
     )
 }
@@ -44,8 +45,7 @@ export function NoBoards() {
         <EmptyState
             title="No boards yet"
             body="Create a board to start tracking work."
-            actionLabel="New board"
-            onPress={openNewBoard}
+            action={{ label: 'New board', onPress: openNewBoard }}
         />
     )
 }
@@ -58,15 +58,23 @@ export function NoBoards() {
  * with three, so the user is recovering from a dead end and the fastest way out
  * is one press. Renaming it is one more press from the column menu.
  */
-export function EmptyBoard({ projectId }: { projectId: string }) {
+export function EmptyBoard({ projectId, canEdit }: { projectId: string; canEdit: boolean }) {
     const createList = useCreateList(projectId)
 
+    // A viewer or commentor cannot create the list, so they get the state
+    // without the CTA — the body alone says why the board is blank.
     return (
         <EmptyState
             title="No lists yet"
-            body="Create a list to start adding cards."
-            actionLabel={createList.isPending ? 'Adding…' : 'Add list'}
-            onPress={() => createList.mutate({ name: 'To do', position: FIRST_RANK })}
+            body={canEdit ? 'Create a list to start adding cards.' : 'Nothing here yet.'}
+            action={
+                canEdit
+                    ? {
+                          label: createList.isPending ? 'Adding…' : 'Add list',
+                          onPress: () => createList.mutate({ name: 'To do', position: FIRST_RANK }),
+                      }
+                    : undefined
+            }
         />
     )
 }
