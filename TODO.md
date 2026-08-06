@@ -498,6 +498,31 @@ where there's a form, `captureException` context strings like
       lift tick on activation, selection tick crossing columns, success on
       drop; core `SortableList` ticks on activation too. Native needs a
       dev-client rebuild (new native module).
+    - **Phantom-slot preview fixed** (fork commit `e9b5dcd`): drax's
+      data-change effect listed `keyExtractor` in its deps and treated every
+      re-run as an external data change, so the receiving column's own
+      highlight re-render wiped the preview shifts the frame they applied —
+      hovered columns outlined but their cards never moved aside. The fork
+      now resets only when the `rawData` REFERENCE changes. Cards-side, the
+      receiving column grows by one card height (`PHANTOM_SLOT_HEIGHT`
+      padding) — the shifts are pure transforms, so without real layout room
+      the last resident slid past the container edge (clipped) and a drop
+      aimed at the vacated space fell outside the column's bounds and
+      cancelled the transfer. Covered by the landing-slot e2e spec, which
+      holds a drag mid-hover and asserts residents shift.
+    - **Live-query emissions no longer re-render the board.** Six queries
+      feed `useActiveBoard` and two react to org-wide writes (`users`, the
+      membership join); every emission rebuilt the whole tree with fresh
+      identities, so every column re-rendered and drax's sortable lists saw
+      "external data changed" mid-drag — the intermittent parallel-e2e drop
+      failure. `buildBoardProject` now structurally shares against the
+      previous tree (value-equal nodes keep identity; an equal rebuild
+      returns the SAME project), `BoardColumn` is memoized, and sibling
+      chrome reads `BoardProject.listOrder` ({id, position} only) so card
+      edits don't ripple identity through the full `lists` array. The
+      sharing contract is pinned by unit tests. Same-board concurrent edits
+      mid-drag still reset drax (a real data change) — deferring that to
+      drag end is a filed fork follow-up.
 - [ ] Mobile app support; Fit all screens to mobile, ensure drag-n-drop has 
       full fidelity.
 - [x] Delete `sample-projects.ts`; move its shapes into `types.ts` and its
