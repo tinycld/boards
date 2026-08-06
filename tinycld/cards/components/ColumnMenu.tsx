@@ -14,12 +14,12 @@ import { useState } from 'react'
 import { Pressable } from 'react-native'
 import { useDeleteList, useUpdateList } from '../hooks/useListMutations'
 import { rankForReorder } from '../lib/move'
-import type { BoardListView } from '../types'
+import type { BoardListRank, BoardListView } from '../types'
 
 interface ColumnMenuProps {
     list: BoardListView
-    /** Every column on the board, in render order — the reorder needs siblings. */
-    lists: BoardListView[]
+    /** Every column's rank, in render order — the reorder needs siblings. */
+    listOrder: BoardListRank[]
     onRename: () => void
 }
 
@@ -30,20 +30,20 @@ interface ColumnMenuProps {
  * the accessible path — drag-and-drop is a later task and an addition, never the
  * only way to do something.
  */
-export function ColumnMenu({ list, lists, onRename }: ColumnMenuProps) {
+export function ColumnMenu({ list, listOrder, onRename }: ColumnMenuProps) {
     const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
     const mutedColor = useThemeColor('muted')
     const updateList = useUpdateList()
     const deleteList = useDeleteList()
 
-    const index = lists.findIndex(candidate => candidate.id === list.id)
+    const index = listOrder.findIndex(candidate => candidate.id === list.id)
     const canMoveLeft = index > 0
-    const canMoveRight = index >= 0 && index < lists.length - 1
+    const canMoveRight = index >= 0 && index < listOrder.length - 1
 
     const move = (delta: number) => {
         updateList.mutate({
             listId: list.id,
-            position: rankForReorder(lists, list.id, index + delta),
+            position: rankForReorder(listOrder, list.id, index + delta),
         })
     }
 

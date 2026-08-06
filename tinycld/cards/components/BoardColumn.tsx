@@ -1,7 +1,7 @@
 import { hapticImpactLight, hapticSelection, hapticSuccess } from '@tinycld/core/lib/haptics'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
-import { useRef, useState } from 'react'
+import { memo, useRef, useState } from 'react'
 import { ScrollView, Text, View } from 'react-native'
 import type { DraxDragWithReceiverEventData, DraxMonitorEventData } from 'react-native-drax'
 import { DraxView, SortableContainer, SortableItem, useSortableList } from 'react-native-drax'
@@ -15,7 +15,7 @@ import {
     isColumnDragPayload,
 } from '../lib/dnd'
 import { rankForAppend, rankForReorder } from '../lib/move'
-import type { BoardCardView, BoardListView } from '../types'
+import type { BoardCardView, BoardListRank, BoardListView } from '../types'
 import { BoardCard } from './BoardCard'
 import { CardComposer } from './CardComposer'
 import { ColumnMenu } from './ColumnMenu'
@@ -38,8 +38,11 @@ const CARD_HOVER_STYLE = {
 interface BoardColumnProps {
     list: BoardListView
     projectId: string
-    /** Every column, in render order — the menu's reorder needs siblings. */
-    lists: BoardListView[]
+    /** Every column's rank, in render order — the menu's reorder and the
+     *  header-drag drop index need siblings, but only their {id, position}.
+     *  Identity-stable across card-level changes (see BoardProject.listOrder),
+     *  which is what lets the memo below skip untouched columns. */
+    listOrder: BoardListRank[]
     /** From useBoardDnd — keeps this column's Drax bounds fresh while the
      *  canvas scrolls under a drag. */
     registerMeasure: (listId: string, measure: (() => void) | null) => void
@@ -49,10 +52,18 @@ interface BoardColumnProps {
 
 type DropSide = 'before' | 'after'
 
-export function BoardColumn({
+/**
+ * Memoized: a live-query emission that changes one card must re-render only
+ * that card's column. Structural sharing in buildBoardProject keeps every
+ * untouched column's `list` (and `listOrder`) identity stable, so the other
+ * columns — including their drax sortable state — are left alone. Without
+ * this boundary, every emission re-rendered every column, and a re-render
+ * mid-drag is what wiped the phantom-slot preview.
+ */
+export const BoardColumn = memo(function BoardColumn({
     list,
     projectId,
-    lists,
+    listOrder,
     registerMeasure,
     canEdit,
 }: BoardColumnProps) {
@@ -83,12 +94,12 @@ export function BoardColumn({
         setColumnDropSide(null)
         const payload = event.dragged.payload
         if (!isForeignColumn(event) || !isColumnDragPayload(payload)) return
-        const index = columnDropIndex(lists, payload.listId, list.id, sideFor(event))
+        const index = columnDropIndex(listOrder, payload.listId, list.id, sideFor(event))
         if (index === null) return
         hapticSuccess()
         updateList.mutate({
             listId: payload.listId,
-            position: rankForReorder(lists, payload.listId, index),
+            position: rankForReorder(listOrder, payload.listId, index),
         })
     }
 
@@ -142,7 +153,7 @@ export function BoardColumn({
                     {canEdit ? (
                         <ColumnMenu
                             list={list}
-                            lists={lists}
+                            listOrder={listOrder}
                             onRename={() => setIsRenaming(true)}
                         />
                     ) : null}
@@ -150,6 +161,7 @@ export function BoardColumn({
                 <ColumnCards
                     list={list}
                     registerMeasure={registerMeasure}
+                    isReceiving={isReceiving}
                     onReceivingChange={setIsReceiving}
                     canEdit={canEdit}
                 />
@@ -161,7 +173,7 @@ export function BoardColumn({
             <ColumnInsertionBar side={columnDropSide} color={barColor} />
         </DraxView>
     )
-}
+})
 
 /** The 3px bar previewing where a dragged column will land. Sits in the gap
  *  beside the column (the canvas gap is 12px), never inside its rounding. */
@@ -282,10 +294,15 @@ function ColumnNameInput({ list, onDone }: { list: BoardListView; onDone: () => 
     )
 }
 
+/** Room reserved below the stack for the phantom slot while receiving —
+ *  one standard card face (40) plus the 8px stack gap. */
+const PHANTOM_SLOT_HEIGHT = 48
+
 interface ColumnCardsProps {
     list: BoardListView
     registerMeasure: (listId: string, measure: (() => void) | null) => void
     /** True while a card from ANOTHER column is dragged over this one. */
+    isReceiving: boolean
     onReceivingChange: (isReceiving: boolean) => void
     canEdit: boolean
 }
@@ -297,7 +314,13 @@ interface ColumnCardsProps {
  * empty — it is the drop target, and a null here would leave an empty column
  * with no bounds to hit-test and no place for the phantom slot.
  */
-function ColumnCards({ list, registerMeasure, onReceivingChange, canEdit }: ColumnCardsProps) {
+function ColumnCards({
+    list,
+    registerMeasure,
+    isReceiving,
+    onReceivingChange,
+    canEdit,
+}: ColumnCardsProps) {
     const scrollRef = useRef<ScrollView>(null)
     const moveCard = useMoveCard()
 
@@ -371,7 +394,16 @@ function ColumnCards({ list, registerMeasure, onReceivingChange, canEdit }: Colu
                 // empty-state text: the composer below is the affordance, and
                 // "No cards yet" above an "Add card" button says nothing the
                 // button doesn't.
-                contentContainerStyle={{ minHeight: 56 }}
+                //
+                // While receiving, grow by one card so the phantom slot has
+                // real layout room: the shifts are pure transforms, so without
+                // it the last resident slides past the container edge and gets
+                // clipped, and a drop aimed at the vacated space lands outside
+                // the column's bounds and cancels the transfer.
+                contentContainerStyle={{
+                    minHeight: 56,
+                    paddingBottom: isReceiving ? PHANTOM_SLOT_HEIGHT : 0,
+                }}
                 onScroll={sortable.onScroll}
                 scrollEventThrottle={16}
                 onContentSizeChange={sortable.onContentSizeChange}

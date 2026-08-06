@@ -43,12 +43,14 @@ export function BoardCanvas({ project }: { project: BoardProject }) {
                         key={list.id}
                         list={list}
                         projectId={project.id}
-                        lists={project.lists}
+                        listOrder={project.listOrder}
                         registerMeasure={dnd.registerColumnMeasure}
                         canEdit={canEdit}
                     />
                 ))}
-                {canEdit ? <AddListColumn projectId={project.id} lists={project.lists} /> : null}
+                {canEdit ? (
+                    <AddListColumn projectId={project.id} listOrder={project.listOrder} />
+                ) : null}
             </ScrollView>
             <DragActiveMarker />
         </SortableBoardContainer>
