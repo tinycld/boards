@@ -1,6 +1,7 @@
 import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import type { SearchRow } from '@tinycld/core/lib/search/types'
+import { useToastStore } from '@tinycld/core/lib/stores/toast-store'
 import { useRouter } from 'expo-router'
 import { useCardsUIStore } from './stores/cards-ui-store'
 
@@ -35,7 +36,24 @@ export function useSearchActions() {
         onSelect: (row: SearchRow) => {
             const card = cardsCollection.get(row.id)
             const projectId = card?.project
-            if (!projectId) return
+            if (!projectId) {
+                // toRow is pure — it cannot reach cardsCollection to skip an
+                // unresolvable hit before it ever renders as selectable — so
+                // this guard has to live here. Silently returning made
+                // pressing Enter indistinguishable from a broken feature: the
+                // palette still closes (SearchPalette only skips the close
+                // when NO handler ran at all, not when a handler ran and
+                // declined). A toast at least tells the user why nothing
+                // happened instead of leaving them to assume the app is
+                // broken.
+                useToastStore.getState().addToast({
+                    title: "Can't open that card yet",
+                    body: 'Its project is still syncing — try again in a moment.',
+                    variant: 'warning',
+                    duration: 4000,
+                })
+                return
+            }
 
             const { setActiveProject, openCard } = useCardsUIStore.getState()
 

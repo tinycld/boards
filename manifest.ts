@@ -23,7 +23,7 @@ const manifest = {
     server: { package: 'server', module: 'tinycld.org/packages/cards' },
     collections: { register: 'collections', types: 'types' },
     seed: { script: 'seed' },
-    peerVersions: { '@tinycld/core': '>=0.0.4 <0.1.0' },
+    peerVersions: { '@tinycld/core': '>=0.0.6 <0.1.0' },
 }
 
 export default manifest
