@@ -4,6 +4,7 @@ import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { type Shortcut, useRegisterShortcuts, useShortcutScope } from '@tinycld/core/lib/shortcuts'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useNavigateBack } from '@tinycld/core/lib/use-navigate-back'
+import { useDeviceInsets } from '@tinycld/core/lib/use-safe-area'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ChevronLeft } from 'lucide-react-native'
 import { useMemo, useRef } from 'react'
@@ -92,11 +93,12 @@ interface CardPageProps {
 function CardPage({ project, entry, cardId, navigateBack }: CardPageProps) {
     usePageShortcuts(project, cardId, navigateBack)
     const { canEdit } = useProjectRole(project.id)
+    const insets = useDeviceInsets()
 
     return (
         <View className="flex-1 bg-background">
             <DocumentTitle pkg="Cards" title={entry.card.title} />
-            <ProjectWash color={project.color} />
+            <ProjectWash color={project.color} bleedRight={insets.right} />
             <View className="flex-row items-center gap-2 pl-3 pr-4 pt-3 pb-2">
                 <BackButton label={project.name} onPress={navigateBack} />
                 <ListStepper

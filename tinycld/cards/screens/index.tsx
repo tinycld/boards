@@ -1,5 +1,6 @@
 import { DocumentTitle } from '@tinycld/core/components/DocumentTitle'
 import { LoadingState } from '@tinycld/core/components/LoadingState'
+import { useDeviceInsets } from '@tinycld/core/lib/use-safe-area'
 import { View } from 'react-native'
 import { BoardCanvas } from '../components/BoardCanvas'
 import { BoardHeader } from '../components/BoardHeader'
@@ -11,6 +12,7 @@ import { useActiveBoard } from '../hooks/useActiveBoard'
 
 export default function CardsIndex() {
     const { project, cardCount, isLoading, hasProjects } = useActiveBoard()
+    const insets = useDeviceInsets()
 
     // Three states, guarded once here so everything below takes a non-null
     // board. Loading is checked FIRST: without it, a cold load renders the
@@ -37,7 +39,7 @@ export default function CardsIndex() {
     return (
         <View className="flex-1 bg-background">
             <DocumentTitle pkg="Cards" title={project.name} />
-            <ProjectWash color={project.color} />
+            <ProjectWash color={project.color} bleedRight={insets.right} />
             <BoardHeader project={project} cardCount={cardCount} />
             <BoardCanvas project={project} />
             <CardPeek project={project} />
