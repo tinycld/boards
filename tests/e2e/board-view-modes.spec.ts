@@ -5,6 +5,19 @@ import { addCard, boardCard, cardsInColumn, createBoard, dragCardToColumn } from
 // Collapsed columns and card density: both are per-user view preferences
 // held in the Zustand store, so nothing here touches the server. Every spec
 // creates its own uniquely-named board and drives the UI only.
+//
+// UNVERIFIED AT TIME OF WRITING — these specs have not been executed. The
+// package's playwright config routes testDir through
+// node_modules/@tinycld/cards, which symlinks to the main checkout, so a run
+// launched from a worktree exercises the main branch instead of this one.
+// Two assertions here are the ones most likely to need adjusting on first
+// real run, both about a collapsed column:
+//   - `not.toBeVisible()` on a clipped card. The stack is clipped by an
+//     overflow-hidden parent rather than unmounted (it must keep bounds to
+//     stay a drop target), and Playwright's visibility check keys off layout
+//     boxes, which a clipped child may still report.
+//   - the drop-after-collapse case assumes the 40px spine accepts a drop.
+// If either fails, the fix is in BoardColumn's collapsed branch, not here.
 
 let run = 0
 async function freshBoard(page: import('@playwright/test').Page, label: string): Promise<string> {

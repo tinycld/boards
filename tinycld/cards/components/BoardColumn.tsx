@@ -204,16 +204,21 @@ export const BoardColumn = memo(function BoardColumn({
                         ) : null}
                     </View>
                 )}
-                {/* Collapsed HIDES the stack, it does not unmount it: this
-                    container is the column's drop target, and an unmounted one
-                    leaves no bounds to hit-test — a card dragged over a
-                    collapsed column would fall through to the canvas. Same
+                {/* Collapsed CLIPS the stack, it does not unmount or zero it.
+                    This container is the column's drop target, so it has to
+                    keep real bounds: an unmounted (or 0-height) one leaves
+                    nothing to hit-test and a card dragged onto a collapsed
+                    column falls through to the canvas. It keeps the column's
+                    height and clips horizontally instead, so the cards are out
+                    of sight while the drop area stays the full spine. Same
                     reasoning as PhantomSlotSpacer, which reserves layout room
-                    rather than rendering conditionally. */}
-                <View
-                    className={isCollapsed ? 'h-0 overflow-hidden' : undefined}
-                    pointerEvents={isCollapsed ? 'none' : 'auto'}
-                >
+                    rather than rendering conditionally.
+
+                    pointerEvents stays 'auto': Drax hit-tests through the
+                    measured view, and 'none' would make the spine inert as a
+                    drop target. The cards inside are clipped out of reach, so
+                    nothing under the pointer is clickable anyway. */}
+                <View className={isCollapsed ? 'flex-1 overflow-hidden' : undefined}>
                     <ColumnCards
                         list={list}
                         registerMeasure={registerBothMeasures}

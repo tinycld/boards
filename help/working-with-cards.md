@@ -31,6 +31,25 @@ To move a whole list, drag it by its name in the list header. A colored bar
 shows which side of the neighboring list it will land on. The list menu's
 **Move left** and **Move right** do the same thing one step at a time.
 
+## Making room on a busy board
+
+Two controls change how much of the board you see at once. Both are yours
+alone — they change nothing for anyone else on the board, and they stay set
+the next time you open it.
+
+To fold a list you're not working in down to a narrow strip, open its menu and
+choose **Collapse list**. The strip keeps the number of cards in the list, so a
+row of collapsed lists still tells you where the work is piling up. Click the
+strip to open it again.
+
+Collapsed lists are still lists: you can drag a card onto one, and it lands
+there.
+
+To fit more cards on screen, click the rows button in the board's top bar to
+**Hide card details**. Cards shrink to a single line, keeping the title, who
+it's assigned to, and its due date — labels stay as colored dots. Click the
+button again to bring the full cards back.
+
 ## Reordering a checklist
 
 In an open card, drag a checklist item by the grip at the start of its row.
