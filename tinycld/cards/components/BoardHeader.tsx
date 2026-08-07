@@ -1,10 +1,13 @@
 import { NameAvatar } from '@tinycld/core/components/NameAvatar'
+import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useCurrentRole } from '@tinycld/core/lib/use-current-role'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
+import { Rows2, Rows3 } from 'lucide-react-native'
 import { useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useUpdateProject } from '../hooks/useProjectMutations'
 import { useProjectRole } from '../hooks/useProjectRole'
+import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardProject, CardsMemberRole } from '../types'
 import { BoardMenu } from './BoardMenu'
 import { roleLabel } from './sharing/roles'
@@ -54,6 +57,7 @@ export function BoardHeader({ project, cardCount }: BoardHeaderProps) {
                 project={project}
                 onPress={isGuest ? undefined : () => setIsSharing(true)}
             />
+            <DensityToggle />
             {/* Rename, recolor and archive are all owner-only by rule; hiding
                 the menu also removes the only rename entry point, so
                 BoardNameInput needs no gate of its own. */}
@@ -108,6 +112,38 @@ function RoleChip({ role, isVisible }: { role: CardsMemberRole | null; isVisible
         <View testID="cards-role-chip" className="bg-foreground/[0.06] rounded-full px-2 py-0.5">
             <Text className="text-[11px] font-semibold text-muted">{roleLabel(role)}</Text>
         </View>
+    )
+}
+
+/**
+ * Card density, for every role.
+ *
+ * Deliberately NOT in BoardMenu, which is owner-only: density changes nothing
+ * on the server and belongs to the person looking at the board, not the person
+ * who owns it — and a viewer scanning a busy board is exactly who wants it.
+ * Gating a view preference behind ownership would repeat the mistake
+ * TeamAvatars documents, where chrome offered something it could not deliver.
+ *
+ * Labelled by what it does rather than by the state it names ("Compact"): the
+ * label flips with the state, the way ColumnMenu's done-list item does.
+ */
+function DensityToggle() {
+    const isCompact = useCardsUIStore(s => s.isCompactCards)
+    const toggleCompact = useCardsUIStore(s => s.toggleCompactCards)
+    const mutedColor = useThemeColor('muted')
+    const label = isCompact ? 'Show card details' : 'Hide card details'
+    const Icon = isCompact ? Rows3 : Rows2
+
+    return (
+        <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={label}
+            testID="cards-density-toggle"
+            onPress={toggleCompact}
+            className="w-7 h-7 items-center justify-center rounded-md hover:bg-foreground/10 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+        >
+            <Icon size={15} color={mutedColor} strokeWidth={2} />
+        </Pressable>
     )
 }
 
