@@ -358,8 +358,9 @@ where there's a form, `captureException` context strings like
       state is only reachable by deleting every column, so the fastest way out
       of the dead end is one press), and `components/ColumnMenu.tsx` carries
       rename / move left / move right / mark-as-done / delete.
-      Reorder lives in the MENU, not behind a drag: drag-and-drop is a later
-      task and an addition, never the only way to do something.
+      Reorder lives in the MENU as the accessible path; drag-and-drop of
+      columns shipped later (see the DnD task below) as an addition, never
+      the only way to do something.
       **Card handling is already decided by the schema: deleting a
       list DELETES ITS CARDS.** `cards_cards.list` ships `cascadeDelete: true`
       (create migration ~L433), so PocketBase does it server-side in both the
@@ -433,8 +434,8 @@ where there's a form, `captureException` context strings like
       `useChecklistMutations` + an interactive `DetailChecklist` (rows were not
       even Pressables before). The section no longer hides when empty: it owns
       the "Add item" composer, so hiding it left a card with no way to start a
-      checklist. Reorder is NOT done — the ranks are there, the UI is not; it
-      belongs with the drag-and-drop task.
+      checklist. Reorder shipped with the drag-and-drop task below: core
+      `SortableList` + a left grip per row, `moveItem` writing one rank.
 - [x] Comments: real composer (replace the static "Write a comment…" text),
       render `created` timestamps; reply-to-comment via the `parent` field
       (one level of nesting in the activity list is enough). **Shipped** —
@@ -452,12 +453,52 @@ where there's a form, `captureException` context strings like
 - [x] Filter button: implement (by label / assignee / due state) or remove it
       until it works — no dead chrome. **Removed.** It was a plain `View` —
       not even pressable. Board filtering stays a filed follow-up (M7).
-- [ ] Drag-and-drop cards between columns (and column reorder) — the stepper
-      covers correctness; DnD is the expected kanban interaction. Check
-      calendar's event-dragging implementation for the gesture approach.
-      This is a key feature and **care must be taken** to implement it
-      properly, with the very best UX.
-      Fine as a late task, but before release.
+- [x] Drag-and-drop cards between columns (and column reorder) — the stepper
+      covers correctness; DnD is the expected kanban interaction.
+      **Shipped**, on drax's experimental sortable-board API
+      (`useSortableBoard`/`SortableBoardContainer` + per-column
+      `useSortableList`), NOT calendar's hand-rolled gesture layer — the board
+      API gives phantom-slot previews, live reorder, per-column auto-scroll,
+      snap animations and cancel-reinject for free. Cards drag whole-face
+      (web: movement threshold; native: 200ms hold); columns drag by their
+      header title with an insertion-bar preview; checklist rows reorder via
+      core `SortableList` + a left grip. `ListStepper` and `ColumnMenu`
+      remain the accessible non-drag paths. Things that surfaced, all load-
+      bearing for future work:
+    - **The board hit-test is NOT scroll-compensated** (unlike the spatial
+      index): the canvas must stay a plain ScrollView — a DraxScrollView
+      would re-anchor column measurements and break `findTargetColumn`.
+      `useBoardDnd` re-measures every column (Drax `registration.measure()`)
+      at drag start and on canvas scroll, and hand-rolls edge auto-scroll
+      from the board monitor's `monitorOffsetRatio`.
+    - **drax is consumed from a pinned fork**
+      (`github:nathanstitt/react-native-drax`, `consumer/1.1.0-finalize-fix`
+      branch — the fix plus committed `lib/`, since pnpm won't run prepare
+      for a git workspace-root dep; `fix/finalize-canceled-flag` is the
+      clean branch for the upstream PR). Root cause, found by bisecting
+      drax's own cross-list example in this stack: gesture-handler PR #3887
+      moved onFinalize's end flag from the legacy `success` parameter into
+      the event as `canceled`, and drax 1.1.0 still reads the removed
+      parameter — so on released RNGH 3.x (3.0.1, 3.1.0; the 3.0.0-beta.2
+      their demo pins is fine) every normal drag end dispatched a stale
+      cancelled drag-end, and the board container's cancel branch reverted
+      every cross-column drop. The fork reads `event.canceled` with a
+      legacy fallback (`isFinalizeCanceled`), keeps a board-level stale-
+      cancel guard as defense in depth, and adds the repo's first tests.
+      The pin lives in tinycld/package.json + the workspace override; swap
+      back to the npm release once upstream merges.
+    - Drax pads monitor bounds by ~100px, so adjacent columns both "contain"
+      a drag near the gap — the receiving highlight keys off
+      `monitorOffsetRatio` ∈ [0,1] each frame, never enter/exit alone.
+    - A drag handle wants INTRINSIC size: Drax anchors the hover copy and
+      hit point at the grab offset, so wide handles (a flex-1 column header,
+      a right-edge checklist grip) drop far from the pointer.
+    - Haptics: `@tinycld/core/lib/haptics` (expo-haptics; no-op on web) —
+      lift tick on activation, selection tick crossing columns, success on
+      drop; core `SortableList` ticks on activation too. Native needs a
+      dev-client rebuild (new native module).
+- [ ] Mobile app support; Fit all screens to mobile, ensure drag-n-drop has 
+      full fidelity.
 - [x] Delete `sample-projects.ts`; move its shapes into `types.ts` and its
       content into the seed (next task). Update the three unit tests that
       import it (`board-cards.test.ts`, `due-state.test.ts`). **Done** — the

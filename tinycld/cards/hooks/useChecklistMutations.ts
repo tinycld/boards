@@ -64,5 +64,16 @@ export function useChecklistMutations(cardId: string, projectId: string) {
         }),
     })
 
-    return { createItem, toggleItem, renameItem, deleteItem }
+    // One row, one field — like useMoveCard, this is what keeps an optimistic
+    // reorder from ever renumbering the sibling rows.
+    const moveItem = useMutation<void, Error, { itemId: string; position: string }>({
+        mutationKey: ['cards', 'checklist', 'move'],
+        mutationFn: mutation(function* ({ itemId, position }) {
+            yield itemsCollection.update(itemId, draft => {
+                draft.position = position
+            })
+        }),
+    })
+
+    return { createItem, toggleItem, renameItem, deleteItem, moveItem }
 }

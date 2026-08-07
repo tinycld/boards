@@ -1,15 +1,13 @@
 import { DocumentTitle } from '@tinycld/core/components/DocumentTitle'
 import { LoadingState } from '@tinycld/core/components/LoadingState'
-import { ScrollView, View } from 'react-native'
-import { AddListColumn } from '../components/AddListColumn'
-import { BoardColumn } from '../components/BoardColumn'
+import { View } from 'react-native'
+import { BoardCanvas } from '../components/BoardCanvas'
 import { BoardHeader } from '../components/BoardHeader'
 import { CardPeek } from '../components/CardPeek'
-import { EmptyBoard, NoBoards } from '../components/EmptyBoard'
+import { NoBoards } from '../components/EmptyBoard'
 import { NewBoardDialog } from '../components/NewBoardDialog'
 import { ProjectWash } from '../components/ProjectWash'
 import { useActiveBoard } from '../hooks/useActiveBoard'
-import type { BoardProject } from '../types'
 
 export default function CardsIndex() {
     const { project, cardCount, isLoading, hasProjects } = useActiveBoard()
@@ -45,34 +43,5 @@ export default function CardsIndex() {
             <CardPeek project={project} />
             <NewBoardDialog />
         </View>
-    )
-}
-
-function BoardCanvas({ project }: { project: BoardProject }) {
-    if (project.lists.length === 0) return <EmptyBoard projectId={project.id} />
-
-    return (
-        <ScrollView
-            horizontal
-            className="flex-1"
-            contentContainerStyle={{
-                height: '100%',
-                paddingHorizontal: 20,
-                paddingTop: 10,
-                paddingBottom: 20,
-                gap: 12,
-                alignItems: 'flex-start',
-            }}
-        >
-            {project.lists.map(list => (
-                <BoardColumn
-                    key={list.id}
-                    list={list}
-                    projectId={project.id}
-                    lists={project.lists}
-                />
-            ))}
-            <AddListColumn projectId={project.id} lists={project.lists} />
-        </ScrollView>
     )
 }

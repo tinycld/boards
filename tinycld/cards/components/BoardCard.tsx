@@ -17,18 +17,29 @@ interface BoardCardProps {
 function useCardPress(cardId: string) {
     const openCard = useCardsUIStore(s => s.openCard)
     const isOpen = useCardsUIStore(s => s.openCardId === cardId)
-    return { isOpen, onPress: () => openCard(cardId) }
+    const onPress = () => {
+        // Releasing a web drag can synthesize a trailing click on whatever
+        // sits under the pointer — swallowing it keeps a drop from popping
+        // the peek open. Read imperatively: the flag flips mid-gesture, after
+        // this closure was registered.
+        if (useCardsUIStore.getState().isCardDragging) return
+        openCard(cardId)
+    }
+    return { isOpen, onPress }
 }
 
 export function BoardCard({ card, isDone }: BoardCardProps) {
     const { isOpen, onPress } = useCardPress(card.id)
-    if (isDone) return <DoneCard title={card.title} isOpen={isOpen} onPress={onPress} />
+    if (isDone) {
+        return <DoneCard cardId={card.id} title={card.title} isOpen={isOpen} onPress={onPress} />
+    }
 
     return (
         <Pressable
             accessibilityRole="button"
+            testID={`board-card-${card.id}`}
             onPress={onPress}
-            className={`bg-card border rounded-[10px] px-3 py-2.5 gap-1.5 shadow-sm web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${
+            className={`bg-card border rounded-[10px] px-3 py-2.5 gap-1.5 shadow-sm web:cursor-grab web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${
                 isOpen ? 'border-ring' : 'border-border hover:border-muted/50'
             }`}
         >
@@ -45,18 +56,20 @@ export function BoardCard({ card, isDone }: BoardCardProps) {
 }
 
 interface DoneCardProps {
+    cardId: string
     title: string
     isOpen: boolean
     onPress: () => void
 }
 
-function DoneCard({ title, isOpen, onPress }: DoneCardProps) {
+function DoneCard({ cardId, title, isOpen, onPress }: DoneCardProps) {
     const successColor = useThemeColor('success')
     return (
         <Pressable
             accessibilityRole="button"
+            testID={`board-card-${cardId}`}
             onPress={onPress}
-            className={`bg-card border rounded-[10px] px-3 py-2.5 shadow-sm web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${
+            className={`bg-card border rounded-[10px] px-3 py-2.5 shadow-sm web:cursor-grab web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${
                 isOpen ? 'border-ring' : 'border-border'
             }`}
         >
