@@ -15,19 +15,21 @@ import type {
     SortableBoardTransferEvent,
 } from 'react-native-drax'
 import { useSortableBoard } from 'react-native-drax'
-import { isCardDragPayload, isColumnDragPayload, setGrabbingCursor } from '../lib/dnd'
+import type { EdgeDirection } from '../lib/dnd'
+import {
+    edgeScrollDirection,
+    isCardDragPayload,
+    isColumnDragPayload,
+    setGrabbingCursor,
+} from '../lib/dnd'
 import { rankForInsert } from '../lib/move'
 import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardCardView, BoardProject } from '../types'
 import { useMoveCard } from './useCardMutations'
 
-/** Fraction of the canvas width, at each edge, that triggers auto-scroll. */
-const EDGE_ZONE_RATIO = 0.08
 /** Fraction of the canvas width scrolled per auto-scroll tick. */
 const EDGE_JUMP_RATIO = 0.15
 const EDGE_SCROLL_INTERVAL_MS = 250
-
-type EdgeDirection = -1 | 0 | 1
 
 export interface BoardDnd {
     board: SortableBoardHandle<BoardCardView>
@@ -152,10 +154,7 @@ export function useBoardDnd(project: BoardProject, canEdit: boolean): BoardDnd {
 
     const onMonitorDragOver = (event: DraxMonitorEventData) => {
         if (!isDraggingRef.current) return
-        const ratio = event.monitorOffsetRatio.x
-        const direction: EdgeDirection =
-            ratio > 1 - EDGE_ZONE_RATIO ? 1 : ratio < EDGE_ZONE_RATIO ? -1 : 0
-        setEdgeScroll(direction)
+        setEdgeScroll(edgeScrollDirection(event, viewportWidthRef.current))
     }
 
     const endDrag = () => {

@@ -104,6 +104,51 @@ export function columnDropIndex(
     return insertIndex
 }
 
+export type EdgeDirection = -1 | 0 | 1
+
+/** Fraction of the canvas width, at each edge, that triggers auto-scroll. */
+const EDGE_ZONE_RATIO = 0.08
+/** Zone floor: 8% of a phone canvas is a sliver nobody can hold a finger in,
+ *  so narrow viewports get a fixed finger-sized band instead. */
+const EDGE_ZONE_MIN_PT = 48
+
+/** The monitor-event fields the edge computation reads — structurally a subset
+ *  of DraxMonitorEventData, so tests can build one without the full event. */
+export interface EdgeScrollSample {
+    dragAbsolutePosition: { x: number }
+    monitorOffset: { x: number }
+    dragged: {
+        grabOffset: { x: number }
+        hoverPosition: { x: number }
+    }
+}
+
+/**
+ * Which way the canvas should auto-scroll for a drag sample, from the
+ * FINGER's position — not the event's monitor offset. Drax hit-tests at the
+ * center of the hovering card, so `monitorOffsetRatio` lags/leads the finger
+ * by up to half a card width (~136pt) depending on where the card was
+ * grabbed. On a desktop canvas the ratio zone dwarfs that error; on a
+ * phone-width canvas it is smaller than the error, leaving the zone
+ * unreachable — the finger sits at the screen edge while the tracked center
+ * never enters it. Recover the finger instead:
+ *
+ * - hoverPosition is the hover copy's root-relative top-left, placed at
+ *   finger − grabOffset, so finger = hoverPosition + grabOffset;
+ * - dragAbsolutePosition and monitorOffset name the same hit-test point
+ *   root- and monitor-relatively, so their difference is the monitor origin.
+ */
+export function edgeScrollDirection(event: EdgeScrollSample, viewportWidth: number): EdgeDirection {
+    if (viewportWidth <= 0) return 0
+    const fingerRootX = event.dragged.hoverPosition.x + event.dragged.grabOffset.x
+    const monitorOriginX = event.dragAbsolutePosition.x - event.monitorOffset.x
+    const fingerX = fingerRootX - monitorOriginX
+    const zone = Math.max(EDGE_ZONE_MIN_PT, viewportWidth * EDGE_ZONE_RATIO)
+    if (fingerX <= zone) return -1
+    if (fingerX >= viewportWidth - zone) return 1
+    return 0
+}
+
 /**
  * Body-wide `grabbing` cursor while a drag is live (web only). The hover copy
  * under the pointer is a plain View, so without this the browser shows the
