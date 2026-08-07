@@ -12,7 +12,7 @@ ordered by dependency; tasks within one are small and mostly independent.
 | M1 | Data model: collections, migrations, types | ✅ shipped |
 | M2 | RBAC: the rules themselves | ✅ shipped |
 | M2a | Prove the rules behave | ✅ shipped — 64 Go tests |
-| **M3** | **Wire the UI to live data** | mostly shipped — mobile, search, board-to-detail shortcuts remain |
+| **M3** | **Wire the UI to live data** | mostly shipped — board-to-detail shortcuts, collapse/compact, markdown and presence remain |
 | M3b | Role-gated UI and sharing | ✅ shipped |
 | M4 | Mail: create a card from an email | touches `mail/` |
 | M5 | Calendar: due dates on the calendar | touches `calendar/` |
@@ -523,8 +523,32 @@ where there's a form, `captureException` context strings like
       sharing contract is pinned by unit tests. Same-board concurrent edits
       mid-drag still reset drax (a real data change) — deferring that to
       drag end is a filed fork follow-up.
-- [ ] Mobile app support; Fit all screens to mobile, ensure drag-n-drop has 
-      full fidelity.
+- [x] Mobile app support; Fit all screens to mobile, ensure drag-n-drop has
+      full fidelity. **Verified on device**: boards render, cards drag between
+      columns, and card editing works. Two reasons this needed no mobile-specific
+      code, both worth knowing before anyone "improves" them:
+    - **Drag was built native-first, so there was nothing to fix.**
+      `CARD_DRAG_ACTIVATION_MS`/`COLUMN_DRAG_ACTIVATION_MS` (`lib/dnd.ts`) are
+      already `web ? 0 : 200/150` — a hold on touch, a movement threshold on
+      web. `edgeScrollDirection` already carries an `EDGE_ZONE_MIN_PT = 48`
+      floor *because* 8% of a phone canvas is a sliver nobody can hold a finger
+      in, and already recovers the finger from `hoverPosition + grabOffset`
+      rather than trusting Drax's card-center hit point (off by ~136pt, which on
+      a phone exceeds the zone itself). `useBoardDnd` suspends the MobileDrawer
+      edge-swipe for the duration of a drag.
+    - **The board switcher is the drawer, not cards' chrome.** `MobileDrawer`
+      (20px edge strip, 280px panel) renders the active package's sidebar on a
+      left-edge swipe, and `sidebar.tsx` IS the board list — so no mobile
+      navigation affordance was needed in `BoardHeader`. This is also why the
+      edge-swipe suspension above is load-bearing: without it the two gestures
+      fight.
+      **This is "works on a phone", NOT a responsive pass.** Still true, and
+      still worth doing: cards is the only feature package with zero
+      `useBreakpoint` usage; `COLUMN_WIDTH` (284) and `PEEK_WIDTH` (500) are
+      fixed constants (the peek survives only on `max-w-[94%]`); `BoardHeader`
+      is one non-wrapping `flex-row`; and `screens/_layout.tsx` is a bare
+      `<Stack>` where mail and calendar use `FrozenSlideStack` (so no
+      freezeOnBlur, no push animation on the card page).
 - [x] Delete `sample-projects.ts`; move its shapes into `types.ts` and its
       content into the seed (next task). Update the three unit tests that
       import it (`board-cards.test.ts`, `due-state.test.ts`). **Done** — the
@@ -590,9 +614,34 @@ where there's a form, `captureException` context strings like
       `DuePicker`/`LabelPicker`/`AssigneePicker`/`BoardMenu`/`EditableText`/
       `CardComposer`. Split out deliberately: it is the most invasive slice and
       the board-level control above is useful without it.
-- [ ] Search: we want to implement a `/` shortcut that opens a search box
+- [x] Search: we want to implement a `/` shortcut that opens a search box
       like vscode and github uses.  Consider sharing this in core and using
-      with drive & mail
+      with drive & mail. **Shipped, and the "share it in core" option is the
+      one that was taken** — this is a cross-package palette, not a cards search
+      box. `/` is bound in `core/components/CoreShortcuts.tsx` at `global` scope
+      (`allowInInputs` deliberately omitted, so `/` stays typeable), and the
+      palette mounts once in the app shell. Core owns the query grammar (`pkg:`
+      chips, `-term` exclusion), the cross-package scorer and the section
+      builder; mail, drive and contacts contribute alongside cards.
+      Cards' four pieces: `pb-migrations/1980000002_create_fts_cards.js` (FTS5
+      **plus an explicit backfill** — cards shipped before the index existed, so
+      unlike contacts/drive/mail the sync hooks alone would have left every
+      pre-existing card unsearchable); `ftsConfig` in `server/register.go`
+      (`MemberScope` over `cards_project_members`, and `ExcludeField: 'archived'`
+      because someone typing `/` wants active work, not history);
+      `search-adapter.ts`; and `tests/search-adapter.test.ts`.
+      Two live constraints:
+    - **The palette is web-only.** `SearchPalette.tsx` (native) is a `return
+      null` stub — a keyboard surface's touch equivalent is a separate design
+      problem. Android registers no shortcuts at all (`provider.android.tsx` is
+      a passthrough; a root-level focus grab broke the soft keyboard).
+    - **Selection depends on the peek.** `useSearchActions` does
+      `router.replace(orgHref('cards'))` → `setActiveProject` → `openCard`, in
+      that order (`setActiveProject` clears `openCardId`, so the reverse
+      silently no-ops). Anything that stops rendering `CardPeek` — a mobile
+      full-page detail, for instance — breaks search selection there. The fix
+      when that day comes is to route straight to `cards/[cardId]` on every
+      breakpoint, which also retires the ordering hazard.
 - [ ] Feature: add the ability to collapse columns and to toggle cards into a
       compact representation
 - [ ] Full markdown editing.  Should be multi-user and show other users cursors
