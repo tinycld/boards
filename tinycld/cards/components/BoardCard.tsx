@@ -19,6 +19,10 @@ interface BoardCardProps {
 function useCardPress(cardId: string) {
     const openCard = useCardsUIStore(s => s.openCard)
     const isOpen = useCardsUIStore(s => s.openCardId === cardId)
+    // Per-card boolean, not the whole focus state: only the card whose ring
+    // actually flips re-renders, so arrowing across the board never re-renders
+    // a column and cannot disturb a live drag.
+    const isFocused = useCardsUIStore(s => s.focusedCardId === cardId)
     const onPress = () => {
         // Releasing a web drag can synthesize a trailing click on whatever
         // sits under the pointer — swallowing it keeps a drop from popping
@@ -27,17 +31,29 @@ function useCardPress(cardId: string) {
         if (useCardsUIStore.getState().isCardDragging) return
         openCard(cardId)
     }
-    return { isOpen, onPress }
+    return { isOpen, isFocused, onPress }
+}
+
+/**
+ * The open card already wears the solid ring, so focus only shows while the
+ * peek is closed — otherwise the card you are reading carries two rings and
+ * neither reads as meaningful.
+ */
+function cardRingClass(isOpen: boolean, isFocused: boolean, idle: string) {
+    if (isOpen) return 'border-ring'
+    if (isFocused) return 'border-muted-foreground'
+    return idle
 }
 
 export function BoardCard({ card, isDone, canDrag }: BoardCardProps) {
-    const { isOpen, onPress } = useCardPress(card.id)
+    const { isOpen, isFocused, onPress } = useCardPress(card.id)
     if (isDone) {
         return (
             <DoneCard
                 cardId={card.id}
                 title={card.title}
                 isOpen={isOpen}
+                isFocused={isFocused}
                 onPress={onPress}
                 canDrag={canDrag}
             />
@@ -49,10 +65,13 @@ export function BoardCard({ card, isDone, canDrag }: BoardCardProps) {
             accessibilityRole="button"
             testID={`board-card-${card.id}`}
             onPress={onPress}
-            className={`bg-card border rounded-[10px] px-3 py-2.5 gap-1.5 shadow-sm ${canDrag ? 'web:cursor-grab' : ''} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${
-                isOpen ? 'border-ring' : 'border-border hover:border-muted/50'
-            }`}
+            className={`bg-card border rounded-[10px] px-3 py-2.5 gap-1.5 shadow-sm ${canDrag ? 'web:cursor-grab' : ''} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${cardRingClass(
+                isOpen,
+                isFocused,
+                'border-border hover:border-muted/50'
+            )}`}
         >
+            <FocusMarker isFocused={isFocused} cardId={card.id} />
             <CardLabels labels={card.labels ?? []} />
             <Text
                 className="text-[13.5px] font-medium leading-[18px] text-foreground"
@@ -65,25 +84,40 @@ export function BoardCard({ card, isDone, canDrag }: BoardCardProps) {
     )
 }
 
+/**
+ * Zero-size marker the keyboard e2e asserts on — a border class is not
+ * queryable. Deliberately NOT prefixed `board-card-`: the e2e helpers select
+ * card faces with `[data-testid^="board-card-"]` and read their text, and a
+ * second matching node per card would corrupt every column readout.
+ */
+function FocusMarker({ isFocused, cardId }: { isFocused: boolean; cardId: string }) {
+    if (!isFocused) return null
+    return <View testID={`cards-focused-${cardId}`} />
+}
+
 interface DoneCardProps {
     cardId: string
     title: string
     isOpen: boolean
+    isFocused: boolean
     onPress: () => void
     canDrag: boolean
 }
 
-function DoneCard({ cardId, title, isOpen, onPress, canDrag }: DoneCardProps) {
+function DoneCard({ cardId, title, isOpen, isFocused, onPress, canDrag }: DoneCardProps) {
     const successColor = useThemeColor('success')
     return (
         <Pressable
             accessibilityRole="button"
             testID={`board-card-${cardId}`}
             onPress={onPress}
-            className={`bg-card border rounded-[10px] px-3 py-2.5 shadow-sm ${canDrag ? 'web:cursor-grab' : ''} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${
-                isOpen ? 'border-ring' : 'border-border'
-            }`}
+            className={`bg-card border rounded-[10px] px-3 py-2.5 shadow-sm ${canDrag ? 'web:cursor-grab' : ''} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${cardRingClass(
+                isOpen,
+                isFocused,
+                'border-border'
+            )}`}
         >
+            <FocusMarker isFocused={isFocused} cardId={cardId} />
             <View className="flex-row items-start gap-2">
                 <View className="mt-px">
                     <CircleCheck size={14} color={successColor} strokeWidth={2.4} />

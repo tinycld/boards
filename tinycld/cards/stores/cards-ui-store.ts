@@ -23,6 +23,22 @@ interface CardsUIState {
      */
     isCardDragging: boolean
     setCardDragging: (isDragging: boolean) => void
+    /**
+     * The keyboard focus ring. Exactly one of the two is set — a card carries
+     * its own column, and an empty column can still hold focus so "new card
+     * here" has a target. The card's column is deliberately NOT stored beside
+     * it: a realtime move would change the card's list without changing a
+     * stored column id, and the two would drift.
+     *
+     * Read per-card (`s => s.focusedCardId === card.id`) so only the card whose
+     * ring actually flipped re-renders — a whole-board read would re-render
+     * every column on every arrow press and undo the structural sharing that
+     * keeps drags stable.
+     */
+    focusedCardId: string | null
+    focusedColumnId: string | null
+    focusCard: (cardId: string | null) => void
+    focusColumn: (columnId: string | null) => void
 }
 
 export const useCardsUIStore = create<CardsUIState>()(
@@ -41,15 +57,20 @@ export const useCardsUIStore = create<CardsUIState>()(
             closeNewBoard: () => set({ isNewBoardOpen: false }),
             isCardDragging: false,
             setCardDragging: isDragging => set({ isCardDragging: isDragging }),
+            focusedCardId: null,
+            focusedColumnId: null,
+            focusCard: cardId => set({ focusedCardId: cardId, focusedColumnId: null }),
+            focusColumn: columnId => set({ focusedCardId: null, focusedColumnId: columnId }),
         }),
         {
             name: 'tinycld_cards_ui',
             storage: asyncStorage,
             // Only the active board persists. A restored openCardId would
-            // reopen a peek on a card that may have been deleted since, and a
+            // reopen a peek on a card that may have been deleted since, a
             // restored dialog flag would greet the user with a modal they did
-            // not ask for. A persisted id that no longer resolves is handled
-            // in useActiveBoard, which falls back to the first board.
+            // not ask for, and a restored focus ring would point at a card that
+            // may have moved or gone. A persisted id that no longer resolves is
+            // handled in useActiveBoard, which falls back to the first board.
             partialize: s => ({ activeProjectId: s.activeProjectId }),
         }
     )

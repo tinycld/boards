@@ -158,6 +158,9 @@ export function useBoardDnd(project: BoardProject, canEdit: boolean): BoardDnd {
         // would land in whatever column it covers. Grabbing a card also means
         // the user is done reading — close it.
         if (ui.openCardId) ui.closeCard()
+        // Drax's own hover and phantom-slot visuals own the board during a
+        // drag; a stale ring left behind on the lifted card competes with them.
+        if (ui.focusedCardId || ui.focusedColumnId) ui.focusCard(null)
     }
 
     const onMonitorDragOver = (event: DraxMonitorEventData) => {
