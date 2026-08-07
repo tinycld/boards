@@ -1,4 +1,5 @@
 import { hapticSuccess } from '@tinycld/core/lib/haptics'
+import { useWorkspaceStore } from '@tinycld/core/lib/stores/workspace-store'
 import { useCallback, useEffect, useRef } from 'react'
 import type {
     LayoutChangeEvent,
@@ -108,6 +109,9 @@ export function useBoardDnd(project: BoardProject, canEdit: boolean): BoardDnd {
         () => () => {
             if (edgeIntervalRef.current) clearInterval(edgeIntervalRef.current)
             setGrabbingCursor(false)
+            // Without this a mid-drag unmount would leave the drawer's
+            // edge-swipe suspended forever.
+            useWorkspaceStore.getState().setEdgeSwipeSuspended(false)
         },
         []
     )
@@ -141,6 +145,10 @@ export function useBoardDnd(project: BoardProject, canEdit: boolean): BoardDnd {
         isDraggingRef.current = true
         measureAllColumns()
         setGrabbingCursor(true)
+        // A drag routinely visits the left screen edge (that's what triggers
+        // the auto-scroll), where a micro-lifted touch could otherwise read
+        // as a drawer edge-swipe and fling the sidebar open mid-drag.
+        useWorkspaceStore.getState().setEdgeSwipeSuspended(true)
         const ui = useCardsUIStore.getState()
         // Set for column drags too: the press guard should swallow a trailing
         // click no matter what kind of drag just released over a card.
@@ -162,6 +170,7 @@ export function useBoardDnd(project: BoardProject, canEdit: boolean): BoardDnd {
         isDraggingRef.current = false
         stopEdgeScroll()
         setGrabbingCursor(false)
+        useWorkspaceStore.getState().setEdgeSwipeSuspended(false)
         // One frame later so the trailing click a web drag-release can
         // synthesize still sees the flag (see BoardCard's onPress).
         requestAnimationFrame(() => useCardsUIStore.getState().setCardDragging(false))
