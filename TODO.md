@@ -12,7 +12,7 @@ ordered by dependency; tasks within one are small and mostly independent.
 | M1 | Data model: collections, migrations, types | ✅ shipped |
 | M2 | RBAC: the rules themselves | ✅ shipped |
 | M2a | Prove the rules behave | ✅ shipped — 64 Go tests |
-| **M3** | **Wire the UI to live data** | mostly shipped — seed, mobile, shortcuts, search remain |
+| **M3** | **Wire the UI to live data** | mostly shipped — mobile, search, board-to-detail shortcuts remain |
 | M3b | Role-gated UI and sharing | ✅ shipped |
 | M4 | Mail: create a card from an email | touches `mail/` |
 | M5 | Calendar: due dates on the calendar | touches `calendar/` |
@@ -546,7 +546,50 @@ where there's a form, `captureException` context strings like
       checklist/comment writes (verified: the REST hooks fire for
       superusers). Idempotency probes user-owned `cards_projects` only, so
       the admin-owned board never trips the guard.
-- [ ] Keyboard shortcuts: implement complete keyboard control of all actions
+- [x] Keyboard shortcuts: complete keyboard control of the BOARD. **Shipped** —
+      `hooks/useBoardShortcuts.ts` at `'list'` scope: `j`/`k`/arrows walk cards
+      (arrows cross columns keeping the row index), `Enter`/`o` opens, `Escape`
+      clears, `Shift+arrows` move a card across or within a column, `x`
+      archives. Mutating keys gate on `canEdit`, so a viewer keeps navigation
+      only. Focus math is pure in `lib/board-focus.ts` (13 unit tests);
+      `rankForAppend`/`rankForReorder` are reused unchanged for the moves.
+      Three things surfaced, all load-bearing:
+    - **The focus ring is a PER-CARD store selector** (`s.focusedCardId ===
+      card.id`), matching how `BoardCard` already reads `openCardId`. A
+      board-level read would re-render every column on every arrow press and
+      undo the structural sharing that keeps drags stable. Focus is not
+      persisted, and a drag clears it.
+    - **`freezeOnBlur` broke the shortcut system in TWO places, and both had to
+      be fixed in core.** A blurred screen stays MOUNTED, so (1) `useShortcutScope`
+      pushed on mount and never popped — fixed by keying it on `useFocusEffect`,
+      which pops on blur; and (2) `useRegisterShortcut` likewise never
+      unregistered, so mail's frozen list and a live cards board both held
+      `'list'` `j`/`k`/`x` and the matcher fired whichever it reached first.
+      Scope alone cannot separate them, so a shortcut now carries the scope
+      INSTANCE that registered it (`Shortcut.scopeId`) and only the instance
+      holding the keyboard fires. Both were pre-existing — mail's Escape had
+      the same bug — and the e2e round-trip case pins it.
+    - **The `⇧?` overlay listed shortcuts that could not fire.** It rendered
+      every REGISTERED shortcut, but a scope shadowed by an inner one (the
+      board, while a card is open) or left mounted by `freezeOnBlur` is still
+      registered — so with the peek open the Cards group advertised the
+      board's move/archive keys next to the peek's own, duplicating every
+      entry the two share. It now filters on `isScopeActive`, exported from
+      the matcher so the overlay cannot drift from what actually matches.
+      Separately, an alias needs its own wording (`'Open card (alt)'`) or the
+      overlay lists one action twice — mail's convention, now documented.
+    - **`nav.shortcut` uniqueness was never actually validated**, though
+      `core/docs/keyboard-shortcuts.md` claimed it was: the e2e shortcut stub
+      and cards both claimed `k`, making `t k` unresolvable. The stub moved to
+      `z` and `validateNavShortcuts` now fails generation on a collision.
+- [ ] Keyboard shortcuts, part two: reach the card DETAIL from the board —
+      `e`/`d`/`l`/`a` to edit title, due, labels, assignees, and `n`/`Shift+N`
+      for the composers. All six of those surfaces are uncontrolled `Menu`s /
+      local `useState` today with no external open trigger, so this needs
+      optional controlled-open props (or imperative handles) threaded through
+      `DuePicker`/`LabelPicker`/`AssigneePicker`/`BoardMenu`/`EditableText`/
+      `CardComposer`. Split out deliberately: it is the most invasive slice and
+      the board-level control above is useful without it.
 - [ ] Search: we want to implement a `/` shortcut that opens a search box
       like vscode and github uses.  Consider sharing this in core and using
       with drive & mail
