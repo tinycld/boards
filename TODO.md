@@ -12,7 +12,7 @@ ordered by dependency; tasks within one are small and mostly independent.
 | M1 | Data model: collections, migrations, types | ✅ shipped |
 | M2 | RBAC: the rules themselves | ✅ shipped |
 | M2a | Prove the rules behave | ✅ shipped — 64 Go tests |
-| **M3** | **Wire the UI to live data** | mostly shipped — board-to-detail shortcuts, collapse/compact, markdown and presence remain |
+| **M3** | **Wire the UI to live data** | mostly shipped — board-to-detail shortcuts, markdown and presence remain |
 | M3b | Role-gated UI and sharing | ✅ shipped |
 | M4 | Mail: create a card from an email | touches `mail/` |
 | M5 | Calendar: due dates on the calendar | touches `calendar/` |
@@ -614,6 +614,20 @@ where there's a form, `captureException` context strings like
       `DuePicker`/`LabelPicker`/`AssigneePicker`/`BoardMenu`/`EditableText`/
       `CardComposer`. Split out deliberately: it is the most invasive slice and
       the board-level control above is useful without it.
+      **Cheaper than this entry implies, established while shipping
+      collapse/compact:** core's `Menu` (`tinycld/core/ui/menu/index.tsx`)
+      ALREADY takes `isOpen` + `onOpenChange`, and calc drives it controlled in
+      ~10 places — so `DuePicker`/`LabelPicker`/`AssigneePicker`/`BoardMenu`
+      need prop pass-through, not a rewrite. Controlled-ness keys on `isOpen`
+      being defined, NOT on `onOpenChange` (a bare handler leaves the menu
+      uncontrolled and merely notifies).
+      Two real hazards remain. (1) A keyboard-opened menu has never measured
+      its trigger — only click and `onMouseEnter` call `setTriggerLayout` — so
+      it positions at (0,0); `Menu`'s `triggerPosition` prop is the escape
+      hatch. (2) `EditableText` wants an imperative handle rather than a
+      controlled boolean: its `beginEdit` snapshots `committedRef`, seeds
+      `draft`, THEN opens, and an externally-set `isEditing` that skips that
+      leaves a stale draft and the wrong Escape-revert target.
 - [x] Search: we want to implement a `/` shortcut that opens a search box
       like vscode and github uses.  Consider sharing this in core and using
       with drive & mail. **Shipped, and the "share it in core" option is the
@@ -642,10 +656,76 @@ where there's a form, `captureException` context strings like
       full-page detail, for instance — breaks search selection there. The fix
       when that day comes is to route straight to `cards/[cardId]` on every
       breakpoint, which also retires the ordering hazard.
-- [ ] Feature: add the ability to collapse columns and to toggle cards into a
-      compact representation
-- [ ] Full markdown editing.  Should be multi-user and show other users cursors
-      like text does, share editor framework with that pacakge and test on mobile
+- [x] Feature: add the ability to collapse columns and to toggle cards into a
+      compact representation. **Shipped.** Both are per-user view preferences in
+      `cards-ui-store` (`collapsedColumnIds`, `isCompactCards`), both persisted.
+    - **Neither belongs on the board tree.** A UI toggle has no row to derive
+      from, and adding a field to `BoardListView` would need a matching line in
+      `buildBoardProject`'s structural sharing — where a missed field silently
+      keeps reusing the stale node. Collapse is read PER COLUMN
+      (`s => !!s.collapsedColumnIds[list.id]`) and density per card, so a
+      toggle re-renders only what changed and the sharing that keeps drags
+      stable survives.
+    - **Collapsing must re-measure every column.** `findTargetColumn`
+      hit-tests against bounds stored at drag start and on canvas scroll, and
+      neither fires for a width change — so narrowing one column shifts every
+      column to its right and the next drop lands where the board USED to be.
+      `useBoardDnd` now exposes `measureAllColumns`; `BoardCanvas` drives it
+      from a sorted-key effect (a net-zero toggle does not re-measure).
+    - **The collapsed column keeps its card stack mounted and its bounds
+      real** — it is the drop target. Clipped, never unmounted or zero-height,
+      and `pointerEvents` stays `auto`. This is the constraint that decided
+      the collapsed face: a rotated -90° name (what most kanban tools show)
+      would make the visual extent and the measured box disagree in exactly
+      this subsystem, and needs ~180px of vertical run to read while the
+      column's height is content-driven. The face leads with the card count
+      instead, which also makes a row of collapsed columns read as
+      work-in-progress per list. **If the truncated name proves hard to read
+      in practice, vertical text is the sanctioned fallback** — the switch is
+      one branch in `BoardColumn`, but re-derive the 40px width and re-run the
+      collapse-then-drag-right e2e case.
+    - **Density is NOT owner-gated.** It changes nothing on the server and a
+      viewer scanning a busy board wants it most, so the toggle sits in
+      `BoardHeader` outside the `isOwner` gate rather than in `BoardMenu`.
+      Compact keeps title, assignees and due state (lateness must never need
+      an expand to see), drops labels to colour dots and hides the
+      checklist/comment counts.
+    - **The e2e specs have NOT been run.** `playwright.config.ts` routes
+      `testDir` through `node_modules/@tinycld/cards`, which symlinks to the
+      main checkout — a run launched from a worktree tests the wrong branch.
+      `tests/e2e/board-view-modes.spec.ts` names the two assertions most
+      likely to need adjusting on the first real run.
+- [ ] Full markdown editing, multi-user, with collaborator cursors.
+      **Decided: cards builds its OWN markdown-specific editor bundle** rather
+      than sharing text's. Text's WebView editor is an 898KB prebuilt blob
+      (`text/tinycld/text/webview-editor/build/editorHtml.ts`) that is NOT in
+      text's `package.json` `exports`, and siblings must not depend on each
+      other anyway — so "share it" would mean extracting it into core, a
+      refactor of a shipped package. A markdown-only bundle is far smaller than
+      text's full rich-text/suggestions/authorship stack.
+      What core ALREADY provides, so this is not from scratch:
+      `useRealtimeRoom` + `useRemoteAwareness` (`core/lib/realtime/`),
+      `PresenceAvatars` (`core/components/`), the WebView message bus and
+      `EditorMount` (`core/lib/editor/`), and `RegisterRoomKind`
+      (`core/server/realtime/authorize.go`). Cards already has
+      `server/register.go` to register a room kind in — `RegisterRoomKind(kind,
+      authorizeFn)` is the authorize-only form, which is all an ephemeral
+      presence room needs.
+      `calc/tinycld/calc/hooks/use-presence.ts` is the shape to copy for the
+      awareness schema (calc hand-rolls `parsePresence`/`samePresence` over
+      `useRemoteAwareness`; the shape is deliberately per-package).
+      **Gotcha from `text/tinycld/text/hooks/useTextRoom.ts`:** TipTap's
+      `CollaborationCaret` writes its `user` option into `awareness.user` on
+      mount, clobbering whatever is there — so identity must be stamped BOTH in
+      `initialAwareness` (so avatars render between WS connect and editor
+      mount) and in the caret's own `user` option.
+      Rendering markdown is separable and much cheaper: core already has
+      `components/help/MarkdownRenderer.tsx` over `react-native-marked`. It
+      carries help-specific behavior (a `help://` link scheme, per-platform
+      ⌘/Ctrl glyph swapping) that would need lifting behind an optional prop
+      before cards reuses it — but that is a small job next to the editor, and
+      it closes the "description says Markdown, renders as plain text" gap on
+      its own.
 - [ ] Feature: Show activity by users in real-time  If a user is viewing or editing
       a card show their avatar highlighted like Jira.  Ask for details/screenshots
       unclear.
