@@ -5,6 +5,7 @@ import (
 
 	"tinycld.org/core/fts"
 	"tinycld.org/core/offboard"
+	"tinycld.org/core/search"
 )
 
 // ftsConfig is the cards FTS index/search config, driving both the index-sync
@@ -80,4 +81,9 @@ func registerShared(app *pocketbase.PocketBase) {
 
 	// FTS index-sync record hooks + GET /api/cards/search, from core/fts.
 	fts.Register(app, []fts.Config{ftsConfig})
+
+	// Cards' contribution to the federated GET /api/search. Registered here
+	// rather than in Register so a hosted tenant and a self-hosted deployment
+	// search identically — the same reason fts.Register sits here.
+	search.RegisterSources(searchSource())
 }
