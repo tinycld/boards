@@ -34,6 +34,13 @@ export const COLUMN_WIDTH = 284
  */
 export const COLLAPSED_COLUMN_WIDTH = 40
 
+/**
+ * Minimum height the collapsed column's (clipped) card stack keeps, so it
+ * stays a hit-testable drop target. A finger-sized band — the same floor the
+ * expanded stack uses for an empty column.
+ */
+const COLLAPSED_DROP_HEIGHT = 56
+
 /** The floating copy while a card is dragged: a slight lift and tilt.
  *  shadowColor is left at its default (black) — a shadow is a shadow in both
  *  themes, and the card face underneath keeps its own theming. */
@@ -208,17 +215,24 @@ export const BoardColumn = memo(function BoardColumn({
                     This container is the column's drop target, so it has to
                     keep real bounds: an unmounted (or 0-height) one leaves
                     nothing to hit-test and a card dragged onto a collapsed
-                    column falls through to the canvas. It keeps the column's
-                    height and clips horizontally instead, so the cards are out
-                    of sight while the drop area stays the full spine. Same
-                    reasoning as PhantomSlotSpacer, which reserves layout room
-                    rather than rendering conditionally.
+                    column falls through to the canvas. Same reasoning as
+                    PhantomSlotSpacer, which reserves layout room rather than
+                    rendering conditionally.
+
+                    The height is an explicit minimum rather than flex-1: this
+                    column sits in a max-h-full box with no fixed height, where
+                    a flex child can resolve to zero — which is precisely the
+                    0-height case that breaks the drop. Width clips to the
+                    spine, so the 284-wide cards inside are simply out of view.
 
                     pointerEvents stays 'auto': Drax hit-tests through the
                     measured view, and 'none' would make the spine inert as a
-                    drop target. The cards inside are clipped out of reach, so
-                    nothing under the pointer is clickable anyway. */}
-                <View className={isCollapsed ? 'flex-1 overflow-hidden' : undefined}>
+                    drop target. The cards are clipped out of reach, so nothing
+                    under the pointer is clickable anyway. */}
+                <View
+                    className={isCollapsed ? 'overflow-hidden' : undefined}
+                    style={isCollapsed ? { minHeight: COLLAPSED_DROP_HEIGHT } : undefined}
+                >
                     <ColumnCards
                         list={list}
                         registerMeasure={registerBothMeasures}
