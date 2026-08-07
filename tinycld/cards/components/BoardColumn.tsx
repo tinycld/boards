@@ -43,11 +43,19 @@ interface BoardColumnProps {
     /** From useBoardDnd — keeps this column's Drax bounds fresh while the
      *  canvas scrolls under a drag. */
     registerMeasure: (listId: string, measure: (() => void) | null) => void
+    /** viaWriter — every affordance in this column mutates content. */
+    canEdit: boolean
 }
 
 type DropSide = 'before' | 'after'
 
-export function BoardColumn({ list, projectId, lists, registerMeasure }: BoardColumnProps) {
+export function BoardColumn({
+    list,
+    projectId,
+    lists,
+    registerMeasure,
+    canEdit,
+}: BoardColumnProps) {
     const [isRenaming, setIsRenaming] = useState(false)
     const [isReceiving, setIsReceiving] = useState(false)
     const [columnDropSide, setColumnDropSide] = useState<DropSide | null>(null)
@@ -65,10 +73,10 @@ export function BoardColumn({ list, projectId, lists, registerMeasure }: BoardCo
     // the first receive events optimistically and applies the acceptsDrag
     // verdict a frame later, and a rejected receiver never gets the Exit that
     // would clear its state — the source column would strand a 'before' bar
-    // for the whole drag. Re-check the payload in every handler.
+    // for the whole drag. Re-check the payload (and canEdit) in every handler.
     const isForeignColumn = (event: DraxDragWithReceiverEventData) => {
         const payload = event.dragged.payload
-        return isColumnDragPayload(payload) && payload.listId !== list.id
+        return canEdit && isColumnDragPayload(payload) && payload.listId !== list.id
     }
 
     const dropColumn = (event: DraxDragWithReceiverEventData) => {
@@ -88,7 +96,9 @@ export function BoardColumn({ list, projectId, lists, registerMeasure }: BoardCo
         <DraxView
             receptive
             monitoring
-            acceptsDrag={payload => isColumnDragPayload(payload) && payload.listId !== list.id}
+            acceptsDrag={payload =>
+                canEdit && isColumnDragPayload(payload) && payload.listId !== list.id
+            }
             onReceiveDragOver={event => {
                 if (!isForeignColumn(event)) return
                 const side = sideFor(event)
@@ -123,17 +133,29 @@ export function BoardColumn({ list, projectId, lists, registerMeasure }: BoardCo
                             onDone={() => setIsRenaming(false)}
                         />
                     ) : (
-                        <ColumnDragHandle list={list} />
+                        <ColumnDragHandle list={list} canDrag={canEdit} />
                     )}
                     <View className="flex-1" />
-                    <ColumnMenu list={list} lists={lists} onRename={() => setIsRenaming(true)} />
+                    {/* Hiding the menu also removes the only rename entry point
+                        (onRename fires nowhere else), so ColumnNameInput needs
+                        no gate of its own. */}
+                    {canEdit ? (
+                        <ColumnMenu
+                            list={list}
+                            lists={lists}
+                            onRename={() => setIsRenaming(true)}
+                        />
+                    ) : null}
                 </View>
                 <ColumnCards
                     list={list}
                     registerMeasure={registerMeasure}
                     onReceivingChange={setIsReceiving}
+                    canEdit={canEdit}
                 />
-                <CardComposer onSubmit={addCard} isPending={createCard.isPending} />
+                {canEdit ? (
+                    <CardComposer onSubmit={addCard} isPending={createCard.isPending} />
+                ) : null}
                 {isReceiving ? <View testID="cards-column-receiving" /> : null}
             </View>
             <ColumnInsertionBar side={columnDropSide} color={barColor} />
@@ -172,10 +194,10 @@ function ColumnInsertionBar({ side, color }: { side: DropSide | null; color: str
  * documents the same lesson). The floating copy is a compact header pill —
  * cheap, and honest about what is being moved.
  */
-function ColumnDragHandle({ list }: { list: BoardListView }) {
+function ColumnDragHandle({ list, canDrag }: { list: BoardListView; canDrag: boolean }) {
     return (
         <DraxView
-            draggable
+            draggable={canDrag}
             dragPayload={{ kind: 'cards-column', listId: list.id }}
             longPressDelay={COLUMN_DRAG_ACTIVATION_MS}
             draggingStyle={{ opacity: 0.35 }}
@@ -265,6 +287,7 @@ interface ColumnCardsProps {
     registerMeasure: (listId: string, measure: (() => void) | null) => void
     /** True while a card from ANOTHER column is dragged over this one. */
     onReceivingChange: (isReceiving: boolean) => void
+    canEdit: boolean
 }
 
 /**
@@ -274,7 +297,7 @@ interface ColumnCardsProps {
  * empty — it is the drop target, and a null here would leave an empty column
  * with no bounds to hit-test and no place for the phantom slot.
  */
-function ColumnCards({ list, registerMeasure, onReceivingChange }: ColumnCardsProps) {
+function ColumnCards({ list, registerMeasure, onReceivingChange, canEdit }: ColumnCardsProps) {
     const scrollRef = useRef<ScrollView>(null)
     const moveCard = useMoveCard()
 
@@ -360,9 +383,10 @@ function ColumnCards({ list, registerMeasure, onReceivingChange }: ColumnCardsPr
                         index={index}
                         payload={{ kind: 'cards-card', cardId: card.id, listId: list.id }}
                         hoverDraggingStyle={CARD_HOVER_STYLE}
+                        fixed={!canEdit}
                     >
                         <NoNativeDrag>
-                            <BoardCard card={card} isDone={list.isDone} />
+                            <BoardCard card={card} isDone={list.isDone} canDrag={canEdit} />
                         </NoNativeDrag>
                     </SortableItem>
                 ))}

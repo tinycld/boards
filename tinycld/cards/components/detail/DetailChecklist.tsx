@@ -14,9 +14,10 @@ interface DetailChecklistProps {
     items: BoardChecklistItem[]
     cardId: string
     projectId: string
+    canEdit: boolean
 }
 
-export function DetailChecklist({ items, cardId, projectId }: DetailChecklistProps) {
+export function DetailChecklist({ items, cardId, projectId, canEdit }: DetailChecklistProps) {
     const { createItem, toggleItem, renameItem, deleteItem, moveItem } = useChecklistMutations(
         cardId,
         projectId
@@ -37,6 +38,11 @@ export function DetailChecklist({ items, cardId, projectId }: DetailChecklistPro
             position: rankForReorder(items, moved.id, moved.index),
         })
     }
+
+    // The section normally always renders because it owns the composer — but a
+    // read-only card has no composer, so an empty checklist is just a heading
+    // over nothing.
+    if (!canEdit && items.length === 0) return null
 
     return (
         <View className="mb-6">
@@ -60,9 +66,11 @@ export function DetailChecklist({ items, cardId, projectId }: DetailChecklistPro
                 data={items}
                 keyExtractor={item => item.id}
                 onReorder={reorderItems}
+                isDraggable={() => canEdit}
                 renderItem={({ item }) => (
                     <ChecklistRow
                         item={item}
+                        canEdit={canEdit}
                         onToggle={() =>
                             toggleItem.mutate({ itemId: item.id, isDone: !item.isDone })
                         }
@@ -71,24 +79,30 @@ export function DetailChecklist({ items, cardId, projectId }: DetailChecklistPro
                     />
                 )}
             />
-            <ChecklistComposer
-                onSubmit={title => createItem.mutate({ title, position: rankForAppend(items) })}
-            />
+            {canEdit ? (
+                <ChecklistComposer
+                    onSubmit={title => createItem.mutate({ title, position: rankForAppend(items) })}
+                />
+            ) : null}
         </View>
     )
 }
 
 interface ChecklistRowProps {
     item: BoardChecklistItem
+    canEdit: boolean
     onToggle: () => void
     onRename: (title: string) => void
     onDelete: () => void
 }
 
-function ChecklistRow({ item, onToggle, onRename, onDelete }: ChecklistRowProps) {
+function ChecklistRow({ item, canEdit, onToggle, onRename, onDelete }: ChecklistRowProps) {
     const [isEditing, setIsEditing] = useState(false)
     const checkColor = useThemeColor('success-foreground')
     const mutedColor = useThemeColor('muted')
+    const titleClassName = `text-[13.5px] leading-[19px] ${
+        item.isDone ? 'text-muted line-through' : 'text-foreground'
+    }`
 
     return (
         <View className="flex-row items-start gap-2.5 py-[5px] group">
@@ -99,26 +113,21 @@ function ChecklistRow({ item, onToggle, onRename, onDelete }: ChecklistRowProps)
                 the copy off-screen and its hit-test center lands outside the
                 list, killing slot detection. It sits in normal flow because
                 core SortableList's inner ScrollView clips anything negative-
-                margined out of the content box. */}
+                margined out of the content box. The column keeps its width on
+                a read-only card so the checkboxes stay aligned with nothing
+                to grip. */}
             <View
                 className={`w-6 mt-[2px] ${
                     Platform.OS === 'web' ? 'opacity-0 web:group-hover:opacity-100' : ''
                 }`}
             >
-                <SortableDragHandle size={12} testID="checklist-drag-handle" />
+                {canEdit ? <SortableDragHandle size={12} testID="checklist-drag-handle" /> : null}
             </View>
-            <Pressable
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: item.isDone }}
-                accessibilityLabel={item.title}
-                onPress={onToggle}
-                hitSlop={6}
-                className={`w-[15px] h-[15px] mt-[2px] rounded-[4.5px] items-center justify-center web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${
-                    item.isDone ? 'bg-success' : 'border-[1.5px] border-muted'
-                }`}
-            >
-                {item.isDone ? <Check size={10} color={checkColor} strokeWidth={3.5} /> : null}
-            </Pressable>
+            <ChecklistCheckbox
+                item={item}
+                checkColor={checkColor}
+                onToggle={canEdit ? onToggle : undefined}
+            />
 
             {isEditing ? (
                 // Keyed on the title so each edit mounts a fresh input seeded
@@ -130,32 +139,92 @@ function ChecklistRow({ item, onToggle, onRename, onDelete }: ChecklistRowProps)
                     onDone={() => setIsEditing(false)}
                 />
             ) : (
-                <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Edit ${item.title}`}
-                    onPress={() => setIsEditing(true)}
-                    className="flex-1 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring rounded"
-                >
-                    <Text
-                        className={`text-[13.5px] leading-[19px] ${
-                            item.isDone ? 'text-muted line-through' : 'text-foreground'
-                        }`}
-                    >
-                        {item.title}
-                    </Text>
-                </Pressable>
+                <ChecklistTitle
+                    title={item.title}
+                    titleClassName={titleClassName}
+                    onEdit={canEdit ? () => setIsEditing(true) : undefined}
+                />
             )}
 
-            <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Delete ${item.title}`}
-                onPress={onDelete}
-                hitSlop={6}
-                className="opacity-0 web:group-hover:opacity-100 web:focus-visible:opacity-100 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring rounded"
-            >
-                <X size={13} color={mutedColor} strokeWidth={2.2} />
-            </Pressable>
+            {canEdit ? (
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete ${item.title}`}
+                    onPress={onDelete}
+                    hitSlop={6}
+                    className="opacity-0 web:group-hover:opacity-100 web:focus-visible:opacity-100 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring rounded"
+                >
+                    <X size={13} color={mutedColor} strokeWidth={2.2} />
+                </Pressable>
+            ) : null}
         </View>
+    )
+}
+
+/** Tap-to-edit title; plain text when the viewer cannot write. */
+function ChecklistTitle({
+    title,
+    titleClassName,
+    onEdit,
+}: {
+    title: string
+    titleClassName: string
+    onEdit?: () => void
+}) {
+    if (!onEdit) {
+        return <Text className={`flex-1 ${titleClassName}`}>{title}</Text>
+    }
+    return (
+        <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Edit ${title}`}
+            onPress={onEdit}
+            className="flex-1 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring rounded"
+        >
+            <Text className={titleClassName}>{title}</Text>
+        </Pressable>
+    )
+}
+
+/** The done toggle; renders as a static box (no button semantics) when the
+ *  viewer cannot write. */
+function ChecklistCheckbox({
+    item,
+    checkColor,
+    onToggle,
+}: {
+    item: BoardChecklistItem
+    checkColor: string
+    onToggle?: () => void
+}) {
+    const boxClassName = `w-[15px] h-[15px] mt-[2px] rounded-[4.5px] items-center justify-center ${
+        item.isDone ? 'bg-success' : 'border-[1.5px] border-muted'
+    }`
+    const check = item.isDone ? <Check size={10} color={checkColor} strokeWidth={3.5} /> : null
+
+    if (!onToggle) {
+        return (
+            <View
+                accessibilityState={{ checked: item.isDone }}
+                accessibilityLabel={item.title}
+                className={boxClassName}
+            >
+                {check}
+            </View>
+        )
+    }
+
+    return (
+        <Pressable
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: item.isDone }}
+            accessibilityLabel={item.title}
+            onPress={onToggle}
+            hitSlop={6}
+            className={`${boxClassName} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring`}
+        >
+            {check}
+        </Pressable>
     )
 }
 

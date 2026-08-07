@@ -60,3 +60,9 @@ With a card open:
 
 J and K walk the board in order, list by list, so you can review a column
 without touching the mouse.
+
+## Missing a button?
+
+What you can do on a board depends on your role there. If you can't add or
+edit cards, you're likely a viewer or commentor — see
+[Sharing boards](help://cards:sharing-boards).

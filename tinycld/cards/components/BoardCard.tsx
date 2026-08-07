@@ -12,6 +12,8 @@ const MAX_LABELS = 3
 interface BoardCardProps {
     card: BoardCardView
     isDone?: boolean
+    /** A grab cursor on a card a viewer cannot drag is a lie — drop it. */
+    canDrag: boolean
 }
 
 function useCardPress(cardId: string) {
@@ -28,10 +30,18 @@ function useCardPress(cardId: string) {
     return { isOpen, onPress }
 }
 
-export function BoardCard({ card, isDone }: BoardCardProps) {
+export function BoardCard({ card, isDone, canDrag }: BoardCardProps) {
     const { isOpen, onPress } = useCardPress(card.id)
     if (isDone) {
-        return <DoneCard cardId={card.id} title={card.title} isOpen={isOpen} onPress={onPress} />
+        return (
+            <DoneCard
+                cardId={card.id}
+                title={card.title}
+                isOpen={isOpen}
+                onPress={onPress}
+                canDrag={canDrag}
+            />
+        )
     }
 
     return (
@@ -39,7 +49,7 @@ export function BoardCard({ card, isDone }: BoardCardProps) {
             accessibilityRole="button"
             testID={`board-card-${card.id}`}
             onPress={onPress}
-            className={`bg-card border rounded-[10px] px-3 py-2.5 gap-1.5 shadow-sm web:cursor-grab web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${
+            className={`bg-card border rounded-[10px] px-3 py-2.5 gap-1.5 shadow-sm ${canDrag ? 'web:cursor-grab' : ''} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${
                 isOpen ? 'border-ring' : 'border-border hover:border-muted/50'
             }`}
         >
@@ -60,16 +70,17 @@ interface DoneCardProps {
     title: string
     isOpen: boolean
     onPress: () => void
+    canDrag: boolean
 }
 
-function DoneCard({ cardId, title, isOpen, onPress }: DoneCardProps) {
+function DoneCard({ cardId, title, isOpen, onPress, canDrag }: DoneCardProps) {
     const successColor = useThemeColor('success')
     return (
         <Pressable
             accessibilityRole="button"
             testID={`board-card-${cardId}`}
             onPress={onPress}
-            className={`bg-card border rounded-[10px] px-3 py-2.5 shadow-sm web:cursor-grab web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${
+            className={`bg-card border rounded-[10px] px-3 py-2.5 shadow-sm ${canDrag ? 'web:cursor-grab' : ''} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${
                 isOpen ? 'border-ring' : 'border-border'
             }`}
         >

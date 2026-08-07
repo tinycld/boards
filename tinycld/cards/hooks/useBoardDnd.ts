@@ -55,7 +55,7 @@ export interface BoardDnd {
  * column at drag start and on each canvas scroll event keeps the stored
  * bounds correct at the only moments they can drift.
  */
-export function useBoardDnd(project: BoardProject): BoardDnd {
+export function useBoardDnd(project: BoardProject, canEdit: boolean): BoardDnd {
     const moveCard = useMoveCard()
     const canvasRef = useRef<ScrollView>(null)
 
@@ -111,6 +111,10 @@ export function useBoardDnd(project: BoardProject): BoardDnd {
     )
 
     const onTransfer = (event: SortableBoardTransferEvent<BoardCardView>) => {
+        // Load-bearing, not belt-and-braces: Drax dispatches receive events
+        // optimistically before acceptsDrag verdicts settle, so disabling the
+        // drag sources alone does not guarantee a transfer can't commit.
+        if (!canEdit) return
         // The target list can vanish mid-drag (deleted on another client).
         const target = project.lists.find(list => list.id === event.toContainerId)
         if (!target) return

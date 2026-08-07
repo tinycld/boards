@@ -14,9 +14,12 @@ import (
 
 // Shared fixture for the cards RLS suites.
 //
-// Cards has no Go authorization: every access decision lives in the rules the
-// migration ships, because a hosted multi-org tenant runs no feature Go and the
-// rule is therefore the entire authorization. Those rules had been verified
+// Cards' access decisions live in the rules the migration ships, because a
+// hosted multi-org tenant runs no feature Go and the rule is therefore the
+// entire authorization there. (The one exception is the last-owner guard —
+// member_owner_guard.go — which a rule cannot express; its tests bind that
+// hook explicitly. The RLS suites here still bind no hooks and measure the
+// rule engine alone.) Those rules had been verified
 // only STRUCTURALLY — the stored SQL was read back and audited for three known
 // traps — which makes them claims about strings. These suites execute them.
 //

@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router'
 import { Maximize2, X } from 'lucide-react-native'
 import { useMemo } from 'react'
 import { View } from 'react-native'
+import { useProjectRole } from '../hooks/useProjectRole'
 import { type CardEntry, findCardEntry, neighborCardId } from '../lib/board-cards'
 import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardProject } from '../types'
@@ -77,6 +78,7 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
     const orgHref = useOrgHref()
     const closeCard = useCardsUIStore(s => s.closeCard)
     const mutedColor = useThemeColor('muted')
+    const { canEdit } = useProjectRole(project.id)
     usePeekShortcuts(project, entry.card.id)
 
     const expandCard = () => router.push(orgHref('cards/[cardId]', { cardId: entry.card.id }))
@@ -88,16 +90,23 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
         >
             <ProjectWash color={project.color} height={180} />
             <View className="flex-row items-center gap-1 pl-4 pr-3 pt-3 pb-2">
-                <ListStepper project={project} card={entry.card} list={entry.list} />
+                <ListStepper
+                    project={project}
+                    card={entry.card}
+                    list={entry.list}
+                    isInteractive={canEdit}
+                />
                 <View className="flex-1" />
                 <IconButton label="Open full page" onPress={expandCard}>
                     <Maximize2 size={14} color={mutedColor} strokeWidth={2.2} />
                 </IconButton>
-                <CardActionsMenu
-                    cardId={entry.card.id}
-                    cardTitle={entry.card.title}
-                    onDismiss={closeCard}
-                />
+                {canEdit ? (
+                    <CardActionsMenu
+                        cardId={entry.card.id}
+                        cardTitle={entry.card.title}
+                        onDismiss={closeCard}
+                    />
+                ) : null}
                 <IconButton label="Close" onPress={closeCard}>
                     <X size={15} color={mutedColor} strokeWidth={2.2} />
                 </IconButton>
