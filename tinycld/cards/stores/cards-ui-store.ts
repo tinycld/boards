@@ -39,6 +39,26 @@ interface CardsUIState {
     focusedColumnId: string | null
     focusCard: (cardId: string | null) => void
     focusColumn: (columnId: string | null) => void
+    /**
+     * Lists the user has collapsed to a narrow spine. A set rather than a flag
+     * on the list: collapse is a per-USER view preference with no row to derive
+     * it from, and putting it on BoardListView would mean a new comparison in
+     * buildBoardProject's structural sharing — where a missed field silently
+     * keeps reusing the stale node.
+     *
+     * Keyed by list id, which is globally unique, so one map serves every
+     * board. Read per-column (`s => !!s.collapsedColumnIds[list.id]`) for the
+     * same reason the focus ring is read per-card: a whole-map read would
+     * re-render every column on every toggle.
+     */
+    collapsedColumnIds: Record<string, true>
+    toggleColumnCollapsed: (listId: string) => void
+    /**
+     * Card density, board-wide. Off = the full face; on = one line plus
+     * assignees and due state.
+     */
+    isCompactCards: boolean
+    toggleCompactCards: () => void
 }
 
 export const useCardsUIStore = create<CardsUIState>()(
@@ -61,17 +81,44 @@ export const useCardsUIStore = create<CardsUIState>()(
             focusedColumnId: null,
             focusCard: cardId => set({ focusedCardId: cardId, focusedColumnId: null }),
             focusColumn: columnId => set({ focusedCardId: null, focusedColumnId: columnId }),
+            collapsedColumnIds: {},
+            // Deletes rather than storing `false`, so the map holds only
+            // collapsed ids and never accumulates an entry per list the user
+            // has ever expanded.
+            toggleColumnCollapsed: listId =>
+                set(s => {
+                    const next = { ...s.collapsedColumnIds }
+                    if (next[listId]) delete next[listId]
+                    else next[listId] = true
+                    return { collapsedColumnIds: next }
+                }),
+            isCompactCards: false,
+            toggleCompactCards: () => set(s => ({ isCompactCards: !s.isCompactCards })),
         }),
         {
             name: 'tinycld_cards_ui',
             storage: asyncStorage,
-            // Only the active board persists. A restored openCardId would
-            // reopen a peek on a card that may have been deleted since, a
-            // restored dialog flag would greet the user with a modal they did
-            // not ask for, and a restored focus ring would point at a card that
-            // may have moved or gone. A persisted id that no longer resolves is
-            // handled in useActiveBoard, which falls back to the first board.
-            partialize: s => ({ activeProjectId: s.activeProjectId }),
+            // What persists is what the user would be annoyed to redo, and
+            // what cannot mislead them if it comes back stale.
+            //
+            // Excluded: a restored openCardId would reopen a peek on a card
+            // that may have been deleted since, a restored dialog flag would
+            // greet the user with a modal they did not ask for, and a restored
+            // focus ring would point at a card that may have moved or gone. A
+            // persisted activeProjectId that no longer resolves is handled in
+            // useActiveBoard, which falls back to the first board.
+            //
+            // The two view preferences persist because a stale value of either
+            // is INERT rather than wrong: a collapsed id naming a list that no
+            // longer exists is simply never looked up (a miss reads as "not
+            // collapsed"), and density is a preference with no referent to go
+            // stale at all. Both are also exactly the kind of thing someone
+            // sets once and expects to survive a reload.
+            partialize: s => ({
+                activeProjectId: s.activeProjectId,
+                collapsedColumnIds: s.collapsedColumnIds,
+                isCompactCards: s.isCompactCards,
+            }),
         }
     )
 )
