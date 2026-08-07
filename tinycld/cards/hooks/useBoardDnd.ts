@@ -39,6 +39,14 @@ export interface BoardDnd {
     monitorProps: Partial<DraxViewProps>
     /** Columns register their Drax re-measure function here (null to remove). */
     registerColumnMeasure: (listId: string, measure: (() => void) | null) => void
+    /**
+     * Re-measure every registered column. Exposed because ANY change to column
+     * widths invalidates the stored bounds findTargetColumn hit-tests against,
+     * and collapsing one column shifts every column to its right. The internal
+     * drag-start and canvas-scroll re-measures cannot see that: a collapse
+     * between drags leaves stale bounds, so drops land in the wrong column.
+     */
+    measureAllColumns: () => void
     onCanvasScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void
     onCanvasLayout: (event: LayoutChangeEvent) => void
 }
@@ -77,9 +85,16 @@ export function useBoardDnd(project: BoardProject, canEdit: boolean): BoardDnd {
         }
     }, [])
 
-    const measureAllColumns = () => {
+    // Stable identity: BoardCanvas drives this from an effect keyed on the
+    // collapsed set, and a fresh function each render would re-run it on every
+    // board emission instead.
+    //
+    // Deliberately measures EVERY column rather than taking a subset: a width
+    // change anywhere shifts every column to its right, so the affected set is
+    // never just the columns that changed.
+    const measureAllColumns = useCallback(() => {
         for (const measure of measureFnsRef.current.values()) measure()
-    }
+    }, [])
 
     const stopEdgeScroll = () => {
         edgeDirectionRef.current = 0
@@ -197,5 +212,13 @@ export function useBoardDnd(project: BoardProject, canEdit: boolean): BoardDnd {
         viewportWidthRef.current = event.nativeEvent.layout.width
     }
 
-    return { board, canvasRef, monitorProps, registerColumnMeasure, onCanvasScroll, onCanvasLayout }
+    return {
+        board,
+        canvasRef,
+        monitorProps,
+        registerColumnMeasure,
+        measureAllColumns,
+        onCanvasScroll,
+        onCanvasLayout,
+    }
 }

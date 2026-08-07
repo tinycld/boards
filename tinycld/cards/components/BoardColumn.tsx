@@ -2,7 +2,7 @@ import { hapticImpactLight, hapticSelection, hapticSuccess } from '@tinycld/core
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
 import { memo, useCallback, useRef, useState } from 'react'
-import { ScrollView, Text, View } from 'react-native'
+import { Pressable, ScrollView, Text, View } from 'react-native'
 import type { DraxDragWithReceiverEventData, DraxMonitorEventData } from 'react-native-drax'
 import { DraxView, SortableContainer, SortableItem, useSortableList } from 'react-native-drax'
 import type { SharedValue } from 'react-native-reanimated'
@@ -17,6 +17,7 @@ import {
     isColumnDragPayload,
 } from '../lib/dnd'
 import { rankForAppend, rankForReorder } from '../lib/move'
+import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardCardView, BoardListRank, BoardListView } from '../types'
 import { BoardCard } from './BoardCard'
 import { CardComposer } from './CardComposer'
@@ -24,6 +25,21 @@ import { ColumnMenu } from './ColumnMenu'
 import { NoNativeDrag } from './NoNativeDrag'
 
 export const COLUMN_WIDTH = 284
+
+/**
+ * A collapsed column's spine. Sized to hold a two-digit count pill at the
+ * board's 11px metadata scale inside the column's existing p-1.5 — the same
+ * rhythm as the 26px ProjectTile beside it — and still be a comfortable touch
+ * target.
+ */
+export const COLLAPSED_COLUMN_WIDTH = 40
+
+/**
+ * Minimum height the collapsed column's (clipped) card stack keeps, so it
+ * stays a hit-testable drop target. A finger-sized band — the same floor the
+ * expanded stack uses for an empty column.
+ */
+const COLLAPSED_DROP_HEIGHT = 56
 
 /** The floating copy while a card is dragged: a slight lift and tilt.
  *  shadowColor is left at its default (black) — a shadow is a shadow in both
@@ -75,6 +91,12 @@ export const BoardColumn = memo(function BoardColumn({
     const createCard = useCreateCard(projectId)
     const updateList = useUpdateList()
     const barColor = useThemeColor('primary')
+    // Per-column boolean, not the whole map: only the column whose flag
+    // flipped re-renders, mirroring how BoardCard reads its focus ring. A
+    // whole-map read would re-render every column on every toggle and undo
+    // the structural sharing that keeps drags stable.
+    const isCollapsed = useCardsUIStore(s => !!s.collapsedColumnIds[list.id])
+    const toggleCollapsed = useCardsUIStore(s => s.toggleColumnCollapsed)
 
     // This outer DraxView is the column-drag receiver, so its bounds go stale
     // the same way the card container's do when the canvas scrolls mid-drag.
@@ -157,41 +179,68 @@ export const BoardColumn = memo(function BoardColumn({
                 className={`bg-foreground/[0.04] rounded-[14px] p-1.5 max-h-full border-2 ${
                     isReceiving ? 'border-ring' : 'border-transparent'
                 }`}
-                style={{ width: COLUMN_WIDTH }}
+                style={{ width: isCollapsed ? COLLAPSED_COLUMN_WIDTH : COLUMN_WIDTH }}
             >
-                <View className="flex-row items-center gap-2 pl-3 pr-2.5 py-2">
-                    {isRenaming ? (
-                        // Keyed on the current name so each rename session mounts a
-                        // fresh input seeded from the CURRENT value. Without the
-                        // remount the draft state would persist, and a second
-                        // rename would open showing the first one's text.
-                        <ColumnNameInput
-                            key={list.name}
-                            list={list}
-                            onDone={() => setIsRenaming(false)}
-                        />
-                    ) : (
-                        <ColumnDragHandle list={list} canDrag={canEdit} />
-                    )}
-                    <View className="flex-1" />
-                    {/* Hiding the menu also removes the only rename entry point
-                        (onRename fires nowhere else), so ColumnNameInput needs
-                        no gate of its own. */}
-                    {canEdit ? (
-                        <ColumnMenu
-                            list={list}
-                            listOrder={listOrder}
-                            onRename={() => setIsRenaming(true)}
-                        />
-                    ) : null}
+                {isCollapsed ? (
+                    <CollapsedColumnFace list={list} onExpand={() => toggleCollapsed(list.id)} />
+                ) : (
+                    <View className="flex-row items-center gap-2 pl-3 pr-2.5 py-2">
+                        {isRenaming ? (
+                            // Keyed on the current name so each rename session mounts a
+                            // fresh input seeded from the CURRENT value. Without the
+                            // remount the draft state would persist, and a second
+                            // rename would open showing the first one's text.
+                            <ColumnNameInput
+                                key={list.name}
+                                list={list}
+                                onDone={() => setIsRenaming(false)}
+                            />
+                        ) : (
+                            <ColumnDragHandle list={list} canDrag={canEdit} />
+                        )}
+                        <View className="flex-1" />
+                        {/* Hiding the menu also removes the only rename entry point
+                            (onRename fires nowhere else), so ColumnNameInput needs
+                            no gate of its own. */}
+                        {canEdit ? (
+                            <ColumnMenu
+                                list={list}
+                                listOrder={listOrder}
+                                onRename={() => setIsRenaming(true)}
+                            />
+                        ) : null}
+                    </View>
+                )}
+                {/* Collapsed CLIPS the stack, it does not unmount or zero it.
+                    This container is the column's drop target, so it has to
+                    keep real bounds: an unmounted (or 0-height) one leaves
+                    nothing to hit-test and a card dragged onto a collapsed
+                    column falls through to the canvas. Same reasoning as
+                    PhantomSlotSpacer, which reserves layout room rather than
+                    rendering conditionally.
+
+                    The height is an explicit minimum rather than flex-1: this
+                    column sits in a max-h-full box with no fixed height, where
+                    a flex child can resolve to zero — which is precisely the
+                    0-height case that breaks the drop. Width clips to the
+                    spine, so the 284-wide cards inside are simply out of view.
+
+                    pointerEvents stays 'auto': Drax hit-tests through the
+                    measured view, and 'none' would make the spine inert as a
+                    drop target. The cards are clipped out of reach, so nothing
+                    under the pointer is clickable anyway. */}
+                <View
+                    className={isCollapsed ? 'overflow-hidden' : undefined}
+                    style={isCollapsed ? { minHeight: COLLAPSED_DROP_HEIGHT } : undefined}
+                >
+                    <ColumnCards
+                        list={list}
+                        registerMeasure={registerBothMeasures}
+                        onReceivingChange={setIsReceiving}
+                        canEdit={canEdit}
+                    />
                 </View>
-                <ColumnCards
-                    list={list}
-                    registerMeasure={registerBothMeasures}
-                    onReceivingChange={setIsReceiving}
-                    canEdit={canEdit}
-                />
-                {canEdit ? (
+                {canEdit && !isCollapsed ? (
                     <CardComposer onSubmit={addCard} isPending={createCard.isPending} />
                 ) : null}
                 {isReceiving ? <View testID="cards-column-receiving" /> : null}
@@ -200,6 +249,46 @@ export const BoardColumn = memo(function BoardColumn({
         </DraxView>
     )
 })
+
+/**
+ * A collapsed column's whole face: the card count, then the name beneath it.
+ *
+ * Count first, deliberately. A rotated -90° name is what most kanban tools
+ * show, but it needs ~180px of vertical run to read and this column's height
+ * is content-driven (max-h-full over a shrinking stack), so a short column
+ * degrades into a truncated rotated string that is harder to scan than a
+ * truncated horizontal one. A rotation would also make the visual extent and
+ * the measured Drax box disagree, in the exact subsystem collapsing already
+ * perturbs.
+ *
+ * Leading with the count is also the more useful face: collapsed columns read
+ * across the board as a row of work-in-progress numbers, which is something
+ * the expanded board makes you count for yourself.
+ *
+ * The whole face is the press target, so expanding never asks the user to hit
+ * a small control — and it must not, since ColumnMenu (which collapsed it) is
+ * hidden while collapsed.
+ */
+function CollapsedColumnFace({ list, onExpand }: { list: BoardListView; onExpand: () => void }) {
+    return (
+        <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Expand ${list.name} list`}
+            testID={`cards-column-collapsed-${list.id}`}
+            onPress={onExpand}
+            className="items-center gap-1.5 py-2 rounded-[10px] hover:bg-foreground/5 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+        >
+            <View className="bg-foreground/[0.06] rounded-full px-1.5 py-px">
+                <Text className="text-[11px] font-semibold text-muted">{list.cards.length}</Text>
+            </View>
+            {/* Truncates by width rather than wrapping — a wrapped name would
+                grow the spine and defeat the collapse. */}
+            <Text className="text-[11px] text-muted text-center" numberOfLines={1}>
+                {list.name}
+            </Text>
+        </Pressable>
+    )
+}
 
 /** The 3px bar previewing where a dragged column will land. Sits in the gap
  *  beside the column (the canvas gap is 12px), never inside its rounding. */

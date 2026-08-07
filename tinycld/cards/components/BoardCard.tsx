@@ -47,6 +47,24 @@ function cardRingClass(isOpen: boolean, isFocused: boolean, idle: string) {
 
 export function BoardCard({ card, isDone, canDrag }: BoardCardProps) {
     const { isOpen, isFocused, onPress } = useCardPress(card.id)
+    // Board-wide, so read here rather than threaded through BoardColumn —
+    // ColumnCards is memoized and deliberately state-free, and a prop would
+    // re-render it. Every card face re-renders on toggle, which is fine: it
+    // is a deliberate action taken at rest, never mid-drag.
+    const isCompact = useCardsUIStore(s => s.isCompactCards)
+
+    if (isCompact && !isDone) {
+        return (
+            <CompactCard
+                card={card}
+                isOpen={isOpen}
+                isFocused={isFocused}
+                onPress={onPress}
+                canDrag={canDrag}
+            />
+        )
+    }
+
     if (isDone) {
         return (
             <DoneCard
@@ -93,6 +111,103 @@ export function BoardCard({ card, isDone, canDrag }: BoardCardProps) {
 function FocusMarker({ isFocused, cardId }: { isFocused: boolean; cardId: string }) {
     if (!isFocused) return null
     return <View testID={`cards-focused-${cardId}`} />
+}
+
+/**
+ * The dense card face. Not a uniformly shrunken card — it keeps what lets
+ * someone SCAN a board and drops what belongs to the card detail:
+ *
+ *   kept    title (one line) and assignees, the two cues you actually search a
+ *           board by, plus due state — lateness must never be something you
+ *           have to expand a card to see
+ *   demoted labels to their colours alone; the colour is the scanning cue and
+ *           the word is what costs the room
+ *   dropped checklist and comment counts, which nobody scans a board for
+ *
+ * The done face is already this dense (a check and one line), so it is shared
+ * across both densities rather than given a compact variant of its own.
+ */
+function CompactCard({ card, isOpen, isFocused, onPress, canDrag }: CompactCardProps) {
+    return (
+        <Pressable
+            accessibilityRole="button"
+            testID={`board-card-${card.id}`}
+            onPress={onPress}
+            className={`bg-card border rounded-[10px] px-3 py-1.5 flex-row items-center gap-2 shadow-sm ${canDrag ? 'web:cursor-grab' : ''} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${cardRingClass(
+                isOpen,
+                isFocused,
+                'border-border hover:border-muted/50'
+            )}`}
+        >
+            <FocusMarker isFocused={isFocused} cardId={card.id} />
+            <CompactLabelDots labels={card.labels ?? []} />
+            <Text
+                className="flex-1 text-[13.5px] font-medium leading-[18px] text-foreground"
+                numberOfLines={1}
+            >
+                {card.title}
+            </Text>
+            <CompactDueIcon due={card.due} />
+            <CardAssignees assignees={card.assignees} />
+        </Pressable>
+    )
+}
+
+interface CompactCardProps {
+    card: BoardCardView
+    isOpen: boolean
+    isFocused: boolean
+    onPress: () => void
+    canDrag: boolean
+}
+
+/**
+ * Label colours without their names, capped and counted exactly as the full
+ * face does — a card must not appear to lose labels when density changes, so
+ * the overflow marker survives even though the words don't.
+ */
+function CompactLabelDots({ labels }: { labels: BoardLabel[] }) {
+    if (labels.length === 0) return null
+
+    const visible = labels.slice(0, MAX_LABELS)
+    const overflow = labels.length - visible.length
+    return (
+        <View className="flex-row items-center gap-1">
+            {visible.map(label => (
+                <View
+                    key={label.id}
+                    accessibilityLabel={label.name}
+                    className="w-2 h-2 rounded-full"
+                    style={{ backgroundColor: label.color }}
+                />
+            ))}
+            {overflow > 0 ? (
+                <Text className="text-[10px] font-medium text-muted">+{overflow}</Text>
+            ) : null}
+        </View>
+    )
+}
+
+/**
+ * Due state as an icon alone. Keeps the full face's colour semantics — danger
+ * for overdue, warning for soon, muted otherwise — because losing the date
+ * text must not also lose the fact that something is late.
+ */
+function CompactDueIcon({ due }: { due?: Date }) {
+    const warningColor = useThemeColor('warning')
+    const dangerColor = useThemeColor('danger')
+    const mutedColor = useThemeColor('muted')
+    if (!due) return null
+
+    const state = dueStateFor(due)
+    const isOverdue = state === 'overdue'
+    const Icon = isOverdue ? Clock : CalendarDays
+    const color = isOverdue ? dangerColor : state === 'soon' ? warningColor : mutedColor
+    return (
+        <View accessibilityLabel={`Due ${formatDueDate(due)}`}>
+            <Icon size={12} color={color} strokeWidth={2.2} />
+        </View>
+    )
 }
 
 interface DoneCardProps {
