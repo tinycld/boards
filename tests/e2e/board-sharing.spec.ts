@@ -92,6 +92,11 @@ test.describe('Cards — board sharing and role gates', () => {
             await expect(bobPage.getByText('Add card', { exact: true })).toHaveCount(0)
             await expect(bobPage.getByText('Add list', { exact: true })).toHaveCount(0)
             await expect(bobPage.getByRole('button', { name: 'Board actions' })).toHaveCount(0)
+            // The header names the read-only role — the positive signal beside
+            // all the absent-affordance ones. The owner's own header (positive
+            // control) never shows it.
+            await expect(bobPage.getByTestId('cards-role-chip')).toHaveText('Viewer')
+            await expect(page.getByTestId('cards-role-chip')).toHaveCount(0)
 
             // Card detail: the stepper stays visible as the status display but
             // its segments stop being buttons; no comment composer.
@@ -122,6 +127,7 @@ test.describe('Cards — board sharing and role gates', () => {
             await bobPage.reload()
             await appShell(bobPage).waitFor({ state: 'visible' })
             await expect(boardCard(bobPage, CARD_TITLE)).toBeVisible()
+            await expect(bobPage.getByTestId('cards-role-chip')).toHaveText('Commentor')
             await expect(bobPage.getByText('Add card', { exact: true })).toHaveCount(0)
 
             await boardCard(bobPage, CARD_TITLE).click()

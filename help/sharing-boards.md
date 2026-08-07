@@ -18,7 +18,9 @@ what they can do:
 - **Viewer** — read everything, change nothing.
 
 Controls you don't have simply aren't shown: a viewer sees no card composer or
-drag handles, and a commentor keeps only the comment box.
+drag handles, and a commentor keeps only the comment box. On boards you can't
+edit, a small badge next to the board name shows your role, so a board without
+those controls is labeled rather than looking broken.
 
 ## Opening the member list
 
