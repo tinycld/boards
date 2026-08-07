@@ -3,8 +3,37 @@ package cards
 import (
 	"github.com/pocketbase/pocketbase"
 
+	"tinycld.org/core/fts"
 	"tinycld.org/core/offboard"
 )
+
+// ftsConfig is the cards FTS index/search config, driving both the index-sync
+// hooks and the /api/cards/search route. The fts_cards virtual table is created
+// by pb-migrations/1980000002; this only reads and writes it.
+//
+// description is markdown source rather than HTML, so it is indexed verbatim.
+var ftsConfig = fts.Config{
+	Slug:       "cards",
+	Collection: "cards_cards",
+	Table:      "fts_cards",
+	Columns: []fts.Column{
+		{FTS: "title", Field: "title"},
+		{FTS: "description", Field: "description"},
+	},
+	Scope: fts.MemberScope{
+		Table:       "cards_project_members",
+		MemberField: "project",
+		UserField:   "user",
+		RecordField: "project",
+	},
+	Output: []fts.OutputColumn{
+		{Name: "title"},
+		{Name: "project"},
+		{Name: "list"},
+	},
+	// Someone typing `/` wants active work, not history.
+	ExcludeField: "archived",
+}
 
 // Register wires server-side behavior for the Cards package. Core's generator
 // injects a call to this from server/package_extensions.go once the package is
@@ -48,4 +77,7 @@ func registerShared(app *pocketbase.PocketBase) {
 
 	registerBoardCounters(app)
 	registerMemberLastOwnerGuard(app)
+
+	// FTS index-sync record hooks + GET /api/cards/search, from core/fts.
+	fts.Register(app, []fts.Config{ftsConfig})
 }

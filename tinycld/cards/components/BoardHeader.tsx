@@ -5,8 +5,9 @@ import { useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useUpdateProject } from '../hooks/useProjectMutations'
 import { useProjectRole } from '../hooks/useProjectRole'
-import type { BoardProject } from '../types'
+import type { BoardProject, CardsMemberRole } from '../types'
 import { BoardMenu } from './BoardMenu'
+import { roleLabel } from './sharing/roles'
 import { ShareDialog } from './sharing/ShareDialog'
 
 interface BoardHeaderProps {
@@ -21,7 +22,7 @@ function pluralize(count: number, noun: string): string {
 export function BoardHeader({ project, cardCount }: BoardHeaderProps) {
     const [isRenaming, setIsRenaming] = useState(false)
     const [isSharing, setIsSharing] = useState(false)
-    const { isOwner } = useProjectRole(project.id)
+    const { isOwner, role, isReady, canEdit } = useProjectRole(project.id)
     // The ORG axis: a share-link guest cannot read the roster, so for them the
     // stack stays a plain display instead of opening an empty dialog.
     const { isGuest } = useCurrentRole()
@@ -47,6 +48,7 @@ export function BoardHeader({ project, cardCount }: BoardHeaderProps) {
                 )}
                 <Text className="text-[12.5px] text-muted mt-px">{subtitle}</Text>
             </View>
+            <RoleChip role={role} isVisible={isReady && !canEdit} />
             <View className="flex-1" />
             <TeamAvatars
                 project={project}
@@ -90,6 +92,22 @@ function BoardNameInput({ project, onDone }: { project: BoardProject; onDone: ()
             }}
             className="text-[17px] font-semibold tracking-tight text-foreground"
         />
+    )
+}
+
+/**
+ * Names the caller's role on boards they cannot edit. The affordance gates
+ * (no composers, no drag) already ENFORCE read-only; this is the one place
+ * that EXPLAINS it — without it a shared board just looks broken ("why can't
+ * I drag?"). Visibility gates on `isReady` so it never flashes at an
+ * owner/editor during the cold-load null role.
+ */
+function RoleChip({ role, isVisible }: { role: CardsMemberRole | null; isVisible: boolean }) {
+    if (!isVisible || !role) return null
+    return (
+        <View testID="cards-role-chip" className="bg-foreground/[0.06] rounded-full px-2 py-0.5">
+            <Text className="text-[11px] font-semibold text-muted">{roleLabel(role)}</Text>
+        </View>
     )
 }
 

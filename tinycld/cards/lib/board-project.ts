@@ -6,6 +6,8 @@
 import type {
     BoardCardView,
     BoardLabel,
+    BoardListRank,
+    BoardListView,
     BoardMember,
     BoardProject,
     CardsCards,
@@ -108,8 +110,21 @@ export interface BuildBoardInput {
     users: UserLike[]
 }
 
-/** Assemble the board tree, or null when there is no project to render. */
-export function buildBoardProject(input: BuildBoardInput): BoardProject | null {
+/**
+ * Assemble the board tree, or null when there is no project to render.
+ *
+ * When `previous` is the tree from the last emission, every node whose value
+ * is unchanged is returned BY IDENTITY from it (see shareTree). The six live
+ * queries feeding this re-emit far more often than this board's content
+ * changes — two of them (`users`, the membership join) react to org-wide
+ * writes — and without sharing, every emission rebuilt every object, so every
+ * column re-rendered and drax's sortable columns saw "external data changed"
+ * mid-drag.
+ */
+export function buildBoardProject(
+    input: BuildBoardInput,
+    previous?: BoardProject | null
+): BoardProject | null {
     const { project, lists, cards, labels, members, users } = input
     if (!project) return null
 
@@ -125,7 +140,8 @@ export function buildBoardProject(input: BuildBoardInput): BoardProject | null {
         else cardsByList.set(card.list, [view])
     }
 
-    return {
+    const sortedLists = [...lists].sort(byRank)
+    const fresh: BoardProject = {
         id: project.id,
         name: project.name,
         color: project.color,
@@ -133,12 +149,128 @@ export function buildBoardProject(input: BuildBoardInput): BoardProject | null {
         // Sorted by name so the label picker has a stable order that does not
         // depend on insertion sequence.
         labels: [...labelsById.values()].sort((a, b) => a.name.localeCompare(b.name)),
-        lists: [...lists].sort(byRank).map(list => ({
+        lists: sortedLists.map(list => ({
             id: list.id,
             name: list.name,
             position: list.position,
             isDone: list.is_done,
             cards: cardsByList.get(list.id) ?? [],
         })),
+        listOrder: sortedLists.map(list => ({ id: list.id, position: list.position })),
     }
+
+    if (!previous || previous.id !== fresh.id) return fresh
+    return shareTree(previous, fresh)
+}
+
+// ---------------------------------------------------------------------------
+// Structural sharing.
+//
+// Value equality per node type. Every field a view carries must be compared —
+// a field added to a view type without a line here would make its updates
+// invisible (the stale previous node keeps being reused).
+// ---------------------------------------------------------------------------
+
+function sameMember(a: BoardMember, b: BoardMember): boolean {
+    return a.id === b.id && a.firstName === b.firstName && a.lastName === b.lastName
+}
+
+function sameLabel(a: BoardLabel, b: BoardLabel): boolean {
+    return a.id === b.id && a.name === b.name && a.color === b.color
+}
+
+function sameCard(a: BoardCardView, b: BoardCardView): boolean {
+    return (
+        a.id === b.id &&
+        a.listId === b.listId &&
+        a.position === b.position &&
+        a.title === b.title &&
+        a.description === b.description &&
+        (a.due?.getTime() ?? null) === (b.due?.getTime() ?? null) &&
+        a.checklistTotal === b.checklistTotal &&
+        a.checklistDone === b.checklistDone &&
+        a.commentCount === b.commentCount &&
+        a.attachmentCount === b.attachmentCount &&
+        sameElements(a.labels, b.labels, sameLabel) &&
+        sameElements(a.assignees, b.assignees, sameMember)
+    )
+}
+
+function sameRank(a: BoardListRank, b: BoardListRank): boolean {
+    return a.id === b.id && a.position === b.position
+}
+
+function sameElements<T>(a: T[], b: T[], same: (x: T, y: T) => boolean): boolean {
+    return a.length === b.length && a.every((item, i) => same(item, b[i] as T))
+}
+
+/** True when `next` is element-for-element the SAME objects as `previous`. */
+function allShared<T>(next: T[], previous: T[]): boolean {
+    return next.length === previous.length && next.every((item, i) => item === previous[i])
+}
+
+/** Element-wise reuse by id, then whole-array reuse when nothing changed. */
+function shareById<T extends { id: string }>(
+    previous: T[],
+    fresh: T[],
+    same: (a: T, b: T) => boolean
+): T[] {
+    const previousById = new Map(previous.map(item => [item.id, item]))
+    const shared = fresh.map(item => {
+        const prior = previousById.get(item.id)
+        return prior && same(prior, item) ? prior : item
+    })
+    return allShared(shared, previous) ? previous : shared
+}
+
+/**
+ * Reuse nodes from the previous tree wherever the fresh value is equal, so
+ * memoized columns and drax's sortable lists see stable identities whenever an
+ * emission didn't change what they render. Cards are matched by id across the
+ * WHOLE board, not per list — a card that moved columns changed value anyway
+ * (its listId), so the wider index costs nothing and keeps the map simple.
+ */
+function shareTree(previous: BoardProject, fresh: BoardProject): BoardProject {
+    const previousCards = new Map<string, BoardCardView>()
+    for (const list of previous.lists) {
+        for (const card of list.cards) previousCards.set(card.id, card)
+    }
+    const previousLists = new Map(previous.lists.map(list => [list.id, list]))
+
+    const lists = fresh.lists.map((list): BoardListView => {
+        const cards = list.cards.map(card => {
+            const prior = previousCards.get(card.id)
+            return prior && sameCard(prior, card) ? prior : card
+        })
+        const prior = previousLists.get(list.id)
+        if (
+            prior &&
+            prior.name === list.name &&
+            prior.position === list.position &&
+            prior.isDone === list.isDone &&
+            allShared(cards, prior.cards)
+        ) {
+            return prior
+        }
+        return { ...list, cards }
+    })
+    const sharedLists = allShared(lists, previous.lists) ? previous.lists : lists
+
+    const labels = shareById(previous.labels, fresh.labels, sameLabel)
+    const members = shareById(previous.members, fresh.members, sameMember)
+    const listOrder = sameElements(previous.listOrder, fresh.listOrder, sameRank)
+        ? previous.listOrder
+        : fresh.listOrder
+
+    if (
+        sharedLists === previous.lists &&
+        labels === previous.labels &&
+        members === previous.members &&
+        listOrder === previous.listOrder &&
+        previous.name === fresh.name &&
+        previous.color === fresh.color
+    ) {
+        return previous
+    }
+    return { ...fresh, lists: sharedLists, labels, members, listOrder }
 }

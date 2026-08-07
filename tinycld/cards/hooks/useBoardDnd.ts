@@ -1,4 +1,5 @@
 import { hapticSuccess } from '@tinycld/core/lib/haptics'
+import { useWorkspaceStore } from '@tinycld/core/lib/stores/workspace-store'
 import { useCallback, useEffect, useRef } from 'react'
 import type {
     LayoutChangeEvent,
@@ -15,19 +16,21 @@ import type {
     SortableBoardTransferEvent,
 } from 'react-native-drax'
 import { useSortableBoard } from 'react-native-drax'
-import { isCardDragPayload, isColumnDragPayload, setGrabbingCursor } from '../lib/dnd'
+import type { EdgeDirection } from '../lib/dnd'
+import {
+    edgeScrollDirection,
+    isCardDragPayload,
+    isColumnDragPayload,
+    setGrabbingCursor,
+} from '../lib/dnd'
 import { rankForInsert } from '../lib/move'
 import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardCardView, BoardProject } from '../types'
 import { useMoveCard } from './useCardMutations'
 
-/** Fraction of the canvas width, at each edge, that triggers auto-scroll. */
-const EDGE_ZONE_RATIO = 0.08
 /** Fraction of the canvas width scrolled per auto-scroll tick. */
 const EDGE_JUMP_RATIO = 0.15
 const EDGE_SCROLL_INTERVAL_MS = 250
-
-type EdgeDirection = -1 | 0 | 1
 
 export interface BoardDnd {
     board: SortableBoardHandle<BoardCardView>
@@ -106,6 +109,9 @@ export function useBoardDnd(project: BoardProject, canEdit: boolean): BoardDnd {
         () => () => {
             if (edgeIntervalRef.current) clearInterval(edgeIntervalRef.current)
             setGrabbingCursor(false)
+            // Without this a mid-drag unmount would leave the drawer's
+            // edge-swipe suspended forever.
+            useWorkspaceStore.getState().setEdgeSwipeSuspended(false)
         },
         []
     )
@@ -139,6 +145,10 @@ export function useBoardDnd(project: BoardProject, canEdit: boolean): BoardDnd {
         isDraggingRef.current = true
         measureAllColumns()
         setGrabbingCursor(true)
+        // A drag routinely visits the left screen edge (that's what triggers
+        // the auto-scroll), where a micro-lifted touch could otherwise read
+        // as a drawer edge-swipe and fling the sidebar open mid-drag.
+        useWorkspaceStore.getState().setEdgeSwipeSuspended(true)
         const ui = useCardsUIStore.getState()
         // Set for column drags too: the press guard should swallow a trailing
         // click no matter what kind of drag just released over a card.
@@ -148,14 +158,14 @@ export function useBoardDnd(project: BoardProject, canEdit: boolean): BoardDnd {
         // would land in whatever column it covers. Grabbing a card also means
         // the user is done reading — close it.
         if (ui.openCardId) ui.closeCard()
+        // Drax's own hover and phantom-slot visuals own the board during a
+        // drag; a stale ring left behind on the lifted card competes with them.
+        if (ui.focusedCardId || ui.focusedColumnId) ui.focusCard(null)
     }
 
     const onMonitorDragOver = (event: DraxMonitorEventData) => {
         if (!isDraggingRef.current) return
-        const ratio = event.monitorOffsetRatio.x
-        const direction: EdgeDirection =
-            ratio > 1 - EDGE_ZONE_RATIO ? 1 : ratio < EDGE_ZONE_RATIO ? -1 : 0
-        setEdgeScroll(direction)
+        setEdgeScroll(edgeScrollDirection(event, viewportWidthRef.current))
     }
 
     const endDrag = () => {
@@ -163,6 +173,7 @@ export function useBoardDnd(project: BoardProject, canEdit: boolean): BoardDnd {
         isDraggingRef.current = false
         stopEdgeScroll()
         setGrabbingCursor(false)
+        useWorkspaceStore.getState().setEdgeSwipeSuspended(false)
         // One frame later so the trailing click a web drag-release can
         // synthesize still sees the flag (see BoardCard's onPress).
         requestAnimationFrame(() => useCardsUIStore.getState().setCardDragging(false))

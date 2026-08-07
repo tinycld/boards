@@ -1,9 +1,11 @@
 package cards
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/pocketbase/pocketbase/core"
@@ -119,14 +121,26 @@ func newCardsApp(t *testing.T) *tests.TestApp {
 	return app
 }
 
+// fixtureUserSeq makes every fixture username unique within a process run.
+// Fixtures across this package reuse the same local-parts (owner@test.local,
+// viewer@test.local, …) in different apps, and PocketBase derives a username
+// from the email local-part when none is set — so two fixtures deriving the
+// same "owner" username can collide with "username: Value must be unique"
+// depending on which tests ran first. Setting an explicit unique username
+// removes the derivation entirely, so the outcome no longer depends on test
+// ordering or on what the cloned seed data already contains.
+var fixtureUserSeq atomic.Uint64
+
 func cardsUser(t *testing.T, app core.App, email, orgRole string) *core.Record {
 	t.Helper()
 	col, err := app.FindCollectionByNameOrId("users")
 	if err != nil {
 		t.Fatalf("find users: %v", err)
 	}
+	local, _, _ := strings.Cut(email, "@")
 	r := core.NewRecord(col)
 	r.SetEmail(email)
+	r.Set("username", fmt.Sprintf("%s_%d", local, fixtureUserSeq.Add(1)))
 	r.Set("name", "Test User")
 	r.Set("role", orgRole)
 	r.SetVerified(true)

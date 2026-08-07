@@ -47,7 +47,7 @@ export async function addCard(page: Page, columnIndex: number, title: string) {
  * doesn't take). `cards-drag-active` is the deterministic "drag is live"
  * signal (mounted by BoardCanvas for card AND column drags).
  */
-async function activateDrag(page: Page, start: { x: number; y: number }) {
+export async function activateDrag(page: Page, start: { x: number; y: number }) {
     const active = page.getByTestId('cards-drag-active')
     await expect(async () => {
         if ((await active.count()) === 0) {
@@ -65,7 +65,7 @@ async function activateDrag(page: Page, start: { x: number; y: number }) {
 
 /** Step the held pointer to a position so Drax re-runs its hit-test along
  *  the way; a single jump can arrive without ever flagging the target. */
-async function travelTo(
+export async function travelTo(
     page: Page,
     start: { x: number; y: number },
     end: { x: number; y: number }
@@ -79,7 +79,7 @@ async function travelTo(
     }
 }
 
-async function centerOf(locator: Locator): Promise<{ x: number; y: number }> {
+export async function centerOf(locator: Locator): Promise<{ x: number; y: number }> {
     const box = await locator.boundingBox()
     if (!box) throw new Error('locator has no bounding box (not visible?)')
     return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
@@ -100,6 +100,13 @@ export async function dragCardToColumn(
     const header = await centerOf(columnHeader(page, columnName))
     const entry = { x: header.x, y: header.y + 60 }
 
+    // Measure the reference card at REST, before the drag: Drax's slot
+    // boundaries use the pre-drag layout, and once the phantom slot shifts
+    // residents down, a live re-measure would chase the shifted position
+    // past the column's bottom bound — where the transfer cancels.
+    const below = options?.below ? await options.below.boundingBox() : null
+    if (options?.below && !below) throw new Error('below-reference card not visible')
+
     await activateDrag(page, start)
     await travelTo(page, start, entry)
 
@@ -110,17 +117,12 @@ export async function dragCardToColumn(
         await expect(receiving).toHaveCount(1)
     }).toPass()
 
-    if (options?.below) {
-        // Re-measure the reference card live (entering the column can shift
-        // residents for the phantom slot), then settle HALF A CARD below its
-        // bottom edge. The margin matters: the slot boundary sits at
-        // bottom + gap/2, and Drax's slot math uses the hover-copy CENTER,
-        // which trails the pointer by ~12px — a drop "just below" the card
-        // computes as the slot above it.
-        await page.waitForTimeout(300)
-        const box = await options.below.boundingBox()
-        if (!box) throw new Error('below-reference card not visible')
-        const end = { x: box.x + box.width / 2, y: box.y + box.height * 1.5 }
+    if (below) {
+        // Settle HALF A CARD below the resting bottom edge. The margin
+        // matters: the slot boundary sits at bottom + gap/2, and Drax's slot
+        // math uses the hover-copy CENTER, which trails the pointer by ~12px
+        // — a drop "just below" the card computes as the slot above it.
+        const end = { x: below.x + below.width / 2, y: below.y + below.height * 1.5 }
         await travelTo(page, entry, end)
         await page.waitForTimeout(300)
         await expect(receiving).toHaveCount(1)

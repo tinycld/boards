@@ -1,10 +1,12 @@
 import { hapticImpactLight, hapticSelection, hapticSuccess } from '@tinycld/core/lib/haptics'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
-import { useRef, useState } from 'react'
+import { memo, useCallback, useRef, useState } from 'react'
 import { ScrollView, Text, View } from 'react-native'
 import type { DraxDragWithReceiverEventData, DraxMonitorEventData } from 'react-native-drax'
 import { DraxView, SortableContainer, SortableItem, useSortableList } from 'react-native-drax'
+import type { SharedValue } from 'react-native-reanimated'
+import Reanimated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated'
 import { useCreateCard, useMoveCard } from '../hooks/useCardMutations'
 import { useUpdateList } from '../hooks/useListMutations'
 import {
@@ -15,7 +17,7 @@ import {
     isColumnDragPayload,
 } from '../lib/dnd'
 import { rankForAppend, rankForReorder } from '../lib/move'
-import type { BoardCardView, BoardListView } from '../types'
+import type { BoardCardView, BoardListRank, BoardListView } from '../types'
 import { BoardCard } from './BoardCard'
 import { CardComposer } from './CardComposer'
 import { ColumnMenu } from './ColumnMenu'
@@ -38,8 +40,11 @@ const CARD_HOVER_STYLE = {
 interface BoardColumnProps {
     list: BoardListView
     projectId: string
-    /** Every column, in render order — the menu's reorder needs siblings. */
-    lists: BoardListView[]
+    /** Every column's rank, in render order — the menu's reorder and the
+     *  header-drag drop index need siblings, but only their {id, position}.
+     *  Identity-stable across card-level changes (see BoardProject.listOrder),
+     *  which is what lets the memo below skip untouched columns. */
+    listOrder: BoardListRank[]
     /** From useBoardDnd — keeps this column's Drax bounds fresh while the
      *  canvas scrolls under a drag. */
     registerMeasure: (listId: string, measure: (() => void) | null) => void
@@ -49,10 +54,18 @@ interface BoardColumnProps {
 
 type DropSide = 'before' | 'after'
 
-export function BoardColumn({
+/**
+ * Memoized: a live-query emission that changes one card must re-render only
+ * that card's column. Structural sharing in buildBoardProject keeps every
+ * untouched column's `list` (and `listOrder`) identity stable, so the other
+ * columns — including their drax sortable state — are left alone. Without
+ * this boundary, every emission re-rendered every column, and a re-render
+ * mid-drag is what wiped the phantom-slot preview.
+ */
+export const BoardColumn = memo(function BoardColumn({
     list,
     projectId,
-    lists,
+    listOrder,
     registerMeasure,
     canEdit,
 }: BoardColumnProps) {
@@ -62,6 +75,27 @@ export function BoardColumn({
     const createCard = useCreateCard(projectId)
     const updateList = useUpdateList()
     const barColor = useThemeColor('primary')
+
+    // This outer DraxView is the column-drag receiver, so its bounds go stale
+    // the same way the card container's do when the canvas scrolls mid-drag.
+    // Fold its measure into the same registration the card container uses, so
+    // useBoardDnd's drag-start/scroll re-measures refresh both. (Structural
+    // type: drax doesn't re-export DraxViewRegistration from its index.)
+    const outerRegistrationRef = useRef<{ measure: () => void } | null>(null)
+    const registerBothMeasures = useCallback(
+        (listId: string, measure: (() => void) | null) => {
+            registerMeasure(
+                listId,
+                measure
+                    ? () => {
+                          outerRegistrationRef.current?.measure()
+                          measure()
+                      }
+                    : null
+            )
+        },
+        [registerMeasure]
+    )
 
     const addCard = (title: string) =>
         createCard.mutate({ listId: list.id, title, position: rankForAppend(list.cards) })
@@ -83,12 +117,12 @@ export function BoardColumn({
         setColumnDropSide(null)
         const payload = event.dragged.payload
         if (!isForeignColumn(event) || !isColumnDragPayload(payload)) return
-        const index = columnDropIndex(lists, payload.listId, list.id, sideFor(event))
+        const index = columnDropIndex(listOrder, payload.listId, list.id, sideFor(event))
         if (index === null) return
         hapticSuccess()
         updateList.mutate({
             listId: payload.listId,
-            position: rankForReorder(lists, payload.listId, index),
+            position: rankForReorder(listOrder, payload.listId, index),
         })
     }
 
@@ -96,6 +130,10 @@ export function BoardColumn({
         <DraxView
             receptive
             monitoring
+            measureVisual
+            registration={registration => {
+                outerRegistrationRef.current = registration ?? null
+            }}
             acceptsDrag={payload =>
                 canEdit && isColumnDragPayload(payload) && payload.listId !== list.id
             }
@@ -142,14 +180,14 @@ export function BoardColumn({
                     {canEdit ? (
                         <ColumnMenu
                             list={list}
-                            lists={lists}
+                            listOrder={listOrder}
                             onRename={() => setIsRenaming(true)}
                         />
                     ) : null}
                 </View>
                 <ColumnCards
                     list={list}
-                    registerMeasure={registerMeasure}
+                    registerMeasure={registerBothMeasures}
                     onReceivingChange={setIsReceiving}
                     canEdit={canEdit}
                 />
@@ -161,7 +199,7 @@ export function BoardColumn({
             <ColumnInsertionBar side={columnDropSide} color={barColor} />
         </DraxView>
     )
-}
+})
 
 /** The 3px bar previewing where a dragged column will land. Sits in the gap
  *  beside the column (the canvas gap is 12px), never inside its rounding. */
@@ -282,10 +320,20 @@ function ColumnNameInput({ list, onDone }: { list: BoardListView; onDone: () => 
     )
 }
 
+/** The card stack's flex gap (contentContainerClassName="gap-2"). */
+const STACK_GAP = 8
+
+/** Room reserved below the stack for the phantom slot while receiving —
+ *  one standard card face; the stack gap in front of the spacer supplies
+ *  the rest. */
+const PHANTOM_SLOT_HEIGHT = 40
+
 interface ColumnCardsProps {
     list: BoardListView
     registerMeasure: (listId: string, measure: (() => void) | null) => void
-    /** True while a card from ANOTHER column is dragged over this one. */
+    /** Reports whether a card from ANOTHER column is dragged over this one.
+     *  Consumed by BoardColumn (border + e2e marker) — never fed back here,
+     *  so the flip cannot re-render this subtree. */
     onReceivingChange: (isReceiving: boolean) => void
     canEdit: boolean
 }
@@ -296,10 +344,25 @@ interface ColumnCardsProps {
  * commits same-column reorders. The container mounts even when the column is
  * empty — it is the drop target, and a null here would leave an empty column
  * with no bounds to hit-test and no place for the phantom slot.
+ *
+ * Memoized and deliberately state-free: a re-render mid-drag re-measures
+ * every SortableItem while its shift transform is still animating, storing
+ * origins corrupted by the un-travelled remainder — the landing slot then
+ * oscillates and gaps stick around after the drop. The drax fork now guards
+ * against mid-drag re-measures too, but not re-rendering at all is the cheap
+ * half of the fix, and it is why receiving feedback leaves this subtree
+ * untouched: the border lives in BoardColumn behind the memo boundary, and
+ * the phantom room is a SharedValue-driven spacer.
  */
-function ColumnCards({ list, registerMeasure, onReceivingChange, canEdit }: ColumnCardsProps) {
+const ColumnCards = memo(function ColumnCards({
+    list,
+    registerMeasure,
+    onReceivingChange,
+    canEdit,
+}: ColumnCardsProps) {
     const scrollRef = useRef<ScrollView>(null)
     const moveCard = useMoveCard()
+    const phantomSpace = useSharedValue(0)
 
     const sortable = useSortableList<BoardCardView>({
         // Container id === list id, so the board's transfer events speak list ids.
@@ -316,7 +379,7 @@ function ColumnCards({ list, registerMeasure, onReceivingChange, canEdit }: Colu
             })
         },
         longPressDelay: CARD_DRAG_ACTIVATION_MS,
-        animationConfig: 'spring',
+        animationConfig: 'snappy',
         inactiveItemStyle: { opacity: 0.75 },
         onDragStart: () => hapticImpactLight(),
     })
@@ -339,13 +402,17 @@ function ColumnCards({ list, registerMeasure, onReceivingChange, canEdit }: Colu
     const updateReceiving = (event: DraxMonitorEventData) => {
         const { x, y } = event.monitorOffsetRatio
         const receiving = isForeignCard(event) && x >= 0 && x <= 1 && y >= 0 && y <= 1
-        // The tick a finger feels crossing into a new column.
-        if (receiving && !wasReceivingRef.current) hapticSelection()
-        wasReceivingRef.current = receiving
+        if (receiving !== wasReceivingRef.current) {
+            // The tick a finger feels crossing into a new column.
+            if (receiving) hapticSelection()
+            wasReceivingRef.current = receiving
+            phantomSpace.value = receiving ? PHANTOM_SLOT_HEIGHT : 0
+        }
         onReceivingChange(receiving)
     }
     const clearReceiving = () => {
         wasReceivingRef.current = false
+        phantomSpace.value = 0
         onReceivingChange(false)
     }
 
@@ -390,7 +457,25 @@ function ColumnCards({ list, registerMeasure, onReceivingChange, canEdit }: Colu
                         </NoNativeDrag>
                     </SortableItem>
                 ))}
+                <PhantomSlotSpacer space={phantomSpace} />
             </ScrollView>
         </SortableContainer>
     )
+})
+
+/**
+ * Layout room for the cross-column phantom slot, grown while a foreign card
+ * hovers over this column. The slot shifts are pure transforms, so without
+ * real room the last resident slides past the container edge and gets
+ * clipped, and a drop aimed at the vacated space lands outside the column's
+ * bounds and cancels the transfer. Height is a SharedValue so the mid-drag
+ * toggle never re-renders (and re-measures) the items above; at rest the
+ * negative margin swallows the stack gap the spacer would otherwise add.
+ */
+function PhantomSlotSpacer({ space }: { space: SharedValue<number> }) {
+    const style = useAnimatedStyle(() => ({
+        height: space.value,
+        marginTop: space.value > 0 ? 0 : -STACK_GAP,
+    }))
+    return <Reanimated.View style={style} />
 }

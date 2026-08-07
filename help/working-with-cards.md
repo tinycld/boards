@@ -52,14 +52,36 @@ shows on the card itself.
 
 ## Keyboard shortcuts
 
+You can work a board without touching the mouse. Press **J** to start — the
+first press highlights a card, and from there:
+
+- **J** / **↓** — next card
+- **K** / **↑** — previous card
+- **←** / **→** — the card beside it in the next column over
+- **Enter** or **O** — open the highlighted card
+- **Esc** — clear the highlight
+
+J and K walk the board in order, list by list, so you can review a whole board
+a card at a time. The arrow keys move across columns instead, keeping your place
+in the column — handy when a board is laid out as stages.
+
+To move a card, hold **Shift** with an arrow key:
+
+- **Shift + ←** / **Shift + →** — send it to the column beside it
+- **Shift + ↑** / **Shift + ↓** — move it up or down its own column
+- **X** — archive it
+
+Moving and archiving need permission to edit the board; if you're a viewer or
+commentor, the navigation keys still work.
+
 With a card open:
 
 - **J** — next card
 - **K** — previous card
 - **Esc** — close the card (or return to the board from the full-screen view)
 
-J and K walk the board in order, list by list, so you can review a column
-without touching the mouse.
+Press **⇧?** anywhere to see every shortcut the app knows, including the ones
+for jumping between apps.
 
 ## Missing a button?
 

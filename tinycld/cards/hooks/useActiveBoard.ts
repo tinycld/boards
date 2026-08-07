@@ -1,9 +1,10 @@
 import { eq } from '@tanstack/db'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { buildBoardProject } from '../lib/board-project'
 import { useCardsUIStore } from '../stores/cards-ui-store'
+import type { BoardProject } from '../types'
 
 /**
  * The board, live.
@@ -114,18 +115,30 @@ export function useActiveBoard() {
     // cards they were assigned, and must still render.
     const { data: userRows } = useOrgLiveQuery(query => query.from({ user: usersCollection }))
 
+    // The queries above re-emit far more often than this board's content
+    // changes (users and the membership join react to org-wide writes), so the
+    // build reconciles against the previous tree: value-equal nodes keep their
+    // identity, and when nothing changed the previous PROJECT comes back — the
+    // canvas doesn't re-render at all. The ref write during render is the
+    // standard previous-value pattern; a StrictMode double render just feeds
+    // the second pass an equal tree, which shares back to the same object.
+    const previousProjectRef = useRef<BoardProject | null>(null)
     const project = useMemo(
         () =>
-            buildBoardProject({
-                project: projects.find(p => p.id === projectId),
-                lists: listRows ?? [],
-                cards: cardRows ?? [],
-                labels: labelRows ?? [],
-                members: (memberRows ?? []).map(r => r.user),
-                users: userRows ?? [],
-            }),
+            buildBoardProject(
+                {
+                    project: projects.find(p => p.id === projectId),
+                    lists: listRows ?? [],
+                    cards: cardRows ?? [],
+                    labels: labelRows ?? [],
+                    members: (memberRows ?? []).map(r => r.user),
+                    users: userRows ?? [],
+                },
+                previousProjectRef.current
+            ),
         [projects, projectId, listRows, cardRows, labelRows, memberRows, userRows]
     )
+    previousProjectRef.current = project
 
     const cardCount = useMemo(
         () => project?.lists.reduce((total, list) => total + list.cards.length, 0) ?? 0,

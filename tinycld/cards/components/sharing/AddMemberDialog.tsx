@@ -100,7 +100,7 @@ export function AddMemberDialog({
     return (
         <Modal isOpen onClose={handleClose}>
             <ModalBackdrop />
-            <ModalContent className="w-[440px] max-h-[560px] p-0 rounded-xl">
+            <ModalContent className="w-[90%] max-w-[440px] max-h-[560px] p-0 rounded-xl">
                 <DialogHeader onClose={handleClose} />
                 <View className="px-4 pt-3 pb-2 gap-3">
                     <SearchRow query={query} onChange={setQuery} />

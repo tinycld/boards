@@ -1,15 +1,18 @@
 import { expect, test } from '@playwright/test'
 import { appShell, login, navigateToPackage } from '@tinycld/core/e2e-helpers'
 import {
+    activateDrag,
     addCard,
     boardCard,
     cardsInColumn,
+    centerOf,
     columnHeader,
     columnOrder,
     createBoard,
     dragCardBelow,
     dragCardToColumn,
     dragColumn,
+    travelTo,
 } from './helpers'
 
 // Every spec creates its own uniquely-named board (three default lists:
@@ -66,6 +69,53 @@ test.describe('Cards — drag and drop', () => {
         await expect
             .poll(async () => (await cardsInColumn(page, 'Doing')).sort())
             .toEqual(['mover', 'resident'])
+    })
+
+    test('shifts resident cards to preview the landing slot while hovering', async ({ page }) => {
+        await freshBoard(page, 'preview')
+        await addCard(page, 0, 'mover')
+        await addCard(page, 1, 'res-a')
+        await addCard(page, 1, 'res-b')
+
+        const restingA = await boardCard(page, 'res-a').boundingBox()
+        const restingB = await boardCard(page, 'res-b').boundingBox()
+        if (!restingA || !restingB) throw new Error('resident cards not visible')
+        // The pointer parks on res-a's ORIGINAL bottom edge — the middle of
+        // the slot-1 band. Drax's insertion boundaries sit at the residents'
+        // pre-drag centers (slot 1 spans res-a's center to res-b's center,
+        // ~48px), and the hit point is the hover copy's center, which rides
+        // ~12px above the pointer: activateDrag's activation wiggle ends
+        // below the grab point, inflating the recorded grab offset. Parking
+        // at res-a's center — the slot-0/1 boundary itself — made the
+        // preview flip with event timing; the bottom edge keeps ≥16px of
+        // margin from both boundaries under that bias.
+        const park = { x: restingA.x + restingA.width / 2, y: restingA.y + restingA.height }
+
+        const start = await centerOf(boardCard(page, 'mover'))
+        await activateDrag(page, start)
+        await travelTo(page, start, park)
+        const receiving = page.getByTestId('cards-column-receiving')
+        await expect(async () => {
+            await page.mouse.move(park.x, park.y + 10)
+            await page.mouse.move(park.x, park.y)
+            await expect(receiving).toHaveCount(1)
+        }).toPass()
+
+        // Parked mid-gap, the phantom slot sits BELOW res-a. The preview must
+        // push res-b down by one card height while the drag is still held,
+        // and leave res-a in place.
+        const shiftOf = async (title: string, resting: { y: number }) => {
+            const now = await boardCard(page, title).boundingBox()
+            return now ? now.y - resting.y : 0
+        }
+        await expect.poll(() => shiftOf('res-b', restingB)).toBeGreaterThan(30)
+        expect(await shiftOf('res-a', restingA)).toBeLessThan(10)
+
+        // Releasing must land the card in the slot the preview showed.
+        await page.mouse.up()
+        await expect
+            .poll(async () => cardsInColumn(page, 'Doing'))
+            .toEqual(['res-a', 'mover', 'res-b'])
     })
 
     test('drops into an empty column', async ({ page }) => {

@@ -68,7 +68,7 @@ function ShareDialogContent({ onClose, project }: { onClose: () => void; project
     return (
         <Modal isOpen onClose={onClose}>
             <ModalBackdrop />
-            <ModalContent className="w-[480px] max-h-[600px] p-0 rounded-xl">
+            <ModalContent className="w-[90%] max-w-[480px] max-h-[600px] p-0 rounded-xl">
                 <View className="flex-row items-center justify-between px-4 py-3 border-b border-border">
                     <Text className="text-[15px] font-semibold text-foreground" numberOfLines={1}>
                         Share “{project.name}”

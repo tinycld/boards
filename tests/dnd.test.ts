@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import type { EdgeScrollSample } from '~/tinycld/cards/lib/dnd'
 import {
     columnDropIndex,
+    edgeScrollDirection,
     isCardDragPayload,
     isColumnDragPayload,
     movedEntry,
@@ -89,6 +91,74 @@ describe('columnDropIndex', () => {
     it('is null for unknown dragged or target ids', () => {
         expect(columnDropIndex(lists, 'zz', 'a', 'before')).toBeNull()
         expect(columnDropIndex(lists, 'a', 'zz', 'before')).toBeNull()
+    })
+})
+
+describe('edgeScrollDirection', () => {
+    const CARD_WIDTH = 272
+
+    /**
+     * A monitor-drag sample built the way drax builds one: the hover copy's
+     * top-left sits at finger − grabOffset, and the event's hit-test point
+     * (dragAbsolutePosition / monitorOffset) is the hover copy's CENTER —
+     * which is exactly why the helper cannot use monitorOffset directly.
+     * `fingerX` is monitor-relative; `monitorOriginX` places the monitor in
+     * root space (e.g. the rail to its left).
+     */
+    function sample(fingerX: number, grabX: number, monitorOriginX = 0): EdgeScrollSample {
+        const fingerRootX = monitorOriginX + fingerX
+        const hoverX = fingerRootX - grabX
+        const centerRootX = hoverX + CARD_WIDTH / 2
+        return {
+            dragAbsolutePosition: { x: centerRootX },
+            monitorOffset: { x: centerRootX - monitorOriginX },
+            dragged: {
+                grabOffset: { x: grabX },
+                hoverPosition: { x: hoverX },
+            },
+        }
+    }
+
+    it('triggers at the right edge regardless of grab point', () => {
+        // Portrait-phone canvas. Grabbed at the card's left edge the hover
+        // center leads the finger; grabbed at the right edge it trails by
+        // ~136pt — the case the old center-based ratio could never reach.
+        expect(edgeScrollDirection(sample(370, 0), 390)).toBe(1)
+        expect(edgeScrollDirection(sample(370, CARD_WIDTH), 390)).toBe(1)
+    })
+
+    it('triggers at the left edge regardless of grab point', () => {
+        expect(edgeScrollDirection(sample(20, 0), 390)).toBe(-1)
+        expect(edgeScrollDirection(sample(20, CARD_WIDTH), 390)).toBe(-1)
+    })
+
+    it('is idle mid-canvas', () => {
+        expect(edgeScrollDirection(sample(195, 0), 390)).toBe(0)
+        expect(edgeScrollDirection(sample(195, CARD_WIDTH), 390)).toBe(0)
+    })
+
+    it('floors the zone at finger size on narrow viewports', () => {
+        // 8% of 390 is ~31pt; 40pt from the edge is outside that ratio zone
+        // but inside the 48pt floor.
+        expect(edgeScrollDirection(sample(350, 136), 390)).toBe(1)
+        expect(edgeScrollDirection(sample(40, 136), 390)).toBe(-1)
+    })
+
+    it('uses the ratio zone once it exceeds the floor', () => {
+        // 8% of 1000 is 80pt: 60pt from the edge is inside, 90pt is out.
+        expect(edgeScrollDirection(sample(940, 136), 1000)).toBe(1)
+        expect(edgeScrollDirection(sample(910, 136), 1000)).toBe(0)
+    })
+
+    it('is unaffected by the monitor sitting offset in root space', () => {
+        const railWidth = 64
+        expect(edgeScrollDirection(sample(370, CARD_WIDTH, railWidth), 390)).toBe(1)
+        expect(edgeScrollDirection(sample(195, CARD_WIDTH, railWidth), 390)).toBe(0)
+        expect(edgeScrollDirection(sample(20, 0, railWidth), 390)).toBe(-1)
+    })
+
+    it('is idle before the viewport has measured', () => {
+        expect(edgeScrollDirection(sample(370, 0), 0)).toBe(0)
     })
 })
 

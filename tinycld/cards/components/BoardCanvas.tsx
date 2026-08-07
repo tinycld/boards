@@ -1,6 +1,7 @@
 import { ScrollView, View } from 'react-native'
 import { SortableBoardContainer } from 'react-native-drax'
 import { useBoardDnd } from '../hooks/useBoardDnd'
+import { useBoardShortcuts } from '../hooks/useBoardShortcuts'
 import { useProjectRole } from '../hooks/useProjectRole'
 import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardProject } from '../types'
@@ -11,6 +12,7 @@ import { EmptyBoard } from './EmptyBoard'
 export function BoardCanvas({ project }: { project: BoardProject }) {
     const { canEdit } = useProjectRole(project.id)
     const dnd = useBoardDnd(project, canEdit)
+    useBoardShortcuts(project, canEdit)
 
     if (project.lists.length === 0) {
         return <EmptyBoard projectId={project.id} canEdit={canEdit} />
@@ -43,12 +45,14 @@ export function BoardCanvas({ project }: { project: BoardProject }) {
                         key={list.id}
                         list={list}
                         projectId={project.id}
-                        lists={project.lists}
+                        listOrder={project.listOrder}
                         registerMeasure={dnd.registerColumnMeasure}
                         canEdit={canEdit}
                     />
                 ))}
-                {canEdit ? <AddListColumn projectId={project.id} lists={project.lists} /> : null}
+                {canEdit ? (
+                    <AddListColumn projectId={project.id} listOrder={project.listOrder} />
+                ) : null}
             </ScrollView>
             <DragActiveMarker />
         </SortableBoardContainer>
