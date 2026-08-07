@@ -1,16 +1,17 @@
 import { hexToRgba } from '@tinycld/core/lib/color-utils'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { Pressable, Text, View } from 'react-native'
-import type { BoardCard, BoardList, SampleProject } from '../../sample-projects'
-import { useCardsUIStore } from '../../stores/cards-ui-store'
+import { useMoveCard } from '../../hooks/useCardMutations'
+import { rankForAppend } from '../../lib/move'
+import type { BoardCardView, BoardListView, BoardProject } from '../../types'
 
 const SEGMENT_WIDTH = 20
 const SEGMENT_HEIGHT = 7
 
 interface ListStepperProps {
-    project: SampleProject
-    card: BoardCard
-    list: BoardList
+    project: BoardProject
+    card: BoardCardView
+    list: BoardListView
 }
 
 /**
@@ -20,9 +21,21 @@ interface ListStepperProps {
  * is the control that changes it.
  */
 export function ListStepper({ project, card, list }: ListStepperProps) {
-    const moveCard = useCardsUIStore(s => s.moveCard)
+    const moveCard = useMoveCard()
     const successColor = useThemeColor('success')
     const currentIndex = project.lists.findIndex(target => target.id === list.id)
+
+    // The stepper has no drop index — it names a column, not a slot — so a move
+    // appends. Pressing the current list is a no-op rather than a re-append to
+    // the bottom of the column the card is already in.
+    const moveTo = (target: BoardListView) => {
+        if (target.id === list.id) return
+        moveCard.mutate({
+            cardId: card.id,
+            listId: target.id,
+            position: rankForAppend(target.cards),
+        })
+    }
 
     return (
         <View className="flex-row items-center gap-2 shrink min-w-0">
@@ -33,7 +46,7 @@ export function ListStepper({ project, card, list }: ListStepperProps) {
                         name={target.name}
                         fillColor={segmentFill(project, list, index, currentIndex, successColor)}
                         borderColor={hexToRgba(project.color, 0.45)}
-                        onPress={() => moveCard(card.id, target.id)}
+                        onPress={() => moveTo(target)}
                     />
                 ))}
             </View>
@@ -45,8 +58,8 @@ export function ListStepper({ project, card, list }: ListStepperProps) {
 }
 
 function segmentFill(
-    project: SampleProject,
-    list: BoardList,
+    project: BoardProject,
+    list: BoardListView,
     index: number,
     currentIndex: number,
     successColor: string

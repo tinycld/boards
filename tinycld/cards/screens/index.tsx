@@ -1,16 +1,40 @@
 import { DocumentTitle } from '@tinycld/core/components/DocumentTitle'
+import { LoadingState } from '@tinycld/core/components/LoadingState'
 import { ScrollView, View } from 'react-native'
 import { AddListColumn } from '../components/AddListColumn'
 import { BoardColumn } from '../components/BoardColumn'
 import { BoardHeader } from '../components/BoardHeader'
 import { CardPeek } from '../components/CardPeek'
-import { EmptyBoard } from '../components/EmptyBoard'
+import { EmptyBoard, NoBoards } from '../components/EmptyBoard'
+import { NewBoardDialog } from '../components/NewBoardDialog'
 import { ProjectWash } from '../components/ProjectWash'
 import { useActiveBoard } from '../hooks/useActiveBoard'
-import type { SampleProject } from '../sample-projects'
+import type { BoardProject } from '../types'
 
 export default function CardsIndex() {
-    const { project, cardCount } = useActiveBoard()
+    const { project, cardCount, isLoading, hasProjects } = useActiveBoard()
+
+    // Three states, guarded once here so everything below takes a non-null
+    // board. Loading is checked FIRST: without it, a cold load renders the
+    // no-boards call-to-action for a frame before the query settles.
+    if (isLoading) {
+        return (
+            <View className="flex-1 bg-background">
+                <DocumentTitle pkg="Cards" title="Cards" />
+                <LoadingState />
+            </View>
+        )
+    }
+
+    if (!hasProjects || !project) {
+        return (
+            <View className="flex-1 bg-background">
+                <DocumentTitle pkg="Cards" title="Cards" />
+                <NoBoards />
+                <NewBoardDialog />
+            </View>
+        )
+    }
 
     return (
         <View className="flex-1 bg-background">
@@ -19,12 +43,13 @@ export default function CardsIndex() {
             <BoardHeader project={project} cardCount={cardCount} />
             <BoardCanvas project={project} />
             <CardPeek project={project} />
+            <NewBoardDialog />
         </View>
     )
 }
 
-function BoardCanvas({ project }: { project: SampleProject }) {
-    if (project.lists.length === 0) return <EmptyBoard />
+function BoardCanvas({ project }: { project: BoardProject }) {
+    if (project.lists.length === 0) return <EmptyBoard projectId={project.id} />
 
     return (
         <ScrollView
@@ -40,9 +65,14 @@ function BoardCanvas({ project }: { project: SampleProject }) {
             }}
         >
             {project.lists.map(list => (
-                <BoardColumn key={list.id} list={list} />
+                <BoardColumn
+                    key={list.id}
+                    list={list}
+                    projectId={project.id}
+                    lists={project.lists}
+                />
             ))}
-            <AddListColumn />
+            <AddListColumn projectId={project.id} lists={project.lists} />
         </ScrollView>
     )
 }

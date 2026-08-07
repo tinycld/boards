@@ -1,21 +1,22 @@
 import { DocumentTitle } from '@tinycld/core/components/DocumentTitle'
+import { LoadingState } from '@tinycld/core/components/LoadingState'
 import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { type Shortcut, useRegisterShortcuts, useShortcutScope } from '@tinycld/core/lib/shortcuts'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useNavigateBack } from '@tinycld/core/lib/use-navigate-back'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { ChevronLeft, MoreHorizontal } from 'lucide-react-native'
+import { ChevronLeft } from 'lucide-react-native'
 import { useMemo, useRef } from 'react'
 import { Pressable, Text, View } from 'react-native'
+import { CardActionsMenu } from '../components/detail/CardActionsMenu'
 import { CardDetail } from '../components/detail/CardDetail'
-import { IconButton } from '../components/detail/IconButton'
 import { ListStepper } from '../components/detail/ListStepper'
 import { ProjectWash } from '../components/ProjectWash'
 import { useActiveBoard } from '../hooks/useActiveBoard'
 import { type CardEntry, findCardEntry, neighborCardId } from '../lib/board-cards'
-import type { SampleProject } from '../sample-projects'
+import type { BoardProject } from '../types'
 
-function usePageShortcuts(project: SampleProject, cardId: string, goBack: () => void) {
+function usePageShortcuts(project: BoardProject, cardId: string, goBack: () => void) {
     const router = useRouter()
     const orgHref = useOrgHref()
     // A second Escape while the back navigation is in flight slips past
@@ -67,23 +68,27 @@ export default function CardDetailScreen() {
     const { cardId = '' } = useLocalSearchParams<{ cardId: string }>()
     const orgHref = useOrgHref()
     const navigateBack = useNavigateBack(() => orgHref('cards'))
-    const { project } = useActiveBoard()
-    const entry = findCardEntry(project, cardId)
+    const { project, isLoading } = useActiveBoard()
+    const entry = project ? findCardEntry(project, cardId) : null
 
-    if (!entry) return <CardNotFound onBack={navigateBack} />
+    // Loading is checked BEFORE the not-found branch. findCardEntry returns
+    // null while the board query is still in flight, so without this guard
+    // every deep link and every refresh flashes "this card doesn't exist"
+    // before the card appears.
+    if (isLoading) return <LoadingState />
+    if (!project || !entry) return <CardNotFound onBack={navigateBack} />
 
     return <CardPage project={project} entry={entry} cardId={cardId} navigateBack={navigateBack} />
 }
 
 interface CardPageProps {
-    project: SampleProject
+    project: BoardProject
     entry: CardEntry
     cardId: string
     navigateBack: () => void
 }
 
 function CardPage({ project, entry, cardId, navigateBack }: CardPageProps) {
-    const mutedColor = useThemeColor('muted')
     usePageShortcuts(project, cardId, navigateBack)
 
     return (
@@ -94,11 +99,19 @@ function CardPage({ project, entry, cardId, navigateBack }: CardPageProps) {
                 <BackButton label={project.name} onPress={navigateBack} />
                 <ListStepper project={project} card={entry.card} list={entry.list} />
                 <View className="flex-1" />
-                <IconButton label="More actions">
-                    <MoreHorizontal size={15} color={mutedColor} strokeWidth={2.2} />
-                </IconButton>
+                <CardActionsMenu
+                    cardId={entry.card.id}
+                    cardTitle={entry.card.title}
+                    onDismiss={navigateBack}
+                />
             </View>
-            <CardDetail card={entry.card} variant="page" />
+            <CardDetail
+                card={entry.card}
+                variant="page"
+                projectId={project.id}
+                projectLabels={project.labels}
+                projectMembers={project.members}
+            />
         </View>
     )
 }

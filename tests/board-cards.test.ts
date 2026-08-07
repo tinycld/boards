@@ -1,14 +1,28 @@
 import { describe, expect, it } from 'vitest'
 import {
-    applyCardMoves,
     checklistProgress,
     findCardEntry,
     flattenCards,
     neighborCardId,
 } from '../tinycld/cards/lib/board-cards'
-import type { SampleProject } from '../tinycld/cards/sample-projects'
+import type { BoardCardView, BoardProject } from '../tinycld/cards/types'
 
-function project(): SampleProject {
+function card(id: string, listId: string, position: string): BoardCardView {
+    return {
+        id,
+        listId,
+        position,
+        title: id.toUpperCase(),
+        description: '',
+        labels: [],
+        assignees: [],
+        checklistTotal: 0,
+        checklistDone: 0,
+        commentCount: 0,
+    }
+}
+
+function project(): BoardProject {
     return {
         id: 'p1',
         name: 'Test',
@@ -18,13 +32,18 @@ function project(): SampleProject {
             {
                 id: 'todo',
                 name: 'Todo',
-                cards: [
-                    { id: 'a', title: 'A' },
-                    { id: 'b', title: 'B' },
-                ],
+                position: 'a0',
+                isDone: false,
+                cards: [card('a', 'todo', 'a0'), card('b', 'todo', 'a1')],
             },
-            { id: 'doing', name: 'Doing', cards: [{ id: 'c', title: 'C' }] },
-            { id: 'done', name: 'Done', isDone: true, cards: [] },
+            {
+                id: 'doing',
+                name: 'Doing',
+                position: 'a1',
+                isDone: false,
+                cards: [card('c', 'doing', 'a0')],
+            },
+            { id: 'done', name: 'Done', position: 'a2', isDone: true, cards: [] },
         ],
     }
 }
@@ -75,33 +94,5 @@ describe('neighborCardId', () => {
 
     it('returns null for unknown cards', () => {
         expect(neighborCardId(project(), 'nope', 1)).toBeNull()
-    })
-})
-
-describe('applyCardMoves', () => {
-    it('returns the same project when there are no moves', () => {
-        const p = project()
-        expect(applyCardMoves(p, {})).toBe(p)
-    })
-
-    it('moves a card to the top of the target list', () => {
-        const moved = applyCardMoves(project(), { a: 'doing' })
-        expect(moved.lists[0].cards.map(c => c.id)).toEqual(['b'])
-        expect(moved.lists[1].cards.map(c => c.id)).toEqual(['a', 'c'])
-    })
-
-    it('keeps a card in place when moved to the list it already lives in', () => {
-        const moved = applyCardMoves(project(), { b: 'todo' })
-        expect(moved.lists[0].cards.map(c => c.id)).toEqual(['a', 'b'])
-    })
-
-    it('puts the most recently moved card on top', () => {
-        const moved = applyCardMoves(project(), { a: 'done', c: 'done' })
-        expect(moved.lists[2].cards.map(c => c.id)).toEqual(['c', 'a'])
-    })
-
-    it('ignores moves to unknown lists or of unknown cards', () => {
-        const p = project()
-        expect(applyCardMoves(p, { a: 'missing', ghost: 'doing' })).toBe(p)
     })
 })

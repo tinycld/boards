@@ -2,19 +2,20 @@ import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { type Shortcut, useRegisterShortcuts, useShortcutScope } from '@tinycld/core/lib/shortcuts'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useRouter } from 'expo-router'
-import { Maximize2, MoreHorizontal, X } from 'lucide-react-native'
+import { Maximize2, X } from 'lucide-react-native'
 import { useMemo } from 'react'
 import { View } from 'react-native'
 import { type CardEntry, findCardEntry, neighborCardId } from '../lib/board-cards'
-import type { SampleProject } from '../sample-projects'
 import { useCardsUIStore } from '../stores/cards-ui-store'
+import type { BoardProject } from '../types'
+import { CardActionsMenu } from './detail/CardActionsMenu'
 import { CardDetail } from './detail/CardDetail'
 import { IconButton } from './detail/IconButton'
 import { ListStepper } from './detail/ListStepper'
 import { ProjectWash } from './ProjectWash'
 
 interface CardPeekProps {
-    project: SampleProject
+    project: BoardProject
 }
 
 /**
@@ -31,7 +32,7 @@ export function CardPeek({ project }: CardPeekProps) {
     return <CardPeekPanel project={project} entry={entry} />
 }
 
-function usePeekShortcuts(project: SampleProject, cardId: string) {
+function usePeekShortcuts(project: BoardProject, cardId: string) {
     const openCard = useCardsUIStore(s => s.openCard)
     const closeCard = useCardsUIStore(s => s.closeCard)
     useShortcutScope('modal')
@@ -71,7 +72,7 @@ function usePeekShortcuts(project: SampleProject, cardId: string) {
     useRegisterShortcuts(shortcuts)
 }
 
-function CardPeekPanel({ project, entry }: { project: SampleProject; entry: CardEntry }) {
+function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardEntry }) {
     const router = useRouter()
     const orgHref = useOrgHref()
     const closeCard = useCardsUIStore(s => s.closeCard)
@@ -92,14 +93,22 @@ function CardPeekPanel({ project, entry }: { project: SampleProject; entry: Card
                 <IconButton label="Open full page" onPress={expandCard}>
                     <Maximize2 size={14} color={mutedColor} strokeWidth={2.2} />
                 </IconButton>
-                <IconButton label="More actions">
-                    <MoreHorizontal size={15} color={mutedColor} strokeWidth={2.2} />
-                </IconButton>
+                <CardActionsMenu
+                    cardId={entry.card.id}
+                    cardTitle={entry.card.title}
+                    onDismiss={closeCard}
+                />
                 <IconButton label="Close" onPress={closeCard}>
                     <X size={15} color={mutedColor} strokeWidth={2.2} />
                 </IconButton>
             </View>
-            <CardDetail card={entry.card} variant="peek" />
+            <CardDetail
+                card={entry.card}
+                variant="peek"
+                projectId={project.id}
+                projectLabels={project.labels}
+                projectMembers={project.members}
+            />
         </View>
     )
 }

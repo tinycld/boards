@@ -1,14 +1,32 @@
-import { Platform, Pressable, ScrollView, Text, View } from 'react-native'
-import type { BoardCard } from '../../sample-projects'
+import { useState } from 'react'
+import { ScrollView, Text, View } from 'react-native'
+import { useCardDetail } from '../../hooks/useCardDetail'
+import { useUpdateCard } from '../../hooks/useCardMutations'
+import { useCommentMutations } from '../../hooks/useCommentMutations'
+import type { BoardCardView, BoardLabel, BoardMember } from '../../types'
+import { LabelManagerDialog } from '../LabelManagerDialog'
+import { CommentComposer } from './CommentComposer'
 import { DetailActivity } from './DetailActivity'
 import { DetailChecklist } from './DetailChecklist'
 import { DetailProperties } from './DetailProperties'
+import { EditableText } from './EditableText'
 
 type DetailVariant = 'peek' | 'page'
 
 interface CardDetailProps {
-    card: BoardCard
+    card: BoardCardView
     variant: DetailVariant
+    /**
+     * The board the card belongs to. Threaded in rather than read off the card:
+     * every child collection's access rule resolves membership through its own
+     * denormalized `project` relation, so inserts need it, and BoardCardView
+     * deliberately does not carry it (the card is always rendered inside a
+     * board that already knows).
+     */
+    projectId: string
+    /** The board's labels and roster — what the pickers offer. */
+    projectLabels: BoardLabel[]
+    projectMembers: BoardMember[]
 }
 
 /**
@@ -17,75 +35,111 @@ interface CardDetailProps {
  * component owns everything below: title, properties, description, checklist,
  * activity, and the comment composer.
  */
-export function CardDetail({ card, variant }: CardDetailProps) {
+export function CardDetail({
+    card,
+    variant,
+    projectId,
+    projectLabels,
+    projectMembers,
+}: CardDetailProps) {
+    const [isManagingLabels, setIsManagingLabels] = useState(false)
     const widthClass = variant === 'page' ? 'w-full max-w-[720px] self-center' : ''
+    // Fetched here rather than threaded in as props, so the peek and the page
+    // both get it without either container knowing about on-demand collections.
+    const { checklist, comments } = useCardDetail(card.id)
+    const updateCard = useUpdateCard()
+    const { createComment, deleteComment } = useCommentMutations(card.id, projectId)
+    // Which comment the composer is replying to. Local because it is transient
+    // UI state that dies with the open card, and it lives HERE rather than in
+    // the composer because the activity list is what sets it.
+    const [replyingTo, setReplyingTo] = useState<{ id: string; authorName: string } | null>(null)
+
+    const submitComment = (body: string) => {
+        createComment.mutate(
+            { body, parent: replyingTo?.id ?? '' },
+            { onSuccess: () => setReplyingTo(null) }
+        )
+    }
 
     return (
         <>
             <ScrollView className="flex-1">
                 <View className={`px-6 pb-6 ${widthClass}`}>
-                    <Text className="text-[20px] font-semibold leading-[27px] tracking-tight text-foreground mt-1 mb-[18px]">
-                        {card.title}
-                    </Text>
-                    <DetailProperties card={card} />
-                    <DescriptionSection description={card.description} />
-                    <ChecklistSection card={card} />
-                    <DetailActivity comments={card.comments ?? []} />
+                    <View className="mt-1 mb-[18px]">
+                        <EditableText
+                            value={card.title}
+                            onSave={title => updateCard.mutate({ cardId: card.id, title })}
+                            placeholder="Card title"
+                            accessibilityLabel="Edit card title"
+                            textClassName="text-[20px] font-semibold leading-[27px] tracking-tight text-foreground"
+                        />
+                    </View>
+                    <DetailProperties
+                        card={card}
+                        projectLabels={projectLabels}
+                        projectMembers={projectMembers}
+                        onManageLabels={() => setIsManagingLabels(true)}
+                    />
+                    <DescriptionSection
+                        description={card.description}
+                        onSave={description => updateCard.mutate({ cardId: card.id, description })}
+                    />
+                    <DetailChecklist items={checklist} cardId={card.id} projectId={projectId} />
+                    <DetailActivity
+                        comments={comments}
+                        onReply={comment =>
+                            setReplyingTo({
+                                id: comment.id,
+                                authorName: comment.author.firstName || 'this comment',
+                            })
+                        }
+                        onDelete={commentId => deleteComment.mutate(commentId)}
+                    />
                 </View>
             </ScrollView>
-            <CommentComposer widthClass={widthClass} />
+            <CommentComposer
+                widthClass={widthClass}
+                onSubmit={submitComment}
+                isPending={createComment.isPending}
+                replyingTo={replyingTo ?? undefined}
+                onCancelReply={() => setReplyingTo(null)}
+            />
+            <LabelManagerDialog
+                isVisible={isManagingLabels}
+                onClose={() => setIsManagingLabels(false)}
+                projectId={projectId}
+                labels={projectLabels}
+            />
         </>
     )
 }
 
-function DescriptionSection({ description }: { description?: string }) {
+/**
+ * The description is stored as Markdown (see types.ts) but rendered as plain
+ * text for now — editing it and rendering it are separate concerns, and a
+ * half-wired renderer is worse than none. Rendering is filed in M7.
+ */
+function DescriptionSection({
+    description,
+    onSave,
+}: {
+    description?: string
+    onSave: (value: string) => void
+}) {
     return (
         <View className="mb-6">
             <Text className="text-[13px] font-semibold text-foreground mb-2.5">Description</Text>
-            <DescriptionBody description={description} />
+            <EditableText
+                value={description ?? ''}
+                onSave={onSave}
+                placeholder="Add a description — what does done look like?"
+                accessibilityLabel="Edit description"
+                multiline
+            />
         </View>
     )
 }
 
-function DescriptionBody({ description }: { description?: string }) {
-    if (!description) {
-        return (
-            <Pressable
-                accessibilityRole="button"
-                className="bg-foreground/5 rounded-lg px-3.5 py-3 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
-            >
-                <Text className="text-[13.5px] text-muted">
-                    Add a description — what does done look like?
-                </Text>
-            </Pressable>
-        )
-    }
-    return <Text className="text-[14px] leading-[22px] text-foreground">{description}</Text>
-}
-
-function ChecklistSection({ card }: { card: BoardCard }) {
-    if (!card.checklist?.length) return null
-    return <DetailChecklist items={card.checklist} />
-}
-
-function CommentComposer({ widthClass }: { widthClass: string }) {
-    return (
-        <View className="border-t border-border px-4 pt-3 pb-2 bg-card">
-            <View className={widthClass}>
-                <View className="border border-border rounded-[10px] bg-background px-3 py-[9px]">
-                    <Text className="text-[13.5px] text-muted">Write a comment…</Text>
-                </View>
-                <ShortcutHint />
-            </View>
-        </View>
-    )
-}
-
-function ShortcutHint() {
-    if (Platform.OS !== 'web') return null
-    return (
-        <Text className="text-center text-[11px] text-muted pt-[7px]">
-            J / K next · previous card&ensp;·&ensp;Esc close
-        </Text>
-    )
-}
+// ChecklistSection used to hide the whole section when empty. It is gone: the
+// section now owns an "Add item" composer, and hiding it would mean a card with
+// no checklist offers no way to start one.

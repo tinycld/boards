@@ -501,6 +501,37 @@ migrate(
                     name: 'archived',
                     type: 'bool',
                 },
+                // Board-face counters. cards_checklist_items and cards_comments
+                // sync on-demand — they are fetched only for the OPEN card — so
+                // a checklist ratio or comment count is not available at rest,
+                // which is exactly when the board face needs it. These are
+                // maintained by server/counters.go (mail_threads.has_attachments
+                // is the precedent) and are never written by a client.
+                //
+                // Always RECOMPUTED, never incremented: a delta drifts silently
+                // under concurrent writes, and a COUNT(*) per event is cheap at
+                // kanban scale.
+                {
+                    id: 'cards_cards_checklist_total',
+                    name: 'checklist_total',
+                    type: 'number',
+                    required: false,
+                    min: 0,
+                },
+                {
+                    id: 'cards_cards_checklist_done',
+                    name: 'checklist_done',
+                    type: 'number',
+                    required: false,
+                    min: 0,
+                },
+                {
+                    id: 'cards_cards_comment_count',
+                    name: 'comment_count',
+                    type: 'number',
+                    required: false,
+                    min: 0,
+                },
                 {
                     id: 'cards_cards_created',
                     name: 'created',
