@@ -5,6 +5,8 @@ import { memo, useRef, useState } from 'react'
 import { ScrollView, Text, View } from 'react-native'
 import type { DraxDragWithReceiverEventData, DraxMonitorEventData } from 'react-native-drax'
 import { DraxView, SortableContainer, SortableItem, useSortableList } from 'react-native-drax'
+import type { SharedValue } from 'react-native-reanimated'
+import Reanimated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated'
 import { useCreateCard, useMoveCard } from '../hooks/useCardMutations'
 import { useUpdateList } from '../hooks/useListMutations'
 import {
@@ -161,7 +163,6 @@ export const BoardColumn = memo(function BoardColumn({
                 <ColumnCards
                     list={list}
                     registerMeasure={registerMeasure}
-                    isReceiving={isReceiving}
                     onReceivingChange={setIsReceiving}
                     canEdit={canEdit}
                 />
@@ -294,15 +295,20 @@ function ColumnNameInput({ list, onDone }: { list: BoardListView; onDone: () => 
     )
 }
 
+/** The card stack's flex gap (contentContainerClassName="gap-2"). */
+const STACK_GAP = 8
+
 /** Room reserved below the stack for the phantom slot while receiving —
- *  one standard card face (40) plus the 8px stack gap. */
-const PHANTOM_SLOT_HEIGHT = 48
+ *  one standard card face; the stack gap in front of the spacer supplies
+ *  the rest. */
+const PHANTOM_SLOT_HEIGHT = 40
 
 interface ColumnCardsProps {
     list: BoardListView
     registerMeasure: (listId: string, measure: (() => void) | null) => void
-    /** True while a card from ANOTHER column is dragged over this one. */
-    isReceiving: boolean
+    /** Reports whether a card from ANOTHER column is dragged over this one.
+     *  Consumed by BoardColumn (border + e2e marker) — never fed back here,
+     *  so the flip cannot re-render this subtree. */
     onReceivingChange: (isReceiving: boolean) => void
     canEdit: boolean
 }
@@ -313,16 +319,25 @@ interface ColumnCardsProps {
  * commits same-column reorders. The container mounts even when the column is
  * empty — it is the drop target, and a null here would leave an empty column
  * with no bounds to hit-test and no place for the phantom slot.
+ *
+ * Memoized and deliberately state-free: a re-render mid-drag re-measures
+ * every SortableItem while its shift transform is still animating, storing
+ * origins corrupted by the un-travelled remainder — the landing slot then
+ * oscillates and gaps stick around after the drop. The drax fork now guards
+ * against mid-drag re-measures too, but not re-rendering at all is the cheap
+ * half of the fix, and it is why receiving feedback leaves this subtree
+ * untouched: the border lives in BoardColumn behind the memo boundary, and
+ * the phantom room is a SharedValue-driven spacer.
  */
-function ColumnCards({
+const ColumnCards = memo(function ColumnCards({
     list,
     registerMeasure,
-    isReceiving,
     onReceivingChange,
     canEdit,
 }: ColumnCardsProps) {
     const scrollRef = useRef<ScrollView>(null)
     const moveCard = useMoveCard()
+    const phantomSpace = useSharedValue(0)
 
     const sortable = useSortableList<BoardCardView>({
         // Container id === list id, so the board's transfer events speak list ids.
@@ -339,7 +354,7 @@ function ColumnCards({
             })
         },
         longPressDelay: CARD_DRAG_ACTIVATION_MS,
-        animationConfig: 'spring',
+        animationConfig: 'snappy',
         inactiveItemStyle: { opacity: 0.75 },
         onDragStart: () => hapticImpactLight(),
     })
@@ -362,13 +377,17 @@ function ColumnCards({
     const updateReceiving = (event: DraxMonitorEventData) => {
         const { x, y } = event.monitorOffsetRatio
         const receiving = isForeignCard(event) && x >= 0 && x <= 1 && y >= 0 && y <= 1
-        // The tick a finger feels crossing into a new column.
-        if (receiving && !wasReceivingRef.current) hapticSelection()
-        wasReceivingRef.current = receiving
+        if (receiving !== wasReceivingRef.current) {
+            // The tick a finger feels crossing into a new column.
+            if (receiving) hapticSelection()
+            wasReceivingRef.current = receiving
+            phantomSpace.value = receiving ? PHANTOM_SLOT_HEIGHT : 0
+        }
         onReceivingChange(receiving)
     }
     const clearReceiving = () => {
         wasReceivingRef.current = false
+        phantomSpace.value = 0
         onReceivingChange(false)
     }
 
@@ -394,16 +413,7 @@ function ColumnCards({
                 // empty-state text: the composer below is the affordance, and
                 // "No cards yet" above an "Add card" button says nothing the
                 // button doesn't.
-                //
-                // While receiving, grow by one card so the phantom slot has
-                // real layout room: the shifts are pure transforms, so without
-                // it the last resident slides past the container edge and gets
-                // clipped, and a drop aimed at the vacated space lands outside
-                // the column's bounds and cancels the transfer.
-                contentContainerStyle={{
-                    minHeight: 56,
-                    paddingBottom: isReceiving ? PHANTOM_SLOT_HEIGHT : 0,
-                }}
+                contentContainerStyle={{ minHeight: 56 }}
                 onScroll={sortable.onScroll}
                 scrollEventThrottle={16}
                 onContentSizeChange={sortable.onContentSizeChange}
@@ -422,7 +432,25 @@ function ColumnCards({
                         </NoNativeDrag>
                     </SortableItem>
                 ))}
+                <PhantomSlotSpacer space={phantomSpace} />
             </ScrollView>
         </SortableContainer>
     )
+})
+
+/**
+ * Layout room for the cross-column phantom slot, grown while a foreign card
+ * hovers over this column. The slot shifts are pure transforms, so without
+ * real room the last resident slides past the container edge and gets
+ * clipped, and a drop aimed at the vacated space lands outside the column's
+ * bounds and cancels the transfer. Height is a SharedValue so the mid-drag
+ * toggle never re-renders (and re-measures) the items above; at rest the
+ * negative margin swallows the stack gap the spacer would otherwise add.
+ */
+function PhantomSlotSpacer({ space }: { space: SharedValue<number> }) {
+    const style = useAnimatedStyle(() => ({
+        height: space.value,
+        marginTop: space.value > 0 ? 0 : -STACK_GAP,
+    }))
+    return <Reanimated.View style={style} />
 }
