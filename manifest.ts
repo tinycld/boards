@@ -12,6 +12,7 @@ const manifest = {
     },
     sidebar: { component: 'sidebar' },
     help: { directory: 'help' },
+    search: { endpoint: '/api/cards/search', adapter: 'search-adapter' },
     migrations: { directory: 'pb-migrations' },
     // Cards is rule-first: every authorization decision lives in the access
     // rules the migrations ship, never in a Go hook, because a hosted tenant

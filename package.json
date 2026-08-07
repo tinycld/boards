@@ -15,7 +15,8 @@
         "./hooks/*": "./tinycld/cards/hooks/*.ts",
         "./lib/*": "./tinycld/cards/lib/*.ts",
         "./stores/*": "./tinycld/cards/stores/*.ts",
-        "./components/*": "./tinycld/cards/components/*.tsx"
+        "./components/*": "./tinycld/cards/components/*.tsx",
+        "./search-adapter": "./tinycld/cards/search-adapter.ts"
     },
     "scripts": {
         "typecheck": "tinycld-pkg typecheck",
