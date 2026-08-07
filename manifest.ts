@@ -12,7 +12,11 @@ const manifest = {
     },
     sidebar: { component: 'sidebar' },
     help: { directory: 'help' },
-    search: { endpoint: '/api/cards/search', adapter: 'search-adapter' },
+    // Cards is searchable through core's federated /api/search, which reads the
+    // Go source registered in server/search.go — there is no per-package search
+    // route to name here. `adapter` supplies the client-side selection handler
+    // the palette calls when a cards row is chosen.
+    search: { adapter: 'search-adapter' },
     migrations: { directory: 'pb-migrations' },
     // Cards is rule-first: every authorization decision lives in the access
     // rules the migrations ship, never in a Go hook, because a hosted tenant

@@ -5,22 +5,13 @@ import { useToastStore } from '@tinycld/core/lib/stores/toast-store'
 import { useRouter } from 'expo-router'
 import { useCardsUIStore } from './stores/cards-ui-store'
 
-interface CardsSearchHit {
-    id: string
-    title: string
-    project: string
-    list: string
-}
-
-export function toRow(hit: unknown): Omit<SearchRow, 'slug'> | null {
-    const card = hit as CardsSearchHit
-    return {
-        id: card.id,
-        title: card.title || 'Untitled card',
-        subtitle: undefined,
-        meta: undefined,
-    }
-}
+// Row shaping (title, subtitle, meta) is the server's job — see
+// cards/server/search.go. Normalizing there rather than here means the palette
+// and the CLI render identical rows from one implementation; a TypeScript
+// version could only ever serve the browser.
+//
+// What remains client-side is selection, which needs a router and stores that
+// exist only in the app.
 
 // The palette calls this for every in-scope package while it is open, so it
 // only takes handles — no fetching, no subscriptions. The cards UI store has

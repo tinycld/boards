@@ -79,11 +79,14 @@ func registerShared(app *pocketbase.PocketBase) {
 	registerBoardCounters(app)
 	registerMemberLastOwnerGuard(app)
 
-	// FTS index-sync record hooks + GET /api/cards/search, from core/fts.
-	fts.Register(app, []fts.Config{ftsConfig})
+	// FTS index-sync record hooks only — deliberately NOT fts.Register, which
+	// would also mount GET /api/cards/search. Cards has no in-app search box,
+	// so the federated /api/search is its only reader; a per-package route
+	// would be dead on arrival.
+	fts.RegisterSync(app, ftsConfig)
 
 	// Cards' contribution to the federated GET /api/search. Registered here
 	// rather than in Register so a hosted tenant and a self-hosted deployment
-	// search identically — the same reason fts.Register sits here.
+	// search identically.
 	search.RegisterSources(searchSource())
 }

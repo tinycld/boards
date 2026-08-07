@@ -25,32 +25,14 @@ vi.mock('@tinycld/core/lib/stores/toast-store', () => ({
     useToastStore: { getState: () => ({ addToast }) },
 }))
 
-import { toRow, useSearchActions } from '@tinycld/cards/search-adapter'
-
-describe('cards toRow', () => {
-    it('maps a hit to a row with the card title', () => {
-        const row = toRow({ id: 'c1', title: 'Ship the budget', project: 'p1', list: 'l1' })
-        expect(row).toEqual({
-            id: 'c1',
-            title: 'Ship the budget',
-            subtitle: undefined,
-            meta: undefined,
-        })
-    })
-
-    it('keeps a hit whose title is empty', () => {
-        expect(toRow({ id: 'c1', title: '', project: 'p1', list: 'l1' })?.title).toBe(
-            'Untitled card'
-        )
-    })
-})
+import { useSearchActions } from '@tinycld/cards/search-adapter'
 
 // Regression guard (I1): a card whose project hasn't finished syncing used to
 // make onSelect silently return — pressing Enter on it looked identical to a
 // working selection, since the palette closes regardless (SearchPalette only
-// skips the close when NO handler runs at all). toRow can't guard this itself
-// (it's a pure function with no access to cardsCollection), so the check has
-// to stay in onSelect — it must now surface a toast instead of doing nothing.
+// skips the close when NO handler runs at all). The server cannot guard this
+// (the gap is a client-side sync race, not a data problem), so the check lives
+// in onSelect — it must surface a toast instead of doing nothing.
 describe('cards useSearchActions', () => {
     afterEach(() => {
         h.card = undefined
