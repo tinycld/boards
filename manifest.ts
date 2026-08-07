@@ -6,7 +6,7 @@ const manifest = {
     routes: { directory: 'screens' },
     nav: {
         label: 'Cards',
-        icon: 'kanban',
+        icon: 'square-kanban',
         order: 25,
         shortcut: 'k',
     },
