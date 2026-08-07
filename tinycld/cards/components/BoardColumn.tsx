@@ -1,7 +1,7 @@
 import { hapticImpactLight, hapticSelection, hapticSuccess } from '@tinycld/core/lib/haptics'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
-import { memo, useRef, useState } from 'react'
+import { memo, useCallback, useRef, useState } from 'react'
 import { ScrollView, Text, View } from 'react-native'
 import type { DraxDragWithReceiverEventData, DraxMonitorEventData } from 'react-native-drax'
 import { DraxView, SortableContainer, SortableItem, useSortableList } from 'react-native-drax'
@@ -76,6 +76,27 @@ export const BoardColumn = memo(function BoardColumn({
     const updateList = useUpdateList()
     const barColor = useThemeColor('primary')
 
+    // This outer DraxView is the column-drag receiver, so its bounds go stale
+    // the same way the card container's do when the canvas scrolls mid-drag.
+    // Fold its measure into the same registration the card container uses, so
+    // useBoardDnd's drag-start/scroll re-measures refresh both. (Structural
+    // type: drax doesn't re-export DraxViewRegistration from its index.)
+    const outerRegistrationRef = useRef<{ measure: () => void } | null>(null)
+    const registerBothMeasures = useCallback(
+        (listId: string, measure: (() => void) | null) => {
+            registerMeasure(
+                listId,
+                measure
+                    ? () => {
+                          outerRegistrationRef.current?.measure()
+                          measure()
+                      }
+                    : null
+            )
+        },
+        [registerMeasure]
+    )
+
     const addCard = (title: string) =>
         createCard.mutate({ listId: list.id, title, position: rankForAppend(list.cards) })
 
@@ -109,6 +130,10 @@ export const BoardColumn = memo(function BoardColumn({
         <DraxView
             receptive
             monitoring
+            measureVisual
+            registration={registration => {
+                outerRegistrationRef.current = registration ?? null
+            }}
             acceptsDrag={payload =>
                 canEdit && isColumnDragPayload(payload) && payload.listId !== list.id
             }
@@ -162,7 +187,7 @@ export const BoardColumn = memo(function BoardColumn({
                 </View>
                 <ColumnCards
                     list={list}
-                    registerMeasure={registerMeasure}
+                    registerMeasure={registerBothMeasures}
                     onReceivingChange={setIsReceiving}
                     canEdit={canEdit}
                 />
