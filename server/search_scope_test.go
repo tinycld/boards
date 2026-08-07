@@ -180,6 +180,93 @@ func TestSearchDeniesRemovedMember(t *testing.T) {
 	}
 }
 
+// TestSearchScopeWiresMemberAndRecordFieldsCorrectly pins cards' MemberScope
+// to the real schema (cards_project_members.project -> cards_projects,
+// cards_cards.project -> cards_projects). MemberField and RecordField are
+// both literally "project" in the shipped config, so swapping them emits
+// byte-identical SQL and no string-based check can tell them apart. Only a
+// behavioural test — two projects, membership in one, a card in each — can
+// catch that transposition: under a swap, the membership subquery
+// (`SELECT project FROM cards_project_members WHERE user = :scopeUser`)
+// still yields project-A's id, but comparing it against `c.project` degrades
+// into no scoping distinction being provable via id alone unless a SECOND,
+// distinctly-idd project with its own card exists to show the wrong one
+// staying hidden — hence project B below.
+func TestSearchScopeWiresMemberAndRecordFieldsCorrectly(t *testing.T) {
+	app := setupSearchApp(t)
+
+	users, err := app.FindCollectionByNameOrId("users")
+	if err != nil {
+		t.Fatal(err)
+	}
+	member := core.NewRecord(users)
+	member.Set("email", "member@example.com")
+	member.Set("password", "1234567890")
+	if err := app.Save(member); err != nil {
+		t.Fatal(err)
+	}
+
+	projects, err := app.FindCollectionByNameOrId("cards_projects")
+	if err != nil {
+		t.Fatal(err)
+	}
+	newProject := func(name string) *core.Record {
+		p := core.NewRecord(projects)
+		p.Set("name", name)
+		if err := app.Save(p); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	projectA := newProject("Project A")
+	projectB := newProject("Project B")
+
+	membersColl, err := app.FindCollectionByNameOrId("cards_project_members")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := core.NewRecord(membersColl)
+	m.Set("project", projectA.Id)
+	m.Set("user", member.Id)
+	if err := app.Save(m); err != nil {
+		t.Fatal(err)
+	}
+
+	cardsColl, err := app.FindCollectionByNameOrId("cards_cards")
+	if err != nil {
+		t.Fatal(err)
+	}
+	newCard := func(title string, project *core.Record) *core.Record {
+		c := core.NewRecord(cardsColl)
+		c.Set("title", title)
+		c.Set("project", project.Id)
+		if err := app.Save(c); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := app.DB().NewQuery(
+			`INSERT INTO fts_cards (record_id, title, description) VALUES ({:id}, {:t}, '')`,
+		).Bind(map[string]any{"id": c.Id, "t": title}).Execute(); err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	newCard("Roadmap alpha", projectA)
+	newCard("Roadmap beta", projectB)
+
+	hits, _, err := fts.Search(app, ftsConfig, member.Id, fts.SearchOpts{Query: "roadmap", Limit: 25})
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if len(hits) != 1 {
+		t.Fatalf("got %d hits, want 1 (only project A's card)", len(hits))
+	}
+	if hits[0].Columns["project"] != projectA.Id {
+		t.Errorf("project = %v, want %v (project A) — card from project B leaked, "+
+			"or the member's own project was excluded: MemberField/RecordField "+
+			"may be transposed", hits[0].Columns["project"], projectA.Id)
+	}
+}
+
 func TestSearchDeniesDisabledUser(t *testing.T) {
 	app := setupSearchApp(t)
 	member, _, _ := seedProjectWithCard(t, app, "Ship the budget")
