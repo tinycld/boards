@@ -12,6 +12,11 @@ interface ListStepperProps {
     project: BoardProject
     card: BoardCardView
     list: BoardListView
+    /**
+     * The stepper is the card's status DISPLAY as much as its move control, so
+     * a viewer keeps seeing it — the segments just stop being buttons.
+     */
+    isInteractive: boolean
 }
 
 /**
@@ -20,7 +25,7 @@ interface ListStepperProps {
  * board's list sequence is the card's status, so the control that shows it
  * is the control that changes it.
  */
-export function ListStepper({ project, card, list }: ListStepperProps) {
+export function ListStepper({ project, card, list, isInteractive }: ListStepperProps) {
     const moveCard = useMoveCard()
     const successColor = useThemeColor('success')
     const currentIndex = project.lists.findIndex(target => target.id === list.id)
@@ -46,7 +51,7 @@ export function ListStepper({ project, card, list }: ListStepperProps) {
                         name={target.name}
                         fillColor={segmentFill(project, list, index, currentIndex, successColor)}
                         borderColor={hexToRgba(project.color, 0.45)}
-                        onPress={() => moveTo(target)}
+                        onPress={isInteractive ? () => moveTo(target) : undefined}
                     />
                 ))}
             </View>
@@ -73,10 +78,23 @@ interface StepperSegmentProps {
     name: string
     fillColor: string | null
     borderColor: string
-    onPress: () => void
+    /** Absent when the stepper is display-only — renders a plain View. */
+    onPress?: () => void
 }
 
 function StepperSegment({ name, fillColor, borderColor, onPress }: StepperSegmentProps) {
+    const segmentStyle = {
+        width: SEGMENT_WIDTH,
+        height: SEGMENT_HEIGHT,
+        borderWidth: 1.5,
+        borderColor: fillColor ?? borderColor,
+        backgroundColor: fillColor ?? 'transparent',
+    }
+
+    if (!onPress) {
+        return <View className="rounded-[4px]" style={segmentStyle} />
+    }
+
     return (
         <Pressable
             accessibilityRole="button"
@@ -84,13 +102,7 @@ function StepperSegment({ name, fillColor, borderColor, onPress }: StepperSegmen
             onPress={onPress}
             hitSlop={6}
             className="rounded-[4px] web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
-            style={{
-                width: SEGMENT_WIDTH,
-                height: SEGMENT_HEIGHT,
-                borderWidth: 1.5,
-                borderColor: fillColor ?? borderColor,
-                backgroundColor: fillColor ?? 'transparent',
-            }}
+            style={segmentStyle}
         />
     )
 }

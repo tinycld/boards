@@ -9,11 +9,21 @@ import type { BoardComment } from '../../types'
 
 interface DetailActivityProps {
     comments: BoardComment[]
+    /** viaCommenter — gates the Reply affordance. */
+    canComment: boolean
+    /** Project owners may delete anyone's comment (author-or-owner rule). */
+    canModerate: boolean
     onReply: (comment: BoardComment) => void
     onDelete: (commentId: string) => void
 }
 
-export function DetailActivity({ comments, onReply, onDelete }: DetailActivityProps) {
+export function DetailActivity({
+    comments,
+    canComment,
+    canModerate,
+    onReply,
+    onDelete,
+}: DetailActivityProps) {
     const threads = useMemo(() => buildCommentThreads(comments), [comments])
 
     return (
@@ -24,7 +34,9 @@ export function DetailActivity({ comments, onReply, onDelete }: DetailActivityPr
             </View>
             {threads.length === 0 ? (
                 <Text className="text-[13px] text-muted">
-                    No comments yet — start the discussion below.
+                    {canComment
+                        ? 'No comments yet — start the discussion below.'
+                        : 'No comments yet.'}
                 </Text>
             ) : (
                 <View className="gap-4">
@@ -32,6 +44,8 @@ export function DetailActivity({ comments, onReply, onDelete }: DetailActivityPr
                         <View key={thread.comment.id} className="gap-3">
                             <CommentRow
                                 comment={thread.comment}
+                                canComment={canComment}
+                                canModerate={canModerate}
                                 onReply={onReply}
                                 onDelete={onDelete}
                             />
@@ -39,6 +53,8 @@ export function DetailActivity({ comments, onReply, onDelete }: DetailActivityPr
                                 <View key={reply.id} className="pl-9">
                                     <CommentRow
                                         comment={reply}
+                                        canComment={canComment}
+                                        canModerate={canModerate}
                                         onReply={onReply}
                                         onDelete={onDelete}
                                     />
@@ -59,17 +75,16 @@ function CommentCount({ count }: { count: number }) {
 
 interface CommentRowProps {
     comment: BoardComment
+    canComment: boolean
+    canModerate: boolean
     onReply: (comment: BoardComment) => void
     onDelete: (commentId: string) => void
 }
 
-function CommentRow({ comment, onReply, onDelete }: CommentRowProps) {
+function CommentRow({ comment, canComment, canModerate, onReply, onDelete }: CommentRowProps) {
     const { user } = useAuth()
     const mutedColor = useThemeColor('muted')
-    // Delete is offered to the author only. A project owner may also delete by
-    // rule, but the client cannot tell an owner from a member here without the
-    // role hook that M3b introduces — so the affordance stays conservative
-    // rather than showing a button that 403s.
+    // Author-or-owner, mirroring the delete rule.
     const isAuthor = !!user?.id && user.id === comment.author.id
     // An optimistic comment has created '' until PocketBase answers.
     const timestamp = comment.created ? formatRelativeDate(comment.created) : 'Just now'
@@ -91,7 +106,8 @@ function CommentRow({ comment, onReply, onDelete }: CommentRowProps) {
                     <View className="flex-1" />
                     <CommentActions
                         color={mutedColor}
-                        isAuthor={isAuthor}
+                        canReply={canComment}
+                        canDelete={isAuthor || canModerate}
                         onReply={() => onReply(comment)}
                         onDelete={() => onDelete(comment.id)}
                     />
@@ -104,23 +120,29 @@ function CommentRow({ comment, onReply, onDelete }: CommentRowProps) {
 
 function CommentActions({
     color,
-    isAuthor,
+    canReply,
+    canDelete,
     onReply,
     onDelete,
 }: {
     color: string
-    isAuthor: boolean
+    canReply: boolean
+    canDelete: boolean
     onReply: () => void
     onDelete: () => void
 }) {
+    if (!canReply && !canDelete) return null
+
     return (
         <View className="flex-row gap-2 opacity-0 web:group-hover:opacity-100 web:focus-within:opacity-100">
-            <Pressable accessibilityRole="button" accessibilityLabel="Reply" onPress={onReply}>
-                <Text className="text-[11.5px] font-medium" style={{ color }}>
-                    Reply
-                </Text>
-            </Pressable>
-            {isAuthor ? (
+            {canReply ? (
+                <Pressable accessibilityRole="button" accessibilityLabel="Reply" onPress={onReply}>
+                    <Text className="text-[11.5px] font-medium" style={{ color }}>
+                        Reply
+                    </Text>
+                </Pressable>
+            ) : null}
+            {canDelete ? (
                 <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Delete comment"

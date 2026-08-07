@@ -1,9 +1,11 @@
 package cards
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/pocketbase/pocketbase/core"
@@ -14,9 +16,12 @@ import (
 
 // Shared fixture for the cards RLS suites.
 //
-// Cards has no Go authorization: every access decision lives in the rules the
-// migration ships, because a hosted multi-org tenant runs no feature Go and the
-// rule is therefore the entire authorization. Those rules had been verified
+// Cards' access decisions live in the rules the migration ships, because a
+// hosted multi-org tenant runs no feature Go and the rule is therefore the
+// entire authorization there. (The one exception is the last-owner guard —
+// member_owner_guard.go — which a rule cannot express; its tests bind that
+// hook explicitly. The RLS suites here still bind no hooks and measure the
+// rule engine alone.) Those rules had been verified
 // only STRUCTURALLY — the stored SQL was read back and audited for three known
 // traps — which makes them claims about strings. These suites execute them.
 //
@@ -116,14 +121,26 @@ func newCardsApp(t *testing.T) *tests.TestApp {
 	return app
 }
 
+// fixtureUserSeq makes every fixture username unique within a process run.
+// Fixtures across this package reuse the same local-parts (owner@test.local,
+// viewer@test.local, …) in different apps, and PocketBase derives a username
+// from the email local-part when none is set — so two fixtures deriving the
+// same "owner" username can collide with "username: Value must be unique"
+// depending on which tests ran first. Setting an explicit unique username
+// removes the derivation entirely, so the outcome no longer depends on test
+// ordering or on what the cloned seed data already contains.
+var fixtureUserSeq atomic.Uint64
+
 func cardsUser(t *testing.T, app core.App, email, orgRole string) *core.Record {
 	t.Helper()
 	col, err := app.FindCollectionByNameOrId("users")
 	if err != nil {
 		t.Fatalf("find users: %v", err)
 	}
+	local, _, _ := strings.Cut(email, "@")
 	r := core.NewRecord(col)
 	r.SetEmail(email)
+	r.Set("username", fmt.Sprintf("%s_%d", local, fixtureUserSeq.Add(1)))
 	r.Set("name", "Test User")
 	r.Set("role", orgRole)
 	r.SetVerified(true)

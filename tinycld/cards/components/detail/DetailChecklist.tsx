@@ -1,26 +1,48 @@
+import { SortableDragHandle, SortableList } from '@tinycld/core/components/SortableList'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
 import { Check, Plus, X } from 'lucide-react-native'
 import { useRef, useState } from 'react'
-import { Pressable, Text, View } from 'react-native'
+import { Platform, Pressable, Text, View } from 'react-native'
 import { useChecklistMutations } from '../../hooks/useChecklistMutations'
 import { checklistProgress } from '../../lib/board-cards'
-import { rankForAppend } from '../../lib/move'
+import { movedEntry } from '../../lib/dnd'
+import { rankForAppend, rankForReorder } from '../../lib/move'
 import type { BoardChecklistItem } from '../../types'
 
 interface DetailChecklistProps {
     items: BoardChecklistItem[]
     cardId: string
     projectId: string
+    canEdit: boolean
 }
 
-export function DetailChecklist({ items, cardId, projectId }: DetailChecklistProps) {
-    const { createItem, toggleItem, renameItem, deleteItem } = useChecklistMutations(
+export function DetailChecklist({ items, cardId, projectId, canEdit }: DetailChecklistProps) {
+    const { createItem, toggleItem, renameItem, deleteItem, moveItem } = useChecklistMutations(
         cardId,
         projectId
     )
     const { done, total, isComplete } = checklistProgress(items)
     const fillPercent = total === 0 ? 0 : Math.round((done / total) * 100)
+
+    // SortableList reports the whole reordered array; recover the one row
+    // that moved and write only its rank.
+    const reorderItems = (reordered: BoardChecklistItem[]) => {
+        const moved = movedEntry(
+            items.map(item => item.id),
+            reordered.map(item => item.id)
+        )
+        if (!moved) return
+        moveItem.mutate({
+            itemId: moved.id,
+            position: rankForReorder(items, moved.id, moved.index),
+        })
+    }
+
+    // The section normally always renders because it owns the composer — but a
+    // read-only card has no composer, so an empty checklist is just a heading
+    // over nothing.
+    if (!canEdit && items.length === 0) return null
 
     return (
         <View className="mb-6">
@@ -40,48 +62,72 @@ export function DetailChecklist({ items, cardId, projectId }: DetailChecklistPro
                     />
                 </View>
             ) : null}
-            {items.map(item => (
-                <ChecklistRow
-                    key={item.id}
-                    item={item}
-                    onToggle={() => toggleItem.mutate({ itemId: item.id, isDone: !item.isDone })}
-                    onRename={title => renameItem.mutate({ itemId: item.id, title })}
-                    onDelete={() => deleteItem.mutate(item.id)}
-                />
-            ))}
-            <ChecklistComposer
-                onSubmit={title => createItem.mutate({ title, position: rankForAppend(items) })}
+            <SortableList
+                data={items}
+                keyExtractor={item => item.id}
+                onReorder={reorderItems}
+                isDraggable={() => canEdit}
+                renderItem={({ item }) => (
+                    <ChecklistRow
+                        item={item}
+                        canEdit={canEdit}
+                        onToggle={() =>
+                            toggleItem.mutate({ itemId: item.id, isDone: !item.isDone })
+                        }
+                        onRename={title => renameItem.mutate({ itemId: item.id, title })}
+                        onDelete={() => deleteItem.mutate(item.id)}
+                    />
+                )}
             />
+            {canEdit ? (
+                <ChecklistComposer
+                    onSubmit={title => createItem.mutate({ title, position: rankForAppend(items) })}
+                />
+            ) : null}
         </View>
     )
 }
 
 interface ChecklistRowProps {
     item: BoardChecklistItem
+    canEdit: boolean
     onToggle: () => void
     onRename: (title: string) => void
     onDelete: () => void
 }
 
-function ChecklistRow({ item, onToggle, onRename, onDelete }: ChecklistRowProps) {
+function ChecklistRow({ item, canEdit, onToggle, onRename, onDelete }: ChecklistRowProps) {
     const [isEditing, setIsEditing] = useState(false)
     const checkColor = useThemeColor('success-foreground')
     const mutedColor = useThemeColor('muted')
+    const titleClassName = `text-[13.5px] leading-[19px] ${
+        item.isDone ? 'text-muted line-through' : 'text-foreground'
+    }`
 
     return (
         <View className="flex-row items-start gap-2.5 py-[5px] group">
-            <Pressable
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: item.isDone }}
-                accessibilityLabel={item.title}
-                onPress={onToggle}
-                hitSlop={6}
-                className={`w-[15px] h-[15px] mt-[2px] rounded-[4.5px] items-center justify-center web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${
-                    item.isDone ? 'bg-success' : 'border-[1.5px] border-muted'
+            {/* Hover-revealed on web like the delete; always visible on
+                touch, where a handle you can't see is a handle that doesn't
+                exist. The grip must be at the row's LEFT: Drax anchors the
+                floating copy at the grab point, so a right-edge grip flings
+                the copy off-screen and its hit-test center lands outside the
+                list, killing slot detection. It sits in normal flow because
+                core SortableList's inner ScrollView clips anything negative-
+                margined out of the content box. The column keeps its width on
+                a read-only card so the checkboxes stay aligned with nothing
+                to grip. */}
+            <View
+                className={`w-6 mt-[2px] ${
+                    Platform.OS === 'web' ? 'opacity-0 web:group-hover:opacity-100' : ''
                 }`}
             >
-                {item.isDone ? <Check size={10} color={checkColor} strokeWidth={3.5} /> : null}
-            </Pressable>
+                {canEdit ? <SortableDragHandle size={12} testID="checklist-drag-handle" /> : null}
+            </View>
+            <ChecklistCheckbox
+                item={item}
+                checkColor={checkColor}
+                onToggle={canEdit ? onToggle : undefined}
+            />
 
             {isEditing ? (
                 // Keyed on the title so each edit mounts a fresh input seeded
@@ -93,32 +139,92 @@ function ChecklistRow({ item, onToggle, onRename, onDelete }: ChecklistRowProps)
                     onDone={() => setIsEditing(false)}
                 />
             ) : (
-                <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Edit ${item.title}`}
-                    onPress={() => setIsEditing(true)}
-                    className="flex-1 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring rounded"
-                >
-                    <Text
-                        className={`text-[13.5px] leading-[19px] ${
-                            item.isDone ? 'text-muted line-through' : 'text-foreground'
-                        }`}
-                    >
-                        {item.title}
-                    </Text>
-                </Pressable>
+                <ChecklistTitle
+                    title={item.title}
+                    titleClassName={titleClassName}
+                    onEdit={canEdit ? () => setIsEditing(true) : undefined}
+                />
             )}
 
-            <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Delete ${item.title}`}
-                onPress={onDelete}
-                hitSlop={6}
-                className="opacity-0 web:group-hover:opacity-100 web:focus-visible:opacity-100 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring rounded"
-            >
-                <X size={13} color={mutedColor} strokeWidth={2.2} />
-            </Pressable>
+            {canEdit ? (
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete ${item.title}`}
+                    onPress={onDelete}
+                    hitSlop={6}
+                    className="opacity-0 web:group-hover:opacity-100 web:focus-visible:opacity-100 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring rounded"
+                >
+                    <X size={13} color={mutedColor} strokeWidth={2.2} />
+                </Pressable>
+            ) : null}
         </View>
+    )
+}
+
+/** Tap-to-edit title; plain text when the viewer cannot write. */
+function ChecklistTitle({
+    title,
+    titleClassName,
+    onEdit,
+}: {
+    title: string
+    titleClassName: string
+    onEdit?: () => void
+}) {
+    if (!onEdit) {
+        return <Text className={`flex-1 ${titleClassName}`}>{title}</Text>
+    }
+    return (
+        <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Edit ${title}`}
+            onPress={onEdit}
+            className="flex-1 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring rounded"
+        >
+            <Text className={titleClassName}>{title}</Text>
+        </Pressable>
+    )
+}
+
+/** The done toggle; renders as a static box (no button semantics) when the
+ *  viewer cannot write. */
+function ChecklistCheckbox({
+    item,
+    checkColor,
+    onToggle,
+}: {
+    item: BoardChecklistItem
+    checkColor: string
+    onToggle?: () => void
+}) {
+    const boxClassName = `w-[15px] h-[15px] mt-[2px] rounded-[4.5px] items-center justify-center ${
+        item.isDone ? 'bg-success' : 'border-[1.5px] border-muted'
+    }`
+    const check = item.isDone ? <Check size={10} color={checkColor} strokeWidth={3.5} /> : null
+
+    if (!onToggle) {
+        return (
+            <View
+                accessibilityState={{ checked: item.isDone }}
+                accessibilityLabel={item.title}
+                className={boxClassName}
+            >
+                {check}
+            </View>
+        )
+    }
+
+    return (
+        <Pressable
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: item.isDone }}
+            accessibilityLabel={item.title}
+            onPress={onToggle}
+            hitSlop={6}
+            className={`${boxClassName} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring`}
+        >
+            {check}
+        </Pressable>
     )
 }
 
@@ -185,6 +291,7 @@ function ChecklistComposer({ onSubmit }: { onSubmit: (title: string) => void }) 
                 onPress={() => setIsOpen(true)}
                 className="flex-row items-center gap-2 py-[5px] mt-0.5 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring rounded"
             >
+                <View className="w-6" />
                 <Plus size={13} color={mutedColor} strokeWidth={2.2} />
                 <Text className="text-[13px] font-medium text-muted">Add item</Text>
             </Pressable>
@@ -193,6 +300,8 @@ function ChecklistComposer({ onSubmit }: { onSubmit: (title: string) => void }) 
 
     return (
         <View className="flex-row items-center gap-2.5 py-[5px]">
+            {/* Matches the rows' grip column so the checkboxes line up. */}
+            <View className="w-6" />
             <View className="w-[15px] h-[15px] rounded-[4.5px] border-[1.5px] border-muted opacity-40" />
             <PlainInput
                 ref={inputRef}

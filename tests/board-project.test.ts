@@ -285,3 +285,77 @@ describe('buildBoardProject', () => {
         expect(result?.labels).toEqual([])
     })
 })
+
+// Identity is the contract here, not just value: memoized columns and drax's
+// sortable lists key their "did the data change" checks on object identity, so
+// a rebuild from an emission that changed nothing must return the SAME nodes.
+describe('buildBoardProject structural sharing', () => {
+    const input = () => ({
+        project: project(),
+        lists: [list('list1', 'a0'), list('list2', 'a1')],
+        cards: [card('c1', 'list1', 'a0'), card('c2', 'list2', 'a0')],
+        labels: [],
+        members: [user('u1', 'Maya Kim')],
+        users: [user('u1', 'Maya Kim')],
+    })
+
+    it('returns the previous project when nothing changed', () => {
+        const previous = buildBoardProject(input())
+        // Fresh input objects, equal values — as a live query re-emission
+        // delivers them.
+        expect(buildBoardProject(input(), previous)).toBe(previous)
+    })
+
+    it('replaces only the touched card and its list', () => {
+        const previous = buildBoardProject(input())
+        const next = input()
+        next.cards[0] = card('c1', 'list1', 'a0', { title: 'renamed' })
+        const result = buildBoardProject(next, previous)
+
+        expect(result).not.toBe(previous)
+        expect(result?.lists[0]).not.toBe(previous?.lists[0])
+        expect(result?.lists[0]?.cards[0]).not.toBe(previous?.lists[0]?.cards[0])
+        // The other column — node, cards array and card — is untouched.
+        expect(result?.lists[1]).toBe(previous?.lists[1])
+        // Card-level changes never move columns around.
+        expect(result?.listOrder).toBe(previous?.listOrder)
+        expect(result?.members).toBe(previous?.members)
+    })
+
+    it('keeps the project identity when an unrelated user appears', () => {
+        const previous = buildBoardProject(input())
+        const next = input()
+        next.users = [...next.users, user('u2', 'Jonas Reyes')]
+        // The users table churns org-wide; a user on no card here is invisible.
+        expect(buildBoardProject(next, previous)).toBe(previous)
+    })
+
+    it('replaces listOrder when a list moves', () => {
+        const previous = buildBoardProject(input())
+        const next = input()
+        next.lists[1] = list('list2', 'a0!')
+        const result = buildBoardProject(next, previous)
+        expect(result?.listOrder).not.toBe(previous?.listOrder)
+        expect(result?.listOrder.map(l => l.id)).toEqual(['list1', 'list2'])
+    })
+
+    it('shares a card that changed due-date representation but not value', () => {
+        const withDue = () => {
+            const next = input()
+            next.cards[0] = card('c1', 'list1', 'a0', { due: '2026-08-05 00:00:00Z' })
+            return next
+        }
+        const previous = buildBoardProject(withDue())
+        // Each build allocates a fresh Date; equal timestamps must still share.
+        expect(buildBoardProject(withDue(), previous)).toBe(previous)
+    })
+
+    it('ignores a stale tree from a different project', () => {
+        const previous = buildBoardProject(input())
+        const other = input()
+        other.project = project({ id: 'p2' })
+        const result = buildBoardProject(other, previous)
+        expect(result).not.toBe(previous)
+        expect(result?.id).toBe('p2')
+    })
+})

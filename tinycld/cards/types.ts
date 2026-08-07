@@ -161,12 +161,26 @@ export interface BoardListView {
     cards: BoardCardView[]
 }
 
+/**
+ * The {id, position} slice of a column that sibling-aware chrome (the column
+ * menu's move left/right, the header drag's drop index, the add-list rank)
+ * actually reads. Split from BoardListView so a card-level change — which
+ * replaces that list's node and therefore `lists` — leaves this array's
+ * identity untouched, keeping memoized columns from re-rendering.
+ */
+export interface BoardListRank {
+    id: string
+    position: string
+}
+
 export interface BoardProject {
     id: string
     name: string
     color: CardsColor
     members: BoardMember[]
     lists: BoardListView[]
+    /** `lists` reduced to ranks — identity changes only when list ROWS change. */
+    listOrder: BoardListRank[]
     /**
      * Every label defined on this board — what the card label picker offers,
      * which is a superset of any one card's `labels`.

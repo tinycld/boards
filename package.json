@@ -9,12 +9,14 @@
         "./manifest": "./manifest.ts",
         "./types": "./tinycld/cards/types.ts",
         "./collections": "./tinycld/cards/collections.ts",
+        "./seed": "./tinycld/cards/seed.ts",
         "./screens/*": "./tinycld/cards/screens/*.tsx",
         "./sidebar": "./tinycld/cards/sidebar.tsx",
         "./hooks/*": "./tinycld/cards/hooks/*.ts",
         "./lib/*": "./tinycld/cards/lib/*.ts",
         "./stores/*": "./tinycld/cards/stores/*.ts",
-        "./components/*": "./tinycld/cards/components/*.tsx"
+        "./components/*": "./tinycld/cards/components/*.tsx",
+        "./search-adapter": "./tinycld/cards/search-adapter.ts"
     },
     "scripts": {
         "typecheck": "tinycld-pkg typecheck",
@@ -32,6 +34,7 @@
         "pbtsdb": ">=0.6.3",
         "@tanstack/react-db": ">=0.1",
         "@tanstack/db": ">=0.6",
-        "fractional-indexing": ">=3.2.0 <4"
+        "fractional-indexing": ">=3.2.0 <4",
+        "react-native-drax": "^1.1.0"
     }
 }

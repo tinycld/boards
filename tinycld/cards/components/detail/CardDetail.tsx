@@ -3,6 +3,7 @@ import { ScrollView, Text, View } from 'react-native'
 import { useCardDetail } from '../../hooks/useCardDetail'
 import { useUpdateCard } from '../../hooks/useCardMutations'
 import { useCommentMutations } from '../../hooks/useCommentMutations'
+import { useProjectRole } from '../../hooks/useProjectRole'
 import type { BoardCardView, BoardLabel, BoardMember } from '../../types'
 import { LabelManagerDialog } from '../LabelManagerDialog'
 import { CommentComposer } from './CommentComposer'
@@ -47,6 +48,8 @@ export function CardDetail({
     // Fetched here rather than threaded in as props, so the peek and the page
     // both get it without either container knowing about on-demand collections.
     const { checklist, comments } = useCardDetail(card.id)
+    // Resolved here for the same reason — both containers share the gates.
+    const { canEdit, canComment, isOwner } = useProjectRole(projectId)
     const updateCard = useUpdateCard()
     const { createComment, deleteComment } = useCommentMutations(card.id, projectId)
     // Which comment the composer is replying to. Local because it is transient
@@ -72,6 +75,7 @@ export function CardDetail({
                             placeholder="Card title"
                             accessibilityLabel="Edit card title"
                             textClassName="text-[20px] font-semibold leading-[27px] tracking-tight text-foreground"
+                            isDisabled={!canEdit}
                         />
                     </View>
                     <DetailProperties
@@ -79,14 +83,23 @@ export function CardDetail({
                         projectLabels={projectLabels}
                         projectMembers={projectMembers}
                         onManageLabels={() => setIsManagingLabels(true)}
+                        canEdit={canEdit}
                     />
                     <DescriptionSection
                         description={card.description}
                         onSave={description => updateCard.mutate({ cardId: card.id, description })}
+                        canEdit={canEdit}
                     />
-                    <DetailChecklist items={checklist} cardId={card.id} projectId={projectId} />
+                    <DetailChecklist
+                        items={checklist}
+                        cardId={card.id}
+                        projectId={projectId}
+                        canEdit={canEdit}
+                    />
                     <DetailActivity
                         comments={comments}
+                        canComment={canComment}
+                        canModerate={isOwner}
                         onReply={comment =>
                             setReplyingTo({
                                 id: comment.id,
@@ -97,13 +110,16 @@ export function CardDetail({
                     />
                 </View>
             </ScrollView>
-            <CommentComposer
-                widthClass={widthClass}
-                onSubmit={submitComment}
-                isPending={createComment.isPending}
-                replyingTo={replyingTo ?? undefined}
-                onCancelReply={() => setReplyingTo(null)}
-            />
+            {/* Commentors keep the composer — that is what the role means. */}
+            {canComment ? (
+                <CommentComposer
+                    widthClass={widthClass}
+                    onSubmit={submitComment}
+                    isPending={createComment.isPending}
+                    replyingTo={replyingTo ?? undefined}
+                    onCancelReply={() => setReplyingTo(null)}
+                />
+            ) : null}
             <LabelManagerDialog
                 isVisible={isManagingLabels}
                 onClose={() => setIsManagingLabels(false)}
@@ -122,10 +138,17 @@ export function CardDetail({
 function DescriptionSection({
     description,
     onSave,
+    canEdit,
 }: {
     description?: string
     onSave: (value: string) => void
+    canEdit: boolean
 }) {
+    // A disabled EditableText still renders its placeholder styled as an
+    // affordance, so a read-only card with no description drops the section
+    // entirely — there is nothing to show and nothing to invite.
+    if (!canEdit && !description) return null
+
     return (
         <View className="mb-6">
             <Text className="text-[13px] font-semibold text-foreground mb-2.5">Description</Text>
@@ -135,6 +158,7 @@ function DescriptionSection({
                 placeholder="Add a description — what does done look like?"
                 accessibilityLabel="Edit description"
                 multiline
+                isDisabled={!canEdit}
             />
         </View>
     )

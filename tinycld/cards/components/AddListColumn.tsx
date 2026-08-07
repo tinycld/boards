@@ -5,13 +5,13 @@ import { useRef, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useCreateList } from '../hooks/useListMutations'
 import { rankForAppend } from '../lib/move'
-import type { BoardListView } from '../types'
+import type { BoardListRank } from '../types'
 import { COLUMN_WIDTH } from './BoardColumn'
 
 interface AddListColumnProps {
     projectId: string
-    /** The board's existing columns — the new one appends after them. */
-    lists: BoardListView[]
+    /** The board's existing column ranks — the new one appends after them. */
+    listOrder: BoardListRank[]
 }
 
 /**
@@ -21,7 +21,7 @@ interface AddListColumnProps {
  * but it cannot reuse that component: this one IS the column (it owns the
  * column's width and dashed-border chrome) rather than sitting inside one.
  */
-export function AddListColumn({ projectId, lists }: AddListColumnProps) {
+export function AddListColumn({ projectId, listOrder }: AddListColumnProps) {
     const [isOpen, setIsOpen] = useState(false)
     const [name, setName] = useState('')
     const inputRef = useRef<React.ComponentRef<typeof PlainInput>>(null)
@@ -34,7 +34,7 @@ export function AddListColumn({ projectId, lists }: AddListColumnProps) {
             setIsOpen(false)
             return
         }
-        createList.mutate({ name: trimmed, position: rankForAppend(lists) })
+        createList.mutate({ name: trimmed, position: rankForAppend(listOrder) })
         setName('')
         inputRef.current?.focus()
     }

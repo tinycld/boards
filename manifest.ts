@@ -6,12 +6,13 @@ const manifest = {
     routes: { directory: 'screens' },
     nav: {
         label: 'Cards',
-        icon: 'kanban',
+        icon: 'square-kanban',
         order: 25,
         shortcut: 'k',
     },
     sidebar: { component: 'sidebar' },
     help: { directory: 'help' },
+    search: { endpoint: '/api/cards/search', adapter: 'search-adapter' },
     migrations: { directory: 'pb-migrations' },
     // Cards is rule-first: every authorization decision lives in the access
     // rules the migrations ship, never in a Go hook, because a hosted tenant
@@ -21,7 +22,8 @@ const manifest = {
     // board-face counters, and mint share-link tokens (M6a).
     server: { package: 'server', module: 'tinycld.org/packages/cards' },
     collections: { register: 'collections', types: 'types' },
-    peerVersions: { '@tinycld/core': '>=0.0.4 <0.1.0' },
+    seed: { script: 'seed' },
+    peerVersions: { '@tinycld/core': '>=0.0.6 <0.1.0' },
 }
 
 export default manifest

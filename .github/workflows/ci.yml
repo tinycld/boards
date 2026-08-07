@@ -70,16 +70,36 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version-file: ws/.node-version
+      # cache-dependency-path matters more than it looks: the install below runs a
+      # postinstall that regenerates the PB schema, which shells out to Go and
+      # pulls core's module graph. That download — not package fetching — is the
+      # bulk of the install step's runtime.
       - uses: actions/setup-go@v6
         with:
           go-version-file: ws/.go-version
+          # go.mod, not go.sum: cards deliberately commits no go.sum (see the
+          # comment in server/go.mod — every dep resolves through go.work
+          # replaces to local dirs, so there are no module hashes to record).
+          # The hand-maintained require block still changes whenever a
+          # dependency does, so it is the right key here.
+          cache-dependency-path: |
+            ws/cards/server/go.mod
       # corepack enables the pnpm version pinned in the workspace root's
       # "packageManager" field. pnpm discovers members from pnpm-workspace.yaml;
       # node-linker=hoisted (set there) gives a flat node_modules so member
       # peerDeps resolve.
+      # Cache pnpm's content-addressable store. setup-node's built-in `cache: pnpm`
+      # can't be used: it keys on a lockfile hash, and the workspace root here is
+      # bootstrap-GENERATED, so no lockfile exists until the install produces one.
+      - name: Cache pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ws/.pnpm-store
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('ws/package.json', 'ws/pnpm-workspace.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
       - name: Install (workspace root)
         working-directory: ws
-        run: corepack enable && pnpm install --no-frozen-lockfile
+        run: corepack enable && pnpm install --no-frozen-lockfile --store-dir=.pnpm-store
       # Also the real test of the PB migrations: install runs the generator,
       # which boots a throwaway PocketBase and replays every migration to
       # regenerate pbSchema.ts. A migration that can't apply fails here.
@@ -164,10 +184,20 @@ jobs:
         if: steps.specs.outputs.found == 'true'
         with:
           go-version-file: ws/.go-version
+          # go.mod, not go.sum — see the note on the job above.
+          cache-dependency-path: |
+            ws/cards/server/go.mod
+      - name: Cache pnpm store
+        if: steps.specs.outputs.found == 'true'
+        uses: actions/cache@v6
+        with:
+          path: ws/.pnpm-store
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('ws/package.json', 'ws/pnpm-workspace.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
       - name: Install (workspace root)
         if: steps.specs.outputs.found == 'true'
         working-directory: ws
-        run: corepack enable && pnpm install --no-frozen-lockfile
+        run: corepack enable && pnpm install --no-frozen-lockfile --store-dir=.pnpm-store
       # Shared e2e prep: installs the Playwright browser and pre-builds the
       # static web bundle (expo export + sourcemaps). e2e serves that bundle
       # statically — there's no Metro at runtime. The E2E step reuses the built

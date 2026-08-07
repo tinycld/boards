@@ -4,6 +4,7 @@ import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { type Shortcut, useRegisterShortcuts, useShortcutScope } from '@tinycld/core/lib/shortcuts'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useNavigateBack } from '@tinycld/core/lib/use-navigate-back'
+import { useDeviceInsets } from '@tinycld/core/lib/use-safe-area'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ChevronLeft } from 'lucide-react-native'
 import { useMemo, useRef } from 'react'
@@ -13,6 +14,7 @@ import { CardDetail } from '../components/detail/CardDetail'
 import { ListStepper } from '../components/detail/ListStepper'
 import { ProjectWash } from '../components/ProjectWash'
 import { useActiveBoard } from '../hooks/useActiveBoard'
+import { useProjectRole } from '../hooks/useProjectRole'
 import { type CardEntry, findCardEntry, neighborCardId } from '../lib/board-cards'
 import type { BoardProject } from '../types'
 
@@ -90,20 +92,29 @@ interface CardPageProps {
 
 function CardPage({ project, entry, cardId, navigateBack }: CardPageProps) {
     usePageShortcuts(project, cardId, navigateBack)
+    const { canEdit } = useProjectRole(project.id)
+    const insets = useDeviceInsets()
 
     return (
         <View className="flex-1 bg-background">
             <DocumentTitle pkg="Cards" title={entry.card.title} />
-            <ProjectWash color={project.color} />
+            <ProjectWash color={project.color} bleedRight={insets.right} />
             <View className="flex-row items-center gap-2 pl-3 pr-4 pt-3 pb-2">
                 <BackButton label={project.name} onPress={navigateBack} />
-                <ListStepper project={project} card={entry.card} list={entry.list} />
-                <View className="flex-1" />
-                <CardActionsMenu
-                    cardId={entry.card.id}
-                    cardTitle={entry.card.title}
-                    onDismiss={navigateBack}
+                <ListStepper
+                    project={project}
+                    card={entry.card}
+                    list={entry.list}
+                    isInteractive={canEdit}
                 />
+                <View className="flex-1" />
+                {canEdit ? (
+                    <CardActionsMenu
+                        cardId={entry.card.id}
+                        cardTitle={entry.card.title}
+                        onDismiss={navigateBack}
+                    />
+                ) : null}
             </View>
             <CardDetail
                 card={entry.card}

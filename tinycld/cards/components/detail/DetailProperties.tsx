@@ -18,6 +18,8 @@ interface DetailPropertiesProps {
     /** The board's roster, so a card is only assignable to someone who can open it. */
     projectMembers: BoardMember[]
     onManageLabels: () => void
+    /** When false the values render bare — no picker Menus, no ghost chips. */
+    canEdit: boolean
 }
 
 export function DetailProperties({
@@ -25,12 +27,33 @@ export function DetailProperties({
     projectLabels,
     projectMembers,
     onManageLabels,
+    canEdit,
 }: DetailPropertiesProps) {
     const updateCard = useUpdateCard()
     const toggleRelation = useToggleCardRelation()
 
     const toggle = (field: 'labels' | 'assignees') => (id: string, isSelected: boolean) =>
         toggleRelation.mutate({ cardId: card.id, field, id, isSelected })
+
+    // The Value components double as the pickers' Menu.Trigger children; a
+    // trigger injects onPress by cloning, so rendering one bare (no picker
+    // wrapper, no onPress) is what makes it read-only — see their no-onPress
+    // branches.
+    if (!canEdit) {
+        return (
+            <View className="gap-3 mb-[22px]">
+                <PropertyRow name="Assignees">
+                    <AssigneesValue card={card} />
+                </PropertyRow>
+                <PropertyRow name="Labels">
+                    <LabelsValue card={card} />
+                </PropertyRow>
+                <PropertyRow name="Due">
+                    <DueValue due={card.due} />
+                </PropertyRow>
+            </View>
+        )
+    }
 
     return (
         <View className="gap-3 mb-[22px]">
@@ -63,6 +86,11 @@ export function DetailProperties({
             </PropertyRow>
         </View>
     )
+}
+
+/** What an empty property shows on a read-only card, in place of a ghost chip. */
+function EmptyValue() {
+    return <Text className="text-[12.5px] text-muted">None</Text>
 }
 
 function PropertyRow({ name, children }: { name: string; children: ReactNode }) {
@@ -102,6 +130,17 @@ const GhostChip = forwardRef<View, { label: string; onPress?: () => void }>(func
  */
 const AssigneesValue = forwardRef<View, { card: BoardCardView; onPress?: () => void }>(
     function AssigneesValue({ card, onPress }, ref) {
+        // No onPress means no picker wrapped this value (read-only card):
+        // plain content, no button semantics, and no ghost-chip invitation.
+        if (!onPress) {
+            if (!card.assignees?.length) return <EmptyValue />
+            return (
+                <View className="flex-row flex-wrap items-center gap-1.5">
+                    <AssigneeChips card={card} />
+                </View>
+            )
+        }
+
         if (!card.assignees?.length) {
             return <GhostChip ref={ref} label="Assign" onPress={onPress} />
         }
@@ -114,30 +153,47 @@ const AssigneesValue = forwardRef<View, { card: BoardCardView; onPress?: () => v
                 onPress={onPress}
                 className="flex-row flex-wrap items-center gap-1.5 rounded-full web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
             >
-                {card.assignees.map(member => (
-                    <View
-                        key={member.id}
-                        className="flex-row items-center gap-1.5 bg-foreground/[0.06] rounded-full pl-[3px] pr-2.5 py-[2px]"
-                    >
-                        <NameAvatar
-                            firstName={member.firstName}
-                            lastName={member.lastName}
-                            size={20}
-                            colorKey={member.id}
-                        />
-                        <Text className="text-[12.5px] font-medium text-foreground">
-                            {member.firstName} {member.lastName}
-                        </Text>
-                    </View>
-                ))}
+                <AssigneeChips card={card} />
             </Pressable>
         )
     }
 )
 
+function AssigneeChips({ card }: { card: BoardCardView }) {
+    return (
+        <>
+            {card.assignees.map(member => (
+                <View
+                    key={member.id}
+                    className="flex-row items-center gap-1.5 bg-foreground/[0.06] rounded-full pl-[3px] pr-2.5 py-[2px]"
+                >
+                    <NameAvatar
+                        firstName={member.firstName}
+                        lastName={member.lastName}
+                        size={20}
+                        colorKey={member.id}
+                    />
+                    <Text className="text-[12.5px] font-medium text-foreground">
+                        {member.firstName} {member.lastName}
+                    </Text>
+                </View>
+            ))}
+        </>
+    )
+}
+
 /** The label chips, and the LabelPicker's trigger. See AssigneesValue. */
 const LabelsValue = forwardRef<View, { card: BoardCardView; onPress?: () => void }>(
     function LabelsValue({ card, onPress }, ref) {
+        if (!onPress) {
+            if (!card.labels?.length) return <EmptyValue />
+            return (
+                <View className="flex-row flex-wrap items-center gap-1.5">
+                    <LabelChips card={card} />
+                </View>
+            )
+        }
+
         if (!card.labels?.length) {
             return <GhostChip ref={ref} label="Add label" onPress={onPress} />
         }
@@ -150,13 +206,21 @@ const LabelsValue = forwardRef<View, { card: BoardCardView; onPress?: () => void
                 onPress={onPress}
                 className="flex-row flex-wrap items-center gap-1.5 rounded-full web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
             >
-                {card.labels.map(label => (
-                    <LabelBadge key={label.id} name={label.name} color={label.color} />
-                ))}
+                <LabelChips card={card} />
             </Pressable>
         )
     }
 )
+
+function LabelChips({ card }: { card: BoardCardView }) {
+    return (
+        <>
+            {card.labels.map(label => (
+                <LabelBadge key={label.id} name={label.name} color={label.color} />
+            ))}
+        </>
+    )
+}
 
 /**
  * The due chip — and the DuePicker's trigger, which is why its root is a
@@ -172,6 +236,7 @@ const DueValue = forwardRef<View, { due?: Date; onPress?: () => void }>(function
     const mutedColor = useThemeColor('muted')
 
     if (!due) {
+        if (!onPress) return <EmptyValue />
         return <GhostChip ref={ref} label="Set due date" onPress={onPress} />
     }
 
@@ -185,6 +250,25 @@ const DueValue = forwardRef<View, { due?: Date; onPress?: () => void }>(function
         : state === 'soon'
           ? 'bg-warning/10'
           : 'bg-foreground/[0.06]'
+    const chipContent = (
+        <>
+            <Icon size={12} color={color} strokeWidth={2.2} />
+            <Text className="text-[12.5px] font-medium" style={{ color }}>
+                {label}
+            </Text>
+        </>
+    )
+
+    if (!onPress) {
+        return (
+            <View
+                accessibilityLabel={`Due ${label}`}
+                className={`flex-row items-center gap-[5px] rounded-md px-2 py-[3px] ${stateClass}`}
+            >
+                {chipContent}
+            </View>
+        )
+    }
 
     return (
         <Pressable
@@ -194,10 +278,7 @@ const DueValue = forwardRef<View, { due?: Date; onPress?: () => void }>(function
             onPress={onPress}
             className={`flex-row items-center gap-[5px] rounded-md px-2 py-[3px] web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${stateClass}`}
         >
-            <Icon size={12} color={color} strokeWidth={2.2} />
-            <Text className="text-[12.5px] font-medium" style={{ color }}>
-                {label}
-            </Text>
+            {chipContent}
         </Pressable>
     )
 })
