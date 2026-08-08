@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, cardsInColumn, createBoard } from './helpers'
+import { addCard, boardCard, cardsInColumn, columnHeader, createBoard } from './helpers'
 
 // Every spec creates its own uniquely-named board (three default lists:
 // To do / Doing / Done), so specs stay independent and re-runnable against
@@ -49,7 +49,7 @@ test.describe('Cards — keyboard control', () => {
 
         await page.keyboard.press('Enter')
         // The peek's description placeholder proves the detail mounted.
-        await expect(page.getByText('Add a description', { exact: false })).toBeVisible()
+        await expect(page.getByText('Description', { exact: true })).toBeVisible()
     })
 
     test('crosses columns with the arrow keys, including an empty one', async ({ page }) => {
@@ -132,7 +132,7 @@ test.describe('Cards — keyboard control', () => {
 
         await page.keyboard.press('j')
         await page.keyboard.press('Enter')
-        await expect(page.getByText('Add a description', { exact: false })).toBeVisible()
+        await expect(page.getByText('Description', { exact: true })).toBeVisible()
 
         // With the peek open ('modal' on top), 'x' must NOT reach the board's
         // archive — the card is still there after pressing it.
@@ -165,5 +165,72 @@ test.describe('Cards — keyboard control', () => {
         await page.keyboard.press('Escape')
         await page.keyboard.press('j')
         await expect(focusedCard(page)).toHaveCount(1)
+    })
+
+    test('n opens the composer for the focused column', async ({ page }) => {
+        await freshBoard(page, 'addcard')
+        await addCard(page, 0, 'anchor')
+
+        // Focus a card in the first column, then add a sibling with the
+        // keyboard alone — the composer that opens must be that column's.
+        await page.keyboard.press('j')
+        await page.keyboard.press('n')
+        await page.keyboard.type('via-keyboard')
+        await page.keyboard.press('Enter')
+
+        await expect(boardCard(page, 'via-keyboard')).toBeVisible()
+        expect(await cardsInColumn(page, 'To do')).toEqual(['anchor', 'via-keyboard'])
+        await page.keyboard.press('Escape')
+    })
+
+    test('n adopts the first column when nothing is focused', async ({ page }) => {
+        await freshBoard(page, 'addcard-adopt')
+
+        // No focus ring at all: doing nothing here would make the key look
+        // broken on a board the user has not clicked into yet.
+        await page.keyboard.press('n')
+        await page.keyboard.type('adopted')
+        await page.keyboard.press('Enter')
+
+        expect(await cardsInColumn(page, 'To do')).toEqual(['adopted'])
+        await page.keyboard.press('Escape')
+    })
+
+    test('Shift+N opens the add-list composer', async ({ page }) => {
+        await freshBoard(page, 'addlist')
+
+        await page.keyboard.press('Shift+N')
+        await page.keyboard.type('From the keyboard')
+        await page.keyboard.press('Enter')
+
+        await expect(columnHeader(page, 'From the keyboard')).toBeVisible()
+        await page.keyboard.press('Escape')
+    })
+
+    // `e` is registered by the PEEK, at 'modal' scope — the board's 'list'
+    // scope is shadowed while a card is open, so a board-scoped binding would
+    // be firing at a component that is not mounted. This fails if `e` is
+    // registered on the board, and also if it is registered inside CardDetail
+    // (where the child-before-parent effect order stamps the wrong scope id).
+    test('e edits the title of the open card', async ({ page }) => {
+        await freshBoard(page, 'edit')
+        await addCard(page, 0, 'rename-me')
+
+        await page.keyboard.press('j')
+        await page.keyboard.press('Enter')
+        await expect(page.getByText('Description', { exact: true })).toBeVisible()
+
+        await page.keyboard.press('e')
+        // beginEdit seeds the draft from the current value before opening, so
+        // the input arrives holding the title rather than empty. An externally
+        // flipped isEditing flag would skip that and show a stale draft.
+        const titleInput = page.locator('input[value="rename-me"]')
+        await expect(titleInput).toBeVisible()
+
+        await page.keyboard.press('ControlOrMeta+a')
+        await page.keyboard.type('renamed-by-key')
+        await page.keyboard.press('Enter')
+
+        await expect(boardCard(page, 'renamed-by-key')).toBeVisible()
     })
 })

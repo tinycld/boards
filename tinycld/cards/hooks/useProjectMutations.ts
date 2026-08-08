@@ -85,8 +85,8 @@ export function useArchiveProject() {
  *     cards_project_members' create rule, which requires the caller to be
  *     inserting THEMSELVES as "owner" while the project still has no members.
  *     It is the only way a board gets its first owner — cards deliberately puts
- *     this in the rule rather than a Go hook, so a hosted tenant (which runs no
- *     feature Go) gets it too.
+ *     this in the rule rather than a Go hook, so ownership is established by
+ *     the same request that creates the board and no hook has to fire.
  *  3. The lists are admitted by `viaWriter`, which needs that owner row already
  *     committed. They are yielded as an array because they are independent of
  *     each other — that runs them in parallel.

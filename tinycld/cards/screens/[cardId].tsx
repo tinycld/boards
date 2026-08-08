@@ -7,10 +7,11 @@ import { useNavigateBack } from '@tinycld/core/lib/use-navigate-back'
 import { useDeviceInsets } from '@tinycld/core/lib/use-safe-area'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ChevronLeft } from 'lucide-react-native'
-import { useMemo, useRef } from 'react'
+import { type RefObject, useMemo, useRef } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { CardActionsMenu } from '../components/detail/CardActionsMenu'
 import { CardDetail } from '../components/detail/CardDetail'
+import type { EditableTextHandle } from '../components/detail/EditableText'
 import { ListStepper } from '../components/detail/ListStepper'
 import { ProjectWash } from '../components/ProjectWash'
 import { useActiveBoard } from '../hooks/useActiveBoard'
@@ -18,7 +19,13 @@ import { useProjectRole } from '../hooks/useProjectRole'
 import { type CardEntry, findCardEntry, neighborCardId } from '../lib/board-cards'
 import type { BoardProject } from '../types'
 
-function usePageShortcuts(project: BoardProject, cardId: string, goBack: () => void) {
+function usePageShortcuts(
+    project: BoardProject,
+    cardId: string,
+    goBack: () => void,
+    canEdit: boolean,
+    titleRef: RefObject<EditableTextHandle | null>
+) {
     const router = useRouter()
     const orgHref = useOrgHref()
     // A second Escape while the back navigation is in flight slips past
@@ -32,7 +39,22 @@ function usePageShortcuts(project: BoardProject, cardId: string, goBack: () => v
             const next = neighborCardId(project, cardId, delta)
             if (next) router.replace(orgHref('cards/[cardId]', { cardId: next }))
         }
+        // Mirrors the peek's binding at this scope, so `e` means the same thing
+        // whichever surface the card is open on.
+        const editTitle: Shortcut[] = canEdit
+            ? [
+                  {
+                      id: 'cards.page.editTitle',
+                      keys: 'e',
+                      scope: 'thread',
+                      group: 'Cards',
+                      description: 'Edit card title',
+                      run: () => titleRef.current?.beginEdit(),
+                  },
+              ]
+            : []
         return [
+            ...editTitle,
             {
                 id: 'cards.page.back',
                 keys: 'Escape',
@@ -62,7 +84,7 @@ function usePageShortcuts(project: BoardProject, cardId: string, goBack: () => v
                 run: () => step(-1),
             },
         ]
-    }, [project, cardId, goBack, router, orgHref])
+    }, [project, cardId, goBack, router, orgHref, canEdit, titleRef])
     useRegisterShortcuts(shortcuts)
 }
 
@@ -91,8 +113,9 @@ interface CardPageProps {
 }
 
 function CardPage({ project, entry, cardId, navigateBack }: CardPageProps) {
-    usePageShortcuts(project, cardId, navigateBack)
     const { canEdit } = useProjectRole(project.id)
+    const titleRef = useRef<EditableTextHandle>(null)
+    usePageShortcuts(project, cardId, navigateBack, canEdit, titleRef)
     const insets = useDeviceInsets()
 
     return (
@@ -122,6 +145,7 @@ function CardPage({ project, entry, cardId, navigateBack }: CardPageProps) {
                 projectId={project.id}
                 projectLabels={project.labels}
                 projectMembers={project.members}
+                titleRef={titleRef}
             />
         </View>
     )

@@ -71,6 +71,34 @@ export function targetColumnForMove(
 }
 
 /**
+ * Which column a "new card here" action targets, given where focus is.
+ *
+ * Resolved from the board at call time rather than from a stored column id: a
+ * focused card's column is deliberately not kept in the store, because a
+ * realtime move would change the card's list and leave the two disagreeing.
+ *
+ * With nothing focused this adopts the first column, mirroring how the first
+ * j/k press adopts the first card — doing nothing would make the key look
+ * broken on a board the user has not clicked into yet. Null only when the board
+ * has no columns at all.
+ */
+export function composerTargetColumnId(
+    project: BoardProject,
+    focusedCardId: string | null,
+    focusedColumnId: string | null
+): string | null {
+    if (focusedColumnId) return focusedColumnId
+    if (focusedCardId) {
+        const list = project.lists.find(l => l.cards.some(card => card.id === focusedCardId))
+        // A focused card that is no longer on the board (archived by another
+        // client between keypresses) falls through to the first column rather
+        // than dropping the keypress.
+        if (list) return list.id
+    }
+    return project.lists[0]?.id ?? null
+}
+
+/**
  * The scroll offset that brings a target into view, or null when it already is
  * — returning null is what keeps stepping within a visible column from
  * scrolling on every keypress. A target taller/wider than the viewport aligns

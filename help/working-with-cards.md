@@ -31,6 +31,26 @@ To move a whole list, drag it by its name in the list header. A colored bar
 shows which side of the neighboring list it will land on. The list menu's
 **Move left** and **Move right** do the same thing one step at a time.
 
+## Making room on a busy board
+
+Two controls change how much of the board you see at once. Both are yours
+alone — they change nothing for anyone else on the board, and they stay set
+the next time you open it.
+
+To fold a list you're not working in down to a narrow strip, open its menu and
+choose **Collapse list**, or double-click the list's name. The strip shows the
+number of cards at the top and the list's name down its side, so a row of
+collapsed lists still tells you where the work is piling up. Click the strip to
+open it again.
+
+Collapsed lists are still lists: you can drag a card onto one, and it lands
+there.
+
+To fit more cards on screen, click the rows button in the board's top bar to
+**Hide card details**. Cards shrink to a single line, keeping the title, who
+it's assigned to, and its due date — labels stay as colored dots. Click the
+button again to bring the full cards back.
+
 ## Reordering a checklist
 
 In an open card, drag a checklist item by the grip at the start of its row.
@@ -50,6 +70,49 @@ description, checklist, and comments. A due date turns amber when it's less
 than two days away and red once it has passed — the same colors the board
 shows on the card itself.
 
+## Writing a description
+
+Click a description and start typing — it formats as you go. Type `## ` for a
+heading, `- ` for a bullet, `- [ ] ` for a checkbox, `**bold**`, `` `code` ``
+or `~~strikethrough~~`, and each turns into the real thing as you finish it.
+Tables and images you paste in are kept too. Everything is stored as Markdown,
+so a description written here reads the same anywhere else.
+
+There is no save button: every change is kept as you type. Esc leaves the
+description without discarding anything, and plain Enter starts a new line,
+since a description is prose.
+
+## Writing a description together
+
+Several people can write the same description at once. Edits appear as they are
+typed, each person's cursor shows where they are working, and changes merge
+without anyone overwriting anyone else.
+
+If your connection drops mid-sentence, keep typing — your words are held on
+your machine and sent as soon as you are back. A short note under the
+description says when that is happening.
+
+People with **View** access can read a description but not change it.
+
+## Comments
+
+The box at the bottom of an open card posts a comment. Markdown works here too,
+so `**bold**`, `` `code` ``, lists and links all render once the comment is
+posted — type the source and it formats when it appears.
+
+Press ⌘↩ to post. Plain Enter starts a new line, so a longer comment does not
+send itself half-written. Reply to a comment to keep a thread together.
+
+## Who else is here
+
+When someone else has the same board open, their initials appear beside the
+member avatars at the top. Open a card they're looking at and you'll see them
+on the card face too, so you can tell at a glance if a teammate is already
+working on something.
+
+These appear and disappear as people come and go — nothing is recorded, and
+you'll never see yourself.
+
 ## Keyboard shortcuts
 
 You can work a board without touching the mouse. Press **J** to start — the
@@ -65,19 +128,29 @@ J and K walk the board in order, list by list, so you can review a whole board
 a card at a time. The arrow keys move across columns instead, keeping your place
 in the column — handy when a board is laid out as stages.
 
-To move a card, hold **Shift** with an arrow key:
+To move a card, hold **⇧** with an arrow key:
 
-- **Shift + ←** / **Shift + →** — send it to the column beside it
-- **Shift + ↑** / **Shift + ↓** — move it up or down its own column
+- **⇧←** / **⇧→** — send it to the column beside it
+- **⇧↑** / **⇧↓** — move it up or down its own column
 - **X** — archive it
 
-Moving and archiving need permission to edit the board; if you're a viewer or
-commentor, the navigation keys still work.
+To add something:
+
+- **N** — add a card to the highlighted column. If nothing is highlighted the
+  first column takes it, and a collapsed column opens first.
+- **⇧N** — add a list
+
+The composer stays open after you press Enter, so you can type several cards in
+a row without reaching for the mouse.
+
+Moving, archiving and adding need permission to edit the board; if you're a
+viewer or commentor, the navigation keys still work.
 
 With a card open:
 
 - **J** — next card
 - **K** — previous card
+- **E** — edit the title
 - **Esc** — close the card (or return to the board from the full-screen view)
 
 Press **⇧?** anywhere to see every shortcut the app knows, including the ones

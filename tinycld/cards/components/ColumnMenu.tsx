@@ -6,6 +6,7 @@ import {
     ArrowLeft,
     ArrowRight,
     CheckCircle2,
+    FoldHorizontal,
     MoreHorizontal,
     Pencil,
     Trash2,
@@ -14,6 +15,7 @@ import { useState } from 'react'
 import { Pressable } from 'react-native'
 import { useDeleteList, useUpdateList } from '../hooks/useListMutations'
 import { rankForReorder } from '../lib/move'
+import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardListRank, BoardListView } from '../types'
 
 interface ColumnMenuProps {
@@ -35,6 +37,9 @@ export function ColumnMenu({ list, listOrder, onRename }: ColumnMenuProps) {
     const mutedColor = useThemeColor('muted')
     const updateList = useUpdateList()
     const deleteList = useDeleteList()
+    // Only the setter — this menu renders only while the column is expanded,
+    // so it never needs to read the flag it writes.
+    const toggleCollapsed = useCardsUIStore(s => s.toggleColumnCollapsed)
 
     const index = listOrder.findIndex(candidate => candidate.id === list.id)
     const canMoveLeft = index > 0
@@ -65,6 +70,11 @@ export function ColumnMenu({ list, listOrder, onRename }: ColumnMenuProps) {
                     <Menu.Overlay />
                     <Menu.Content presentation="popover" placement="bottom" align="end">
                         <MenuActionItem label="Rename list" icon={Pencil} onPress={onRename} />
+                        <MenuActionItem
+                            label="Collapse list"
+                            icon={FoldHorizontal}
+                            onPress={() => toggleCollapsed(list.id)}
+                        />
                         <MenuActionItem
                             label="Move left"
                             icon={ArrowLeft}

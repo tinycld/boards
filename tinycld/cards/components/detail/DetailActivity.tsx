@@ -6,6 +6,7 @@ import { useMemo } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { buildCommentThreads } from '../../lib/comment-threads'
 import type { BoardComment } from '../../types'
+import { MarkdownText } from './MarkdownText'
 
 interface DetailActivityProps {
     comments: BoardComment[]
@@ -112,7 +113,7 @@ function CommentRow({ comment, canComment, canModerate, onReply, onDelete }: Com
                         onDelete={() => onDelete(comment.id)}
                     />
                 </View>
-                <Text className="text-[13.5px] leading-5 text-foreground">{comment.body}</Text>
+                <MarkdownText body={comment.body} variant="comment" />
             </View>
         </View>
     )

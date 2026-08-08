@@ -34,9 +34,13 @@ func hasOtherProjectOwner(app core.App, projectID, excludeRowID string) (bool, e
 // the dialog-only version of this guard and its last owner could still
 // self-demote via the API; see mail/server/mailbox_owner_guard.go.
 //
-// A hosted multi-org tenant runs no feature Go, so THERE the Share dialog's
-// memberRowActionsFor derivation is the only line of defense — this hook backs
-// it for the single-org composition, and neither replaces the other.
+// The Share dialog's memberRowActionsFor derivation hides these actions in the
+// UI; this hook refuses them at the API, where a client that ignores the UI
+// still lands. Neither replaces the other — the dialog cannot bind a caller who
+// never loads it, and this hook cannot explain itself in a form. Both run in
+// every composition: the generated registrar is handed to the hosted-tenant and
+// single-org paths alike (see register.go's note correcting the older
+// "a tenant runs no feature Go" claim).
 func registerMemberLastOwnerGuard(app core.App) {
 	app.OnRecordUpdateRequest("cards_project_members").BindFunc(func(e *core.RecordRequestEvent) error {
 		original := e.Record.Original()

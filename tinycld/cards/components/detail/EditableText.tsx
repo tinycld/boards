@@ -1,6 +1,6 @@
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
-import { useRef, useState } from 'react'
+import { forwardRef, type ReactNode, useImperativeHandle, useRef, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 
 interface EditableTextProps {
@@ -15,6 +15,27 @@ interface EditableTextProps {
     placeholderClassName?: string
     accessibilityLabel: string
     isDisabled?: boolean
+    /**
+     * Renders the committed value while idle, in place of the default <Text>.
+     * The card description uses it to show Markdown; editing is unaffected,
+     * since an edit swaps to a raw input regardless.
+     *
+     * Only reached for a non-empty value — the empty state is always the
+     * placeholder affordance.
+     */
+    renderValue?: (value: string) => ReactNode
+}
+
+/**
+ * Lets a parent start an edit — the `e` shortcut's entry point.
+ *
+ * Deliberately an imperative handle rather than a controlled `isEditing` prop:
+ * `beginEdit` snapshots the Escape target and seeds the draft BEFORE opening,
+ * and an externally-flipped boolean would skip both, leaving a stale draft that
+ * a subsequent blur would commit past the unchanged-value guard.
+ */
+export interface EditableTextHandle {
+    beginEdit: () => void
 }
 
 /**
@@ -30,16 +51,20 @@ interface EditableTextProps {
  * a mutation per character would flood the server, and the optimistic update
  * would fight the input's own value.
  */
-export function EditableText({
-    value,
-    onSave,
-    placeholder,
-    multiline = false,
-    textClassName = 'text-[14px] leading-[22px] text-foreground',
-    placeholderClassName = 'text-[13.5px] text-muted',
-    accessibilityLabel,
-    isDisabled = false,
-}: EditableTextProps) {
+export const EditableText = forwardRef<EditableTextHandle, EditableTextProps>(function EditableText(
+    {
+        value,
+        onSave,
+        placeholder,
+        multiline = false,
+        textClassName = 'text-[14px] leading-[22px] text-foreground',
+        placeholderClassName = 'text-[13.5px] text-muted',
+        accessibilityLabel,
+        isDisabled = false,
+        renderValue,
+    },
+    ref
+) {
     const [isEditing, setIsEditing] = useState(false)
     const [draft, setDraft] = useState(value)
     // Escape must restore what was there when the edit STARTED, not the latest
@@ -53,6 +78,11 @@ export function EditableText({
         setDraft(value)
         setIsEditing(true)
     }
+
+    // Exposes the SAME beginEdit the press path uses, so the
+    // snapshot → seed → open ordering holds for a keyboard-started edit
+    // by construction rather than by a second implementation agreeing.
+    useImperativeHandle(ref, () => ({ beginEdit }))
 
     const commit = () => {
         setIsEditing(false)
@@ -80,9 +110,11 @@ export function EditableText({
                         : 'bg-foreground/5 rounded-lg px-3.5 py-3 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring'
                 }
             >
-                <Text className={value ? textClassName : placeholderClassName}>
-                    {value || placeholder}
-                </Text>
+                {value ? (
+                    (renderValue?.(value) ?? <Text className={textClassName}>{value}</Text>)
+                ) : (
+                    <Text className={placeholderClassName}>{placeholder}</Text>
+                )}
             </Pressable>
         )
     }
@@ -122,4 +154,4 @@ export function EditableText({
             />
         </View>
     )
-}
+})

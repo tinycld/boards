@@ -1,16 +1,20 @@
-import { useState } from 'react'
+import { type RefObject, useState } from 'react'
 import { ScrollView, Text, View } from 'react-native'
 import { useCardDetail } from '../../hooks/useCardDetail'
 import { useUpdateCard } from '../../hooks/useCardMutations'
 import { useCommentMutations } from '../../hooks/useCommentMutations'
 import { useProjectRole } from '../../hooks/useProjectRole'
+import { descriptionMode } from '../../lib/description-mode'
 import type { BoardCardView, BoardLabel, BoardMember } from '../../types'
+import { useBoardPresenceContext } from '../BoardPresenceProvider'
 import { LabelManagerDialog } from '../LabelManagerDialog'
 import { CommentComposer } from './CommentComposer'
+import { DescriptionEditor } from './DescriptionEditor'
 import { DetailActivity } from './DetailActivity'
 import { DetailChecklist } from './DetailChecklist'
 import { DetailProperties } from './DetailProperties'
-import { EditableText } from './EditableText'
+import { EditableText, type EditableTextHandle } from './EditableText'
+import { MarkdownText } from './MarkdownText'
 
 type DetailVariant = 'peek' | 'page'
 
@@ -28,6 +32,17 @@ interface CardDetailProps {
     /** The board's labels and roster — what the pickers offer. */
     projectLabels: BoardLabel[]
     projectMembers: BoardMember[]
+    /**
+     * Lets the container start a title edit for the `e` shortcut.
+     *
+     * The shortcut is registered by the CONTAINER, not here, because
+     * `useRegisterShortcut` stamps the scope instance that is current when its
+     * effect runs — and child effects run before parent ones, so registering in
+     * this component would read the scope its container has not pushed yet.
+     * Core's `withScopeId` states the rule: scope and registration belong in the
+     * same component.
+     */
+    titleRef?: RefObject<EditableTextHandle | null>
 }
 
 /**
@@ -42,6 +57,7 @@ export function CardDetail({
     projectId,
     projectLabels,
     projectMembers,
+    titleRef,
 }: CardDetailProps) {
     const [isManagingLabels, setIsManagingLabels] = useState(false)
     const widthClass = variant === 'page' ? 'w-full max-w-[720px] self-center' : ''
@@ -70,6 +86,7 @@ export function CardDetail({
                 <View className={`px-6 pb-6 ${widthClass}`}>
                     <View className="mt-1 mb-[18px]">
                         <EditableText
+                            ref={titleRef}
                             value={card.title}
                             onSave={title => updateCard.mutate({ cardId: card.id, title })}
                             placeholder="Card title"
@@ -86,6 +103,7 @@ export function CardDetail({
                         canEdit={canEdit}
                     />
                     <DescriptionSection
+                        cardId={card.id}
                         description={card.description}
                         onSave={description => updateCard.mutate({ cardId: card.id, description })}
                         canEdit={canEdit}
@@ -131,35 +149,63 @@ export function CardDetail({
 }
 
 /**
- * The description is stored as Markdown (see types.ts) but rendered as plain
- * text for now — editing it and rendering it are separate concerns, and a
- * half-wired renderer is worse than none. Rendering is filed in M7.
+ * The description, stored as Markdown (see types.ts) and now rendered as such.
+ *
+ * Editing stays plain-text: the source is what you edit, the rendering is what
+ * you read. `EditableText` renders `renderValue` in place of its own <Text>
+ * while idle and swaps back to a raw input the moment an edit starts, so the
+ * markdown never has to round-trip through a rich-text model.
  */
 function DescriptionSection({
+    cardId,
     description,
     onSave,
     canEdit,
 }: {
+    cardId: string
     description?: string
     onSave: (value: string) => void
     canEdit: boolean
 }) {
-    // A disabled EditableText still renders its placeholder styled as an
-    // affordance, so a read-only card with no description drops the section
-    // entirely — there is nothing to show and nothing to invite.
-    if (!canEdit && !description) return null
+    const { doc, isReady, isConnected, canEditDoc, awareness, identity } = useBoardPresenceContext()
+
+    // Chosen once, when this card's editor mounts, and deliberately not
+    // re-evaluated: a description with two live write paths is how text gets
+    // lost. A drop mid-sentence keeps the collaborative editor and shows a
+    // reconnecting note — the words are in the local document and Yjs replays
+    // them — rather than racing a mutation against the reconnect.
+    const [mode] = useState(() => descriptionMode({ hasDoc: !!doc, isReady }))
+
+    // A disabled editor still renders its placeholder styled as an affordance,
+    // so a read-only card with no description drops the section entirely —
+    // there is nothing to show and nothing to invite.
+    if (!canEdit && !description && mode === 'mutation') return null
 
     return (
         <View className="mb-6">
             <Text className="text-[13px] font-semibold text-foreground mb-2.5">Description</Text>
-            <EditableText
-                value={description ?? ''}
-                onSave={onSave}
-                placeholder="Add a description — what does done look like?"
-                accessibilityLabel="Edit description"
-                multiline
-                isDisabled={!canEdit}
-            />
+            {mode === 'collab' && doc ? (
+                <DescriptionEditor
+                    // Rebinds to the right fragment when the peek switches cards.
+                    key={cardId}
+                    cardId={cardId}
+                    doc={doc}
+                    awareness={awareness}
+                    identity={identity}
+                    canEdit={canEdit && canEditDoc}
+                    isConnected={isConnected}
+                />
+            ) : (
+                <EditableText
+                    value={description ?? ''}
+                    onSave={onSave}
+                    placeholder="Add a description — what does done look like?"
+                    accessibilityLabel="Edit description"
+                    multiline
+                    isDisabled={!canEdit}
+                    renderValue={value => <MarkdownText body={value} />}
+                />
+            )}
         </View>
     )
 }

@@ -92,8 +92,33 @@ const BOARDS: BoardSeed[] = [
                     },
                     {
                         title: 'Investigate slow board load on large projects',
-                        description:
-                            'Boards with 200+ cards take several seconds to first paint. Profile the board query and the initial render before deciding anything.',
+                        // Deliberately the richest markdown in the seed: a
+                        // heading, emphasis, a code span, a list, a link and a
+                        // table, so `db:reset` leaves behind a card that shows
+                        // the description renderer actually working. A plain
+                        // paragraph would look identical rendered or not.
+                        description: [
+                            '## What we know',
+                            '',
+                            'Boards with **200+ cards** take several seconds to first paint.',
+                            'Profile `useActiveBoard` and the initial render before changing anything.',
+                            '',
+                            '### Suspects',
+                            '',
+                            '- The six live queries that feed the board tree',
+                            '- Structural sharing missing a field, so every column re-renders',
+                            '- Label and assignee lookups resolving per card',
+                            '',
+                            '| Board size | First paint |',
+                            '| --- | --- |',
+                            '| 50 cards | fine |',
+                            '| 200 cards | ~2s |',
+                            '| 500 cards | ~6s |',
+                            '',
+                            '> Measure first. The last two "obvious" fixes here made it slower.',
+                            '',
+                            'See [the board query notes](https://example.com/notes).',
+                        ].join('\n'),
                         labels: ['Bug'],
                     },
                 ],
@@ -132,8 +157,15 @@ const BOARDS: BoardSeed[] = [
                 cards: [
                     {
                         title: 'Press kit landing page',
-                        description:
-                            'One page: logo pack, product shots, boilerplate copy. Link it from the site footer.',
+                        description: [
+                            'One page: **logo pack**, product shots, boilerplate copy.',
+                            '',
+                            '- [ ] Logo pack (SVG + PNG)',
+                            '- [ ] Product shots at 2x',
+                            '- [ ] Boilerplate copy',
+                            '',
+                            'Link it from the site footer.',
+                        ].join('\n'),
                         due: () => dueAt(0),
                         labels: ['Design'],
                         assignees: ['me', 'teammate'],

@@ -35,6 +35,7 @@
         "@tanstack/react-db": ">=0.1",
         "@tanstack/db": ">=0.6",
         "fractional-indexing": ">=3.2.0 <4",
-        "react-native-drax": "^1.1.0"
+        "react-native-drax": "^1.1.0",
+        "y-protocols": ">=1.0"
     }
 }

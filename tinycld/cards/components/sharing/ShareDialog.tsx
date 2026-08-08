@@ -29,9 +29,9 @@ interface ShareDialogProps {
  *
  * The per-row actions come from memberRowActionsFor, which is the CLIENT
  * last-owner guard: the sole owner's demote/remove/leave never render. The
- * server hook (server/member_owner_guard.go) backs this at the API for the
- * single-org composition; a hosted tenant runs no feature Go, so this dialog
- * is the universal line of defense — do not simplify it away.
+ * server hook (server/member_owner_guard.go) backs this at the API, which is
+ * where a caller who bypasses this dialog lands. The two cover different paths
+ * — do not simplify either away.
  *
  * Share links deliberately absent: that flow is M6a.
  */

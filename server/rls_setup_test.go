@@ -16,9 +16,10 @@ import (
 
 // Shared fixture for the cards RLS suites.
 //
-// Cards' access decisions live in the rules the migration ships, because a
-// hosted multi-org tenant runs no feature Go and the rule is therefore the
-// entire authorization there. (The one exception is the last-owner guard —
+// Cards' access decisions live in the rules the migration ships, because those
+// rules are the entire authorization for any caller that does not pass through
+// a Go hook — which includes the REST API a client drives directly. (The one
+// exception is the last-owner guard —
 // member_owner_guard.go — which a rule cannot express; its tests bind that
 // hook explicitly. The RLS suites here still bind no hooks and measure the
 // rule engine alone.) Those rules had been verified

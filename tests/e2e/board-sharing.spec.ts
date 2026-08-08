@@ -98,6 +98,20 @@ test.describe('Cards — board sharing and role gates', () => {
             await expect(bobPage.getByTestId('cards-role-chip')).toHaveText('Viewer')
             await expect(page.getByTestId('cards-role-chip')).toHaveCount(0)
 
+            // Card density is a VIEW preference, not a mutation, so it is one
+            // of the few controls a viewer keeps — and the one who most wants
+            // it, scanning a board they cannot edit. Asserted here because
+            // this is the only place a real viewer session exists; a regression
+            // that folded the toggle into the owner-only BoardMenu would pass
+            // every other spec.
+            const bobDensity = bobPage.getByTestId('cards-density-toggle')
+            await expect(bobDensity).toBeVisible()
+            await bobDensity.click()
+            await expect(bobDensity).toHaveAttribute('aria-label', 'Show card details')
+            await expect(boardCard(bobPage, CARD_TITLE)).toBeVisible()
+            await bobDensity.click()
+            await expect(bobDensity).toHaveAttribute('aria-label', 'Hide card details')
+
             // Card detail: the stepper stays visible as the status display but
             // its segments stop being buttons; no comment composer.
             await boardCard(bobPage, CARD_TITLE).click()

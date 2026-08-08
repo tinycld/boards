@@ -11,6 +11,13 @@ interface CardComposerProps {
     /** "Add card" by default; a column with no cards can say more. */
     label?: string
     placeholder?: string
+    /**
+     * Open state, when a parent owns it — the `n` shortcut opens a composer
+     * inside a memoized column it holds no reference to. Omit both and the
+     * composer stays self-contained, as it is on the empty-board path.
+     */
+    isOpen?: boolean
+    onOpenChange?: (isOpen: boolean) => void
 }
 
 /**
@@ -32,11 +39,22 @@ export function CardComposer({
     isPending = false,
     label = 'Add card',
     placeholder = 'What needs doing?',
+    isOpen: controlledOpen,
+    onOpenChange,
 }: CardComposerProps) {
-    const [isOpen, setIsOpen] = useState(false)
+    const [internalOpen, setInternalOpen] = useState(false)
     const [title, setTitle] = useState('')
     const inputRef = useRef<React.ComponentRef<typeof PlainInput>>(null)
     const mutedColor = useThemeColor('muted')
+
+    // Controlled-ness keys on `isOpen` being supplied, not on `onOpenChange` —
+    // core's Menu learned this the hard way (a bare handler there once left the
+    // internal state stuck closed). A bare handler here merely notifies.
+    const isOpen = controlledOpen ?? internalOpen
+    const setIsOpen = (next: boolean) => {
+        if (controlledOpen === undefined) setInternalOpen(next)
+        onOpenChange?.(next)
+    }
 
     const submit = () => {
         const trimmed = title.trim()
