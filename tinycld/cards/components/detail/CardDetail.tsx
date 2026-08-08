@@ -4,9 +4,12 @@ import { useCardDetail } from '../../hooks/useCardDetail'
 import { useUpdateCard } from '../../hooks/useCardMutations'
 import { useCommentMutations } from '../../hooks/useCommentMutations'
 import { useProjectRole } from '../../hooks/useProjectRole'
+import { descriptionMode } from '../../lib/description-mode'
 import type { BoardCardView, BoardLabel, BoardMember } from '../../types'
+import { useBoardPresenceContext } from '../BoardPresenceProvider'
 import { LabelManagerDialog } from '../LabelManagerDialog'
 import { CommentComposer } from './CommentComposer'
+import { DescriptionEditor } from './DescriptionEditor'
 import { DetailActivity } from './DetailActivity'
 import { DetailChecklist } from './DetailChecklist'
 import { DetailProperties } from './DetailProperties'
@@ -100,6 +103,7 @@ export function CardDetail({
                         canEdit={canEdit}
                     />
                     <DescriptionSection
+                        cardId={card.id}
                         description={card.description}
                         onSave={description => updateCard.mutate({ cardId: card.id, description })}
                         canEdit={canEdit}
@@ -153,31 +157,55 @@ export function CardDetail({
  * markdown never has to round-trip through a rich-text model.
  */
 function DescriptionSection({
+    cardId,
     description,
     onSave,
     canEdit,
 }: {
+    cardId: string
     description?: string
     onSave: (value: string) => void
     canEdit: boolean
 }) {
-    // A disabled EditableText still renders its placeholder styled as an
-    // affordance, so a read-only card with no description drops the section
-    // entirely — there is nothing to show and nothing to invite.
-    if (!canEdit && !description) return null
+    const { doc, isReady, isConnected, canEditDoc, awareness, identity } = useBoardPresenceContext()
+
+    // Chosen once, when this card's editor mounts, and deliberately not
+    // re-evaluated: a description with two live write paths is how text gets
+    // lost. A drop mid-sentence keeps the collaborative editor and shows a
+    // reconnecting note — the words are in the local document and Yjs replays
+    // them — rather than racing a mutation against the reconnect.
+    const [mode] = useState(() => descriptionMode({ hasDoc: !!doc, isReady }))
+
+    // A disabled editor still renders its placeholder styled as an affordance,
+    // so a read-only card with no description drops the section entirely —
+    // there is nothing to show and nothing to invite.
+    if (!canEdit && !description && mode === 'mutation') return null
 
     return (
         <View className="mb-6">
             <Text className="text-[13px] font-semibold text-foreground mb-2.5">Description</Text>
-            <EditableText
-                value={description ?? ''}
-                onSave={onSave}
-                placeholder="Add a description — what does done look like?"
-                accessibilityLabel="Edit description"
-                multiline
-                isDisabled={!canEdit}
-                renderValue={value => <MarkdownText body={value} />}
-            />
+            {mode === 'collab' && doc ? (
+                <DescriptionEditor
+                    // Rebinds to the right fragment when the peek switches cards.
+                    key={cardId}
+                    cardId={cardId}
+                    doc={doc}
+                    awareness={awareness}
+                    identity={identity}
+                    canEdit={canEdit && canEditDoc}
+                    isConnected={isConnected}
+                />
+            ) : (
+                <EditableText
+                    value={description ?? ''}
+                    onSave={onSave}
+                    placeholder="Add a description — what does done look like?"
+                    accessibilityLabel="Edit description"
+                    multiline
+                    isDisabled={!canEdit}
+                    renderValue={value => <MarkdownText body={value} />}
+                />
+            )}
         </View>
     )
 }

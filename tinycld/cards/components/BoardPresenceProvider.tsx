@@ -1,13 +1,38 @@
 import { createContext, type ReactNode, useContext, useMemo } from 'react'
 import type { Awareness } from 'y-protocols/awareness'
-import { type RemoteCardsPresence, useBoardPresence } from '../hooks/useBoardPresence'
+import type * as Y from 'yjs'
+import {
+    type PresenceUser,
+    type RemoteCardsPresence,
+    useBoardPresence,
+} from '../hooks/useBoardPresence'
 
 interface BoardPresenceValue {
     awareness: Awareness | null
     peers: RemoteCardsPresence[]
+    /**
+     * The board's shared document — one Y.Doc holding a fragment per card, so
+     * every open description rides the same connection as presence.
+     */
+    doc: Y.Doc | null
+    /** True once the server's seed has arrived and descriptions are populated. */
+    isReady: boolean
+    isConnected: boolean
+    /** Whether this connection may write to the document, per the server. */
+    canEditDoc: boolean
+    /** This user's presence identity, shared with the collaboration caret. */
+    identity: PresenceUser | null
 }
 
-const BoardPresenceContext = createContext<BoardPresenceValue>({ awareness: null, peers: [] })
+const BoardPresenceContext = createContext<BoardPresenceValue>({
+    awareness: null,
+    peers: [],
+    doc: null,
+    isReady: false,
+    isConnected: false,
+    canEditDoc: false,
+    identity: null,
+})
 
 /**
  * Holds the board's single presence room, so the header's avatar stack and the
@@ -28,10 +53,16 @@ export function BoardPresenceProvider({
     openCardId: string | null
     children: ReactNode
 }) {
-    const { awareness, peers } = useBoardPresence(projectId, openCardId)
+    const { awareness, peers, doc, isReady, isConnected, canEditDoc, identity } = useBoardPresence(
+        projectId,
+        openCardId
+    )
     // Memoized so a board re-render for any unrelated reason does not push a
     // new context value at every consumer.
-    const value = useMemo(() => ({ awareness, peers }), [awareness, peers])
+    const value = useMemo(
+        () => ({ awareness, peers, doc, isReady, isConnected, canEditDoc, identity }),
+        [awareness, peers, doc, isReady, isConnected, canEditDoc, identity]
+    )
     return <BoardPresenceContext.Provider value={value}>{children}</BoardPresenceContext.Provider>
 }
 

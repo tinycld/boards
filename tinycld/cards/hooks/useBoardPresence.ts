@@ -84,12 +84,86 @@ export function useBoardPresence(projectId: string, openCardId: string | null) {
     //
     // `identity` is memoized on the user, so it is a stable dep here rather
     // than three separate scalar reads.
+    // The write MERGES rather than replaces. The board room now carries a
+    // shared document as well as presence, and tiptap's CollaborationCaret
+    // writes its own fields (`cursor`, and its own copy of `user`) into this
+    // same slot. A wholesale setLocalState would erase the caret on every
+    // reconnect and on every card change, so remote collaborators' cursors
+    // would blink out with no obvious cause.
     useEffect(() => {
         if (!awareness || !isConnected || !identity) return
-        awareness.setLocalState({ user: identity, cardId: openCardId })
+
+        const publish = () => {
+            awareness.setLocalState({
+                ...(awareness.getLocalState() ?? {}),
+                user: identity,
+                cardId: openCardId,
+            })
+        }
+        publish()
+
+        // Re-publish when someone else ARRIVES.
+        //
+        // The protocol only fans awareness frames out as they are sent: a
+        // joining client is told nothing about who is already in the room, and
+        // the people already there have no reason to send anything. Without
+        // this, presence is one-directional — whoever connected last is the
+        // only one anybody can see, and which direction works flips as sessions
+        // reconnect.
+        //
+        // Republishing on `added` closes that gap from the side that has the
+        // information. Two guards matter:
+        //
+        //  - Only REMOTE arrivals. Teardown clears the local slot with
+        //    `setLocalState(null)`, which itself fires a change naming the
+        //    local client. Republishing there resurrects the slot we are
+        //    leaving with, and the peer keeps seeing a ghost.
+        //  - Only `added`, never `updated`, so a peer's cursor movement does
+        //    not bounce an update straight back at them.
+        const handleAdded = ({ added }: { added: number[] }) => {
+            if (added.some(clientID => clientID !== awareness.clientID)) publish()
+        }
+        awareness.on('change', handleAdded)
+        return () => awareness.off('change', handleAdded)
     }, [awareness, isConnected, openCardId, identity])
 
-    return { room, awareness, peers: useRemoteCardsPresence(awareness) }
+    return {
+        room,
+        awareness,
+        identity,
+        // The board's shared document: one Y.Doc holding a fragment per card,
+        // so every open description rides this one connection. Null until the
+        // room exists.
+        doc: room?.doc ?? null,
+        isConnected,
+        // Seeding is the server's job and happens before the first sync reply,
+        // so "ready" is also "the descriptions are populated". Rendering an
+        // editor before this would show an empty document for a card that has
+        // prose, and the first keystroke would then be an edit against nothing.
+        isReady: room?.isReady ?? false,
+        canEditDoc: !boardHello(room?.serverHello)?.readOnly,
+        peers: useRemoteCardsPresence(awareness),
+    }
+}
+
+/**
+ * The server's handshake payload: whether this connection may write to the
+ * document, and which incarnation of it we joined.
+ *
+ * Both fields are narrowed rather than trusted — an older server, or a room
+ * kind that never sends a hello, yields null and the caller falls back to
+ * read-only.
+ */
+export interface BoardHello {
+    readOnly: boolean
+    docEpoch: number
+}
+
+export function boardHello(raw: unknown): BoardHello | null {
+    if (raw == null || typeof raw !== 'object') return null
+    const obj = raw as Record<string, unknown>
+    if (typeof obj.readOnly !== 'boolean' || typeof obj.docEpoch !== 'number') return null
+    return { readOnly: obj.readOnly, docEpoch: obj.docEpoch }
 }
 
 /**
