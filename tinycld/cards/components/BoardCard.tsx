@@ -3,11 +3,17 @@ import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { CalendarDays, CircleCheck, Clock, MessageSquare, SquareCheck } from 'lucide-react-native'
 import { Pressable, Text, View } from 'react-native'
+import type { RemoteCardsPresence } from '../hooks/useBoardPresence'
 import { dueStateFor, formatDueDate } from '../lib/due-state'
 import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardCardView, BoardLabel, BoardMember } from '../types'
+import { useCardPresence } from './BoardPresenceProvider'
 
 const MAX_LABELS = 3
+// Three watchers is already unusual company on one card; past that a count
+// says more than another sliver of avatar would. Matches MAX_LABELS so the
+// two overflow markers on a card face behave the same way.
+const MAX_WATCHERS = 3
 
 interface BoardCardProps {
     card: BoardCardView
@@ -263,8 +269,14 @@ function CardLabels({ labels }: { labels: BoardLabel[] }) {
 }
 
 function CardMeta({ card }: { card: BoardCardView }) {
+    // Presence is read here rather than in BoardCard so it participates in the
+    // same row as the other metadata. Per-card, so only the cards a peer moved
+    // between re-render.
+    const watchers = useCardPresence(card.id)
     const hasPills = card.due || card.checklistTotal > 0 || card.commentCount > 0
-    if (!hasPills && card.assignees.length === 0) return null
+    // Someone viewing this card is reason enough to render the row, even on a
+    // card that has no other metadata at all.
+    if (!hasPills && card.assignees.length === 0 && watchers.length === 0) return null
 
     return (
         <View className="flex-row items-center gap-2.5 min-h-[20px]">
@@ -272,7 +284,42 @@ function CardMeta({ card }: { card: BoardCardView }) {
             <ChecklistPill done={card.checklistDone} total={card.checklistTotal} />
             <CommentsPill count={card.commentCount} />
             <View className="flex-1" />
+            <CardWatchers watchers={watchers} cardId={card.id} />
             <CardAssignees assignees={card.assignees} />
+        </View>
+    )
+}
+
+/**
+ * Who is looking at this card right now.
+ *
+ * Rendered as coloured initials rather than reusing NameAvatar: a watcher is
+ * transient and must not read as an assignee, so it carries the peer's own
+ * presence colour (stable per user id) and a ring that sets it apart from the
+ * assignee stack it sits beside.
+ */
+function CardWatchers({ watchers, cardId }: { watchers: RemoteCardsPresence[]; cardId: string }) {
+    if (watchers.length === 0) return null
+
+    const visible = watchers.slice(0, MAX_WATCHERS)
+    const overflow = watchers.length - visible.length
+    return (
+        <View testID={`cards-watchers-${cardId}`} className="flex-row items-center">
+            {visible.map((watcher, index) => (
+                <View
+                    key={watcher.clientID}
+                    accessibilityLabel={`${watcher.user.name} is viewing this card`}
+                    className={`w-[18px] h-[18px] rounded-full items-center justify-center border-2 border-card ${index > 0 ? '-ml-1.5' : ''}`}
+                    style={{ backgroundColor: watcher.user.color }}
+                >
+                    <Text className="text-[9px] font-semibold text-white">
+                        {watcher.user.name.charAt(0).toUpperCase() || '?'}
+                    </Text>
+                </View>
+            ))}
+            {overflow > 0 ? (
+                <Text className="text-[10px] font-medium text-muted ml-1">+{overflow}</Text>
+            ) : null}
         </View>
     )
 }

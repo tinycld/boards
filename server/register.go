@@ -43,16 +43,26 @@ var ftsConfig = fts.Config{
 // Cards is deliberately rule-first: authorization decisions live in the
 // access rules the migrations ship (see
 // pb-migrations/1980000000_create_cards_collections.js), not in Go hooks,
-// because a hosted multi-org tenant runs no feature Go at all — there the rule
-// IS the whole authorization. The *_rls_test.go files in this directory are
-// what hold that line; they bind no hooks and measure the rule engine alone.
+// because the rules are the ENTIRE authorization for every path that does not
+// run through a hook — the REST API a client drives directly, and any future
+// caller we do not control. A Go guard can only add to them, never stand in for
+// them. The *_rls_test.go files in this directory are what hold that line; they
+// bind no hooks and measure the rule engine alone.
+//
+// NOTE: earlier comments across this package justified the above with "a hosted
+// multi-org tenant runs no feature Go at all". That is not true, and anything
+// relying on it should be re-read. tinycld/server/main.go hands the SAME
+// generated registerPackageExtensions to the tenant path and the single-org
+// path ("the SAME generated registrar serves both modes … the artifact is the
+// gate"), and multi-org/README.md says a tenant "registers its linked feature Go
+// unconditionally". So this file DOES run on a hosted tenant. The rule-first
+// design stands on its own merits above; the old rationale was simply wrong.
 //
 // What lives here is only what a rule genuinely cannot express: the board-face
-// counters (a rule cannot aggregate), the last-owner guard (a rule sees one
-// row and cannot count the remaining owners — and on a hosted tenant only the
-// Share dialog's client guard stands, so neither replaces the other) and, in
-// M6a, share-link token minting (32 bytes of entropy must come from the
-// server).
+// counters (a rule cannot aggregate), the last-owner guard (a rule sees one row
+// and cannot count the remaining owners), presence-room authorization (a
+// WebSocket upgrade never passes through the collection rules) and, in M6a,
+// share-link token minting (32 bytes of entropy must come from the server).
 func Register(app *pocketbase.PocketBase) {
 	registerShared(app)
 	// Cards binds no listener and mounts no protocol server, so this single
@@ -78,6 +88,7 @@ func registerShared(app *pocketbase.PocketBase) {
 
 	registerBoardCounters(app)
 	registerMemberLastOwnerGuard(app)
+	registerRealtime(app)
 
 	// FTS index-sync record hooks only — deliberately NOT fts.Register, which
 	// would also mount GET /api/cards/search. Cards has no in-app search box,

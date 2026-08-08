@@ -1,4 +1,5 @@
 import { NameAvatar } from '@tinycld/core/components/NameAvatar'
+import { PresenceAvatars } from '@tinycld/core/components/PresenceAvatars'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useCurrentRole } from '@tinycld/core/lib/use-current-role'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
@@ -10,6 +11,7 @@ import { useProjectRole } from '../hooks/useProjectRole'
 import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardProject, CardsMemberRole } from '../types'
 import { BoardMenu } from './BoardMenu'
+import { useBoardPresenceContext } from './BoardPresenceProvider'
 import { roleLabel } from './sharing/roles'
 import { ShareDialog } from './sharing/ShareDialog'
 
@@ -53,6 +55,10 @@ export function BoardHeader({ project, cardCount }: BoardHeaderProps) {
             </View>
             <RoleChip role={role} isVisible={isReady && !canEdit} />
             <View className="flex-1" />
+            {/* Who is here NOW, distinct from who the board belongs to — hence
+                its own stack rather than a state on TeamAvatars. Renders null
+                when nobody else is connected, so a solo board looks unchanged. */}
+            <LivePresence />
             <TeamAvatars
                 project={project}
                 onPress={isGuest ? undefined : () => setIsSharing(true)}
@@ -165,6 +171,29 @@ function ProjectTile({ name, color }: { name: string; color: string }) {
  * button here taught that chrome which looks pressable but isn't is worse
  * than none).
  */
+/**
+ * The people with this board open right now.
+ *
+ * `PresenceAvatars` takes the raw Awareness and does its own parsing — it
+ * renders any slot carrying `user: {id, name, color}`, which is exactly the
+ * shape useBoardPresence publishes — and returns null when there are no peers,
+ * so no visibility gate is needed here.
+ *
+ * The hairline separates it from the roster stack beside it: two adjacent
+ * avatar rows meaning different things read as one row otherwise.
+ */
+function LivePresence() {
+    const { awareness, peers } = useBoardPresenceContext()
+    if (peers.length === 0) return null
+
+    return (
+        <View testID="cards-live-presence" className="flex-row items-center gap-2.5">
+            <PresenceAvatars awareness={awareness} size={24} />
+            <View className="w-px h-4 bg-border" />
+        </View>
+    )
+}
+
 function TeamAvatars({ project, onPress }: { project: BoardProject; onPress?: () => void }) {
     if (project.members.length === 0) return null
 
