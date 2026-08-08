@@ -19,7 +19,7 @@ ordered by dependency; tasks within one are small and mostly independent.
 | M6 | File attachments with previews | |
 | M6a | Public boards: the share-link flow | schema shipped, flow missing |
 | M7 | Package plumbing, tests, docs | |
-| M9 | Collaborative markdown editing | ✅ web shipped; native collab + leave-cleanup open |
+| M9 | Collaborative markdown editing | ✅ web + native markdown shipped; native collab + leave-cleanup open |
 
 The lettered milestones (M2a, M3b, M6a) were split out once the data model
 landed and the real dependency order became clear: the rules are enforceable
@@ -1123,10 +1123,11 @@ The plan changed in two places, both for the better:
 
 - **No cards-owned WebView bundle.** A shared editor went into core instead —
   `@tinycld/core/lib/editor/rich` — and mail was retrofitted onto it, so there
-  is ONE schema and one serializer rather than a third copy. Native uses
-  TenTap's stock bridges with HTML↔Markdown conversion on the React Native side
-  (`html-markdown.ts`), which is why no bundle was needed. `marked` was already
-  proven on Hermes here by `react-native-marked`.
+  is ONE schema and one serializer rather than a third copy. Native originally
+  used TenTap's stock bridges with HTML↔Markdown conversion on the React Native
+  side (`html-markdown.ts`), which is why no bundle was needed. That pivot is
+  **now gone** — core owns a WebView bundle of its own, see the native-markdown
+  entry below — but the bundle still lives in core, not in cards.
 - **The description doc SHARES the board room.** One `Y.Doc` per board holds one
   `XmlFragment` per card (`card:<id>`), so presence and every open description
   ride the one socket. A Y.Doc is a container of named types and the broker
@@ -1148,37 +1149,63 @@ project-delete WAL cascade. The generic Yjs machinery was promoted from
       `parsePresence` requires. Covered by `tests/board-presence.test.ts`.
 - [x] Help topics updated (writing a description, writing one together,
       markdown in comments).
-- [ ] **Native collaborative editing — do it together with owning the WebView
-      host.** Native gets markdown editing but NOT co-editing: passing `collab`
-      there logs in development and renders a local editor rather than
-      pretending to sync.
+- [x] **Native markdown editing — the HTML pivot is gone.** Core owns a WebView
+      page (`core/lib/editor/rich/webview/source/`) handed to TenTap through
+      `customSource`, running our own tiptap from `buildRichEditorExtensions()`
+      with `@tiptap/markdown`. Markdown is parsed and serialized in place, on
+      the same schema web uses. `html-markdown.ts` and its test are **deleted**.
 
-      These are one piece of work, not two. TenTap's bridge exchanges **HTML**,
-      which is the only reason `core/lib/editor/rich/html-markdown.ts` exists —
-      markdown pivots through PM JSON to HTML and back purely to cross that
-      bridge. A Yjs relay needs the WebView to hold a real `Y.Doc` and exchange
-      binary updates, which that bridge has no concept of; tunnelling them
-      through a channel designed for HTML strings is how text ended up opening a
-      SECOND socket from inside its WebView (`TODO(text-native v1.1)`, the
-      double-presence bug). Designing the wire protocol once — ours, carrying PM
-      JSON or Yjs updates — deletes `html-markdown.ts` and removes the reason
-      for the second connection.
+      This did NOT require forking or rewriting TenTap, which this entry
+      previously assumed. `customSource` already hands over the whole page
+      (`RichText.tsx:57`), and owning the page bypasses `useTenTap` and the
+      `BridgeExtension` system entirely — their channel is what only spoke HTML.
+      TenTap stays as the WebView *host*, so `avoidIosKeyboard` is kept rather
+      than lifted. Its stock bridges still drive the toolbar and the
+      getHTML/setContent surface **mail** depends on.
 
-      What TenTap actually supplies today is small: `useEditorBridge`,
-      `RichText`, `useBridgeState`, and `customSource`. The editor is already
-      ours (text bundles its own tiptap through our esbuild pipeline) and the
-      message bus is already ours (`lib/editor/message-bus/`). Replacing it is a
-      `react-native-webview` plus typed messages. **Lift `avoidIosKeyboard`
-      deliberately** — keyboard avoidance and the focus/scroll handling are the
-      one genuinely fiddly thing TenTap gives us.
+      Upstream has no fix to adopt: 10tap-editor#280 ("How to use 10tap-editor
+      for Markdown?") asks for exactly this and was closed with zero maintainer
+      responses.
 
-      Build the replacement host so **text could adopt it** (same message bus,
-      same `EditorResult` contract), but do not migrate text in that PR: its
-      editor is shipped and carries ~60 commands plus the suggestions and
-      authorship stacks. One native hosting path eventually, not immediately.
+      The build trigger was the one real trap. `scripts/generate.ts` filters
+      core out of the feature loop and core has no manifest, so a core-owned
+      bundle was built by *nothing*; it needed an explicit build step ahead of
+      the feature builds. The artifact is already gitignored by the app shell's
+      bare `build/` rule.
 
-      When it lands, the WebView reuses the native client's clientID so the
-      local user does not appear twice.
+      Native editor coverage went from zero to 47 tests: protocol + base64,
+      host correlation, state derivation against a real editor, a bundle smoke
+      test, and a markdown round-trip (task-list checkboxes, GFM tables, a code
+      span containing a backtick, and idempotence — an unstable round-trip would
+      rewrite the row and churn the FTS index on every save).
+      **Not yet exercised on a device** — iOS/Android and a mail compose pass
+      are still owed.
+
+- [ ] **Native collaborative editing.** Native gets markdown editing but NOT
+      co-editing: passing `collab` logs in development and renders a local
+      editor rather than pretending to sync.
+
+      This is no longer coupled to owning the host — that half is done. What
+      remains is the relay. The wire protocol is already designed for it: the
+      `yjs` namespace is reserved in `lib/editor/message-bus/types.ts` with
+      tested base64 helpers (updates are binary, the channel is a JSON string
+      pipe), `Editor.tsx` already builds its extensions through the
+      `collab`-accepting `buildRichEditorExtensions()` call, and the host gained
+      a namespace-agnostic `onMessage` fan-out. Turning it on should be
+      additive: enable `Collaboration` in the page, relay updates across the
+      channel.
+
+      **The host keeps the one existing socket** (`useBoardPresence`'s Y.Doc)
+      and relays updates over the bridge. The WebView must NOT open its own
+      connection — that is what text does today, and the second connection is
+      the double-presence bug (`TODO(text-native v1.1)`). When it lands, the
+      WebView reuses the native client's clientID so the local user does not
+      appear twice.
+
+      Built so **text could adopt the host** (same message bus, same
+      `EditorResult` contract), but do not migrate text in that PR: its editor
+      is shipped and carries ~60 commands plus the suggestions and authorship
+      stacks. One native hosting path eventually, not immediately.
 - [ ] **A departing peer's avatar lingers** (`board-presence.spec.ts`, still
       red — but failing LATER than before: peers now see each other, which they
       did not previously). This is core realtime plumbing, not cards: the
