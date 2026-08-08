@@ -32,15 +32,33 @@ func authorizeCardsRoom(t *testing.T, env *cardsEnv) realtime.AuthorizeFn {
 	if opts.Authorize == nil {
 		t.Fatal("room kind registered with a nil Authorize")
 	}
-	// An ephemeral presence room must not quietly acquire document mirroring:
 	// AuthorizeShare left nil is what refuses anonymous share-link visitors
 	// before they ever reach the handler, which matters because M6a will add
 	// share links to this package.
 	if opts.AuthorizeShare != nil {
-		t.Error("presence room should not admit anonymous share sessions")
+		t.Error("board room should not admit anonymous share sessions")
 	}
-	if opts.RuntimeProvider != nil || opts.Journal != nil {
-		t.Error("presence room should carry no server-side document runtime")
+	// The room carries a shared document alongside presence, so the document
+	// machinery has to be wired. A missing piece here is the kind of failure
+	// that looks fine in a demo — edits relay between peers — and loses
+	// everything the moment the last person closes the board.
+	if opts.RuntimeProvider == nil {
+		t.Error("board room has no document runtime; descriptions would never persist")
+	}
+	if opts.Journal == nil {
+		t.Error("board room has no journal; an update accepted before a flush would be lost")
+	}
+	if opts.WritePredicate == nil {
+		t.Error("board room has no write gate; a viewer could edit descriptions")
+	}
+	if opts.UpdateContentValidator == nil {
+		t.Error("board room has no update validator; a client could write arbitrary roots")
+	}
+	if opts.OnConnect == nil {
+		t.Error("board room sends no hello; clients could not learn their write access")
+	}
+	if opts.ForceFlush == nil {
+		t.Error("board room cannot be force-flushed")
 	}
 	return opts.Authorize
 }
