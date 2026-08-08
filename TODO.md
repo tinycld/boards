@@ -19,7 +19,7 @@ ordered by dependency; tasks within one are small and mostly independent.
 | M6 | File attachments with previews | |
 | M6a | Public boards: the share-link flow | schema shipped, flow missing |
 | M7 | Package plumbing, tests, docs | |
-| M9 | Collaborative markdown editing | ✅ web + native shipped; device pass owed |
+| M9 | Collaborative markdown editing | web + native shipped; **native carets open (double-awareness)** |
 
 The lettered milestones (M2a, M3b, M6a) were split out once the data model
 landed and the real dependency order became clear: the rules are enforceable
@@ -1126,9 +1126,14 @@ cursors, and the server persists it — proven on web by
 proves the flush wrote the field, plus a viewer who cannot type).
 
 Native reaches the same shared document by relaying updates over the WebView
-bridge on the host's existing socket, rather than opening a second one. It is
-covered by unit tests only — there is no native UI test harness in this
-ecosystem (no Detox/Maestro/Appium) — so **a device pass is still owed**.
+bridge on the host's existing socket, rather than opening a second one.
+Verified on the iOS simulator: text syncs both ways and the description renders
+headings, tables, blockquotes and links.
+
+**Open: no collaborator carets on native** — you cannot see where the other
+person is typing. That falls out of **the double-awareness bug** described
+below, which is the single constraint any fix has to respect. See the entry at
+the end of this section.
 
 The plan changed in two places, both for the better:
 
@@ -1229,14 +1234,85 @@ project-delete WAL cascade. The generic Yjs machinery was promoted from
 
       Coverage: 8 tests driving both sides through the real base64 bridge,
       including three-peer convergence (web peer + phone host + WebView) and a
-      no-echo assertion that was mutation-checked. **Not yet exercised on a
-      device** — iOS/Android is still owed, alongside the markdown device pass
-      already outstanding above.
+      no-echo assertion that was mutation-checked.
+
+      **Verified on the iOS simulator.** Three bugs only a device could find,
+      all fixed and unit-pinned:
+
+      - The WebView rendered at ZERO height. `flex-1` resolves against the
+        parent, and a ScrollView gives children an unbounded one — so the
+        document loaded and had nowhere to draw. No error, just a gap.
+      - Sizing it then fought itself. `.ProseMirror` carries
+        `min-height: 100%`, so measuring the editor node (or
+        `documentElement.scrollHeight`) reports the VIEWPORT back — the value
+        being set — and the height can only grow. Separately, holding that
+        height in `useState` changed the memoized `EditorComponent`'s
+        identity, remounting the WebView on every measurement and thrashing
+        between 72px and the real height forever. Hence
+        `core/lib/editor/height-store.ts`.
+      - The last line was clipped: the measurement ran first-child-top to
+        last-child-bottom, dropping the page offset and the collapsed bottom
+        margin. Now measured from the page origin, plus that margin, plus 24px
+        of trailing space.
+
+      Android and a mail compose pass are still owed.
 
       Built so **text could adopt the host** (same message bus, same
       `EditorResult` contract), but text was deliberately not migrated: its
       editor is shipped and carries ~60 commands plus the suggestions and
       authorship stacks. One native hosting path eventually, not immediately.
+
+- [ ] **Collaborator carets on native — blocked on the DOUBLE-AWARENESS BUG.**
+      Text syncs both ways on a phone, but you cannot see WHERE the other
+      person is typing — no remote caret, no name label. Web has them; native
+      does not.
+
+      **The double-awareness bug** is the thing to understand before touching
+      this. A native editor has TWO awareness instances for one human:
+
+      1. the **host's**, on the room socket — what `useBoardPresence`
+         publishes and what every peer's avatar row reads;
+      2. the **WebView page's**, created locally at
+         `webview/source/Editor.tsx` (`new Awareness(doc)`) to drive carets
+         inside the page.
+
+      Wire the second one to the network and that human becomes two peers:
+      two avatars on the board, two carets in the document, and a slot the
+      host's presence teardown never cleans up (it only knows about its own).
+      **`text` has exactly this bug today** — `text/webview-editor/source/
+      Editor.tsx` opens a SECOND socket inside the WebView with its own
+      awareness identity, which is `TODO(text-native v1.1)`, and it also ships
+      a credential into the page. Cards deliberately did NOT copy that: the
+      relay carries document updates only, the page's awareness never leaves
+      the WebView, and the cost of that choice is precisely these missing
+      carets.
+
+      So this is a consequence of the design, not an oversight — and the fix
+      must keep "one human, one avatar" while adding remote carets.
+
+      The shape that fits: relay awareness over the bridge the same way
+      document updates already are. The `awareness` namespace is already
+      reserved in `core/lib/editor/message-bus/types.ts` for exactly this.
+      Sketch:
+
+      - Host: subscribe to the room's `Awareness`, encode remote states with
+        `encodeAwarenessUpdate` (base64, same as the yjs channel), and post
+        them in. Apply inbound page states to the room awareness so peers see
+        the phone's cursor.
+      - Page: apply host frames to its local `Awareness` with an origin tag so
+        the relay does not echo, exactly as `FROM_HOST` does for the doc.
+      - **The trap:** `CollaborationCaret` OVERWRITES `awareness.user` on
+        mount, and cards' `useBoardPresence` merges into the same slot. A
+        naive relay will either duplicate the local user's avatar on the board
+        or drop it — the same clobber the web path documents at
+        `extensions.ts` `RichEditorCollabOptions.user`. The local client's own
+        slot must be filtered OUT of what is relayed in either direction;
+        only remote peers' states cross the bridge.
+
+      Medium-sized: a protocol addition, both relay halves, the local-slot
+      filter, and unit coverage that two page-awarenesses converge without the
+      local user appearing twice. Worth doing — carets are most of what makes
+      co-editing feel live — but it is its own change, not a follow-up commit.
 - [x] **A departing peer's avatar lingers.** `board-presence.spec.ts` is
       **green**. Fixed in core (`tinycld`), not cards — cards needed no source
       change beyond a corrected comment.
