@@ -88,6 +88,10 @@ Several people can write the same description at once. Edits appear as they are
 typed, each person's cursor shows where they are working, and changes merge
 without anyone overwriting anyone else.
 
+This works in the phone and tablet apps as well as the browser, and between
+them: someone typing on their phone and someone typing on a laptop are writing
+in the same description.
+
 If your connection drops mid-sentence, keep typing — your words are held on
 your machine and sent as soon as you are back. A short note under the
 description says when that is happening.

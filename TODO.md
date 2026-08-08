@@ -19,7 +19,7 @@ ordered by dependency; tasks within one are small and mostly independent.
 | M6 | File attachments with previews | |
 | M6a | Public boards: the share-link flow | schema shipped, flow missing |
 | M7 | Package plumbing, tests, docs | |
-| M9 | Collaborative markdown editing | web + native markdown + leave-cleanup shipped; **native collab open** |
+| M9 | Collaborative markdown editing | ✅ web + native shipped; device pass owed |
 
 The lettered milestones (M2a, M3b, M6a) were split out once the data model
 landed and the real dependency order became clear: the rules are enforceable
@@ -1120,10 +1120,15 @@ none of them mention links.
 
 ## M9 — Collaborative markdown editing
 
-**Shipped on web.** Two people co-edit a card description live, with cursors,
-and the server persists it — proven by `tests/e2e/card-description-collab.spec.ts`
-(both directions, plus a reload that proves the flush wrote the field, plus a
-viewer who cannot type).
+**Shipped on web and native.** Two people co-edit a card description live, with
+cursors, and the server persists it — proven on web by
+`tests/e2e/card-description-collab.spec.ts` (both directions, plus a reload that
+proves the flush wrote the field, plus a viewer who cannot type).
+
+Native reaches the same shared document by relaying updates over the WebView
+bridge on the host's existing socket, rather than opening a second one. It is
+covered by unit tests only — there is no native UI test harness in this
+ecosystem (no Detox/Maestro/Appium) — so **a device pass is still owed**.
 
 The plan changed in two places, both for the better:
 
@@ -1187,31 +1192,51 @@ project-delete WAL cascade. The generic Yjs machinery was promoted from
       **Not yet exercised on a device** — iOS/Android and a mail compose pass
       are still owed.
 
-- [ ] **Native collaborative editing.** Native gets markdown editing but NOT
-      co-editing: passing `collab` logs in development and renders a local
-      editor rather than pretending to sync.
+- [x] **Native collaborative editing — shipped, pending a device pass.**
+      Cards needed no source change: `DescriptionEditor` already passed
+      `collab` on both platforms, and it now syncs instead of warning.
 
-      This is no longer coupled to owning the host — that half is done. What
-      remains is the relay. The wire protocol is already designed for it: the
-      `yjs` namespace is reserved in `lib/editor/message-bus/types.ts` with
-      tested base64 helpers (updates are binary, the channel is a JSON string
-      pipe), `Editor.tsx` already builds its extensions through the
-      `collab`-accepting `buildRichEditorExtensions()` call, and the host gained
-      a namespace-agnostic `onMessage` fan-out. Turning it on should be
-      additive: enable `Collaboration` in the page, relay updates across the
-      channel.
+      The relay is `core/lib/editor/rich/yjs-webview-host.ts`. The host keeps
+      the one existing socket (`useBoardPresence`'s Y.Doc) and relays updates
+      over the bridge as base64 on the reserved `yjs` namespace; the WebView
+      opens no connection of its own. Both directions are origin-guarded, or a
+      single keystroke bounces between the two docs forever — and `RELAY_ORIGIN`
+      is deliberately NOT one of the origins `RealtimeClient` suppresses, so a
+      phone edit still reaches the server while a server edit is not echoed back.
 
-      **The host keeps the one existing socket** (`useBoardPresence`'s Y.Doc)
-      and relays updates over the bridge. The WebView must NOT open its own
-      connection — that is what text does today, and the second connection is
-      the double-presence bug (`TODO(text-native v1.1)`). When it lands, the
-      WebView reuses the native client's clientID so the local user does not
-      appear twice.
+      **Two things this entry previously assumed turned out to be wrong:**
+
+      - **The WebView cannot reuse the native client's clientID.** Yjs forbids
+        two docs sharing one: assign it, apply the host's state, and Yjs logs
+        "Changed the client-id because another client seems to be using it"
+        and reassigns. It sticks only while the host doc is EMPTY — the case
+        that doesn't matter. Verified directly against yjs, not reasoned about.
+        Double presence is avoided structurally instead: **the relay carries
+        document updates only.** The page's `Awareness` never leaves the
+        WebView (it drives just the carets rendered there), and board presence
+        rides the host's socket, so peers see one avatar. The clientID is
+        still sent for correlation.
+      - **`useInitialContent` must be SKIPPED under collab**, and
+        `markdown.set` becomes a no-op. Under collaboration the document
+        arrives as Yjs state; setting content on top of it appends a second
+        copy of the text on every client that joins. The web hook already did
+        both — worth checking the web hook first when adding anything here.
+
+      Bundle grew 4.3KB (843KB → 847KB); yjs was already present transitively.
+      The smoke test now asserts the collaboration stack survives tree-shaking
+      (`y-sync`, `beforeAllTransactions`) — without that, a tree-shaken build
+      would still mount, still accept typing, and silently sync with nobody.
+
+      Coverage: 8 tests driving both sides through the real base64 bridge,
+      including three-peer convergence (web peer + phone host + WebView) and a
+      no-echo assertion that was mutation-checked. **Not yet exercised on a
+      device** — iOS/Android is still owed, alongside the markdown device pass
+      already outstanding above.
 
       Built so **text could adopt the host** (same message bus, same
-      `EditorResult` contract), but do not migrate text in that PR: its editor
-      is shipped and carries ~60 commands plus the suggestions and authorship
-      stacks. One native hosting path eventually, not immediately.
+      `EditorResult` contract), but text was deliberately not migrated: its
+      editor is shipped and carries ~60 commands plus the suggestions and
+      authorship stacks. One native hosting path eventually, not immediately.
 - [x] **A departing peer's avatar lingers.** `board-presence.spec.ts` is
       **green**. Fixed in core (`tinycld`), not cards — cards needed no source
       change beyond a corrected comment.
