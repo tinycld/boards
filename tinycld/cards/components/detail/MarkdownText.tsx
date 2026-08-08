@@ -4,6 +4,12 @@ import { View } from 'react-native'
 interface MarkdownTextProps {
     /** Markdown source. Callers must not render this component for empty text. */
     body: string
+    /**
+     * Which surface this is rendering into. The two differ only in vertical
+     * rhythm: a description swaps places with an editor and must not shift the
+     * layout when it does, while a comment sits in a tight activity row.
+     */
+    variant?: 'description' | 'comment'
 }
 
 /**
@@ -29,9 +35,9 @@ interface MarkdownTextProps {
  * paragraph already has `marginVertical: 6`, so the section's own spacing is
  * applied outside to keep the display and edit states from jumping.
  */
-export function MarkdownText({ body }: MarkdownTextProps) {
+export function MarkdownText({ body, variant = 'description' }: MarkdownTextProps) {
     return (
-        <View className="-my-1.5">
+        <View className={variant === 'comment' ? '-my-2' : '-my-1.5'}>
             <MarkdownRenderer
                 body={body}
                 translateModifierKeys={false}

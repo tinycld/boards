@@ -90,7 +90,8 @@ function ShortcutHint() {
     if (Platform.OS !== 'web') return null
     return (
         <Text className="text-center text-[11px] text-muted pt-[7px]">
-            ⌘↩ send&ensp;·&ensp;J / K next · previous card&ensp;·&ensp;Esc close
+            Markdown supported&ensp;·&ensp;⌘↩ send&ensp;·&ensp;J / K next · previous
+            card&ensp;·&ensp;Esc close
         </Text>
     )
 }
