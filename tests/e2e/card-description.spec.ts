@@ -3,54 +3,17 @@ import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
 import { addCard, boardCard, createBoard } from './helpers'
 
-// Card descriptions are stored as Markdown and now RENDER as Markdown, while
-// editing stays plain text — you edit the source, you read the result.
+// Card descriptions are stored as Markdown and edited in place: the editor IS
+// the rendering, so there is no view/edit swap and no commit step. Typing `## `
+// turns into a heading as you go, and the server writes the markdown source
+// back to the card.
 //
-// The assertions avoid react-native-marked's DOM shape, which is an
-// implementation detail we do not control. They check what a user can actually
-// tell apart: that the syntax characters are GONE once rendered (a `##` still
-// on screen means the renderer never ran), that the words survive, and that the
-// raw source comes back when you edit again.
+// The assertions avoid ProseMirror's DOM shape, which is an implementation
+// detail we do not control. They check what a reader can actually tell apart:
+// the words survive, the syntax characters do not, and the text is still there
+// after a reload.
 
 const CARD_TITLE = 'Release checklist'
-
-const MARKDOWN = ['## Scope', '', 'Ship **the** parser and `the` lexer.', '', '- first', '- second']
-
-/**
- * Open a card and wait for the detail to mount.
- *
- * Gated on the "Description" section heading, NOT the empty-state placeholder:
- * the placeholder only renders while the card HAS no description, so a helper
- * waiting on it works before the first save and never again.
- */
-async function openCard(page: Page, title: string) {
-    await boardCard(page, title).click()
-    await expect(page.getByText('Description', { exact: true })).toBeVisible()
-}
-
-/** The description editor's textarea, identified by its placeholder. */
-function descriptionInput(page: Page) {
-    return page.getByPlaceholder('Add a description', { exact: false })
-}
-
-/**
- * Type a multi-line description into the open card and commit it.
- *
- * Enter is deliberately NOT a submit here — a description is prose, so plain
- * Enter is a newline and ⌘/Ctrl+Enter commits. That asymmetry is the reason
- * this helper exists rather than reusing addCard's keyboard flow.
- */
-async function writeDescription(page: Page, lines: string[]) {
-    // Only ever called on a card with no description yet, so the placeholder is
-    // the affordance to click. Editing an EXISTING description clicks its
-    // rendered text instead — see the round-trip case below.
-    await page.getByText('Add a description', { exact: false }).click()
-    const input = descriptionInput(page)
-    await expect(input).toBeVisible()
-    await input.fill(lines.join('\n'))
-    await page.keyboard.press('ControlOrMeta+Enter')
-    await expect(input).toHaveCount(0)
-}
 
 let run = 0
 async function freshBoard(page: Page, label: string): Promise<string> {
@@ -59,41 +22,68 @@ async function freshBoard(page: Page, label: string): Promise<string> {
     return name
 }
 
+async function openCard(page: Page, title: string) {
+    await boardCard(page, title).click()
+    await expect(page.getByText('Description', { exact: true })).toBeVisible()
+}
+
+/** Open a board from the sidebar. `.first()` because the name also renders in
+ *  the board header once active. */
+async function openBoard(page: Page, name: string) {
+    await page.getByText(name, { exact: true }).first().click()
+    await expect(boardCard(page, CARD_TITLE)).toBeVisible()
+}
+
+function descriptionEditor(page: Page) {
+    return page.locator('.ProseMirror').first()
+}
+
+async function descriptionText(page: Page): Promise<string> {
+    return (await descriptionEditor(page).textContent()) ?? ''
+}
+
+/**
+ * Type into the description.
+ *
+ * Retried as a whole: ProseMirror drops keystrokes that arrive while it is
+ * still settling focus, which would otherwise make this spec fail for reasons
+ * that have nothing to do with descriptions.
+ */
+async function typeDescription(page: Page, text: string) {
+    const editor = descriptionEditor(page)
+    await expect(editor).toBeVisible()
+    await editor.click()
+    await expect(async () => {
+        if (!(await descriptionText(page)).includes(text.replace(/^#+ /, ''))) {
+            await page.keyboard.press('ControlOrMeta+End')
+            await page.keyboard.type(text, { delay: 20 })
+        }
+        expect(await descriptionText(page)).toContain(text.replace(/^#+ /, ''))
+    }).toPass({ timeout: 15_000 })
+}
+
 test.describe('Cards — markdown descriptions', () => {
     test.beforeEach(async ({ page }) => {
         await login(page)
         await navigateToPackage(page, 'cards')
     })
 
-    test('renders markdown when idle and shows the source when editing', async ({ page }) => {
+    test('formats markdown as you type', async ({ page }) => {
         await freshBoard(page, 'render')
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
-        await writeDescription(page, MARKDOWN)
 
-        // Rendered: the prose survives...
-        const peek = page.getByText('Ship', { exact: false }).first()
-        await expect(peek).toBeVisible()
-        await expect(page.getByText('Scope', { exact: true })).toBeVisible()
-        await expect(page.getByText('first', { exact: true })).toBeVisible()
-
-        // ...and the syntax does not. A literal '##' or '**' still on screen
-        // means the description is being dumped as plain text — exactly the
-        // gap this feature closed.
+        // Input rules turn the syntax into formatting while typing, so the
+        // characters themselves must be gone by the time it lands. A literal
+        // '##' left on screen means the editor is behaving like a plain
+        // textarea — exactly what this feature replaced.
+        await typeDescription(page, '## Scope')
         const body = await descriptionText(page)
-        expect(body).not.toContain('##')
-        expect(body).not.toContain('**')
         expect(body).toContain('Scope')
+        expect(body).not.toContain('##')
 
-        // Editing brings the SOURCE back, not the rendered text: you edit
-        // markdown, so the syntax has to be there to change.
-        await page.getByText('Scope', { exact: true }).click()
-        await expect(descriptionInput(page)).toHaveValue(MARKDOWN.join('\n'))
-
-        // Escape discards and re-renders.
-        await page.keyboard.press('Escape')
-        await expect(descriptionInput(page)).toHaveCount(0)
-        await expect(page.getByText('Scope', { exact: true })).toBeVisible()
+        // The heading is a real node, not styled text.
+        await expect(descriptionEditor(page).locator('h2')).toHaveText('Scope')
     })
 
     test('keeps a typed ⌘ glyph verbatim', async ({ page }) => {
@@ -104,7 +94,7 @@ test.describe('Cards — markdown descriptions', () => {
         await freshBoard(page, 'glyph')
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
-        await writeDescription(page, ['Press ⌘S to save.'])
+        await typeDescription(page, 'Press ⌘S to save.')
 
         const body = await descriptionText(page)
         expect(body).toContain('⌘S')
@@ -112,40 +102,21 @@ test.describe('Cards — markdown descriptions', () => {
     })
 
     test('survives a reload', async ({ page }) => {
-        // Rendering happens on read, so a reload proves the markdown SOURCE is
-        // what was persisted — not the rendered output.
+        // The server serializes the shared document back to the stored field,
+        // so a reload proves the markdown SOURCE was persisted rather than the
+        // editor merely remembering its own state.
         const boardName = await freshBoard(page, 'reload')
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
-        await writeDescription(page, MARKDOWN)
+        await typeDescription(page, 'Persisted prose.')
 
         await page.reload()
-        await page.getByText(boardName, { exact: true }).first().click()
+        await navigateToPackage(page, 'cards')
+        await openBoard(page, boardName)
         await openCard(page, CARD_TITLE)
 
-        await expect(page.getByText('Scope', { exact: true })).toBeVisible()
-        const body = await descriptionText(page)
-        expect(body).not.toContain('##')
-        expect(body).toContain('Scope')
+        await expect(async () => {
+            expect(await descriptionText(page)).toContain('Persisted prose.')
+        }).toPass({ timeout: 20_000 })
     })
 })
-
-/**
- * The text content of the description section — everything between the
- * "Description" heading and the checklist below it.
- *
- * Read from the DOM rather than through a locator because the renderer emits a
- * tree of nodes per markdown token, and the point of these assertions is what
- * the whole section reads as.
- */
-async function descriptionText(page: Page): Promise<string> {
-    return page.evaluate(() => {
-        const headings = Array.from(document.querySelectorAll('div, span'))
-        const heading = headings.find(el => el.textContent?.trim() === 'Description')
-        // The section wrapper is the heading's parent; its text includes the
-        // heading itself, which is stripped so 'Description' cannot mask a
-        // missing body.
-        const section = heading?.parentElement
-        return (section?.textContent ?? '').replace('Description', '').trim()
-    })
-}

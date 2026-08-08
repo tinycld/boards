@@ -70,15 +70,38 @@ description, checklist, and comments. A due date turns amber when it's less
 than two days away and red once it has passed — the same colors the board
 shows on the card itself.
 
-## Formatting a description
+## Writing a description
 
-Descriptions are written in Markdown. Click one to edit it and you'll see the
-plain text you typed; click away and it renders — so headings, **bold**,
-`code`, lists, links and tables all work.
+Click a description and start typing — it formats as you go. Type `## ` for a
+heading, `- ` for a bullet, `- [ ] ` for a checkbox, `**bold**`, `` `code` ``
+or `~~strikethrough~~`, and each turns into the real thing as you finish it.
+Tables and images you paste in are kept too. Everything is stored as Markdown,
+so a description written here reads the same anywhere else.
 
-Editing saves when you click away as well as when you press ⌘↩. Plain Enter
-starts a new line, since a description is prose. Press Esc to discard the edit
-and put back what was there when you started.
+There is no save button: every change is kept as you type. Esc leaves the
+description without discarding anything, and plain Enter starts a new line,
+since a description is prose.
+
+## Writing a description together
+
+Several people can write the same description at once. Edits appear as they are
+typed, each person's cursor shows where they are working, and changes merge
+without anyone overwriting anyone else.
+
+If your connection drops mid-sentence, keep typing — your words are held on
+your machine and sent as soon as you are back. A short note under the
+description says when that is happening.
+
+People with **View** access can read a description but not change it.
+
+## Comments
+
+The box at the bottom of an open card posts a comment. Markdown works here too,
+so `**bold**`, `` `code` ``, lists and links all render once the comment is
+posted — type the source and it formats when it appears.
+
+Press ⌘↩ to post. Plain Enter starts a new line, so a longer comment does not
+send itself half-written. Reply to a comment to keep a thread together.
 
 ## Who else is here
 

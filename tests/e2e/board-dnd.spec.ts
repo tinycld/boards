@@ -183,7 +183,7 @@ test.describe('Cards — drag and drop', () => {
 
         await boardCard(page, 'clickable').click()
         // The peek's description placeholder proves the detail mounted.
-        await expect(page.getByText('Add a description', { exact: false })).toBeVisible()
+        await expect(page.getByText('Description', { exact: true })).toBeVisible()
     })
 
     test('reorders columns by header drag; the menu path still works after', async ({ page }) => {

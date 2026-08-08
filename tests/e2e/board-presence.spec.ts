@@ -81,7 +81,7 @@ test.describe('Cards — real-time presence', () => {
 
             // --- Bob opens a card; the owner sees it on that card's face ---
             await boardCard(bobPage, CARD_TITLE).click()
-            await expect(bobPage.getByText('Add a description', { exact: false })).toBeVisible()
+            await expect(bobPage.getByText('Description', { exact: true })).toBeVisible()
 
             const bobCardId = await cardIdFor(page, CARD_TITLE)
             const otherCardId = await cardIdFor(page, OTHER_CARD)

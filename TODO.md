@@ -19,7 +19,7 @@ ordered by dependency; tasks within one are small and mostly independent.
 | M6 | File attachments with previews | |
 | M6a | Public boards: the share-link flow | schema shipped, flow missing |
 | M7 | Package plumbing, tests, docs | |
-| M9 | Collaborative markdown editing | split out of M3 — see below |
+| M9 | Collaborative markdown editing | ✅ web shipped; native collab + leave-cleanup open |
 
 The lettered milestones (M2a, M3b, M6a) were split out once the data model
 landed and the real dependency order became clear: the rules are enforceable
@@ -1114,50 +1114,86 @@ none of them mention links.
 
 ## M9 — Collaborative markdown editing
 
-Split out of M3 once rendering shipped without it. Rendering a description and
-co-editing one are separable problems, and the second is by far the larger:
-it means a WebView editor bundle, a Yjs document in the room, and the whole
-CRDT surface. What shipped in M3 — markdown rendering plus board presence —
-already covers the everyday need, so this is a genuine feature rather than a
-gap left behind.
+**Shipped on web.** Two people co-edit a card description live, with cursors,
+and the server persists it — proven by `tests/e2e/card-description-collab.spec.ts`
+(both directions, plus a reload that proves the flush wrote the field, plus a
+viewer who cannot type).
 
-**Cards would build its OWN markdown-specific editor bundle** rather than
-sharing text's. Text's WebView editor is an 898KB prebuilt blob
-(`text/tinycld/text/webview-editor/build/editorHtml.ts`) that is NOT in text's
-`package.json` `exports`, and siblings must not depend on each other anyway —
-so "share it" would mean extracting it into core, a refactor of a shipped
-package. A markdown-only bundle is far smaller than text's full
-rich-text/suggestions/authorship stack.
+The plan changed in two places, both for the better:
 
-- [ ] The editor bundle: `source/` + a `build.ts` over core's
-      `bundleWebViewEditor`, following `text/tinycld/text/webview-editor/`.
-      Budget for its two documented resolution hazards — the `nodePaths` pair
-      (the source dir has no `node_modules` of its own by design) and the
-      `scopedSubpathResolver` esbuild plugin (esbuild does not append
-      extensions to `exports` targets, which only works in dev where packages
-      are symlinks).
-- [ ] A Y.Text for the description in the room. **The room already exists** —
-      M3's presence room is `cards-board`, authorize-only. A shared document
-      needs `RegisterRoomKindWith` instead: a `RuntimeProvider`, a `Journal`, a
-      save coordinator, and a `WritePredicate` so read-only members cannot
-      mutate the doc (the broker has no other write filter, so without it a
-      viewer who ignores the UI gate can still post updates). Decide whether
-      the description doc shares the board room or takes its own kind.
-- [ ] Collaborator cursors via TipTap's `CollaborationCaret`.
-      **Gotcha from `text/tinycld/text/hooks/useTextRoom.ts`:** the extension
-      writes its `user` option into `awareness.user` on mount, clobbering
-      whatever is there — so identity must be stamped BOTH in
-      `initialAwareness` and in the caret's own `user` option, or the peer
-      silently vanishes from every avatar row (`PresenceAvatars` requires all
-      three of `{id, name, color}` to be strings). **This directly threatens
-      M3's presence**, which publishes into that same slot.
-- [ ] Native double-presence: text has an open `TODO(text-native v1.1)` where
-      the in-WebView editor opens its OWN realtime connection with its own
-      awareness identity, so the local user appears as TWO collaborators to
-      remote peers. Do not inherit it — either suppress the native room's slot
-      and relay presence over the message bus, or tag slots with a
-      `clientGroupId` and dedupe.
-- [ ] Help topic update for collaborative editing.
+- **No cards-owned WebView bundle.** A shared editor went into core instead —
+  `@tinycld/core/lib/editor/rich` — and mail was retrofitted onto it, so there
+  is ONE schema and one serializer rather than a third copy. Native uses
+  TenTap's stock bridges with HTML↔Markdown conversion on the React Native side
+  (`html-markdown.ts`), which is why no bundle was needed. `marked` was already
+  proven on Hermes here by `react-native-marked`.
+- **The description doc SHARES the board room.** One `Y.Doc` per board holds one
+  `XmlFragment` per card (`card:<id>`), so presence and every open description
+  ride the one socket. A Y.Doc is a container of named types and the broker
+  treats updates as opaque bytes, so this needed no broker change at all.
+
+What that took, server-side (`cards/server/`): `RegisterRoomKindWith` with a
+runtime, journal, save coordinator, `WritePredicate` (owner/editor write;
+commentor/viewer read-only), an `UpdateContentValidator` restricting writes to
+`^card:[a-z0-9]{1,32}$`, per-board seed + diff-on-flush with baselines, and a
+project-delete WAL cascade. The generic Yjs machinery was promoted from
+`text/server` into `tinycld.org/core/yjsdoc`; markdown↔ProseMirror is
+`tinycld.org/core/markdown`. **Text was not touched.**
+
+- [x] The shared editor (in core, not a cards bundle).
+- [x] The document in the room, sharing `cards-board`.
+- [x] Collaborator cursors via `CollaborationCaret`. The clobber gotcha is real
+      and handled: the publish effect MERGES into the awareness slot instead of
+      replacing it, and the caret is handed the same `{id,name,color}` object
+      `parsePresence` requires. Covered by `tests/board-presence.test.ts`.
+- [x] Help topics updated (writing a description, writing one together,
+      markdown in comments).
+- [ ] **Native collaborative editing — do it together with owning the WebView
+      host.** Native gets markdown editing but NOT co-editing: passing `collab`
+      there logs in development and renders a local editor rather than
+      pretending to sync.
+
+      These are one piece of work, not two. TenTap's bridge exchanges **HTML**,
+      which is the only reason `core/lib/editor/rich/html-markdown.ts` exists —
+      markdown pivots through PM JSON to HTML and back purely to cross that
+      bridge. A Yjs relay needs the WebView to hold a real `Y.Doc` and exchange
+      binary updates, which that bridge has no concept of; tunnelling them
+      through a channel designed for HTML strings is how text ended up opening a
+      SECOND socket from inside its WebView (`TODO(text-native v1.1)`, the
+      double-presence bug). Designing the wire protocol once — ours, carrying PM
+      JSON or Yjs updates — deletes `html-markdown.ts` and removes the reason
+      for the second connection.
+
+      What TenTap actually supplies today is small: `useEditorBridge`,
+      `RichText`, `useBridgeState`, and `customSource`. The editor is already
+      ours (text bundles its own tiptap through our esbuild pipeline) and the
+      message bus is already ours (`lib/editor/message-bus/`). Replacing it is a
+      `react-native-webview` plus typed messages. **Lift `avoidIosKeyboard`
+      deliberately** — keyboard avoidance and the focus/scroll handling are the
+      one genuinely fiddly thing TenTap gives us.
+
+      Build the replacement host so **text could adopt it** (same message bus,
+      same `EditorResult` contract), but do not migrate text in that PR: its
+      editor is shipped and carries ~60 commands plus the suggestions and
+      authorship stacks. One native hosting path eventually, not immediately.
+
+      When it lands, the WebView reuses the native client's clientID so the
+      local user does not appear twice.
+- [ ] **A departing peer's avatar lingers** (`board-presence.spec.ts`, still
+      red — but failing LATER than before: peers now see each other, which they
+      did not previously). This is core realtime plumbing, not cards: the
+      teardown's `setLocalState(null)` reports the client under `removed`, but
+      the frame peers receive does not clear their copy of the slot. An attempt
+      using `removeAwarenessStates` did not fix it either — the socket likely
+      closes before the frame flushes — and was reverted rather than shipped
+      unverified. Affects every consumer of presence, so fix it in
+      `core/lib/realtime/{use-realtime-room,client}.ts`.
+      While diagnosing it, a SECOND core-level presence bug was found and fixed
+      in cards: the broker only fans awareness out as it is sent and tells a
+      joiner nothing about who is already in the room, so presence was
+      one-directional (last to connect wins, direction flipping on reload).
+      `useBoardPresence` now republishes when a remote peer arrives; the
+      general fix belongs in core.
 
 ## M8 — CLI 
 

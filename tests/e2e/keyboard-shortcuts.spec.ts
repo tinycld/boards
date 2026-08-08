@@ -49,7 +49,7 @@ test.describe('Cards — keyboard control', () => {
 
         await page.keyboard.press('Enter')
         // The peek's description placeholder proves the detail mounted.
-        await expect(page.getByText('Add a description', { exact: false })).toBeVisible()
+        await expect(page.getByText('Description', { exact: true })).toBeVisible()
     })
 
     test('crosses columns with the arrow keys, including an empty one', async ({ page }) => {
@@ -132,7 +132,7 @@ test.describe('Cards — keyboard control', () => {
 
         await page.keyboard.press('j')
         await page.keyboard.press('Enter')
-        await expect(page.getByText('Add a description', { exact: false })).toBeVisible()
+        await expect(page.getByText('Description', { exact: true })).toBeVisible()
 
         // With the peek open ('modal' on top), 'x' must NOT reach the board's
         // archive — the card is still there after pressing it.
@@ -218,7 +218,7 @@ test.describe('Cards — keyboard control', () => {
 
         await page.keyboard.press('j')
         await page.keyboard.press('Enter')
-        await expect(page.getByText('Add a description', { exact: false })).toBeVisible()
+        await expect(page.getByText('Description', { exact: true })).toBeVisible()
 
         await page.keyboard.press('e')
         // beginEdit seeds the draft from the current value before opening, so
