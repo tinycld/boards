@@ -672,18 +672,46 @@ where there's a form, `captureException` context strings like
       column to its right and the next drop lands where the board USED to be.
       `useBoardDnd` now exposes `measureAllColumns`; `BoardCanvas` drives it
       from a sorted-key effect (a net-zero toggle does not re-measure).
-    - **The collapsed column keeps its card stack mounted and its bounds
-      real** — it is the drop target. Clipped, never unmounted or zero-height,
-      and `pointerEvents` stays `auto`. This is the constraint that decided
-      the collapsed face: a rotated -90° name (what most kanban tools show)
-      would make the visual extent and the measured box disagree in exactly
-      this subsystem, and needs ~180px of vertical run to read while the
-      column's height is content-driven. The face leads with the card count
-      instead, which also makes a row of collapsed columns read as
-      work-in-progress per list. **If the truncated name proves hard to read
-      in practice, vertical text is the sanctioned fallback** — the switch is
-      one branch in `BoardColumn`, but re-derive the 40px width and re-run the
-      collapse-then-drag-right e2e case.
+    - **The collapsed column IS the drop target — the spine carries the
+      bounds.** The first design kept the card stack mounted-but-clipped to
+      supply them and led the face with the count, because a rotated name and
+      a content-driven column height read badly together. That has since been
+      replaced by the standard kanban spine (count pill on top, name running
+      down), which supplies real bounds itself, so the stack now unmounts on
+      collapse. Two rules make the rotation safe, and both are load-bearing:
+        - **`transform: rotate`, NOT CSS `writing-mode`.** writing-mode is one
+          line and reflows the text into a genuinely vertical box — but it is
+          **react-native-web only**, and this app ships on native, where it
+          silently no-ops and leaves the name overflowing a 40px spine. The
+          rotation is the only cross-platform vertical text. (Same trap:
+          `transformOrigin` is web-only, so the rotation must work about RN's
+          default centre origin.)
+        - **Rotate the wrapping `View`, never the `Text`.** react-native-web
+          collapses a Text to its CONTAINER's width even when the style sets an
+          explicit one — measured in the running app at 28px when asked for 132.
+          So a rotated Text is first squeezed into the spine's breadth and then
+          turned, landing as an unreadable sliver on top of the next column.
+          That, not clipping, is what made the name unrenderable through several
+          attempts. A View honours its width, so the run is laid out there and
+          the Text simply fills it.
+        - **A transform is applied after layout.** The wrapper therefore carries
+          the post-rotation BREADTH×RUN shape (it is what lays out and what Drax
+          measures) while the rotated child keeps the pre-rotation RUN×BREADTH
+          one, seated concentric with equal-and-opposite top/left insets. Insets
+          rather than a translate pair: they do not depend on how the platform
+          composes a transform list, which is easy to get backwards.
+        - **The spine is sized by its title, not by the stack** — a fixed
+          `COLLAPSED_NAME_RUN`, not a measured one. Measuring the text would
+          feed a layout pass back into the height of a view whose bounds must
+          stay stable, and a spine that stretched with the board would truncate
+          a short column's name to a few letters.
+    - **Collapse is a menu item, plus a double-click on the list header.** The
+      double-click is the shortcut for an action users repeat while scanning a
+      board; the menu item stays as the discoverable path. There is deliberately
+      no header icon — it crowded a header that already carries a title, a count
+      and a menu. The gesture rides a `Pressable` INSIDE `ColumnDragHandle`
+      (DraxView exposes no press props) wrapping only the title, so it never
+      covers the menu button, and a drag is a long-press that fires no onPress.
     - **Density is NOT owner-gated.** It changes nothing on the server and a
       viewer scanning a busy board wants it most, so the toggle sits in
       `BoardHeader` outside the `isOwner` gate rather than in `BoardMenu`.

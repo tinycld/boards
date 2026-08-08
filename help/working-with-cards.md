@@ -38,9 +38,10 @@ alone — they change nothing for anyone else on the board, and they stay set
 the next time you open it.
 
 To fold a list you're not working in down to a narrow strip, open its menu and
-choose **Collapse list**. The strip keeps the number of cards in the list, so a
-row of collapsed lists still tells you where the work is piling up. Click the
-strip to open it again.
+choose **Collapse list**, or double-click the list's name. The strip shows the
+number of cards at the top and the list's name down its side, so a row of
+collapsed lists still tells you where the work is piling up. Click the strip to
+open it again.
 
 Collapsed lists are still lists: you can drag a card onto one, and it lands
 there.

@@ -10,14 +10,9 @@ import { addCard, boardCard, cardsInColumn, createBoard, dragCardToColumn } from
 // package's playwright config routes testDir through
 // node_modules/@tinycld/cards, which symlinks to the main checkout, so a run
 // launched from a worktree exercises the main branch instead of this one.
-// Two assertions here are the ones most likely to need adjusting on first
-// real run, both about a collapsed column:
-//   - `not.toBeVisible()` on a clipped card. The stack is clipped by an
-//     overflow-hidden parent rather than unmounted (it must keep bounds to
-//     stay a drop target), and Playwright's visibility check keys off layout
-//     boxes, which a clipped child may still report.
-//   - the drop-after-collapse case assumes the 40px spine accepts a drop.
-// If either fails, the fix is in BoardColumn's collapsed branch, not here.
+// The assertion most likely to need adjusting on a first real run is the
+// drop-after-collapse case, which assumes the 40px spine accepts a drop. If it
+// fails, the fix is in BoardColumn's collapsed branch, not here.
 
 let run = 0
 async function freshBoard(page: import('@playwright/test').Page, label: string): Promise<string> {
@@ -26,7 +21,7 @@ async function freshBoard(page: import('@playwright/test').Page, label: string):
     return name
 }
 
-/** Collapse a list through its column menu — the only entry point. */
+/** Collapse a list through its column menu — the discoverable entry point. */
 async function collapseList(page: import('@playwright/test').Page, name: string) {
     await page.getByLabel(`${name} list actions`).click()
     await page.getByText('Collapse list', { exact: true }).click()
@@ -47,12 +42,32 @@ test.describe('Cards — collapsed columns and card density', () => {
         await expect(card).toBeVisible()
 
         await collapseList(page, 'To do')
-        // The stack is hidden rather than unmounted (it stays the drop
-        // target), so assert on visibility, not presence.
-        await expect(card).not.toBeVisible()
+        // The spine replaces the stack outright — the collapsed column carries
+        // its own drop bounds, so nothing needs to stay mounted behind it.
+        await expect(card).not.toBeAttached()
 
         await page.getByLabel('Expand To do list').click()
         await expect(card).toBeVisible()
+    })
+
+    test('double-clicking the list header collapses it', async ({ page }) => {
+        await freshBoard(page, 'dblclick')
+
+        // The shortcut for the menu item — the header title is the target, so
+        // the gesture never competes with the menu button beside it.
+        await page.getByLabel('To do list — double tap to collapse').dblclick()
+
+        await expect(page.getByLabel('Expand To do list')).toBeVisible()
+    })
+
+    test('a collapsed list shows its name down the spine', async ({ page }) => {
+        await freshBoard(page, 'spine-name')
+
+        await collapseList(page, 'To do')
+
+        // The vertical name is real text, not an image or an aria-only label —
+        // writingMode reflows it, so it stays copyable and searchable.
+        await expect(page.getByLabel('Expand To do list')).toContainText('To do')
     })
 
     test('a collapsed list still shows its card count', async ({ page }) => {
@@ -127,7 +142,7 @@ test.describe('Cards — collapsed columns and card density', () => {
         await page.reload()
 
         await expect(page.getByLabel('Expand To do list')).toBeVisible()
-        await expect(boardCard(page, 'still hidden')).not.toBeVisible()
+        await expect(boardCard(page, 'still hidden')).not.toBeAttached()
 
         await page.getByLabel('Expand To do list').click()
         await expect(boardCard(page, 'still hidden')).toBeVisible()

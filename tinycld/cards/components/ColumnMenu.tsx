@@ -6,8 +6,8 @@ import {
     ArrowLeft,
     ArrowRight,
     CheckCircle2,
+    FoldHorizontal,
     MoreHorizontal,
-    PanelLeftClose,
     Pencil,
     Trash2,
 } from 'lucide-react-native'
@@ -72,7 +72,7 @@ export function ColumnMenu({ list, listOrder, onRename }: ColumnMenuProps) {
                         <MenuActionItem label="Rename list" icon={Pencil} onPress={onRename} />
                         <MenuActionItem
                             label="Collapse list"
-                            icon={PanelLeftClose}
+                            icon={FoldHorizontal}
                             onPress={() => toggleCollapsed(list.id)}
                         />
                         <MenuActionItem

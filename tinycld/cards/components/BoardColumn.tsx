@@ -35,11 +35,30 @@ export const COLUMN_WIDTH = 284
 export const COLLAPSED_COLUMN_WIDTH = 40
 
 /**
- * Minimum height the collapsed column's (clipped) card stack keeps, so it
- * stays a hit-testable drop target. A finger-sized band — the same floor the
- * expanded stack uses for an empty column.
+ * How far the name may run down the spine before it ellipsizes.
+ *
+ * A ceiling, not a fixed height — the spine takes only the room its own name
+ * needs, so a short list does not reserve a long empty strip. Capped so a
+ * verbose name cannot stretch the column past the cards beside it, and so the
+ * collapsed column's Drax bounds stay bounded (see the re-measure in
+ * BoardCanvas).
  */
-const COLLAPSED_DROP_HEIGHT = 56
+const COLLAPSED_NAME_RUN = 132
+
+/**
+ * Breadth of the rotated name's box — the axis that ends up ACROSS the spine.
+ * The column's inner width: its 40px less the wrapper's p-1.5 on either side.
+ */
+const COLLAPSED_NAME_BREADTH = COLLAPSED_COLUMN_WIDTH - 12
+
+/**
+ * Rough advance width of one character at the 13px semibold title scale, used
+ * to size the spine to its own name. An OVER-estimate on purpose: the box it
+ * produces is what the name ellipsizes into, so guessing high leaves a little
+ * slack at the end of a short name, while guessing low would clip a wide one
+ * (measured: "Done" ≈ 33px over 4 chars, so ~8.25 for narrow glyphs).
+ */
+const NAME_CHAR_WIDTH = 9
 
 /** The floating copy while a card is dragged: a slight lift and tilt.
  *  shadowColor is left at its default (black) — a shadow is a shadow in both
@@ -181,9 +200,7 @@ export const BoardColumn = memo(function BoardColumn({
                 }`}
                 style={{ width: isCollapsed ? COLLAPSED_COLUMN_WIDTH : COLUMN_WIDTH }}
             >
-                {isCollapsed ? (
-                    <CollapsedColumnFace list={list} onExpand={() => toggleCollapsed(list.id)} />
-                ) : (
+                {!isCollapsed ? (
                     <View className="flex-row items-center gap-2 pl-3 pr-2.5 py-2">
                         {isRenaming ? (
                             // Keyed on the current name so each rename session mounts a
@@ -196,7 +213,17 @@ export const BoardColumn = memo(function BoardColumn({
                                 onDone={() => setIsRenaming(false)}
                             />
                         ) : (
-                            <ColumnDragHandle list={list} canDrag={canEdit} />
+                            // Double-clicking the title collapses the column —
+                            // the shortcut for an action users repeat while
+                            // scanning a board, with the menu item as the
+                            // discoverable path. It rides the drag handle
+                            // rather than the whole row so it never competes
+                            // with the menu button for a press.
+                            <ColumnDragHandle
+                                list={list}
+                                canDrag={canEdit}
+                                onDoublePress={canEdit ? () => toggleCollapsed(list.id) : undefined}
+                            />
                         )}
                         <View className="flex-1" />
                         {/* Hiding the menu also removes the only rename entry point
@@ -210,36 +237,27 @@ export const BoardColumn = memo(function BoardColumn({
                             />
                         ) : null}
                     </View>
-                )}
-                {/* Collapsed CLIPS the stack, it does not unmount or zero it.
-                    This container is the column's drop target, so it has to
-                    keep real bounds: an unmounted (or 0-height) one leaves
-                    nothing to hit-test and a card dragged onto a collapsed
-                    column falls through to the canvas. Same reasoning as
-                    PhantomSlotSpacer, which reserves layout room rather than
-                    rendering conditionally.
-
-                    The height is an explicit minimum rather than flex-1: this
-                    column sits in a max-h-full box with no fixed height, where
-                    a flex child can resolve to zero — which is precisely the
-                    0-height case that breaks the drop. Width clips to the
-                    spine, so the 284-wide cards inside are simply out of view.
-
-                    pointerEvents stays 'auto': Drax hit-tests through the
-                    measured view, and 'none' would make the spine inert as a
-                    drop target. The cards are clipped out of reach, so nothing
-                    under the pointer is clickable anyway. */}
-                <View
-                    className={isCollapsed ? 'overflow-hidden' : undefined}
-                    style={isCollapsed ? { minHeight: COLLAPSED_DROP_HEIGHT } : undefined}
-                >
+                ) : null}
+                {/* Collapsed swaps the whole body for the spine, which is
+                    itself the column's drop target — it carries real,
+                    finger-sized bounds, so a card dragged onto a collapsed
+                    column still has something to hit-test. (The earlier design
+                    kept the card stack mounted-but-clipped for those bounds;
+                    the spine supplies them directly, so the stack can go.) */}
+                {isCollapsed ? (
+                    <CollapsedColumnFace
+                        list={list}
+                        onExpand={() => toggleCollapsed(list.id)}
+                        registerMeasure={registerBothMeasures}
+                    />
+                ) : (
                     <ColumnCards
                         list={list}
                         registerMeasure={registerBothMeasures}
                         onReceivingChange={setIsReceiving}
                         canEdit={canEdit}
                     />
-                </View>
+                )}
                 {canEdit && !isCollapsed ? (
                     <CardComposer onSubmit={addCard} isPending={createCard.isPending} />
                 ) : null}
@@ -251,43 +269,171 @@ export const BoardColumn = memo(function BoardColumn({
 })
 
 /**
- * A collapsed column's whole face: the card count, then the name beneath it.
+ * A collapsed column's whole face: the count pill at the top, then the name
+ * running down the spine — the standard kanban shape.
  *
- * Count first, deliberately. A rotated -90° name is what most kanban tools
- * show, but it needs ~180px of vertical run to read and this column's height
- * is content-driven (max-h-full over a shrinking stack), so a short column
- * degrades into a truncated rotated string that is harder to scan than a
- * truncated horizontal one. A rotation would also make the visual extent and
- * the measured Drax box disagree, in the exact subsystem collapsing already
- * perturbs.
+ * The spine is sized by its TITLE, not by the card stack. The column body sits
+ * in a max-h-full box whose height follows its content, so a spine that
+ * stretched with the board would leave a short column's rotated name truncated
+ * to a few letters. A fixed name run (COLLAPSED_NAME_RUN) makes every collapsed
+ * column the same, predictable size and keeps its Drax bounds stable.
  *
- * Leading with the count is also the more useful face: collapsed columns read
- * across the board as a row of work-in-progress numbers, which is something
- * the expanded board makes you count for yourself.
+ * The rotation is a transform, which does NOT change layout bounds — the
+ * measured box would stay the pre-rotation one and disagree with what the user
+ * sees. So the rotated text is absolutely positioned inside a spine box that
+ * declares the post-rotation size directly: the box is what lays out and what
+ * Drax measures, and the transform only paints inside it.
  *
- * The whole face is the press target, so expanding never asks the user to hit
- * a small control — and it must not, since ColumnMenu (which collapsed it) is
- * hidden while collapsed.
+ * The whole face is the press target, so expanding never asks the user to hit a
+ * small control — and it must not, since the header (with its collapse button
+ * and menu) is hidden while collapsed.
  */
-function CollapsedColumnFace({ list, onExpand }: { list: BoardListView; onExpand: () => void }) {
+function CollapsedColumnFace({
+    list,
+    onExpand,
+    registerMeasure,
+}: {
+    list: BoardListView
+    onExpand: () => void
+    registerMeasure: (listId: string, measure: (() => void) | null) => void
+}) {
     return (
-        <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Expand ${list.name} list`}
-            testID={`cards-column-collapsed-${list.id}`}
-            onPress={onExpand}
-            className="items-center gap-1.5 py-2 rounded-[10px] hover:bg-foreground/5 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+        <DraxView
+            receptive
+            monitoring
+            measureVisual
+            registration={registration =>
+                registerMeasure(list.id, registration ? () => registration.measure() : null)
+            }
         >
-            <View className="bg-foreground/[0.06] rounded-full px-1.5 py-px">
-                <Text className="text-[11px] font-semibold text-muted">{list.cards.length}</Text>
-            </View>
-            {/* Truncates by width rather than wrapping — a wrapped name would
-                grow the spine and defeat the collapse. */}
-            <Text className="text-[11px] text-muted text-center" numberOfLines={1}>
-                {list.name}
-            </Text>
-        </Pressable>
+            <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Expand ${list.name} list`}
+                testID={`cards-column-collapsed-${list.id}`}
+                onPress={onExpand}
+                className="items-center gap-2 py-2 rounded-[10px] hover:bg-foreground/5 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+            >
+                <View className="bg-foreground/[0.06] rounded-full px-1.5 py-px">
+                    <Text className="text-[11px] font-semibold text-muted">
+                        {list.cards.length}
+                    </Text>
+                </View>
+                <CollapsedColumnName name={list.name} />
+            </Pressable>
+        </DraxView>
     )
+}
+
+/**
+ * The list name running down the spine.
+ *
+ * A rotation, NOT CSS `writing-mode`. writing-mode would be one line and would
+ * reflow the text into a genuinely vertical box — but it is a
+ * react-native-web-only property with no native equivalent, and this board runs
+ * on native too, where it would silently no-op and leave the name overflowing
+ * a 40px spine. The rotation is the only cross-platform vertical text.
+ *
+ * What that costs, and how it is paid for. A transform is applied AFTER layout,
+ * so the rotated element keeps its pre-rotation box and the wrapper has to
+ * carry the post-rotation BREADTH×RUN shape — the wrapper is what lays out and
+ * what Drax measures.
+ *
+ * The rotated element is a VIEW, never the Text. react-native-web collapses a
+ * Text to its CONTAINER's width even with an explicit width set (measured in
+ * the running app: 28px when the style asked for 132), so a rotated Text is
+ * squeezed into the spine's breadth first and turned second, landing as an
+ * unreadable sliver over the neighbouring column. A View honours its width, so
+ * the run is laid out here and the Text just fills it.
+ *
+ * The turn is about the box's own centre (RN's default origin;
+ * `transformOrigin` is web-only), so equal-and-opposite top/left insets seat it
+ * concentric with the wrapper. The linked recipe
+ * (medium.com/@therealmaarten — "How to layout rotated text in React Native")
+ * expresses the same seating as a translate pair; static insets are used here
+ * because they do not depend on how the platform composes a transform list.
+ *
+ * 90° reads top-to-bottom, matching Jira, Linear and Trello.
+ */
+function CollapsedColumnName({ name }: { name: string }) {
+    // The run this name will actually occupy: its own width, capped. Estimated
+    // from the character count rather than measured with onLayout — a measure
+    // would re-render the collapsed face to apply itself, and this subtree sits
+    // behind the memo boundary that keeps Drax's bounds stable mid-drag. The
+    // estimate only has to be close: it is clamped, and the Text ellipsizes to
+    // whatever it gets.
+    const run = Math.min(COLLAPSED_NAME_RUN, Math.ceil(name.length * NAME_CHAR_WIDTH))
+    // Half the difference between the box's two axes — how far the rotated box
+    // must shift on each to sit concentric with the wrapper.
+    const offset = (run - COLLAPSED_NAME_BREADTH) / 2
+
+    return (
+        // BREADTH×RUN — the post-rotation shape. This is what lays out and what
+        // Drax measures.
+        <View style={{ width: COLLAPSED_NAME_BREADTH, height: run }}>
+            {/* The rotated element is this VIEW, not the Text inside it. A Text
+                given an explicit width is still collapsed to its container's
+                width by react-native-web — measured at 28px when asked for 132
+                — so the name was squeezed into the spine's breadth and then
+                turned, landing as an unreadable sliver over the next column. A
+                View honours the width, so the run is laid out here and the Text
+                simply fills it. */}
+            <View
+                style={{
+                    position: 'absolute',
+                    width: run,
+                    height: COLLAPSED_NAME_BREADTH,
+                    justifyContent: 'center',
+                    top: offset,
+                    left: -offset,
+                    transform: [{ rotate: '90deg' }],
+                }}
+            >
+                <Text
+                    // Ellipsizes along the run rather than wrapping — a second
+                    // line is width the spine does not have.
+                    numberOfLines={1}
+                    // Left-aligned, NOT centred: a 90° turn maps the text's left
+                    // edge to the TOP of the spine, so this is what starts the
+                    // name directly under the count pill. Centring it floated a
+                    // short name in the middle of the run with a gap above.
+                    className="text-[13px] font-semibold text-foreground text-left"
+                >
+                    {name}
+                </Text>
+            </View>
+        </View>
+    )
+}
+
+/** How long after a press a second one still counts as a double-click.
+ *  Matches the 300ms drive uses for the same gesture on its file grid. */
+const DOUBLE_PRESS_MS = 300
+
+/**
+ * Fires onDoublePress for two presses in quick succession.
+ *
+ * There is no double-click event in React Native, so the gap between presses
+ * is timed here. The timestamp lives in a ref: it is read and written inside
+ * the handler and must never re-render the header, which sits above the drag
+ * handle whose Drax bounds a re-render would disturb.
+ *
+ * (drive has the same hook for its file grid, but siblings must not depend on
+ * each other — see the cross-package rule — so the few lines are repeated.)
+ */
+function useDoublePress(onDoublePress: (() => void) | undefined) {
+    const lastPressRef = useRef(0)
+
+    return useCallback(() => {
+        const now = Date.now()
+        if (now - lastPressRef.current < DOUBLE_PRESS_MS) {
+            // Reset so a third rapid press starts a fresh pair rather than
+            // counting as another double.
+            lastPressRef.current = 0
+            onDoublePress?.()
+        } else {
+            lastPressRef.current = now
+        }
+    }, [onDoublePress])
 }
 
 /** The 3px bar previewing where a dragged column will land. Sits in the gap
@@ -320,8 +466,25 @@ function ColumnInsertionBar({ side, color }: { side: DropSide | null; color: str
  * drops land a column to the right of where the user aims (drive's DragGrip
  * documents the same lesson). The floating copy is a compact header pill —
  * cheap, and honest about what is being moved.
+ *
+ * A double press collapses the column. DraxView has no press props of its own,
+ * so the gesture rides a Pressable INSIDE it, wrapping only the title — the
+ * menu button sits outside this component and is never covered. A press that
+ * becomes a drag is a long-press, which fires no onPress, so the two gestures
+ * do not collide.
  */
-function ColumnDragHandle({ list, canDrag }: { list: BoardListView; canDrag: boolean }) {
+function ColumnDragHandle({
+    list,
+    canDrag,
+    onDoublePress,
+}: {
+    list: BoardListView
+    canDrag: boolean
+    /** Omitted for a viewer — collapsing is an edit affordance here. */
+    onDoublePress?: () => void
+}) {
+    const handlePress = useDoublePress(onDoublePress)
+
     return (
         <DraxView
             draggable={canDrag}
@@ -330,10 +493,39 @@ function ColumnDragHandle({ list, canDrag }: { list: BoardListView; canDrag: boo
             draggingStyle={{ opacity: 0.35 }}
             renderHoverContent={() => <ColumnDragGhost list={list} />}
             accessibilityLabel="Drag to move list"
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+            // shrink, but never grow. The no-flex-1 rule above is about GROWING
+            // — a wide handle drags a hit point away from the pointer. Shrinking
+            // is the opposite problem: without it this row keeps its intrinsic
+            // width and a long list name pushes the count and the menu clean out
+            // of the column. minWidth:0 is required with it, since a flex item's
+            // automatic minimum size would otherwise refuse to go below the
+            // text's full width and the shrink would do nothing.
+            style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 8,
+                flexShrink: 1,
+                minWidth: 0,
+            }}
         >
+            {/* display:contents — layout-transparent, so it needs no flex of
+                its own; the Pressable below is the real flex child. */}
             <NoNativeDrag>
-                <ColumnTitle list={list} />
+                <Pressable
+                    onPress={onDoublePress ? handlePress : undefined}
+                    accessibilityLabel={
+                        onDoublePress ? `${list.name} list — double tap to collapse` : undefined
+                    }
+                    style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 8,
+                        flexShrink: 1,
+                        minWidth: 0,
+                    }}
+                >
+                    <ColumnTitle list={list} />
+                </Pressable>
             </NoNativeDrag>
         </DraxView>
     )
@@ -360,10 +552,18 @@ function ColumnDragGhost({ list }: { list: BoardListView }) {
 function ColumnTitle({ list }: { list: BoardListView }) {
     return (
         <>
-            <Text className="text-[13px] font-semibold text-foreground" numberOfLines={1}>
+            {/* The name is the only part that gives way — it ellipsizes so the
+                count beside it stays readable. `numberOfLines` alone cannot do
+                that: it needs a width to ellipsize INTO, which is what the
+                shrink provides. */}
+            <Text
+                className="text-[13px] font-semibold text-foreground shrink min-w-0"
+                numberOfLines={1}
+            >
                 {list.name}
             </Text>
-            <View className="bg-foreground/[0.06] rounded-full px-1.5 py-px">
+            {/* shrink-0: the count must never be squeezed to nothing. */}
+            <View className="bg-foreground/[0.06] rounded-full px-1.5 py-px shrink-0">
                 <Text className="text-[11px] font-semibold text-muted">{list.cards.length}</Text>
             </View>
         </>
