@@ -12,14 +12,14 @@ ordered by dependency; tasks within one are small and mostly independent.
 | M1 | Data model: collections, migrations, types | ✅ shipped |
 | M2 | RBAC: the rules themselves | ✅ shipped |
 | M2a | Prove the rules behave | ✅ shipped — 64 Go tests |
-| **M3** | **Wire the UI to live data** | shortcuts + markdown shipped; **presence red** |
+| M3 | Wire the UI to live data | ✅ shortcuts + markdown + presence shipped |
 | M3b | Role-gated UI and sharing | ✅ shipped |
 | M4 | Mail: create a card from an email | touches `mail/` |
 | M5 | Calendar: due dates on the calendar | touches `calendar/` |
 | M6 | File attachments with previews | |
 | M6a | Public boards: the share-link flow | schema shipped, flow missing |
 | M7 | Package plumbing, tests, docs | |
-| M9 | Collaborative markdown editing | ✅ web + native markdown shipped; native collab + leave-cleanup open |
+| M9 | Collaborative markdown editing | web + native markdown + leave-cleanup shipped; **native collab open** |
 
 The lettered milestones (M2a, M3b, M6a) were split out once the data model
 landed and the real dependency order became clear: the rules are enforceable
@@ -299,20 +299,21 @@ identical to `cards_comments`' (`viaCommenter + isAuthor + pin`), which is.
 The clauses are asserted in the shipped-rules table. Revisit with M6, when
 attachments are actually built.
 
-## M3 — Wire the UI to live data — presence still red
+## M3 — Wire the UI to live data ✅
 
 Everything reading `SAMPLE_PROJECTS` or writing to the `cardMoves`/UI-store
-overlay switched to `useOrgLiveQuery` + `useMutation`. Of the three items that
-outlived that work, two shipped and one did not:
+overlay switched to `useOrgLiveQuery` + `useMutation`. All three items that
+outlived that work have shipped:
 
 - **Board-to-detail shortcuts — shipped** (`e`/`n`/`⇧N`; `d`/`l`/`a` deferred on
   a core `Menu` measurement gap, filed inline below).
 - **Markdown rendering — shipped**, with three e2e specs and seeded examples.
-- **Real-time presence — WRITTEN BUT NOT WORKING.** Both sessions connect to
-  the right room; no avatar renders. `tests/e2e/board-presence.spec.ts` fails.
-  Full diagnostic notes are on the entry below — read them before starting, two
-  candidate causes are already ruled in and one attempted fix is already ruled
-  out.
+- **Real-time presence — shipped.** `tests/e2e/board-presence.spec.ts` is green.
+  The last blocker was not in cards at all: `freezeOnBlur` kept the departed
+  board screen mounted, so the room's unmount-keyed teardown never ran and the
+  leaver's avatar stayed. Fixed in core by keying the leave on blur/pagehide.
+  See the M9 entry for the full diagnosis — worth reading before touching
+  presence, since two earlier theories recorded there were both wrong.
 
 The collaborative markdown editor was carved off deliberately and is now **M9**.
 
@@ -848,13 +849,18 @@ where there's a form, `captureException` context strings like
       apart. Note the helper trap found writing them: gating "card is open" on
       the `Add a description` placeholder works exactly once, since the
       placeholder disappears the moment the card HAS a description.
-- [ ] Feature: show who is viewing a card in real time, Jira-style.
-      **NOT WORKING — written, wired end to end, and RED.** Scoped as
+- [x] Feature: show who is viewing a card in real time, Jira-style.
+      **Shipped**, `tests/e2e/board-presence.spec.ts` green. Scoped as
       BOARD-level presence: avatars in `BoardHeader` for who has the board open,
-      plus a per-card watcher cluster on `BoardCard`. All the code below exists
-      and the Go side is proven; what does not happen is an avatar appearing.
-      `tests/e2e/board-presence.spec.ts` is the failing spec — do not delete it
-      to get green.
+      plus a per-card watcher cluster on `BoardCard`.
+
+      The last blocker was a core lifecycle bug, not anything below: the
+      departing peer's screen stayed MOUNTED under `freezeOnBlur`, so the
+      room teardown never ran and the leaver never sent a removal. Fixed in
+      core by keying the leave on blur/pagehide — see the M9 entry. The
+      diagnostic notes that follow were all written while presence was red;
+      they remain accurate about the design, and the two theories they
+      advance about the *leave* path were both disproven by measurement.
     - **What the diagnostic established, so the next person does not redo it:**
       two separate sessions DO connect, and to the same room — the server log
       shows two `GET /api/realtime/cards-board/<projectId>` upgrades with
@@ -1206,21 +1212,66 @@ project-delete WAL cascade. The generic Yjs machinery was promoted from
       `EditorResult` contract), but do not migrate text in that PR: its editor
       is shipped and carries ~60 commands plus the suggestions and authorship
       stacks. One native hosting path eventually, not immediately.
-- [ ] **A departing peer's avatar lingers** (`board-presence.spec.ts`, still
-      red — but failing LATER than before: peers now see each other, which they
-      did not previously). This is core realtime plumbing, not cards: the
-      teardown's `setLocalState(null)` reports the client under `removed`, but
-      the frame peers receive does not clear their copy of the slot. An attempt
-      using `removeAwarenessStates` did not fix it either — the socket likely
-      closes before the frame flushes — and was reverted rather than shipped
-      unverified. Affects every consumer of presence, so fix it in
-      `core/lib/realtime/{use-realtime-room,client}.ts`.
-      While diagnosing it, a SECOND core-level presence bug was found and fixed
-      in cards: the broker only fans awareness out as it is sent and tells a
-      joiner nothing about who is already in the room, so presence was
-      one-directional (last to connect wins, direction flipping on reload).
-      `useBoardPresence` now republishes when a remote peer arrives; the
-      general fix belongs in core.
+- [x] **A departing peer's avatar lingers.** `board-presence.spec.ts` is
+      **green**. Fixed in core (`tinycld`), not cards — cards needed no source
+      change beyond a corrected comment.
+
+      **The cause was not what every earlier note here assumed**, and the two
+      prior theories in this entry (the removal frame not flushing; a
+      `removeAwarenessStates` gap) were both wrong. Measured before changing
+      anything, with probes on both sides of the wire:
+
+      - **The teardown never ran at all.** Package screens render with
+        `freezeOnBlur` (`core/components/workspace/PackageTabs.tsx`), so
+        navigating from cards to another package leaves the board screen
+        MOUNTED and frozen. `useRealtimeRoom`'s effect cleanup is keyed on
+        unmount, so it never fired, the socket stayed open, and the departing
+        user kept publishing awareness. The e2e log showed the leaver still
+        transmitting after leaving, and no unmount for that session — while a
+        board→board switch, which DOES unmount, tore down correctly.
+      - It never self-healed because the peer's slot kept being refreshed;
+        the presence count stayed at 1 through 40s, past y-protocols' 30s
+        reaper.
+
+      **`core/lib/shortcuts/scopes.ts` had already solved this exact freeze**
+      for keyboard shortcuts, and says so in its own comment — presence just
+      never got the same treatment. The fix follows it: `useRealtimeRoom` now
+      publishes the leave on **blur** (`useFocusEffect`) and on `pagehide`,
+      and restores the saved slot on refocus. Saving the slot is load-bearing:
+      `setLocalState(null)` deletes it outright, so a naive refocus would
+      leave the user invisible to peers.
+
+      Two comments asserting the old, false model were corrected —
+      `text/hooks/useTextRoom.ts` ("covers logout, route change, and tab
+      close") and `BoardPresenceProvider`'s "the provider unmounts with the
+      screen".
+
+- [x] **Ungraceful disconnects now name the departing slot.** Separate from the
+      above and genuinely broken: `broadcastLeave` sent a zero-length payload
+      keyed by the 16-byte BROKER id, which shares no id space with the numeric
+      yjs awareness clientID, so a receiving client could not tell which avatar
+      to drop and discarded the frame. That is the killed-tab / TCP-reset path,
+      where no client-side teardown ever runs.
+
+      New `MsgAwarenessHello` (0x08): the client announces its yjs clientID
+      right after `MsgAssignID`; the broker stores it and synthesizes a REAL
+      y-protocols removal payload on disconnect. Bookkeeping only — never
+      fanned out. Backward and forward compatible in all four skew
+      combinations: a client that never announces still gets the legacy
+      zero-length frame, and `route()`'s switch has no `default`, so an older
+      broker silently drops the unknown frame. **Do not add a `default:` that
+      closes the connection.**
+
+      The synthesized clock is a blunt `1<<31` — the broker never parses
+      awareness payloads so it cannot track per-slot clocks. Verified against
+      real y-protocols that a removal at that clock does delete the slot, and
+      the Go encoder is pinned to captured `encodeAwarenessUpdate` bytes by
+      `TestEncodeAwarenessRemovalGolden`.
+
+      Coverage: 6 Go tests (incl. the ungraceful `CloseNow` path, hello not
+      fanned out, malformed varuint ignored) and 5 TS tests in
+      `core/tests/unit/realtime-leave.test.ts`. The TS hello tests were
+      mutation-checked — deleting the send makes them fail.
 
 ## M8 — CLI 
 
@@ -1271,10 +1322,16 @@ project-delete WAL cascade. The generic Yjs machinery was promoted from
       `pnpm run pkg:check` at the root; fix anything red.
       **Note `pkg:check` does not exist in a bootstrap-assembled root** — the
       equivalents are `pnpm run checks` (lint + app typecheck) from `tinycld/`
-      plus `tinycld-pkg typecheck` per member. Last full run: cards unit 170,
-      cards Go all green (`-count=1`), core + shell unit 895, lint clean over
-      1809 files, every sibling typechecking — and cards e2e 29/30, the one
-      failure being `board-presence.spec.ts`.
+      plus `tinycld-pkg typecheck` per member. Last full run: cards unit 177,
+      cards e2e **35/35** (incl. `board-presence.spec.ts`), core unit 957,
+      text unit 920, calc unit 1378, core Go realtime green under `-race`.
+
+      **Known flake, not caused by the presence work:**
+      `keyboard-shortcuts.spec.ts` ("walks cards with j/k") intermittently
+      fails its `cards-focused-*` assertion under full-suite parallel load —
+      seen once in four full runs, 60/60 green when the file runs alone. It is
+      single-session and touches no realtime code. Fix it at the source rather
+      than by re-running.
 - [ ] Follow-ups to file, not block on: (public share links are now M6a),
       core extraction of the members-junction + ShareDialog pattern once a
       third package needs sharing, a drive-exported file-picker component if

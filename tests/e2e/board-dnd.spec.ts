@@ -211,12 +211,21 @@ test.describe('Cards — drag and drop', () => {
         }
         await page.keyboard.press('Escape')
 
+        // Deduplicated by label because Drax renders a floating hover COPY of
+        // the row being dragged (see core SortableList's renderItem doc), and
+        // that copy carries the same `Edit <title>` label as the row it
+        // clones. Sampling while the copy is still mounted otherwise yields a
+        // phantom fourth entry and an order that never matches — which is how
+        // this read fails under a loaded machine, where the post-drop settle
+        // outlasts the fixed wait below. The first occurrence is the real
+        // row's position, which is what the assertion is about.
         const rows = () =>
-            page.evaluate(() =>
-                Array.from(document.querySelectorAll('[aria-label^="Edit "]'))
+            page.evaluate(() => {
+                const labels = Array.from(document.querySelectorAll('[aria-label^="Edit "]'))
                     .map(el => (el.getAttribute('aria-label') ?? '').replace(/^Edit /, ''))
                     .filter(label => ['alpha', 'beta', 'gamma'].includes(label))
-            )
+                return labels.filter((label, i) => labels.indexOf(label) === i)
+            })
         await expect.poll(rows).toEqual(['alpha', 'beta', 'gamma'])
 
         // Handles are hover-revealed; hover the row to expose alpha's.
