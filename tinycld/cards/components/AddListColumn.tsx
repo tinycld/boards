@@ -5,6 +5,7 @@ import { useRef, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useCreateList } from '../hooks/useListMutations'
 import { rankForAppend } from '../lib/move'
+import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardListRank } from '../types'
 import { COLUMN_WIDTH } from './BoardColumn'
 
@@ -22,7 +23,11 @@ interface AddListColumnProps {
  * column's width and dashed-border chrome) rather than sitting inside one.
  */
 export function AddListColumn({ projectId, listOrder }: AddListColumnProps) {
-    const [isOpen, setIsOpen] = useState(false)
+    // Open state lives in the store rather than locally: this component is a
+    // single instance, but `Shift+N` fires from the shortcut hook, which has no
+    // reference to it.
+    const isOpen = useCardsUIStore(s => s.isAddListOpen)
+    const setIsOpen = useCardsUIStore(s => s.setAddListOpen)
     const [name, setName] = useState('')
     const inputRef = useRef<React.ComponentRef<typeof PlainInput>>(null)
     const mutedColor = useThemeColor('muted')

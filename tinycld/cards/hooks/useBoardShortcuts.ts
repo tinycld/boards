@@ -1,7 +1,7 @@
 import { type Shortcut, useRegisterShortcuts, useShortcutScope } from '@tinycld/core/lib/shortcuts'
 import { useMemo } from 'react'
 import { findCardEntry, neighborCardId } from '../lib/board-cards'
-import { columnStep, targetColumnForMove } from '../lib/board-focus'
+import { columnStep, composerTargetColumnId, targetColumnForMove } from '../lib/board-focus'
 import { rankForAppend, rankForReorder } from '../lib/move'
 import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardProject } from '../types'
@@ -26,6 +26,9 @@ export function useBoardShortcuts(project: BoardProject, canEdit: boolean) {
     const openCard = useCardsUIStore(s => s.openCard)
     const focusCard = useCardsUIStore(s => s.focusCard)
     const focusColumn = useCardsUIStore(s => s.focusColumn)
+    const openComposer = useCardsUIStore(s => s.openComposer)
+    const setAddListOpen = useCardsUIStore(s => s.setAddListOpen)
+    const toggleColumnCollapsed = useCardsUIStore(s => s.toggleColumnCollapsed)
     const moveCard = useMoveCard()
     const archiveCard = useArchiveCard()
 
@@ -104,6 +107,20 @@ export function useBoardShortcuts(project: BoardProject, canEdit: boolean) {
             focusCard(null)
         }
 
+        const addCard = () => {
+            const { focusedCardId, focusedColumnId } = focus()
+            // Resolved at call time from the live board — see the helper's note
+            // on why a focused card's column is never cached.
+            const listId = composerTargetColumnId(project, focusedCardId, focusedColumnId)
+            if (!listId) return
+            // A collapsed column mounts no composer, so opening one there would
+            // set a flag nothing reads. Expand first — the user asked to add a
+            // card to this column, and that is the only way to honour it.
+            const { collapsedColumnIds } = useCardsUIStore.getState()
+            if (collapsedColumnIds[listId]) toggleColumnCollapsed(listId)
+            openComposer(listId)
+        }
+
         const nav = (id: string, keys: string, description: string, run: () => void): Shortcut => ({
             id,
             keys,
@@ -145,8 +162,25 @@ export function useBoardShortcuts(project: BoardProject, canEdit: boolean) {
             nav('cards.board.moveUp', 'Shift+ArrowUp', 'Move card up', () => moveWithin(-1)),
             nav('cards.board.moveDown', 'Shift+ArrowDown', 'Move card down', () => moveWithin(1)),
             nav('cards.board.archive', 'x', 'Archive card', archive),
+            nav('cards.board.addCard', 'n', 'Add card to this column', addCard),
+            // Shift+N is a no-op on an empty board, where BoardCanvas renders
+            // EmptyBoard and mounts no AddListColumn to open.
+            nav('cards.board.addList', 'Shift+N', 'Add list', () => {
+                if (project.lists.length > 0) setAddListOpen(true)
+            }),
         ]
-    }, [project, canEdit, openCard, focusCard, focusColumn, moveCard, archiveCard])
+    }, [
+        project,
+        canEdit,
+        openCard,
+        focusCard,
+        focusColumn,
+        moveCard,
+        archiveCard,
+        openComposer,
+        setAddListOpen,
+        toggleColumnCollapsed,
+    ])
 
     useRegisterShortcuts(shortcuts)
 }

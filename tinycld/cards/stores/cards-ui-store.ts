@@ -59,6 +59,25 @@ interface CardsUIState {
      */
     isCompactCards: boolean
     toggleCompactCards: () => void
+    /**
+     * Which column's card composer is open, so `n` can open one that lives
+     * inside a memoized BoardColumn it has no reference to.
+     *
+     * A single id rather than a set: two open composers would leave the user
+     * unsure which one Enter lands in, and the mouse path has always allowed
+     * only one at a time. Read PER COLUMN
+     * (`s => s.composerOpenListId === list.id`) for the same reason the focus
+     * ring is read per card — a whole-board read would re-render every column.
+     *
+     * The composer still owns its own open state for the press path; this is
+     * the external channel, and closing writes back through it so the two
+     * cannot disagree.
+     */
+    composerOpenListId: string | null
+    openComposer: (listId: string | null) => void
+    /** The board's single "add list" composer — same idea, one instance. */
+    isAddListOpen: boolean
+    setAddListOpen: (isOpen: boolean) => void
 }
 
 export const useCardsUIStore = create<CardsUIState>()(
@@ -94,6 +113,10 @@ export const useCardsUIStore = create<CardsUIState>()(
                 }),
             isCompactCards: false,
             toggleCompactCards: () => set(s => ({ isCompactCards: !s.isCompactCards })),
+            composerOpenListId: null,
+            openComposer: listId => set({ composerOpenListId: listId }),
+            isAddListOpen: false,
+            setAddListOpen: isOpen => set({ isAddListOpen: isOpen }),
         }),
         {
             name: 'tinycld_cards_ui',
@@ -106,7 +129,9 @@ export const useCardsUIStore = create<CardsUIState>()(
             // greet the user with a modal they did not ask for, and a restored
             // focus ring would point at a card that may have moved or gone. A
             // persisted activeProjectId that no longer resolves is handled in
-            // useActiveBoard, which falls back to the first board.
+            // useActiveBoard, which falls back to the first board. The two
+            // composer flags are excluded on the same grounds as the dialog:
+            // a reload should not land on a focused, empty input.
             //
             // The two view preferences persist because a stale value of either
             // is INERT rather than wrong: a collapsed id naming a list that no

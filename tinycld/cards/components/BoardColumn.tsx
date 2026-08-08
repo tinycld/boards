@@ -116,6 +116,10 @@ export const BoardColumn = memo(function BoardColumn({
     // the structural sharing that keeps drags stable.
     const isCollapsed = useCardsUIStore(s => !!s.collapsedColumnIds[list.id])
     const toggleCollapsed = useCardsUIStore(s => s.toggleColumnCollapsed)
+    // Same per-column discipline: `n` opens exactly one column's composer, and
+    // only that column re-renders.
+    const isComposerOpen = useCardsUIStore(s => s.composerOpenListId === list.id)
+    const openComposer = useCardsUIStore(s => s.openComposer)
 
     // This outer DraxView is the column-drag receiver, so its bounds go stale
     // the same way the card container's do when the canvas scrolls mid-drag.
@@ -259,7 +263,12 @@ export const BoardColumn = memo(function BoardColumn({
                     />
                 )}
                 {canEdit && !isCollapsed ? (
-                    <CardComposer onSubmit={addCard} isPending={createCard.isPending} />
+                    <CardComposer
+                        onSubmit={addCard}
+                        isPending={createCard.isPending}
+                        isOpen={isComposerOpen}
+                        onOpenChange={next => openComposer(next ? list.id : null)}
+                    />
                 ) : null}
                 {isReceiving ? <View testID="cards-column-receiving" /> : null}
             </View>

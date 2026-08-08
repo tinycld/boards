@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { columnStep, scrollOffsetFor, targetColumnForMove } from '../tinycld/cards/lib/board-focus'
+import {
+    columnStep,
+    composerTargetColumnId,
+    scrollOffsetFor,
+    targetColumnForMove,
+} from '../tinycld/cards/lib/board-focus'
 import type { BoardCardView, BoardProject } from '../tinycld/cards/types'
 
 function card(id: string, listId: string, position: string): BoardCardView {
@@ -83,6 +88,40 @@ describe('targetColumnForMove', () => {
         expect(targetColumnForMove(project(), 'a', -1)).toBeNull()
         expect(targetColumnForMove(project(), 'd', 1)?.id).toBe('done')
         expect(targetColumnForMove(project(), 'ghost', 1)).toBeNull()
+    })
+})
+
+describe('composerTargetColumnId', () => {
+    it('uses the focused column when one holds focus', () => {
+        // 'done' is the empty column — which is exactly why an empty column can
+        // hold focus at all: so "add a card here" has somewhere to go.
+        expect(composerTargetColumnId(project(), null, 'done')).toBe('done')
+    })
+
+    it("uses the focused card's own column", () => {
+        expect(composerTargetColumnId(project(), 'd', null)).toBe('doing')
+    })
+
+    it('adopts the first column when nothing is focused', () => {
+        // Doing nothing here would make `n` look broken on a board the user
+        // has not clicked into yet.
+        expect(composerTargetColumnId(project(), null, null)).toBe('todo')
+    })
+
+    it('falls back to the first column when the focused card is gone', () => {
+        // Another client archived it between keypresses; the keypress should
+        // still land somewhere rather than being swallowed.
+        expect(composerTargetColumnId(project(), 'deleted-card', null)).toBe('todo')
+    })
+
+    it('prefers a focused column over a focused card', () => {
+        // The store keeps exactly one of the two set, so this only guards the
+        // resolution order if that invariant ever slips.
+        expect(composerTargetColumnId(project(), 'd', 'done')).toBe('done')
+    })
+
+    it('returns null for a board with no columns', () => {
+        expect(composerTargetColumnId({ ...project(), lists: [] }, null, null)).toBeNull()
     })
 })
 

@@ -4,7 +4,7 @@ import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useDeviceInsets } from '@tinycld/core/lib/use-safe-area'
 import { useRouter } from 'expo-router'
 import { Maximize2, X } from 'lucide-react-native'
-import { useMemo } from 'react'
+import { type RefObject, useMemo, useRef } from 'react'
 import { Platform, Pressable, StyleSheet, View } from 'react-native'
 import { useProjectRole } from '../hooks/useProjectRole'
 import { type CardEntry, findCardEntry, neighborCardId } from '../lib/board-cards'
@@ -12,6 +12,7 @@ import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardProject } from '../types'
 import { CardActionsMenu } from './detail/CardActionsMenu'
 import { CardDetail } from './detail/CardDetail'
+import type { EditableTextHandle } from './detail/EditableText'
 import { IconButton } from './detail/IconButton'
 import { ListStepper } from './detail/ListStepper'
 import { ProjectWash } from './ProjectWash'
@@ -34,9 +35,16 @@ export function CardPeek({ project }: CardPeekProps) {
     return <CardPeekPanel project={project} entry={entry} />
 }
 
-function usePeekShortcuts(project: BoardProject, cardId: string) {
+function usePeekShortcuts(
+    project: BoardProject,
+    cardId: string,
+    canEdit: boolean,
+    titleRef: RefObject<EditableTextHandle | null>
+) {
     const openCard = useCardsUIStore(s => s.openCard)
     const closeCard = useCardsUIStore(s => s.closeCard)
+    // Pushed ABOVE the registration below, and in the same component as it, so
+    // every shortcut is stamped with this instance — see core's withScopeId.
     useShortcutScope('modal')
 
     const shortcuts = useMemo<Shortcut[]>(() => {
@@ -44,7 +52,20 @@ function usePeekShortcuts(project: BoardProject, cardId: string) {
             const next = neighborCardId(project, cardId, delta)
             if (next) openCard(next)
         }
+        const editTitle: Shortcut[] = canEdit
+            ? [
+                  {
+                      id: 'cards.peek.editTitle',
+                      keys: 'e',
+                      scope: 'modal',
+                      group: 'Cards',
+                      description: 'Edit card title',
+                      run: () => titleRef.current?.beginEdit(),
+                  },
+              ]
+            : []
         return [
+            ...editTitle,
             {
                 id: 'cards.peek.close',
                 keys: 'Escape',
@@ -70,7 +91,7 @@ function usePeekShortcuts(project: BoardProject, cardId: string) {
                 run: () => step(-1),
             },
         ]
-    }, [project, cardId, openCard, closeCard])
+    }, [project, cardId, openCard, closeCard, canEdit, titleRef])
     useRegisterShortcuts(shortcuts)
 }
 
@@ -84,7 +105,8 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
     const mutedColor = useThemeColor('muted')
     const { canEdit } = useProjectRole(project.id)
     const insets = useDeviceInsets()
-    usePeekShortcuts(project, entry.card.id)
+    const titleRef = useRef<EditableTextHandle>(null)
+    usePeekShortcuts(project, entry.card.id, canEdit, titleRef)
 
     const expandCard = () => router.push(orgHref('cards/[cardId]', { cardId: entry.card.id }))
 
@@ -135,6 +157,7 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
                     projectId={project.id}
                     projectLabels={project.labels}
                     projectMembers={project.members}
+                    titleRef={titleRef}
                 />
             </View>
         </>
