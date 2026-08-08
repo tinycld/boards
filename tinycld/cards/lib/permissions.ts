@@ -34,9 +34,10 @@ export function capabilitiesFor(role: CardsMemberRole | null): ProjectCapabiliti
  *
  * This is the client last-owner guard: a PB rule sees one row and cannot count
  * owners, so the sole owner's demote/remove/leave affordances must never
- * render. server/member_owner_guard.go enforces the same invariant at the API
- * for the single-org composition — but a hosted tenant runs no feature Go, so
- * this derivation is the universal line of defense. Do not "simplify" it away.
+ * render. server/member_owner_guard.go enforces the same invariant at the API.
+ * Neither is redundant — the hook cannot explain a refusal inside a dialog, and
+ * this derivation cannot bind a caller who never opens one. Do not "simplify"
+ * either away.
  */
 export interface MemberRowActions {
     /** Caller is an owner and the row is not the last owner. */

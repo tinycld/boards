@@ -22,9 +22,10 @@ import (
 // This is also the gap calendar could not close. calendar_members' create rule
 // admits a membership only when the caller ALREADY owns the calendar, which the
 // first membership cannot satisfy, so calendar needs a privileged Go hook to
-// write that row — and a hosted tenant, which runs no feature Go, ends up with
-// a calendar owned by nobody (see calendar/server/bootstrap_probe_test.go).
-// Cards puts the bootstrap in the RULE, so a tenant gets it too.
+// write that row (see calendar/server/bootstrap_probe_test.go). Cards puts the
+// bootstrap in the RULE, so ownership is established by the same request that
+// creates the board — no hook has to fire, and nothing can leave a board owned
+// by nobody if one fails to.
 
 // The headline: a fresh non-guest user creates a board and self-grants
 // ownership, entirely through the rules.

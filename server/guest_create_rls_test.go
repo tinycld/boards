@@ -11,8 +11,8 @@ import (
 // (`notGuest` on drive_items.create) because a drive item has no parent to
 // check against. Every cards content row names a `project`, so the create rule
 // can require an existing editor/owner membership on it — that parent check IS
-// the backstop, and it lives in the rule because a hosted tenant runs no
-// feature Go.
+// the backstop, and it lives in the rule so it holds for every caller, hook or
+// no hook.
 //
 // A wrong rule here is a write-capable stranger, which is why these get their
 // own file.

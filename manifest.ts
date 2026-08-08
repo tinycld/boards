@@ -19,11 +19,14 @@ const manifest = {
     search: { adapter: 'search-adapter' },
     migrations: { directory: 'pb-migrations' },
     // Cards is rule-first: every authorization decision lives in the access
-    // rules the migrations ship, never in a Go hook, because a hosted tenant
-    // runs no feature Go — there the rule IS the whole authorization. This
-    // module exists for the things a rule genuinely cannot do: prove those
-    // rules against the real engine (server/*_rls_test.go), maintain the
-    // board-face counters, and mint share-link tokens (M6a).
+    // rules the migrations ship, because those rules are the whole story for
+    // any caller that does not pass through a hook — a Go guard adds to them
+    // and never substitutes for them. (An older comment here justified this
+    // with "a hosted tenant runs no feature Go"; that is not true — see
+    // server/register.go.) This module exists for the things a rule genuinely
+    // cannot do: prove those rules against the real engine
+    // (server/*_rls_test.go), maintain the board-face counters, authorize the
+    // presence room, and mint share-link tokens (M6a).
     server: { package: 'server', module: 'tinycld.org/packages/cards' },
     collections: { register: 'collections', types: 'types' },
     seed: { script: 'seed' },
