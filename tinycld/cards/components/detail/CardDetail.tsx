@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { type RefObject, useState } from 'react'
 import { ScrollView, Text, View } from 'react-native'
 import { useCardDetail } from '../../hooks/useCardDetail'
 import { useUpdateCard } from '../../hooks/useCardMutations'
@@ -10,7 +10,8 @@ import { CommentComposer } from './CommentComposer'
 import { DetailActivity } from './DetailActivity'
 import { DetailChecklist } from './DetailChecklist'
 import { DetailProperties } from './DetailProperties'
-import { EditableText } from './EditableText'
+import { EditableText, type EditableTextHandle } from './EditableText'
+import { MarkdownText } from './MarkdownText'
 
 type DetailVariant = 'peek' | 'page'
 
@@ -28,6 +29,17 @@ interface CardDetailProps {
     /** The board's labels and roster — what the pickers offer. */
     projectLabels: BoardLabel[]
     projectMembers: BoardMember[]
+    /**
+     * Lets the container start a title edit for the `e` shortcut.
+     *
+     * The shortcut is registered by the CONTAINER, not here, because
+     * `useRegisterShortcut` stamps the scope instance that is current when its
+     * effect runs — and child effects run before parent ones, so registering in
+     * this component would read the scope its container has not pushed yet.
+     * Core's `withScopeId` states the rule: scope and registration belong in the
+     * same component.
+     */
+    titleRef?: RefObject<EditableTextHandle | null>
 }
 
 /**
@@ -42,6 +54,7 @@ export function CardDetail({
     projectId,
     projectLabels,
     projectMembers,
+    titleRef,
 }: CardDetailProps) {
     const [isManagingLabels, setIsManagingLabels] = useState(false)
     const widthClass = variant === 'page' ? 'w-full max-w-[720px] self-center' : ''
@@ -70,6 +83,7 @@ export function CardDetail({
                 <View className={`px-6 pb-6 ${widthClass}`}>
                     <View className="mt-1 mb-[18px]">
                         <EditableText
+                            ref={titleRef}
                             value={card.title}
                             onSave={title => updateCard.mutate({ cardId: card.id, title })}
                             placeholder="Card title"
@@ -131,9 +145,12 @@ export function CardDetail({
 }
 
 /**
- * The description is stored as Markdown (see types.ts) but rendered as plain
- * text for now — editing it and rendering it are separate concerns, and a
- * half-wired renderer is worse than none. Rendering is filed in M7.
+ * The description, stored as Markdown (see types.ts) and now rendered as such.
+ *
+ * Editing stays plain-text: the source is what you edit, the rendering is what
+ * you read. `EditableText` renders `renderValue` in place of its own <Text>
+ * while idle and swaps back to a raw input the moment an edit starts, so the
+ * markdown never has to round-trip through a rich-text model.
  */
 function DescriptionSection({
     description,
@@ -159,6 +176,7 @@ function DescriptionSection({
                 accessibilityLabel="Edit description"
                 multiline
                 isDisabled={!canEdit}
+                renderValue={value => <MarkdownText body={value} />}
             />
         </View>
     )
