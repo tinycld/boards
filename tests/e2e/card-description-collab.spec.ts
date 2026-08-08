@@ -149,6 +149,70 @@ test.describe('Cards — collaborative descriptions', () => {
         }
     })
 
+    test('the full-page card is collaborative too, not just the peek', async ({ page }) => {
+        // The peek and the full-page route are separate screens, and only the
+        // board screen used to open the presence room. On the full page the
+        // context fell back to its default (doc: null), the description
+        // silently dropped to the non-collaborative mutation path, and edits
+        // stopped crossing between sessions — while still looking fine, since
+        // that path renders the same markdown.
+        //
+        // This is the DEFAULT way a card opens on a phone, where there is no
+        // peek, so the regression took the whole feature out on mobile while
+        // every existing spec (all peek-based) stayed green.
+        test.slow()
+
+        const boardName = `collab-page-${Date.now()}`
+        await login(page)
+        await navigateToPackage(page, 'cards')
+        await createBoard(page, boardName)
+        await addCard(page, 0, CARD_TITLE)
+
+        const {
+            user: bob,
+            inviteePage: bobPage,
+            close,
+        } = await createInvitedUser(page, 'cardcollabpage')
+        try {
+            await login(page)
+            await navigateToPackage(page, 'cards')
+            await openBoard(page, boardName)
+            await shareBoard(page, boardName, bob.email, 'Editor')
+
+            // Bob stays on the peek; the owner expands to the full page. One
+            // of each proves the two surfaces share a document rather than
+            // merely each working alone.
+            await navigateToPackage(bobPage, 'cards')
+            await openBoard(bobPage, boardName)
+            await openCard(bobPage, CARD_TITLE)
+
+            await openCard(page, CARD_TITLE)
+            await page.getByRole('button', { name: 'Open full page' }).click()
+            // Gate on the route, not on "Description": the peek stays mounted
+            // behind the page, so that heading matches twice.
+            await expect(page).toHaveURL(/\/cards\/[a-z0-9]+/)
+            await expect(page.getByRole('button', { name: 'Back to board' })).toBeVisible()
+            // The collaborative editor is a ProseMirror surface; the fallback
+            // path is a plain text input, so this is the load-bearing check.
+            // Scoped to the VISIBLE one — the peek's editor is still in the
+            // DOM behind the page, and it is the one `.first()` finds.
+            const pageEditor = page.locator('.ProseMirror:visible').first()
+            await expect(pageEditor).toBeVisible()
+
+            await pageEditor.click()
+            await page.keyboard.press('ControlOrMeta+End')
+            await page.keyboard.type('Written from the full page.')
+            await expectDescriptionToContain(bobPage, 'Written from the full page.')
+
+            await typeDescription(bobPage, ' And answered from the peek.')
+            await expect(async () => {
+                expect(await pageEditor.innerText()).toContain('And answered from the peek.')
+            }).toPass({ timeout: 15_000 })
+        } finally {
+            await close()
+        }
+    })
+
     test('a viewer cannot edit the description', async ({ page }) => {
         // The client gate mirrors the server's: WritePredicate drops a
         // read-only member's document frames regardless of what their UI does,

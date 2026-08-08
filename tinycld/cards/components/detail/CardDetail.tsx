@@ -1,10 +1,10 @@
-import { type RefObject, useState } from 'react'
+import { type RefObject, useRef, useState } from 'react'
 import { ScrollView, Text, View } from 'react-native'
 import { useCardDetail } from '../../hooks/useCardDetail'
 import { useUpdateCard } from '../../hooks/useCardMutations'
 import { useCommentMutations } from '../../hooks/useCommentMutations'
 import { useProjectRole } from '../../hooks/useProjectRole'
-import { descriptionMode } from '../../lib/description-mode'
+import { type DescriptionMode, descriptionMode } from '../../lib/description-mode'
 import type { BoardCardView, BoardLabel, BoardMember } from '../../types'
 import { useBoardPresenceContext } from '../BoardPresenceProvider'
 import { LabelManagerDialog } from '../LabelManagerDialog'
@@ -169,12 +169,16 @@ function DescriptionSection({
 }) {
     const { doc, isReady, isConnected, canEditDoc, awareness, identity } = useBoardPresenceContext()
 
-    // Chosen once, when this card's editor mounts, and deliberately not
-    // re-evaluated: a description with two live write paths is how text gets
-    // lost. A drop mid-sentence keeps the collaborative editor and shows a
-    // reconnecting note — the words are in the local document and Yjs replays
-    // them — rather than racing a mutation against the reconnect.
-    const [mode] = useState(() => descriptionMode({ hasDoc: !!doc, isReady }))
+    // Latched, not sampled: once collaborative it stays collaborative for this
+    // mount (two live write paths is how text gets lost — see
+    // descriptionMode), but it can still BECOME collaborative when the room
+    // finishes syncing after this component mounted. That is the ordering on
+    // the full-page card route, where the presence provider mounts with the
+    // screen; sampling once there always lost the race and dropped the card to
+    // the non-collaborative path without any visible sign.
+    const modeRef = useRef<DescriptionMode>('mutation')
+    modeRef.current = descriptionMode({ hasDoc: !!doc, isReady }, modeRef.current)
+    const mode = modeRef.current
 
     // A disabled editor still renders its placeholder styled as an affordance,
     // so a read-only card with no description drops the section entirely —
