@@ -12,13 +12,14 @@ ordered by dependency; tasks within one are small and mostly independent.
 | M1 | Data model: collections, migrations, types | ✅ shipped |
 | M2 | RBAC: the rules themselves | ✅ shipped |
 | M2a | Prove the rules behave | ✅ shipped — 64 Go tests |
-| **M3** | **Wire the UI to live data** | mostly shipped — board-to-detail shortcuts, markdown and presence remain |
+| **M3** | **Wire the UI to live data** | shortcuts + markdown shipped; **presence red** |
 | M3b | Role-gated UI and sharing | ✅ shipped |
 | M4 | Mail: create a card from an email | touches `mail/` |
 | M5 | Calendar: due dates on the calendar | touches `calendar/` |
 | M6 | File attachments with previews | |
 | M6a | Public boards: the share-link flow | schema shipped, flow missing |
 | M7 | Package plumbing, tests, docs | |
+| M9 | Collaborative markdown editing | split out of M3 — see below |
 
 The lettered milestones (M2a, M3b, M6a) were split out once the data model
 landed and the real dependency order became clear: the rules are enforceable
@@ -46,6 +47,19 @@ February entirely, in both the mini-calendar arrows and `useCalendarView`'s
 month paging. Core's version clamps to the target month's last day.
 `toDateString`/`fromDateString` likewise avoid the `toISOString()` UTC round
 trip that shifts a date a day west of Greenwich.
+
+**Correction, established while finishing M3: a hosted multi-org tenant DOES
+run feature Go.** Roughly a dozen comments in this package (and four passages
+below) justified the rule-first design with "a hosted tenant runs no feature Go
+at all". That is false. `tinycld/server/main.go` hands the SAME generated
+`registerPackageExtensions` to the tenant path and the single-org path — its own
+comment reads *"The SAME generated registrar serves both modes … the artifact is
+the gate"* — and `multi-org/README.md` says the tenant binary "registers its
+linked feature Go unconditionally". The rule-first design is still right, for a
+better reason: the rules are the whole authorization for every caller that does
+not pass through a hook, including the REST API a client drives directly, so a
+Go guard can only ADD to them. The comments have been corrected in place; the
+rules and their tests were not touched.
 
 Ecosystem facts these tasks rely on:
 
@@ -285,10 +299,22 @@ identical to `cards_comments`' (`viaCommenter + isAuthor + pin`), which is.
 The clauses are asserted in the shipped-rules table. Revisit with M6, when
 attachments are actually built.
 
-## M3 — Wire the UI to live data
+## M3 — Wire the UI to live data — presence still red
 
-Everything currently reading `SAMPLE_PROJECTS` or writing to the
-`cardMoves`/UI-store overlay switches to `useOrgLiveQuery` + `useMutation`.
+Everything reading `SAMPLE_PROJECTS` or writing to the `cardMoves`/UI-store
+overlay switched to `useOrgLiveQuery` + `useMutation`. Of the three items that
+outlived that work, two shipped and one did not:
+
+- **Board-to-detail shortcuts — shipped** (`e`/`n`/`⇧N`; `d`/`l`/`a` deferred on
+  a core `Menu` measurement gap, filed inline below).
+- **Markdown rendering — shipped**, with three e2e specs and seeded examples.
+- **Real-time presence — WRITTEN BUT NOT WORKING.** Both sessions connect to
+  the right room; no avatar renders. `tests/e2e/board-presence.spec.ts` fails.
+  Full diagnostic notes are on the entry below — read them before starting, two
+  candidate causes are already ruled in and one attempted fix is already ruled
+  out.
+
+The collaborative markdown editor was carved off deliberately and is now **M9**.
 
 **Start here** — a board you cannot create is a board you cannot test, and
 every query below returns nothing until one exists:
@@ -606,28 +632,59 @@ where there's a form, `captureException` context strings like
       `core/docs/keyboard-shortcuts.md` claimed it was: the e2e shortcut stub
       and cards both claimed `k`, making `t k` unresolvable. The stub moved to
       `z` and `validateNavShortcuts` now fails generation on a collision.
-- [ ] Keyboard shortcuts, part two: reach the card DETAIL from the board —
-      `e`/`d`/`l`/`a` to edit title, due, labels, assignees, and `n`/`Shift+N`
-      for the composers. All six of those surfaces are uncontrolled `Menu`s /
-      local `useState` today with no external open trigger, so this needs
-      optional controlled-open props (or imperative handles) threaded through
-      `DuePicker`/`LabelPicker`/`AssigneePicker`/`BoardMenu`/`EditableText`/
-      `CardComposer`. Split out deliberately: it is the most invasive slice and
-      the board-level control above is useful without it.
-      **Cheaper than this entry implies, established while shipping
-      collapse/compact:** core's `Menu` (`tinycld/core/ui/menu/index.tsx`)
-      ALREADY takes `isOpen` + `onOpenChange`, and calc drives it controlled in
-      ~10 places — so `DuePicker`/`LabelPicker`/`AssigneePicker`/`BoardMenu`
-      need prop pass-through, not a rewrite. Controlled-ness keys on `isOpen`
-      being defined, NOT on `onOpenChange` (a bare handler leaves the menu
-      uncontrolled and merely notifies).
-      Two real hazards remain. (1) A keyboard-opened menu has never measured
-      its trigger — only click and `onMouseEnter` call `setTriggerLayout` — so
-      it positions at (0,0); `Menu`'s `triggerPosition` prop is the escape
-      hatch. (2) `EditableText` wants an imperative handle rather than a
-      controlled boolean: its `beginEdit` snapshots `committedRef`, seeds
-      `draft`, THEN opens, and an externally-set `isEditing` that skips that
-      leaves a stale draft and the wrong Escape-revert target.
+- [x] Keyboard shortcuts, part two: reach the card DETAIL from the board.
+      **Shipped as `e` / `n` / `Shift+N`. `d`/`l`/`a` are deliberately NOT
+      shipped — see the deferred note below.**
+    - **`e` registers on the DETAIL surfaces, not the board**, at `'modal'`
+      (peek, in `usePeekShortcuts`) and `'thread'` (page, in
+      `usePageShortcuts`). The scope stack is strict LIFO: opening a card
+      pushes a scope over the board's `'list'`, so every board shortcut goes
+      dark. A board-scoped `e` would be firing at a component that is not
+      mounted.
+    - **Scope and registration must live in the SAME component.**
+      `useRegisterShortcut` stamps `currentScopeId(scope)` when its effect
+      runs, and child effects run BEFORE parent ones — so registering `e`
+      inside `CardDetail` (a child of the container that pushes the scope)
+      stamped the wrong instance. `CardDetail` therefore takes a `titleRef`
+      and the two containers own the binding. Core's `withScopeId` states the
+      rule; this is what it looks like when you break it.
+    - **`EditableText` grew an imperative handle**, not a controlled boolean:
+      `beginEdit` snapshots `committedRef`, seeds `draft`, THEN opens, and an
+      externally-set `isEditing` skipping the first two steps leaves a stale
+      draft that a later blur COMMITS — the unchanged-value guard does not
+      catch it, because a stale draft differs from the current value. The
+      handle calls the same `beginEdit` the press path uses, so the ordering
+      holds by construction rather than by two implementations agreeing.
+    - **`n` and `Shift+N` open composers through the store**
+      (`composerOpenListId`, `isAddListOpen`), because a composer lives inside
+      a memoized `BoardColumn` the shortcut hook holds no reference to. Read
+      per column (`s => s.composerOpenListId === list.id`), matching the
+      discipline the store's own comments insist on. `CardComposer` follows
+      core `Menu`'s controlled/uncontrolled convention — keyed on `isOpen`
+      being defined, so the empty-board instance stays self-contained.
+    - Target resolution is pure in `lib/board-focus.ts`
+      (`composerTargetColumnId`, 6 tests): focused column → focused card's
+      column → first column. Never cached, because a realtime move changes a
+      card's list without changing a stored column id. **A collapsed column
+      mounts no composer**, so `n` expands it first rather than setting a flag
+      nothing reads.
+    - `Shift+N` is a no-op on an empty board, where `BoardCanvas` renders
+      `EmptyBoard` and mounts no `AddListColumn`.
+- [ ] **Deferred: `d` / `l` / `a`** (due, labels, assignees) — blocked, not
+      forgotten. All three are core `Menu` pickers, and **a keyboard-opened
+      `Menu` has never measured its trigger**: `setTriggerLayout` is called
+      only from `Trigger`'s click and `onMouseEnter` handlers, so
+      `Content.positionStyle` returns `{}` and an absolutely-positioned menu
+      lands at (0,0). Core already added `handleMouseEnter` for exactly this
+      gap on hover-opened controlled menus — the keyboard case is the same bug,
+      unfixed. Two ways out: measure in core's `Menu` when `isOpen` goes
+      false→true (the `triggerRef` is already in context; widest benefit,
+      widest blast radius — mind the `setContentLayout` loop the memo guards),
+      or have each picker measure its own chip and pass `triggerPosition`
+      (calc's context-menu precedent, no core risk, three copies of the same
+      code). The pickers themselves need only optional `isOpen`/`onOpenChange`
+      pass-through; controlled-ness keys on `isOpen` being defined, NOT on
+      `onOpenChange`.
 - [x] Search: we want to implement a `/` shortcut that opens a search box
       like vscode and github uses.  Consider sharing this in core and using
       with drive & mail. **Shipped, and the "share it in core" option is the
@@ -739,52 +796,119 @@ where there's a form, `captureException` context strings like
       Compact keeps title, assignees and due state (lateness must never need
       an expand to see), drops labels to colour dots and hides the
       checklist/comment counts.
-    - **The e2e specs have NOT been run.** The spine, both collapse gestures
-      and the long-name cases were verified BY HAND in a browser against the
-      running app — which is also how the two rendering bugs above were finally
-      diagnosed, after reasoning about them from the source produced three
-      wrong answers in a row. Reach for the real app early on layout bugs; a
-      standalone HTML reproduction misled here, because a raw `div` honours a
-      width where react-native-web's `Text` does not.
-      `tests/e2e/board-view-modes.spec.ts` names the assertion most likely to
-      need adjusting on the first real run. Note that `playwright.config.ts`
-      routes `testDir` through `node_modules/@tinycld/cards`, which symlinks to
-      the main checkout — a run launched from a worktree tests the wrong tree.
-- [ ] Full markdown editing, multi-user, with collaborator cursors.
-      **Decided: cards builds its OWN markdown-specific editor bundle** rather
-      than sharing text's. Text's WebView editor is an 898KB prebuilt blob
-      (`text/tinycld/text/webview-editor/build/editorHtml.ts`) that is NOT in
-      text's `package.json` `exports`, and siblings must not depend on each
-      other anyway — so "share it" would mean extracting it into core, a
-      refactor of a shipped package. A markdown-only bundle is far smaller than
-      text's full rich-text/suggestions/authorship stack.
-      What core ALREADY provides, so this is not from scratch:
-      `useRealtimeRoom` + `useRemoteAwareness` (`core/lib/realtime/`),
-      `PresenceAvatars` (`core/components/`), the WebView message bus and
-      `EditorMount` (`core/lib/editor/`), and `RegisterRoomKind`
-      (`core/server/realtime/authorize.go`). Cards already has
-      `server/register.go` to register a room kind in — `RegisterRoomKind(kind,
-      authorizeFn)` is the authorize-only form, which is all an ephemeral
-      presence room needs.
-      `calc/tinycld/calc/hooks/use-presence.ts` is the shape to copy for the
-      awareness schema (calc hand-rolls `parsePresence`/`samePresence` over
-      `useRemoteAwareness`; the shape is deliberately per-package).
-      **Gotcha from `text/tinycld/text/hooks/useTextRoom.ts`:** TipTap's
-      `CollaborationCaret` writes its `user` option into `awareness.user` on
-      mount, clobbering whatever is there — so identity must be stamped BOTH in
-      `initialAwareness` (so avatars render between WS connect and editor
-      mount) and in the caret's own `user` option.
-      Rendering markdown is separable and much cheaper: core already has
-      `components/help/MarkdownRenderer.tsx` over `react-native-marked`. It
-      carries help-specific behavior (a `help://` link scheme, per-platform
-      ⌘/Ctrl glyph swapping) that would need lifting behind an optional prop
-      before cards reuses it — but that is a small job next to the editor, and
-      it closes the "description says Markdown, renders as plain text" gap on
-      its own.
-- [ ] Feature: Show activity by users in real-time  If a user is viewing or editing
-      a card show their avatar highlighted like Jira.  Ask for details/screenshots
-      unclear.
-      
+    - **The e2e specs have now been RUN and pass**, including the
+      drop-after-collapse case the original note flagged as most likely to need
+      adjusting — the 40px spine does accept a drop, so `BoardColumn` needed no
+      change. The spine, both collapse gestures and the long-name cases were
+      originally verified by hand, which is also how the two rendering bugs
+      above were finally diagnosed after reasoning from the source produced
+      three wrong answers in a row. Reach for the real app early on layout
+      bugs; a standalone HTML reproduction misled here, because a raw `div`
+      honours a width where react-native-web's `Text` does not.
+      Note that `playwright.config.ts` routes `testDir` through
+      `node_modules/@tinycld/cards`, which symlinks to the main checkout — a
+      run launched from a worktree tests the wrong tree. (Verified: in this
+      assembly that symlink resolves to the same tree, so the runs above did
+      exercise the edited code.)
+- [x] Render card descriptions as the Markdown they have always been stored as.
+      **Shipped.** The collaborative EDITOR that was filed alongside this is
+      split out to M9 — rendering and editing are separable, and rendering
+      closes the "description says Markdown, renders as plain text" gap on its
+      own for a fraction of the cost.
+    - Core's `MarkdownRenderer` grew three optional props, all defaulting to
+      today's behavior so `HelpTopicView` was untouched: `onLinkPress`,
+      `translateModifierKeys`, `shortcutTableHeuristic`. Cards opts out of all
+      three. **`onLinkPress` is the load-bearing one** — it is what breaks the
+      static import edge from a card description to `lib/help/open-help` and
+      the help Zustand store; help now passes the exported `openHelpLink` back
+      in.
+    - **The ⌘ swap had to be optional, not just tidy.** Help topics are
+      authored once with Mac glyphs and translated per platform; a description
+      is typed by a user, so a ⌘ they typed being silently rewritten to "Ctrl"
+      on Windows is corrupting their text.
+    - Editing stays plain-text: `EditableText` gained `renderValue`, which
+      replaces only the IDLE display. An edit still swaps to a raw input, so
+      the markdown source never round-trips through a rich-text model.
+      `MarkdownText` (`components/detail/`) is the cards-side wrapper.
+    - The renderer instances are still cached, now keyed on the option tuple
+      (a `WeakMap` tags the link handler by identity) rather than being two
+      module-level singletons — allocating per render would churn the whole
+      token tree.
+    - **The seed carries real markdown**, so `db:reset` leaves something that
+      demonstrates the renderer: "Investigate slow board load" gets headings,
+      emphasis, a code span, a list, a table, a blockquote and a link; "Press
+      kit landing page" gets a shorter one. Deliberately replacing the two
+      cards that already had the longest prose — a plain paragraph renders
+      identically whether the renderer runs or not, so it proves nothing.
+    - Covered by `tests/e2e/card-description.spec.ts` (3 specs): syntax gone
+      once rendered, raw source back on edit, ⌘ surviving verbatim, and a
+      reload proving the SOURCE was persisted rather than the output. The
+      assertions deliberately avoid react-native-marked's DOM shape, which is
+      an implementation detail — they check what a reader can actually tell
+      apart. Note the helper trap found writing them: gating "card is open" on
+      the `Add a description` placeholder works exactly once, since the
+      placeholder disappears the moment the card HAS a description.
+- [ ] Feature: show who is viewing a card in real time, Jira-style.
+      **NOT WORKING — written, wired end to end, and RED.** Scoped as
+      BOARD-level presence: avatars in `BoardHeader` for who has the board open,
+      plus a per-card watcher cluster on `BoardCard`. All the code below exists
+      and the Go side is proven; what does not happen is an avatar appearing.
+      `tests/e2e/board-presence.spec.ts` is the failing spec — do not delete it
+      to get green.
+    - **What the diagnostic established, so the next person does not redo it:**
+      two separate sessions DO connect, and to the same room — the server log
+      shows two `GET /api/realtime/cards-board/<projectId>` upgrades with
+      different user tokens. So the room kind, the roomID and the Go authorize
+      are all correct, and the failure is downstream of the connection.
+      Neither session renders `cards-live-presence`.
+    - **Two candidate causes, neither confirmed. Do not assume it is only one.**
+      (1) The local slot may never reach the wire: `initialAwareness` is applied
+      with `setLocalState` BEFORE `client.connect()`, and the client only sends
+      awareness from its `update` listener, so that first write fires at a
+      socket that does not exist and is not covered by the pending-frame queue
+      (which only spans connect → id-assignment). A republish keyed on
+      `isConnected` was tried and did NOT fix it, so either this is not the
+      cause or it is not the only one. (2) The spec's own navigation is wrong —
+      the probe caught the owner sitting on a stale board from an earlier run,
+      so the two sessions may never have been on the same board at the same
+      time. **Fix the spec first**, then re-measure before touching the hook.
+    - **One room per BOARD, not per card** (`roomKind: 'cards-board'`,
+      `roomID` = project id). Which card a peer is on rides in the awareness
+      SLOT, exactly as calc keeps `sheetId` there. Per-card rooms would open
+      and close a socket on every peek, need a `cards_cards → project` hop to
+      authorize, and still give no board-level view without a second room.
+    - Go: `server/realtime.go`, `RegisterRoomKind` (the authorize-only form —
+      an ephemeral awareness room needs no runtime, journal or write
+      predicate), called from `registerShared`. Membership + `disabled`, at
+      READ level: a viewer wants presence as much as an editor does. 8 tests,
+      including that a membership on one board does not open another's room —
+      the case a naive "does this user have any member row" check would pass.
+    - Client: `hooks/useBoardPresence.ts`, modeled on calc's `use-presence`.
+      `parsePresence`/`samePresence` are module-level and wrapped in
+      `useMemo(…, [])` — they land in `useRemoteAwareness`' internal
+      `useCallback` deps, and fresh identities there re-subscribe every render.
+      21 unit tests, mostly about malformed slots: this is the one place cards
+      reads data it did not write. **The unit tests all pass and prove nothing
+      about the bug** — they exercise the parser, not the transport.
+    - **`initialAwareness` is captured on the room's FIRST effect run only**
+      (its deps are `[roomKind, roomID]` by design), so the open card is
+      published by a separate effect rather than by changing that object.
+      Changing `initialAwareness` does nothing — a real trap, and possibly
+      the one behind the red spec.
+    - **Publishing is a `useEffect`, deliberately.** It pushes local state onto
+      a socket and must re-fire on reconnect; there is nothing to fetch, no
+      query key and no cached value, so `useQuery` is the wrong primitive
+      despite the usual "avoid useEffect" rule. Calc does the same from
+      `use-grid-store-instance.ts` — it is the only production awareness
+      publisher in the tree, and it is an effect too.
+    - `BoardPresenceProvider` holds the single room. A React context rather
+      than a Zustand store, against the usual house rule, because what is
+      shared is a live socket handle scoped to the mounted board rather than
+      state: it unmounts with the screen, and `useRealtimeRoom` already
+      publishes a clean-leave frame on teardown. `useCardPresence` memoizes per
+      card and returns a shared empty array, so an awareness tick does not
+      hand every card a new array and undo the memoization drags depend on.
+    - Compact cards drop the cluster, matching the stated density policy.
 
 ## M3b — Role-gated UI and sharing ✅
 
@@ -988,6 +1112,53 @@ none of them mention links.
       in-process and in-memory, so it does not hold across instances.
 - [ ] Help topic: sharing a board publicly, and what a link recipient can do.
 
+## M9 — Collaborative markdown editing
+
+Split out of M3 once rendering shipped without it. Rendering a description and
+co-editing one are separable problems, and the second is by far the larger:
+it means a WebView editor bundle, a Yjs document in the room, and the whole
+CRDT surface. What shipped in M3 — markdown rendering plus board presence —
+already covers the everyday need, so this is a genuine feature rather than a
+gap left behind.
+
+**Cards would build its OWN markdown-specific editor bundle** rather than
+sharing text's. Text's WebView editor is an 898KB prebuilt blob
+(`text/tinycld/text/webview-editor/build/editorHtml.ts`) that is NOT in text's
+`package.json` `exports`, and siblings must not depend on each other anyway —
+so "share it" would mean extracting it into core, a refactor of a shipped
+package. A markdown-only bundle is far smaller than text's full
+rich-text/suggestions/authorship stack.
+
+- [ ] The editor bundle: `source/` + a `build.ts` over core's
+      `bundleWebViewEditor`, following `text/tinycld/text/webview-editor/`.
+      Budget for its two documented resolution hazards — the `nodePaths` pair
+      (the source dir has no `node_modules` of its own by design) and the
+      `scopedSubpathResolver` esbuild plugin (esbuild does not append
+      extensions to `exports` targets, which only works in dev where packages
+      are symlinks).
+- [ ] A Y.Text for the description in the room. **The room already exists** —
+      M3's presence room is `cards-board`, authorize-only. A shared document
+      needs `RegisterRoomKindWith` instead: a `RuntimeProvider`, a `Journal`, a
+      save coordinator, and a `WritePredicate` so read-only members cannot
+      mutate the doc (the broker has no other write filter, so without it a
+      viewer who ignores the UI gate can still post updates). Decide whether
+      the description doc shares the board room or takes its own kind.
+- [ ] Collaborator cursors via TipTap's `CollaborationCaret`.
+      **Gotcha from `text/tinycld/text/hooks/useTextRoom.ts`:** the extension
+      writes its `user` option into `awareness.user` on mount, clobbering
+      whatever is there — so identity must be stamped BOTH in
+      `initialAwareness` and in the caret's own `user` option, or the peer
+      silently vanishes from every avatar row (`PresenceAvatars` requires all
+      three of `{id, name, color}` to be strings). **This directly threatens
+      M3's presence**, which publishes into that same slot.
+- [ ] Native double-presence: text has an open `TODO(text-native v1.1)` where
+      the in-WebView editor opens its OWN realtime connection with its own
+      awareness identity, so the local user appears as TWO collaborators to
+      remote peers. Do not inherit it — either suppress the native room's slot
+      and relay presence over the message bus, or tag slots with a
+      `clientGroupId` and dedupe.
+- [ ] Help topic update for collaborative editing.
+
 ## M8 — CLI 
 
 - [ ] Integerate with CLI, add manifest fields and support CRUD on lists and cards
@@ -1014,17 +1185,33 @@ none of them mention links.
       viewer gates (no composers, no BoardMenu, display-only stepper,
       read-only roster) → promote to commentor via the role menu → commentor
       posts a comment, still cannot edit → last-owner lock asserted as
-      ABSENT affordances with the other row as positive control. Remaining
-      scope here is the editor-path flow: stepper move, due, checklist,
-      attach + preview (M6).
+      ABSENT affordances with the other row as positive control.
+      Since then: `keyboard-shortcuts.spec.ts` covers `e`/`n`/`⇧N`,
+      `card-description.spec.ts` covers markdown rendering, and
+      `board-view-modes.spec.ts` has been run for the first time and passes.
+      Remaining scope is the editor-path flow — stepper move, due, checklist,
+      attach + preview (M6) — plus repairing the RED
+      `board-presence.spec.ts` (see M3).
 - [ ] Update `help/working-with-cards.md` for behavior that changed
       (creating boards/lists/cards); add topics from M4–M6; run
       `pnpm run packages:generate`. Sharing is already covered — M3b shipped
       `help/sharing-boards.md` and cross-linked it.
+      **Partly done:** the M3 pass added the new shortcuts, a "Formatting a
+      description" section and a "Who else is here" section, fixed the
+      pre-existing `Shift +` spellings to the mandated ⇧ glyph, and extended
+      core's `docs/keyboard-shortcuts.md`. The presence section describes
+      behavior that does not currently work — revisit it with that fix.
+      Still open: the M4–M6 topics.
 - [ ] Website docs: offer a cards page for `web/` once the feature set is
       final.
 - [ ] Full gate: `pnpm exec tinycld-pkg check` + `test:e2e` in `cards/`,
       `pnpm run pkg:check` at the root; fix anything red.
+      **Note `pkg:check` does not exist in a bootstrap-assembled root** — the
+      equivalents are `pnpm run checks` (lint + app typecheck) from `tinycld/`
+      plus `tinycld-pkg typecheck` per member. Last full run: cards unit 170,
+      cards Go all green (`-count=1`), core + shell unit 895, lint clean over
+      1809 files, every sibling typechecking — and cards e2e 29/30, the one
+      failure being `board-presence.spec.ts`.
 - [ ] Follow-ups to file, not block on: (public share links are now M6a),
       core extraction of the members-junction + ShareDialog pattern once a
       third package needs sharing, a drive-exported file-picker component if

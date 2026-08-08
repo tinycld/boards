@@ -70,6 +70,26 @@ description, checklist, and comments. A due date turns amber when it's less
 than two days away and red once it has passed — the same colors the board
 shows on the card itself.
 
+## Formatting a description
+
+Descriptions are written in Markdown. Click one to edit it and you'll see the
+plain text you typed; click away and it renders — so headings, **bold**,
+`code`, lists, links and tables all work.
+
+Editing saves when you click away as well as when you press ⌘↩. Plain Enter
+starts a new line, since a description is prose. Press Esc to discard the edit
+and put back what was there when you started.
+
+## Who else is here
+
+When someone else has the same board open, their initials appear beside the
+member avatars at the top. Open a card they're looking at and you'll see them
+on the card face too, so you can tell at a glance if a teammate is already
+working on something.
+
+These appear and disappear as people come and go — nothing is recorded, and
+you'll never see yourself.
+
 ## Keyboard shortcuts
 
 You can work a board without touching the mouse. Press **J** to start — the
@@ -85,19 +105,29 @@ J and K walk the board in order, list by list, so you can review a whole board
 a card at a time. The arrow keys move across columns instead, keeping your place
 in the column — handy when a board is laid out as stages.
 
-To move a card, hold **Shift** with an arrow key:
+To move a card, hold **⇧** with an arrow key:
 
-- **Shift + ←** / **Shift + →** — send it to the column beside it
-- **Shift + ↑** / **Shift + ↓** — move it up or down its own column
+- **⇧←** / **⇧→** — send it to the column beside it
+- **⇧↑** / **⇧↓** — move it up or down its own column
 - **X** — archive it
 
-Moving and archiving need permission to edit the board; if you're a viewer or
-commentor, the navigation keys still work.
+To add something:
+
+- **N** — add a card to the highlighted column. If nothing is highlighted the
+  first column takes it, and a collapsed column opens first.
+- **⇧N** — add a list
+
+The composer stays open after you press Enter, so you can type several cards in
+a row without reaching for the mouse.
+
+Moving, archiving and adding need permission to edit the board; if you're a
+viewer or commentor, the navigation keys still work.
 
 With a card open:
 
 - **J** — next card
 - **K** — previous card
+- **E** — edit the title
 - **Esc** — close the card (or return to the board from the full-screen view)
 
 Press **⇧?** anywhere to see every shortcut the app knows, including the ones

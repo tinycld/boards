@@ -6,12 +6,9 @@ import { addCard, boardCard, cardsInColumn, createBoard, dragCardToColumn } from
 // held in the Zustand store, so nothing here touches the server. Every spec
 // creates its own uniquely-named board and drives the UI only.
 //
-// UNVERIFIED AT TIME OF WRITING — these specs have not been executed; the
-// collapsed spine, both collapse gestures and the long-name cases were checked
-// by hand in a browser instead. The assertion most likely to need adjusting on
-// a first real run is the drop-after-collapse case, which assumes the 40px
-// spine accepts a drop. If it fails, the fix is in BoardColumn's collapsed
-// branch, not here.
+// These have now been executed and pass, including the drop-after-collapse
+// case the original note flagged as most likely to need adjusting — the 40px
+// spine does accept a drop, so no change was needed in BoardColumn.
 //
 // Note when running these from a git worktree: playwright's testDir resolves
 // through node_modules/@tinycld/cards, which symlinks to the main checkout — so
