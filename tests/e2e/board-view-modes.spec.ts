@@ -6,13 +6,16 @@ import { addCard, boardCard, cardsInColumn, createBoard, dragCardToColumn } from
 // held in the Zustand store, so nothing here touches the server. Every spec
 // creates its own uniquely-named board and drives the UI only.
 //
-// UNVERIFIED AT TIME OF WRITING — these specs have not been executed. The
-// package's playwright config routes testDir through
-// node_modules/@tinycld/cards, which symlinks to the main checkout, so a run
-// launched from a worktree exercises the main branch instead of this one.
-// The assertion most likely to need adjusting on a first real run is the
-// drop-after-collapse case, which assumes the 40px spine accepts a drop. If it
-// fails, the fix is in BoardColumn's collapsed branch, not here.
+// UNVERIFIED AT TIME OF WRITING — these specs have not been executed; the
+// collapsed spine, both collapse gestures and the long-name cases were checked
+// by hand in a browser instead. The assertion most likely to need adjusting on
+// a first real run is the drop-after-collapse case, which assumes the 40px
+// spine accepts a drop. If it fails, the fix is in BoardColumn's collapsed
+// branch, not here.
+//
+// Note when running these from a git worktree: playwright's testDir resolves
+// through node_modules/@tinycld/cards, which symlinks to the main checkout — so
+// a run launched from a worktree exercises that checkout, not the worktree.
 
 let run = 0
 async function freshBoard(page: import('@playwright/test').Page, label: string): Promise<string> {

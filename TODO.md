@@ -678,7 +678,7 @@ where there's a form, `captureException` context strings like
       a content-driven column height read badly together. That has since been
       replaced by the standard kanban spine (count pill on top, name running
       down), which supplies real bounds itself, so the stack now unmounts on
-      collapse. Two rules make the rotation safe, and both are load-bearing:
+      collapse. Four rules make the rotation safe, and all are load-bearing:
         - **`transform: rotate`, NOT CSS `writing-mode`.** writing-mode is one
           line and reflows the text into a genuinely vertical box — but it is
           **react-native-web only**, and this app ships on native, where it
@@ -700,11 +700,22 @@ where there's a form, `captureException` context strings like
           one, seated concentric with equal-and-opposite top/left insets. Insets
           rather than a translate pair: they do not depend on how the platform
           composes a transform list, which is easy to get backwards.
-        - **The spine is sized by its title, not by the stack** — a fixed
-          `COLLAPSED_NAME_RUN`, not a measured one. Measuring the text would
-          feed a layout pass back into the height of a view whose bounds must
-          stay stable, and a spine that stretched with the board would truncate
-          a short column's name to a few letters.
+        - **The spine is sized by its title, not by the stack.**
+          `COLLAPSED_NAME_RUN` is a CEILING, not a fixed height: the spine takes
+          only the run its own name needs and ellipsizes past the cap, so a
+          short list does not reserve a long empty strip and a verbose one
+          cannot stretch the column past the cards beside it. The run is
+          estimated from the character count (`NAME_CHAR_WIDTH`, deliberately an
+          over-estimate) rather than measured with `onLayout` — a measure has to
+          re-render the collapsed face to apply itself, and this subtree sits
+          behind the memo boundary that keeps Drax's bounds stable mid-drag. A
+          wrong guess costs slack at the end of a short name, never a clip,
+          because the Text ellipsizes into whatever box it is given. **Swap to
+          `onLayout` only if exact sizing is worth re-rendering for.**
+        - **The name must start at the TOP of the spine, under the count.** A
+          90° turn maps the text's LEFT edge to the spine's top, so the Text is
+          left-aligned — centring it floated a short name in the middle of the
+          run with a gap under the count pill.
     - **Collapse is a menu item, plus a double-click on the list header.** The
       double-click is the shortcut for an action users repeat while scanning a
       board; the menu item stays as the discoverable path. There is deliberately
@@ -712,17 +723,33 @@ where there's a form, `captureException` context strings like
       and a menu. The gesture rides a `Pressable` INSIDE `ColumnDragHandle`
       (DraxView exposes no press props) wrapping only the title, so it never
       covers the menu button, and a drag is a long-press that fires no onPress.
+    - **The header title row must SHRINK, though it must never GROW.** These
+      pull in opposite directions and both matter. No `flex-1`, because a wide
+      drag handle anchors Drax's hit-test away from the pointer and drops land a
+      column off-target. But `flexShrink: 1` + `minWidth: 0` on the DraxView and
+      the Pressable inside it, because without them the row keeps its intrinsic
+      width and a long list name pushes the count and the menu clean out of the
+      column. Inside `ColumnTitle` the name shrinks and the count pill is
+      pinned `shrink-0`, so the name is the only part that gives way.
+      `numberOfLines` cannot ellipsize on its own — it needs a width to
+      ellipsize INTO, which is exactly what the shrink supplies.
     - **Density is NOT owner-gated.** It changes nothing on the server and a
       viewer scanning a busy board wants it most, so the toggle sits in
       `BoardHeader` outside the `isOwner` gate rather than in `BoardMenu`.
       Compact keeps title, assignees and due state (lateness must never need
       an expand to see), drops labels to colour dots and hides the
       checklist/comment counts.
-    - **The e2e specs have NOT been run.** `playwright.config.ts` routes
-      `testDir` through `node_modules/@tinycld/cards`, which symlinks to the
-      main checkout — a run launched from a worktree tests the wrong branch.
-      `tests/e2e/board-view-modes.spec.ts` names the two assertions most
-      likely to need adjusting on the first real run.
+    - **The e2e specs have NOT been run.** The spine, both collapse gestures
+      and the long-name cases were verified BY HAND in a browser against the
+      running app — which is also how the two rendering bugs above were finally
+      diagnosed, after reasoning about them from the source produced three
+      wrong answers in a row. Reach for the real app early on layout bugs; a
+      standalone HTML reproduction misled here, because a raw `div` honours a
+      width where react-native-web's `Text` does not.
+      `tests/e2e/board-view-modes.spec.ts` names the assertion most likely to
+      need adjusting on the first real run. Note that `playwright.config.ts`
+      routes `testDir` through `node_modules/@tinycld/cards`, which symlinks to
+      the main checkout — a run launched from a worktree tests the wrong tree.
 - [ ] Full markdown editing, multi-user, with collaborator cursors.
       **Decided: cards builds its OWN markdown-specific editor bundle** rather
       than sharing text's. Text's WebView editor is an 898KB prebuilt blob
