@@ -1,9 +1,10 @@
 import { eq } from '@tanstack/db'
+import { useQuery } from '@tanstack/react-query'
 import { DocumentTitle } from '@tinycld/core/components/DocumentTitle'
 import { LoadingState } from '@tinycld/core/components/LoadingState'
 import { ShareLinkSignIn } from '@tinycld/core/components/share/ShareLinkSignIn'
 import { useAuth } from '@tinycld/core/lib/auth'
-import { useStore } from '@tinycld/core/lib/pocketbase'
+import { PB_SERVER_ADDR, useStore } from '@tinycld/core/lib/pocketbase'
 import { setShareToken } from '@tinycld/core/lib/share-token'
 import { Redirect, useLocalSearchParams } from 'expo-router'
 import { useEffect, useState } from 'react'
@@ -216,27 +217,30 @@ function PublicBoardHeader({
  * The role a link offers to someone willing to sign in, or null when it offers
  * nothing.
  *
- * A viewer link needs no account — anonymous read is its entire grant — so no
- * button is offered and the server refuses the flow anyway. cards_share_links
- * is owner-only by rule, so a VISITOR reads no row here and sees no button
- * either; the affordance appears once they are someone the rules will show the
- * link to. That is a conservative default rather than a limitation: the board
- * is readable regardless, and offering a sign-in the server would refuse is the
- * dead-affordance mistake this package already made once.
+ * Read from the public metadata endpoint, NOT from cards_share_links. The
+ * collection is owner-only by rule, so a visitor reads no row — the obvious
+ * implementation renders the button only for people who already have access,
+ * i.e. nobody who needs it. That is precisely the bug the e2e caught.
+ *
+ * A viewer link returns needs_signin=false and no button appears, which matches
+ * the server: anonymous read is its whole grant, and the OTP endpoints refuse
+ * it outright.
  */
 function useSignInRole(token: string): 'commentor' | 'editor' | null {
-    const [linksCollection] = useStore('cards_share_links')
-
-    const { data } = useBoardLiveQuery(
-        query => {
-            if (!token) return null
-            return query.from({ link: linksCollection }).where(({ link }) => eq(link.token, token))
+    const { data } = useQuery({
+        queryKey: ['cards', 'share-link-meta', token],
+        enabled: !!token,
+        queryFn: async () => {
+            const res = await fetch(
+                `${PB_SERVER_ADDR}/api/cards/share-link/${encodeURIComponent(token)}`
+            )
+            if (!res.ok) return null
+            return (await res.json()) as { role?: string; needs_signin?: boolean }
         },
-        [token, linksCollection]
-    )
+    })
 
-    const role = data?.[0]?.role
-    return role === 'editor' || role === 'commentor' ? role : null
+    if (!data?.needs_signin) return null
+    return data.role === 'editor' || data.role === 'commentor' ? data.role : null
 }
 
 function LinkGone({ reason }: { reason: 'revoked' | 'missing' }) {

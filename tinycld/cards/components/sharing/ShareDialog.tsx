@@ -44,7 +44,10 @@ export function ShareDialog({ isVisible, onClose, project }: ShareDialogProps) {
 }
 
 function ShareDialogContent({ onClose, project }: { onClose: () => void; project: BoardProject }) {
-    const { user } = useAuth()
+    // Non-throwing for consistency with the hooks below, which are shared with
+    // the public board. This dialog itself is owner-only and never opens
+    // without a session; `user?.id ?? ''` already handles the impossible case.
+    const { user } = useAuth({ throwIfAnon: false })
     const { isOwner } = useProjectRole(project.id)
     // The ORG axis, not the project one: an org-guest reads no roster by rule.
     const { isGuest, isReady: orgRoleReady } = useCurrentRole()

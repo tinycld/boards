@@ -31,7 +31,12 @@ export interface ProjectRole extends ProjectCapabilities {
  */
 export function useProjectRole(projectId: string): ProjectRole {
     const [membersCollection] = useStore('cards_project_members')
-    const { user } = useAuth()
+    // `throwIfAnon: false` is load-bearing, not defensive. The default throws
+    // AuthRequiredError, which is right for every workspace surface — they are
+    // behind the auth gate and a missing session there is a bug. This hook also
+    // runs on the PUBLIC board, where being anonymous is the normal case, and
+    // the default turned that screen into an error boundary.
+    const { user } = useAuth({ throwIfAnon: false })
 
     const { data: rows, isReady } = useOrgLiveQuery(
         (query, { userId }) => {

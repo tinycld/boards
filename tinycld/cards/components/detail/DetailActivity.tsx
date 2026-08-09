@@ -83,7 +83,10 @@ interface CommentRowProps {
 }
 
 function CommentRow({ comment, canComment, canModerate, onReply, onDelete }: CommentRowProps) {
-    const { user } = useAuth()
+    // Non-throwing: comments render on the public board, where there is no
+    // session. The author-or-owner check below already handles a null user by
+    // offering nothing.
+    const { user } = useAuth({ throwIfAnon: false })
     const mutedColor = useThemeColor('muted')
     // Author-or-owner, mirroring the delete rule.
     const isAuthor = !!user?.id && user.id === comment.author.id

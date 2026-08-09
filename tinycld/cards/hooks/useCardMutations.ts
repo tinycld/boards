@@ -49,7 +49,11 @@ export interface UpdateCardInput {
  * lookup in toBoardCard.
  */
 export function useCreateCard(projectId: string) {
-    const { user } = useAuth()
+    // Non-throwing: BoardColumn calls the mutation hooks unconditionally, so
+    // they are constructed on the PUBLIC board too — where there is no
+    // session and the affordances that would invoke them are already gated
+    // off. Throwing here made merely RENDERING a shared board an error.
+    const { user } = useAuth({ throwIfAnon: false })
     const [cardsCollection] = useStore('cards_cards')
 
     return useMutation<string, Error, CreateCardInput>({

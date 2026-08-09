@@ -26,7 +26,11 @@ export interface ProjectMemberRow {
  * explains it rather than looking broken.
  */
 export function useProjectMembers(projectId: string) {
-    const { user } = useAuth()
+    // Non-throwing: BoardColumn calls the mutation hooks unconditionally, so
+    // they are constructed on the PUBLIC board too — where there is no
+    // session and the affordances that would invoke them are already gated
+    // off. Throwing here made merely RENDERING a shared board an error.
+    const { user } = useAuth({ throwIfAnon: false })
     const [membersCollection, usersCollection] = useStore('cards_project_members', 'users')
 
     const { data: rows, isReady } = useOrgLiveQuery(

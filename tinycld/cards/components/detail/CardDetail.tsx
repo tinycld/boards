@@ -87,7 +87,10 @@ export function CardDetail({
     // Only the drop path needs this here — the strip owns the picker and the
     // rows. Both write through the same store, so the two callers of
     // useAttachmentMutations cannot disagree about what is in flight.
-    const { user } = useAuth()
+    // Non-throwing: a card opened from the PUBLIC board has no session, and
+    // the default useAuth() turns that screen into an error boundary. Every
+    // read below already tolerates a null user.
+    const { user } = useAuth({ throwIfAnon: false })
     const { uploadFiles } = useAttachmentMutations(card.id, projectId, user?.id ?? '')
     const { createComment, deleteComment } = useCommentMutations(card.id, projectId)
     // Which comment the composer is replying to. Local because it is transient

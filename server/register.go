@@ -143,6 +143,10 @@ func bindShareLinkRoutes(e *core.ServeEvent) {
 	// account gets one: a commentor/editor link holder proves an email address
 	// and is minted a membership. A public route here is simply one that omits
 	// the middleware; there is no exemptPaths list to add to.
+	e.Router.GET("/api/cards/share-link/{token}", func(re *core.RequestEvent) error {
+		return handleShareLinkMetadata(e.App, re)
+	})
+
 	e.Router.POST("/api/cards/share-link/{token}/otp-request", func(re *core.RequestEvent) error {
 		return handleShareOTPRequest(e.App, re)
 	})

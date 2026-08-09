@@ -84,6 +84,55 @@ func resolveLinkForSignIn(app core.App, token string) (*core.Record, *core.Recor
 	return link, project, 0, ""
 }
 
+// handleShareLinkMetadata tells a visitor what their own link offers.
+//
+// Public, because the alternative does not work: cards_share_links is
+// owner-only by rule, so a visitor reads no row and the client cannot tell an
+// editor link from a viewer one. Without this the board renders but never
+// offers the sign-in that would let someone contribute — the affordance would
+// exist only for people who already have access, which is nobody who needs it.
+//
+// It discloses strictly less than the link already does: the board's name,
+// which the visitor is about to read anyway, and the role, which is what the
+// link grants them. Nothing about the roster, the owner, or any other link.
+// A wrong or dead token is a 404/410 exactly as it is everywhere else, so this
+// is not an oracle for guessing tokens either.
+func handleShareLinkMetadata(app core.App, re *core.RequestEvent) error {
+	if !shareLinkLimiter.Allow(ratelimit.ClientIP(re.Request)) {
+		return re.JSON(http.StatusTooManyRequests,
+			shareLinkErrorResponse{Error: "rate limit exceeded"})
+	}
+
+	token := re.Request.PathValue("token")
+	if len(token) != 64 {
+		return re.JSON(http.StatusNotFound, shareLinkErrorResponse{Error: "share link not found"})
+	}
+	link, err := app.FindFirstRecordByFilter(
+		"cards_share_links", "token = {:t}", dbx.Params{"t": token})
+	if err != nil || link == nil {
+		return re.JSON(http.StatusNotFound, shareLinkErrorResponse{Error: "share link not found"})
+	}
+	if !link.GetBool("is_active") {
+		return re.JSON(http.StatusGone, shareLinkErrorResponse{Error: "this link has been revoked"})
+	}
+	expiresAt := link.GetDateTime("expires_at")
+	if !expiresAt.IsZero() && expiresAt.Time().Before(nowUTC()) {
+		return re.JSON(http.StatusGone, shareLinkErrorResponse{Error: "this link has expired"})
+	}
+
+	project, err := app.FindRecordById("cards_projects", link.GetString("project"))
+	if err != nil || project == nil {
+		return re.JSON(http.StatusNotFound, shareLinkErrorResponse{Error: "board not found"})
+	}
+
+	return re.JSON(http.StatusOK, map[string]any{
+		"role":         link.GetString("role"),
+		"project_id":   project.Id,
+		"project_name": project.GetString("name"),
+		"needs_signin": needsSignIn(link.GetString("role")),
+	})
+}
+
 // handleShareOTPRequest emails a one-time code to a would-be contributor.
 //
 // Public and rate-limited hard: a 6-digit code is a ~10^6 keyspace, and at the
