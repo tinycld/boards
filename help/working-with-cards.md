@@ -1,7 +1,7 @@
 ---
 title: Working with cards
 summary: Opening a card, editing its details, and moving it between lists
-tags: [cards, board, kanban, detail, shortcuts, "drag and drop"]
+tags: [cards, board, kanban, detail, shortcuts, formatting, "drag and drop"]
 order: 20
 ---
 
@@ -78,6 +78,13 @@ or `~~strikethrough~~`, and each turns into the real thing as you finish it.
 Tables and images you paste in are kept too. Everything is stored as Markdown,
 so a description written here reads the same anywhere else.
 
+If you would rather click than remember the syntax, a row of formatting buttons
+appears above the description as soon as you start writing: bold, italic and
+underline, three heading sizes, bullet and numbered lists, a quote, code, and a
+link. They act on whatever you have selected. The usual shortcuts work too —
+⌘B for bold, ⌘I for italic. The buttons are there only while you are writing,
+so a description you are only reading stays clean.
+
 There is no save button: every change is kept as you type. Esc leaves the
 description without discarding anything, and plain Enter starts a new line,
 since a description is prose.
@@ -96,7 +103,8 @@ If your connection drops mid-sentence, keep typing — your words are held on
 your machine and sent as soon as you are back. A short note under the
 description says when that is happening.
 
-People with **View** access can read a description but not change it.
+People with **View** access can read a description but not change it, so the
+formatting buttons never appear for them.
 
 ## Comments
 

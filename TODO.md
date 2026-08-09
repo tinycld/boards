@@ -1403,6 +1403,76 @@ project-delete WAL cascade. The generic Yjs machinery was promoted from
       `core/tests/unit/realtime-leave.test.ts`. The TS hello tests were
       mutation-checked — deleting the send makes them fail.
 
+- [x] **A formatting toolbar on the description.** Markdown was only reachable
+      by knowing the syntax; the commands are now clickable. Bold, italic,
+      underline, H1–H3, bullet and numbered lists, quote, code and link — the
+      set where a working command AND a live active state exist on both
+      platforms. Strikethrough and task lists are deliberately out: no command
+      on `EditorCommands`. Tables/images/colors likewise, and note they cannot
+      be feature-detected on native — `commands.insertTable` is defined and
+      truthy there but lands on a `default: break`.
+
+      **Core's web hook never re-rendered on transactions.** `useEditor` was
+      missing `shouldRerenderOnTransaction`, which tiptap v3 defaults to false,
+      so `toolbarState` froze at its mount-time values — every active flag dead.
+      Invisible until now because cards is the only `useRichEditor` consumer and
+      it had no toolbar. `text` had already hit this and fixed it the same way
+      (`use-document-editor.web.tsx`), and our own WebView page sets it too;
+      core's web hook was the last holdout. `activeHeadingLevel` was missing
+      from the same literal, pinned now by a parity test checking the web
+      derivation against the WebView's for the same document.
+
+      Focus gating needed `onFocus`/`onBlur` on `UseRichEditorOptions` — tiptap
+      events on web, and on native a new `isFocused` field in the WebView's
+      state payload relayed as an edge through `onFocusChange`. The page had to
+      subscribe to `focus`/`blur` explicitly: neither reliably emits a
+      transaction, so without them the flag only reached the host on the NEXT
+      keystroke and the toolbar never hid on blur.
+
+      **Pinning took three attempts and the first two were wrong.** Absolute
+      positioning "worked" in a probe that was a false positive — the panel was
+      already scrolled to its bottom, so the wheel moved nothing; scrolling the
+      other way showed the toolbar sliding 378px off screen. `position: sticky`
+      is web-only, so native pins the same row through `stickyHeaderIndices`,
+      which only accepts a DIRECT ScrollView child — hence `CardDetail`'s
+      content is now flat children with per-section padding rather than one
+      wrapper, and `TOOLBAR_INDEX` must track the toolbar's position in that
+      list (RN pins by index, so a section inserted above it silently pins the
+      wrong thing). Every ancestor also needs `overflow-visible`: RN-Web Views
+      clip by default, which turns sticky back into static with no error.
+
+      The editor is keyed by moving `key={cardId}` up to `CardDetail` at both
+      call sites. It binds one Yjs fragment per mount, so something must remount
+      on card switch; keying the parent is what let `CardDetail` own the editor
+      hook, which the sticky child placement required. `doc` became nullable so
+      that hook can be called unconditionally.
+
+      Appearing must not move the text. The label and the toolbar share one
+      fixed-height row and swap in place — measured shift went 46px → 0. An
+      overlay would also have avoided the reflow but breaks pinning on both
+      platforms: an out-of-flow element has no box to pin. The editor then lost
+      its border and horizontal padding so the prose starts on the same x as the
+      property labels (verified: all three at 805).
+
+      Two e2e races fixed at the source while here, both pre-existing and both
+      "passes alone, fails in the suite". `focusedTitle` in
+      `keyboard-shortcuts.spec.ts` did a one-shot `page.evaluate` behind a
+      non-retrying `expect`, reading `null` before the focus ring painted — this
+      is the j/k flake filed under M7. The checklist drag aimed at coordinates
+      measured BEFORE the grab, but holding a row makes `SortableList` shift the
+      others to preview the gap, so the drop landed short of the end.
+
+      **Still owed: a device pass.** Web and native pin by different mechanisms
+      and only the web path has e2e coverage; `stickyHeaderIndices` and the
+      `isFocused` relay are unit-tested and reasoned about, not run on a
+      simulator.
+
+      Also seen but NOT fixed: under a full-suite run on a loaded machine
+      (load average hit 37) single keystrokes are occasionally dropped before
+      the app sees them — three different keyboard specs each failed once and
+      passed on every other run. That is a real gap in how those specs drive
+      input, not something the toolbar introduced, and it wants its own pass.
+
 ## M8 — CLI 
 
 - [ ] Integerate with CLI, add manifest fields and support CRUD on lists and cards
