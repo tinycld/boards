@@ -35,7 +35,7 @@ func TestCardsShippedRules_CarryTheirGuards(t *testing.T) {
 		// Conjoined onto all 45 rules; sampled here where its absence is a blob
 		// or escalation leak rather than a listing nuisance.
 		{"cards_attachments", "view", `@request.auth.disabled != true`,
-			"viewRule is what PocketBase checks before serving /api/files/... — this clause is the only thing keeping a suspended user from downloading board attachments"},
+			"a suspended user must not read attachment records. NOTE: this does NOT reach the file blob — PB checks the viewRule before serving /api/files/... only for a `protected` file field, and cards_attach_file is not one (apis/file.go:108). An earlier version of this row claimed otherwise; see share_token_rls_test.go"},
 		{"cards_cards", "view", `@request.auth.disabled != true`,
 			"a suspended user must not read board content"},
 		{"cards_comments", "view", `@request.auth.disabled != true`,
@@ -184,6 +184,116 @@ func TestCardsShippedRules_NoCollectionIsPublicOrLocked(t *testing.T) {
 			if strings.TrimSpace(rule) == "" {
 				t.Errorf("%s.%sRule is empty, which PocketBase reads as PUBLIC",
 					collection, kind)
+			}
+		}
+	}
+}
+
+// --------------------------------------------------------------------------
+// M6a share-token read rules (pb-migrations/1980000003).
+
+// The share-token disjunct, on every collection that is meant to carry it.
+//
+// The `project ?= <ref>` clause is the one that matters. @collection registers
+// an UNCONSTRAINED join (a bare LEFT JOIN, no ON), so without a correlation
+// clause a valid token for ANY board matches EVERY board's rows. Dropping it
+// fails ten behavioural tests in share_token_rls_test.go — this says which
+// clause went missing.
+func TestCardsShippedRules_ShareTokenDisjunctIsCorrelated(t *testing.T) {
+	env := setupCardsEnv(t)
+
+	const tokenMatch = `@collection.cards_share_links.token ?= @request.headers.x_share_token`
+	const isActive = `@collection.cards_share_links.is_active ?= true`
+	const neverExpires = `@collection.cards_share_links.expires_at ?= ""`
+	const notYetExpired = `@collection.cards_share_links.expires_at ?> @now`
+
+	// cards_projects correlates on its own id; every content row on `project`.
+	for _, c := range []struct{ collection, correlation string }{
+		{"cards_projects", `@collection.cards_share_links.project ?= id`},
+		{"cards_lists", `@collection.cards_share_links.project ?= project`},
+		{"cards_cards", `@collection.cards_share_links.project ?= project`},
+		{"cards_labels", `@collection.cards_share_links.project ?= project`},
+		{"cards_checklist_items", `@collection.cards_share_links.project ?= project`},
+		{"cards_comments", `@collection.cards_share_links.project ?= project`},
+		{"cards_attachments", `@collection.cards_share_links.project ?= project`},
+	} {
+		for _, kind := range []string{"list", "view"} {
+			t.Run(c.collection+"."+kind, func(t *testing.T) {
+				rlstest.RequireRuleContains(t, env.app, c.collection, kind, tokenMatch)
+				rlstest.RequireRuleContains(t, env.app, c.collection, kind, isActive)
+				rlstest.RequireRuleContains(t, env.app, c.collection, kind, neverExpires)
+				rlstest.RequireRuleContains(t, env.app, c.collection, kind, notYetExpired)
+				rlstest.RequireRuleContains(t, env.app, c.collection, kind, c.correlation)
+			})
+		}
+	}
+}
+
+// The inverse, and the more important half: the disjunct must appear NOWHERE
+// else. A token that reached cards_project_members would read the org's member
+// names and emails — exactly what rosterRule and core's 1870000000 exist to
+// prevent — and one that reached cards_share_links could enumerate every other
+// board's tokens. On a write rule it would hand an anonymous caller the board.
+func TestCardsShippedRules_ShareTokenIsAbsentEverywhereElse(t *testing.T) {
+	env := setupCardsEnv(t)
+
+	readOnlyOnContent := map[string]bool{
+		"cards_projects": true, "cards_lists": true, "cards_cards": true,
+		"cards_labels": true, "cards_checklist_items": true,
+		"cards_comments": true, "cards_attachments": true,
+	}
+
+	for _, collection := range allCardsCollections {
+		for _, kind := range allRuleKinds {
+			isReadKind := kind == "list" || kind == "view"
+			if readOnlyOnContent[collection] && isReadKind {
+				continue // legitimately carries it — asserted above
+			}
+			rule, ok := rlstest.Rule(t, env.app, collection, kind)
+			if !ok {
+				continue
+			}
+			if strings.Contains(rule, "x_share_token") {
+				t.Errorf(
+					"%s.%sRule accepts a share token, which it must never do\n  rule: %s",
+					collection, kind, rule)
+			}
+		}
+	}
+}
+
+// The disjunct must sit OUTSIDE the `enabled &&` conjunction.
+//
+// @request.auth.* resolves to SQL NULL for an unauthenticated caller, and
+// `NULL != true` is NULL — falsy. A token clause conjoined with `enabled` is
+// therefore unsatisfiable for precisely the caller it exists to serve, and it
+// would look entirely correct while never matching. The shape below is what
+// keeps them separate; a rewrite that folds them fails here rather than
+// silently making every public board empty.
+func TestCardsShippedRules_ShareTokenDisjunctIsTopLevel(t *testing.T) {
+	env := setupCardsEnv(t)
+
+	const wrapped = `(@request.auth.disabled != true && `
+
+	for _, collection := range []string{
+		"cards_projects", "cards_lists", "cards_cards", "cards_labels",
+		"cards_checklist_items", "cards_comments", "cards_attachments",
+	} {
+		for _, kind := range []string{"list", "view"} {
+			rule, ok := rlstest.Rule(t, env.app, collection, kind)
+			if !ok {
+				t.Fatalf("%s.%sRule is nil", collection, kind)
+			}
+			if !strings.HasPrefix(rule, wrapped) {
+				t.Errorf(
+					"%s.%sRule does not open with the parenthesised member clause,"+
+						" so the token disjunct may be conjoined with `enabled`\n  rule: %s",
+					collection, kind, rule)
+			}
+			if !strings.Contains(rule, ") || (") {
+				t.Errorf(
+					"%s.%sRule has no top-level || between the member and token clauses\n  rule: %s",
+					collection, kind, rule)
 			}
 		}
 	}

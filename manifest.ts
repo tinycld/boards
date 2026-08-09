@@ -1,7 +1,7 @@
 const manifest = {
     name: 'Cards',
     slug: 'cards',
-    version: '0.1.0',
+    version: '0.2.0',
     description: 'Kanban boards for tracking work across lists.',
     routes: { directory: 'screens' },
     nav: {

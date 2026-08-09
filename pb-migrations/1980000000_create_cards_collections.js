@@ -942,8 +942,20 @@ migrate(
         })
         app.save(commentsRulesCol)
 
-        // cards_attachments: viewRule is what gates the FILE BLOB — PB checks it
-        // before serving /api/files/... — which is why `enabled` matters here.
+        // cards_attachments: viewRule gates the record. It does NOT currently
+        // gate the file BLOB — PB consults the viewRule before serving
+        // /api/files/... only for a file field marked `protected`
+        // (apis/file.go:108), and cards_attach_file is not one, so a blob is
+        // served to anyone who knows the record id and filename. That is a
+        // pre-existing gap shared by every file field in this workspace (mail,
+        // drive, text), not something the M6a share-token rules introduced;
+        // share_token_rls_test.go characterizes it. Marking the field protected
+        // is the fix and is a breaking client change — a protected file needs a
+        // short-lived file token, so Thumbnail/PreviewModal must be updated with
+        // it. Filed, not done here.
+        //
+        // (This comment previously asserted the opposite. It was wrong, and the
+        // rule below is unchanged — only the claim about what it reaches.)
         const attachmentsCol = app.findCollectionByNameOrId('cards_attachments')
         setRules(attachmentsCol, {
             list: `${enabled} && ${viaMember}`,
