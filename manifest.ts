@@ -18,6 +18,7 @@ const manifest = {
     },
     sidebar: { component: 'sidebar' },
     help: { directory: 'help' },
+    tests: { directory: 'tests' },
     // Cards is searchable through core's federated /api/search, which reads the
     // Go source registered in server/search.go — there is no per-package search
     // route to name here. `adapter` supplies the client-side selection handler
@@ -54,6 +55,10 @@ const manifest = {
     },
     collections: { register: 'collections', types: 'types' },
     seed: { script: 'seed' },
+    // Without this, `useReportIssue` returns null and the Help menu's "Report
+    // an issue" item is gated off entirely — cards was the only member missing
+    // it, so the affordance simply did not exist here.
+    repository: { url: 'https://github.com/tinycld/cards' },
     peerVersions: { '@tinycld/core': '>=0.0.6 <0.1.0' },
 }
 
