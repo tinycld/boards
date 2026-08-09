@@ -9,7 +9,11 @@ import type { BoardCardView, BoardLabel, BoardMember } from '../../types'
 import { useBoardPresenceContext } from '../BoardPresenceProvider'
 import { LabelManagerDialog } from '../LabelManagerDialog'
 import { CommentComposer } from './CommentComposer'
-import { DescriptionEditor } from './DescriptionEditor'
+import {
+    DESCRIPTION_HEADER_HEIGHT,
+    type DescriptionEditorSlots,
+    useDescriptionEditor,
+} from './DescriptionEditor'
 import { DetailActivity } from './DetailActivity'
 import { DetailChecklist } from './DetailChecklist'
 import { DetailProperties } from './DetailProperties'
@@ -17,6 +21,15 @@ import { EditableText, type EditableTextHandle } from './EditableText'
 import { MarkdownText } from './MarkdownText'
 
 type DetailVariant = 'peek' | 'page'
+
+/**
+ * Which ScrollView child the description header is, counting from zero:
+ * title, properties, HEADER (label / toolbar), editor, checklist, activity.
+ *
+ * Keep in step with the JSX below. React Native pins by index, so a section
+ * inserted above it silently pins the wrong thing rather than failing.
+ */
+const TOOLBAR_INDEX = 2
 
 interface CardDetailProps {
     card: BoardCardView
@@ -80,21 +93,33 @@ export function CardDetail({
         )
     }
 
+    const description = useDescriptionSection({
+        cardId: card.id,
+        description: card.description,
+        onSave: value => updateCard.mutate({ cardId: card.id, description: value }),
+        canEdit,
+    })
+
     return (
         <>
-            <ScrollView className="flex-1">
-                <View className={`px-6 pb-6 ${widthClass}`}>
-                    <View className="mt-1 mb-[18px]">
-                        <EditableText
-                            ref={titleRef}
-                            value={card.title}
-                            onSave={title => updateCard.mutate({ cardId: card.id, title })}
-                            placeholder="Card title"
-                            accessibilityLabel="Edit card title"
-                            textClassName="text-[20px] font-semibold leading-[27px] tracking-tight text-foreground"
-                            isDisabled={!canEdit}
-                        />
-                    </View>
+            {/* Flat children, not one padded wrapper: `stickyHeaderIndices`
+                only pins a DIRECT child of the ScrollView, so the toolbar has
+                to sit at this level. The section padding therefore lives on
+                each child. TOOLBAR_INDEX below must match the toolbar's
+                position in this list. */}
+            <ScrollView className="flex-1" stickyHeaderIndices={[TOOLBAR_INDEX]}>
+                <View className={`px-6 mt-1 mb-[18px] ${widthClass}`}>
+                    <EditableText
+                        ref={titleRef}
+                        value={card.title}
+                        onSave={title => updateCard.mutate({ cardId: card.id, title })}
+                        placeholder="Card title"
+                        accessibilityLabel="Edit card title"
+                        textClassName="text-[20px] font-semibold leading-[27px] tracking-tight text-foreground"
+                        isDisabled={!canEdit}
+                    />
+                </View>
+                <View className={`px-6 ${widthClass}`}>
                     <DetailProperties
                         card={card}
                         projectLabels={projectLabels}
@@ -102,18 +127,28 @@ export function CardDetail({
                         onManageLabels={() => setIsManagingLabels(true)}
                         canEdit={canEdit}
                     />
-                    <DescriptionSection
-                        cardId={card.id}
-                        description={card.description}
-                        onSave={description => updateCard.mutate({ cardId: card.id, description })}
-                        canEdit={canEdit}
-                    />
+                </View>
+                {/* Index TOOLBAR_INDEX — the sticky one. Always rendered, at a
+                    FIXED height: the label and the toolbar take turns in this
+                    one row, so focusing the editor swaps what is drawn without
+                    changing what the row occupies. Reserving the space is also
+                    what keeps sticky working — an out-of-flow overlay has no
+                    box for either platform to pin. */}
+                <View className={`px-6 ${widthClass}`}>
+                    {description.body ? description.header : null}
+                </View>
+                <View className={`px-6 mb-6 overflow-visible ${widthClass}`}>
+                    {description.body}
+                </View>
+                <View className={`px-6 ${widthClass}`}>
                     <DetailChecklist
                         items={checklist}
                         cardId={card.id}
                         projectId={projectId}
                         canEdit={canEdit}
                     />
+                </View>
+                <View className={`px-6 pb-6 ${widthClass}`}>
                     <DetailActivity
                         comments={comments}
                         canComment={canComment}
@@ -156,7 +191,7 @@ export function CardDetail({
  * while idle and swaps back to a raw input the moment an edit starts, so the
  * markdown never has to round-trip through a rich-text model.
  */
-function DescriptionSection({
+function useDescriptionSection({
     cardId,
     description,
     onSave,
@@ -166,7 +201,7 @@ function DescriptionSection({
     description?: string
     onSave: (value: string) => void
     canEdit: boolean
-}) {
+}): DescriptionEditorSlots {
     const { doc, isReady, isConnected, canEditDoc, awareness, identity } = useBoardPresenceContext()
 
     // Latched, not sampled: once collaborative it stays collaborative for this
@@ -180,38 +215,48 @@ function DescriptionSection({
     modeRef.current = descriptionMode({ hasDoc: !!doc, isReady }, modeRef.current)
     const mode = modeRef.current
 
+    const isCollab = mode === 'collab' && !!doc
+
+    // Called unconditionally — hooks cannot sit behind the branch below. It
+    // builds a plain local editor while `doc` is null, which costs nothing
+    // because the collaborative branch is the only one that renders it.
+    const editorSlots = useDescriptionEditor({
+        cardId,
+        doc: isCollab ? doc : null,
+        awareness,
+        identity,
+        canEdit: canEdit && canEditDoc,
+        isConnected,
+    })
+
+    if (isCollab) return editorSlots
+
     // A disabled editor still renders its placeholder styled as an affordance,
     // so a read-only card with no description drops the section entirely —
     // there is nothing to show and nothing to invite.
-    if (!canEdit && !description && mode === 'mutation') return null
+    const isHidden = !canEdit && !description
 
-    return (
-        <View className="mb-6">
-            <Text className="text-[13px] font-semibold text-foreground mb-2.5">Description</Text>
-            {mode === 'collab' && doc ? (
-                <DescriptionEditor
-                    // Rebinds to the right fragment when the peek switches cards.
-                    key={cardId}
-                    cardId={cardId}
-                    doc={doc}
-                    awareness={awareness}
-                    identity={identity}
-                    canEdit={canEdit && canEditDoc}
-                    isConnected={isConnected}
-                />
-            ) : (
-                <EditableText
-                    value={description ?? ''}
-                    onSave={onSave}
-                    placeholder="Add a description — what does done look like?"
-                    accessibilityLabel="Edit description"
-                    multiline
-                    isDisabled={!canEdit}
-                    renderValue={value => <MarkdownText body={value} />}
-                />
-            )}
-        </View>
-    )
+    return {
+        // The plain-text fallback has no editor commands to drive a toolbar, so
+        // this row only ever shows the label. Same fixed height as the
+        // collaborative path, so the two modes do not lay out differently.
+        header: (
+            <View className="justify-center" style={{ height: DESCRIPTION_HEADER_HEIGHT }}>
+                <Text className="text-[13px] font-semibold text-foreground">Description</Text>
+            </View>
+        ),
+        body: isHidden ? null : (
+            <EditableText
+                value={description ?? ''}
+                onSave={onSave}
+                placeholder="Add a description — what does done look like?"
+                accessibilityLabel="Edit description"
+                multiline
+                isDisabled={!canEdit}
+                renderValue={value => <MarkdownText body={value} />}
+            />
+        ),
+    }
 }
 
 // ChecklistSection used to hide the whole section when empty. It is gone: the

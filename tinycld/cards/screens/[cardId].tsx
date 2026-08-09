@@ -153,6 +153,9 @@ function CardPage({ project, entry, cardId, navigateBack }: CardPageProps) {
                 ) : null}
             </View>
             <CardDetail
+                // See CardPeek: the description editor is bound to one Yjs
+                // fragment per mount, so the card id is the identity.
+                key={entry.card.id}
                 card={entry.card}
                 variant="page"
                 projectId={project.id}
