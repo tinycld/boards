@@ -2,6 +2,7 @@ package cards
 
 import (
 	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/core"
 
 	"tinycld.org/core/fts"
 	"tinycld.org/core/offboard"
@@ -100,4 +101,48 @@ func registerShared(app *pocketbase.PocketBase) {
 	// rather than in Register so a hosted tenant and a self-hosted deployment
 	// search identically.
 	search.RegisterSources(searchSource())
+
+	registerShareLinkEndpoints(app)
+}
+
+// registerShareLinkEndpoints mounts cards' first HTTP routes (M6a).
+//
+// Owner-facing management only. There is deliberately no public read endpoint:
+// a share-link visitor reads the board through the ORDINARY collection REST and
+// realtime, because pb-migrations/1980000003 lets their token satisfy the
+// list/view rules. That is the whole point of the rules-based design — no
+// snapshot endpoint to keep in step with the board UI, and no second read path
+// to audit.
+//
+// Every route requires auth. A public route here would be one that omits
+// requireAuth; there is no exemptPaths list to add to.
+func registerShareLinkEndpoints(app *pocketbase.PocketBase) {
+	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
+		bindShareLinkRoutes(e)
+		return e.Next()
+	})
+}
+
+// bindShareLinkRoutes is the route table itself, split out so the tests mount
+// the SAME one rather than a paraphrase. A test that registered its own routes
+// would keep passing after this table changed.
+func bindShareLinkRoutes(e *core.ServeEvent) {
+	e.Router.POST("/api/cards/share-link", func(re *core.RequestEvent) error {
+		return handleCreateShareLink(e.App, re)
+	}).BindFunc(requireAuth)
+
+	e.Router.GET("/api/cards/share-links", func(re *core.RequestEvent) error {
+		return handleListShareLinks(e.App, re)
+	}).BindFunc(requireAuth)
+
+	e.Router.DELETE("/api/cards/share-link/{id}", func(re *core.RequestEvent) error {
+		return handleRevokeShareLink(e.App, re)
+	}).BindFunc(requireAuth)
+}
+
+func requireAuth(re *core.RequestEvent) error {
+	if re.Auth == nil {
+		return re.UnauthorizedError("Authentication required", nil)
+	}
+	return re.Next()
 }

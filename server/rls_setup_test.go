@@ -345,6 +345,11 @@ type req struct {
 	// present would pass while the leak sat beside it.
 	notContent []string
 	after      func(t testing.TB, app *tests.TestApp)
+	// before mounts routes on the test app's ServeEvent. The RLS suites need
+	// none — they measure the rule engine, which the default router already
+	// exercises — but the endpoint suites must bind the SAME route table
+	// production does, so a test cannot keep passing after that table changes.
+	before func(e *core.ServeEvent)
 }
 
 func (r req) run(t *testing.T, env *cardsEnv) {
@@ -378,6 +383,12 @@ func (r req) run(t *testing.T, env *cardsEnv) {
 		after := r.after
 		scenario.AfterTestFunc = func(t testing.TB, app *tests.TestApp, _ *http.Response) {
 			after(t, app)
+		}
+	}
+	if r.before != nil {
+		before := r.before
+		scenario.BeforeTestFunc = func(_ testing.TB, _ *tests.TestApp, e *core.ServeEvent) {
+			before(e)
 		}
 	}
 	scenario.Test(t)
