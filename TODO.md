@@ -19,7 +19,7 @@ ordered by dependency; tasks within one are small and mostly independent.
 | M6 | File attachments with previews | |
 | M6a | Public boards: the share-link flow | schema shipped, flow missing |
 | M7 | Package plumbing, tests, docs | |
-| M9 | Collaborative markdown editing | web + native shipped; **native carets open (double-awareness)** |
+| M9 | Collaborative markdown editing | web + native shipped, carets included |
 
 The lettered milestones (M2a, M3b, M6a) were split out once the data model
 landed and the real dependency order became clear: the rules are enforceable
@@ -1130,10 +1130,10 @@ bridge on the host's existing socket, rather than opening a second one.
 Verified on the iOS simulator: text syncs both ways and the description renders
 headings, tables, blockquotes and links.
 
-**Open: no collaborator carets on native** — you cannot see where the other
-person is typing. That falls out of **the double-awareness bug** described
-below, which is the single constraint any fix has to respect. See the entry at
-the end of this section.
+Collaborator carets work on both platforms. Getting there turned out to be two
+independent bugs stacked on each other — see the caret entry at the end of this
+section — and the fix also removed `text`'s second WebSocket, so "one human, one
+avatar" now holds across the ecosystem rather than only in cards.
 
 The plan changed in two places, both for the better:
 
@@ -1163,6 +1163,11 @@ project-delete WAL cascade. The generic Yjs machinery was promoted from
       and handled: the publish effect MERGES into the awareness slot instead of
       replacing it, and the caret is handed the same `{id,name,color}` object
       `parsePresence` requires. Covered by `tests/board-presence.test.ts`.
+
+      This entry was ticked prematurely. The wiring was right and the carets
+      were **invisible** — see the caret entry at the end of the section. Data
+      flow tests passed the whole time, because none of them looked at whether
+      anything was drawn.
 - [x] Help topics updated (writing a description, writing one together,
       markdown in comments).
 - [x] **Native markdown editing — the HTML pivot is gone.** Core owns a WebView
@@ -1262,57 +1267,81 @@ project-delete WAL cascade. The generic Yjs machinery was promoted from
       editor is shipped and carries ~60 commands plus the suggestions and
       authorship stacks. One native hosting path eventually, not immediately.
 
-- [ ] **Collaborator carets on native — blocked on the DOUBLE-AWARENESS BUG.**
-      Text syncs both ways on a phone, but you cannot see WHERE the other
-      person is typing — no remote caret, no name label. Web has them; native
-      does not.
+- [x] **Collaborator carets — shipped on web and native.** Fixed entirely in
+      core; cards needed no source change beyond the new e2e.
 
-      **The double-awareness bug** is the thing to understand before touching
-      this. A native editor has TWO awareness instances for one human:
+      This was filed as one bug (no awareness relay on native). It was **two**,
+      stacked, and the second one broke web too:
 
-      1. the **host's**, on the room socket — what `useBoardPresence`
-         publishes and what every peer's avatar row reads;
-      2. the **WebView page's**, created locally at
-         `webview/source/Editor.tsx` (`new Awareness(doc)`) to drive carets
-         inside the page.
+      **(1) The caret CSS was missing on web and dead on native.** The wiring
+      was correct the whole time — `CollaborationCaret` mounted, and its spans
+      reached the DOM. They were simply never drawn:
 
-      Wire the second one to the network and that human becomes two peers:
-      two avatars on the board, two carets in the document, and a slot the
-      host's presence teardown never cleans up (it only knows about its own).
-      **`text` has exactly this bug today** — `text/webview-editor/source/
-      Editor.tsx` opens a SECOND socket inside the WebView with its own
-      awareness identity, which is `TODO(text-native v1.1)`, and it also ships
-      a credential into the page. Cards deliberately did NOT copy that: the
-      relay carries document updates only, the page's awareness never leaves
-      the WebView, and the cost of that choice is precisely these missing
-      carets.
+      - the only caret CSS lived inside the native WebView bundle string, so
+        web loaded none of it. `use-rich-editor.web.tsx` imported no CSS at all,
+        which also left descriptions on web with **no** ProseMirror content
+        styling — no headings, lists, blockquotes or tables, since Tailwind
+        preflight strips the browser defaults;
+      - those rules used tiptap v2's SINGULAR `collaboration-caret__*`, while
+        the installed v3 emits the plural `collaboration-carets__*`. Dead on
+        native as well. The comment claiming the styles were ready and waiting
+        was what kept anyone from checking.
 
-      So this is a consequence of the design, not an oversight — and the fix
-      must keep "one human, one avatar" while adding remote carets.
+      Then a third layer once the classes matched: the caret span carries no
+      text and its label is absolutely positioned, so an unsized `inline-block`
+      collapses to a **zero-height box — and a border on a zero-height box
+      draws nothing**. Correct border, correct class, invisible caret. Hence
+      `height: 1em` in `core/lib/editor/rich/editor-content-styles.ts`.
 
-      The shape that fits: relay awareness over the bridge the same way
-      document updates already are. The `awareness` namespace is already
-      reserved in `core/lib/editor/message-bus/types.ts` for exactly this.
-      Sketch:
+      The lesson worth keeping: three separate data-flow tests were green
+      through all of this, because not one of them asked whether a caret was
+      *drawn*. `card-description-collab.spec.ts` now measures the rendered box
+      and reads the label; both assertions were mutation-checked.
 
-      - Host: subscribe to the room's `Awareness`, encode remote states with
-        `encodeAwarenessUpdate` (base64, same as the yjs channel), and post
-        them in. Apply inbound page states to the room awareness so peers see
-        the phone's cursor.
-      - Page: apply host frames to its local `Awareness` with an origin tag so
-        the relay does not echo, exactly as `FROM_HOST` does for the doc.
-      - **The trap:** `CollaborationCaret` OVERWRITES `awareness.user` on
-        mount, and cards' `useBoardPresence` merges into the same slot. A
-        naive relay will either duplicate the local user's avatar on the board
-        or drop it — the same clobber the web path documents at
-        `extensions.ts` `RichEditorCollabOptions.user`. The local client's own
-        slot must be filtered OUT of what is relayed in either direction;
-        only remote peers' states cross the bridge.
+      **(2) The awareness relay on native.** `collab.awareness` was threaded
+      from cards all the way to `use-rich-editor.native.tsx` and never read
+      there. Now relayed over the reserved `awareness` namespace by
+      `core/lib/editor/rich/awareness-webview-host.ts`.
 
-      Medium-sized: a protocol addition, both relay halves, the local-slot
-      filter, and unit coverage that two page-awarenesses converge without the
-      local user appearing twice. Worth doing — carets are most of what makes
-      co-editing feel live — but it is its own change, not a follow-up commit.
+      The relay is **asymmetric**, which is the whole design:
+
+      - page → host sends the page's own CURSOR POSITION, not an awareness
+        state, and the host merges it into its OWN slot. That is forced by
+        `realtime/client.ts`, which bails unless a change touches its local
+        clientID and then encodes only that slot — a second slot would never
+        reach a peer, and the broker's one-awareness-id-per-connection
+        handshake means its leave frame would never be sent either;
+      - host → page relays only REMOTE peers. **The local slot must be
+        filtered out in both directions**, or the phone's own slot comes back
+        under a clientID that is not the page's own, y-tiptap's
+        "don't draw my own caret" check misses it, and the user watches a
+        ghost caret trail their own typing. One line; one test guards it.
+
+      A cursor crosses untranslated because a Yjs relative position names
+      ITEMS IN THE DOCUMENT, identical in every replica.
+
+      14 unit tests, including three-peer convergence (web peer + phone host +
+      WebView page) asserting the web peer sees exactly ONE slot for the phone
+      carrying both avatar identity and caret.
+
+- [x] **`text` migrated off its second WebSocket.** Its WebView opened a socket
+      of its own with a separate awareness identity **and shipped a live
+      PocketBase token into the page** — one human showing as two peers in
+      `PresenceAvatars`, with a slot the host's teardown could never clean up.
+      Long-standing `TODO(text-native v1.1)`.
+
+      Much smaller than it looked, for two reasons found by reading rather
+      than assuming: `useTextRoom` is a *shared* file, so the native host
+      **already had a live, synced room** it was ignoring (bind it, don't build
+      it); and `buildSuggestionEditorExtensions` takes no awareness at all —
+      suggestions, authorship and comments are Y.Doc-only, so the intimidating
+      part of text's editor was untouched. The credential is gone from the
+      page, and the room's awareness is now the only one on the wire.
+
+      Also surfaced: the page was only ever handed `pb.authStore.token` while
+      the host room supports `shareSession`, so **anonymous share-link users
+      were likely broken on native**. Fixed for free — auth is host-side now.
+      Worth confirming on a device.
 - [x] **A departing peer's avatar lingers.** `board-presence.spec.ts` is
       **green**. Fixed in core (`tinycld`), not cards — cards needed no source
       change beyond a corrected comment.
