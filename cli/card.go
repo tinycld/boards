@@ -73,15 +73,18 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 				return err
 			}
 
-			// JSON gets the whole card with its children nested; the table
-			// format is a field list, which is what a terminal reader wants.
+			// JSON gets the whole card with its children nested; table and CSV
+			// get the field list, which is what a terminal reader wants and
+			// what a CSV consumer can actually parse. Only JSON short-circuits
+			// here — passing nil headers and nil rows to a CSV render emits a
+			// bare newline and drops the record.
 			detail := struct {
 				card      `json:",inline"`
 				Checklist []checklistItem `json:"checklist"`
 				Comments  []comment       `json:"comments"`
 			}{card: cd, Checklist: items, Comments: comments}
 
-			if o.Format != output.Table {
+			if o.Format == output.JSON {
 				return o.Write(cmd.OutOrStdout(), nil, nil, detail)
 			}
 			rows := [][]string{
@@ -178,10 +181,7 @@ func newCardAddCmd(c *client.Client) *cobra.Command {
 				return err
 			}
 			o.Info(cmd.ErrOrStderr(), "added %q to %s", created.Title, l.Name)
-			if o.Format != output.Table {
-				return o.Write(cmd.OutOrStdout(), nil, nil, created)
-			}
-			return nil
+			return writeCardResult(cmd, o, created)
 		},
 	}
 	addBoardFlag(cmd, &boardRef)
@@ -239,10 +239,7 @@ func newCardEditCmd(c *client.Client) *cobra.Command {
 				return err
 			}
 			o.Info(cmd.ErrOrStderr(), "updated %q", updated.Title)
-			if o.Format != output.Table {
-				return o.Write(cmd.OutOrStdout(), nil, nil, updated)
-			}
-			return nil
+			return writeCardResult(cmd, o, updated)
 		},
 	}
 	cmd.Flags().StringVar(&title, "title", "", "new title")
@@ -333,10 +330,7 @@ func newCardMoveCmd(c *client.Client) *cobra.Command {
 				return err
 			}
 			o.Info(cmd.ErrOrStderr(), "moved %q", updated.Title)
-			if o.Format != output.Table {
-				return o.Write(cmd.OutOrStdout(), nil, nil, updated)
-			}
-			return nil
+			return writeCardResult(cmd, o, updated)
 		},
 	}
 	addBoardFlag(cmd, &boardRef)
@@ -366,10 +360,7 @@ func newCardArchiveCmd(c *client.Client) *cobra.Command {
 				verb = "restored"
 			}
 			o.Info(cmd.ErrOrStderr(), "%s %q", verb, updated.Title)
-			if o.Format != output.Table {
-				return o.Write(cmd.OutOrStdout(), nil, nil, updated)
-			}
-			return nil
+			return writeCardResult(cmd, o, updated)
 		},
 	}
 	cmd.Flags().BoolVar(&unset, "unset", false, "restore an archived card")
@@ -440,27 +431,7 @@ func parseDue(v string) (string, error) {
 }
 
 func labelsByID(ctx context.Context, c *client.Client, ids []string) (map[string]label, error) {
-	out := map[string]label{}
-	if len(ids) == 0 {
-		return out, nil
-	}
-	var terms []string
-	seen := map[string]bool{}
-	for _, id := range ids {
-		if id == "" || seen[id] {
-			continue
-		}
-		seen[id] = true
-		terms = append(terms, client.Filter("id = {:i}", map[string]any{"i": id}))
-	}
-	labels, err := client.ListAll[label](ctx, c, labelsCollection, strings.Join(terms, " || "), "")
-	if err != nil {
-		return nil, err
-	}
-	for _, l := range labels {
-		out[l.ID] = l
-	}
-	return out, nil
+	return recordsByID(ctx, c, labelsCollection, ids, func(l label) string { return l.ID })
 }
 
 // labelNames renders a card's labels. An id with no readable row is DROPPED
@@ -482,13 +453,21 @@ func labelNames(ids []string, labels map[string]label) string {
 
 // firstLine collapses a multi-line body into one table cell. Markdown
 // descriptions and comments are frequently long; `--json` gives the full text.
+//
+// The cap counts RUNES, not bytes. Slicing a string at a byte offset cuts a
+// multi-byte rune in half and emits invalid UTF-8 — a description of 60 "é"
+// rendered as a truncated rune followed by the ellipsis — and it also made the
+// visible limit depend on the alphabet, so a CJK body was cut at ~26 characters
+// rather than 80.
 func firstLine(s string) string {
 	s = strings.TrimSpace(s)
 	if i := strings.IndexAny(s, "\r\n"); i >= 0 {
 		s = strings.TrimSpace(s[:i]) + " …"
 	}
-	if len(s) > 80 {
-		s = s[:79] + "…"
+	if r := []rune(s); len(r) > firstLineRunes {
+		s = string(r[:firstLineRunes-1]) + "…"
 	}
 	return s
 }
+
+const firstLineRunes = 80

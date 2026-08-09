@@ -65,9 +65,10 @@ func newBoardListCmd(c *client.Client) *cobra.Command {
 }
 
 // newBoardViewCmd renders a whole board — every column with its cards — which
-// is the shape a person actually wants when they ask about a board. It is a
-// per-column read rather than one query because `cards_cards` has no ordering
-// across lists; each column is sorted independently by `position, id`.
+// is the shape a person actually wants when they ask about a board. The cards
+// come from ONE query grouped by column (cardsByList), not a read per column:
+// `position` only orders within a list, but sorting `list,position,id` groups
+// the rows without disturbing that within-column order.
 func newBoardViewCmd(c *client.Client) *cobra.Command {
 	var all bool
 	cmd := &cobra.Command{
@@ -95,16 +96,17 @@ func newBoardViewCmd(c *client.Client) *cobra.Command {
 				list  `json:",inline"`
 				Cards []card `json:"cards"`
 			}
+			byList, err := cardsByList(ctx, c, p.ID, all)
+			if err != nil {
+				return err
+			}
 			var (
 				view    []columnView
 				rows    [][]string
 				userIDs []string
 			)
 			for _, l := range lists {
-				cards, err := listCards(ctx, c, l.ID, all)
-				if err != nil {
-					return err
-				}
+				cards := byList[l.ID]
 				view = append(view, columnView{list: l, Cards: cards})
 				for _, cd := range cards {
 					userIDs = append(userIDs, cd.Assignees...)

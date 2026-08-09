@@ -98,10 +98,7 @@ func newListAddCmd(c *client.Client) *cobra.Command {
 				return err
 			}
 			o.Info(cmd.ErrOrStderr(), "added list %q to %s", created.Name, p.Name)
-			if o.Format != output.Table {
-				return o.Write(cmd.OutOrStdout(), nil, nil, created)
-			}
-			return nil
+			return writeListResult(cmd, o, created)
 		},
 	}
 	addBoardFlag(cmd, &boardRef)
@@ -135,10 +132,7 @@ func newListRenameCmd(c *client.Client) *cobra.Command {
 				return err
 			}
 			o.Info(cmd.ErrOrStderr(), "renamed to %q", updated.Name)
-			if o.Format != output.Table {
-				return o.Write(cmd.OutOrStdout(), nil, nil, updated)
-			}
-			return nil
+			return writeListResult(cmd, o, updated)
 		},
 	}
 	addBoardFlag(cmd, &boardRef)
@@ -186,10 +180,7 @@ func newListMoveCmd(c *client.Client) *cobra.Command {
 				return err
 			}
 			o.Info(cmd.ErrOrStderr(), "moved %q to position %d", updated.Name, index)
-			if o.Format != output.Table {
-				return o.Write(cmd.OutOrStdout(), nil, nil, updated)
-			}
-			return nil
+			return writeListResult(cmd, o, updated)
 		},
 	}
 	addBoardFlag(cmd, &boardRef)
@@ -223,10 +214,7 @@ func newListDoneCmd(c *client.Client) *cobra.Command {
 				return err
 			}
 			o.Info(cmd.ErrOrStderr(), "%q is_done = %t", updated.Name, updated.IsDone)
-			if o.Format != output.Table {
-				return o.Write(cmd.OutOrStdout(), nil, nil, updated)
-			}
-			return nil
+			return writeListResult(cmd, o, updated)
 		},
 	}
 	addBoardFlag(cmd, &boardRef)
@@ -303,6 +291,43 @@ func addBoardFlag(cmd *cobra.Command, target *string) {
 	cmd.Flags().StringVarP(target, "board", "b", "", "board id or name (required)")
 }
 
+// writeCardResult renders what a card mutation produced.
+//
+// A table run prints nothing — the o.Info chatter on stderr already said what
+// happened, and a field dump after every edit is noise. A MACHINE format must
+// still emit the record: `-o csv` used to take the CSV branch with nil headers
+// and nil rows, which writes a bare newline and silently drops the record, so
+// a scripted consumer got an empty result rather than an error.
+func writeCardResult(cmd *cobra.Command, o output.Options, cd card) error {
+	switch o.Format {
+	case output.Table:
+		return nil
+	case output.CSV:
+		return o.Write(cmd.OutOrStdout(),
+			[]string{"ID", "LIST", "TITLE", "DUE", "ARCHIVED", "POSITION"},
+			[][]string{{
+				cd.ID, cd.List, cd.Title, dueCell(cd),
+				strconv.FormatBool(cd.Archived), cd.Position,
+			}}, cd)
+	default:
+		return o.Write(cmd.OutOrStdout(), nil, nil, cd)
+	}
+}
+
+// writeListResult is writeCardResult for a column. Same contract.
+func writeListResult(cmd *cobra.Command, o output.Options, l list) error {
+	switch o.Format {
+	case output.Table:
+		return nil
+	case output.CSV:
+		return o.Write(cmd.OutOrStdout(),
+			[]string{"ID", "NAME", "IS_DONE", "POSITION"},
+			[][]string{{l.ID, l.Name, strconv.FormatBool(l.IsDone), l.Position}}, l)
+	default:
+		return o.Write(cmd.OutOrStdout(), nil, nil, l)
+	}
+}
+
 // rankAt returns the rank for a new row: appended by default, or placed at
 // `index` when the caller explicitly passed one. Appending is the default
 // because that is what adding a column or card almost always means, and
@@ -311,7 +336,24 @@ func rankAt(positions []string, index int, explicit bool) (string, error) {
 	if !explicit {
 		return rankForAppend(positions)
 	}
+	if err := checkIndex(index); err != nil {
+		return "", err
+	}
 	return rankForInsert(positions, index)
+}
+
+// checkIndex refuses a negative index.
+//
+// rankForInsert CLAMPS out-of-range indexes, which is right for one past the
+// end — "put it last" is what an off-by-one at the top means. A negative index
+// is different: nobody types --index -1 meaning "first", so it is a typo or an
+// arithmetic slip in a calling script, and clamping it to a prepend would carry
+// out a move the caller never asked for.
+func checkIndex(index int) error {
+	if index < 0 {
+		return fmt.Errorf("index %d is negative — positions count from 0", index)
+	}
+	return nil
 }
 
 // rankForReorder returns the rank moving an EXISTING row to `index`.
@@ -320,5 +362,8 @@ func rankAt(positions []string, index int, explicit bool) (string, error) {
 // downward move off by one and turns a move-in-place into a computation of the
 // row's own rank — lib/move.ts hit exactly this and says so.
 func rankForReorder(positionsWithoutMover []string, index int) (string, error) {
+	if err := checkIndex(index); err != nil {
+		return "", err
+	}
 	return rankForInsert(positionsWithoutMover, index)
 }

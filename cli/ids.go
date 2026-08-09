@@ -171,14 +171,14 @@ func resolveProject(ctx context.Context, c *client.Client, ref string) (project,
 	case 0:
 		return project{}, fmt.Errorf("board %q: %w", ref, errNotFound)
 	default:
-		names := make([]string, len(matches))
+		ids := make([]string, len(matches))
 		for i, m := range matches {
-			names[i] = m.ID
+			ids[i] = m.ID
 		}
-		sort.Strings(names)
+		sort.Strings(ids)
 		return project{}, fmt.Errorf(
 			"board %q is ambiguous — %d boards share that name (%s); use an id",
-			ref, len(matches), strings.Join(names, ", "))
+			ref, len(matches), strings.Join(ids, ", "))
 	}
 }
 
@@ -248,6 +248,34 @@ func listCards(ctx context.Context, c *client.Client, listID string, includeArch
 	return client.ListAll[card](ctx, c, cardsCollection, filter, rankSort)
 }
 
+// cardsByList fetches a WHOLE BOARD's cards in one request and groups them by
+// column, for the board view.
+//
+// Reading each column separately is one HTTP round trip per column — ten
+// sequential requests to render a ten-column board. `project` is denormalized
+// onto every card (card.go writes it for exactly this class of reason), so one
+// filtered query returns the same rows.
+//
+// Sorting is `list,position,id`: the leading `list` only groups the result and
+// does not disturb the within-column order, which stays the `position,id` that
+// rankSort names and that the board itself uses. Grouping preserves the
+// server's order, so each column's slice comes back in board order.
+func cardsByList(ctx context.Context, c *client.Client, projectID string, includeArchived bool) (map[string][]card, error) {
+	filter := client.Filter("project = {:p}", map[string]any{"p": projectID})
+	if !includeArchived {
+		filter += " && archived = false"
+	}
+	cards, err := client.ListAll[card](ctx, c, cardsCollection, filter, "list,"+rankSort)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string][]card{}
+	for _, cd := range cards {
+		out[cd.List] = append(out[cd.List], cd)
+	}
+	return out, nil
+}
+
 // cardPositions is the sorted rank slice the rank helpers take. It must come
 // from the SAME ordering the board uses, or an inserted card lands somewhere
 // the app would not have put it.
@@ -267,32 +295,56 @@ func listPositions(lists []list) []string {
 	return out
 }
 
-// usersByID fetches the named users in one request, for rendering assignee and
-// author columns. Returns a partial map rather than failing when a user row is
-// unreadable: on a shared board the caller may not be able to read every
-// user's row, and a missing name must not fail the whole listing.
-func usersByID(ctx context.Context, c *client.Client, ids []string) (map[string]user, error) {
+// idLookupChunk caps how many ids go into one `id = "x" || id = "y"` filter.
+//
+// The filter travels in the QUERY STRING of a GET, and a PocketBase id is 15
+// characters, so each term costs ~26 bytes encoded. A board with hundreds of
+// distinct assignees would otherwise build one filter long enough to exceed
+// what proxies and servers accept for a request line — and it would fail as an
+// opaque 414 or a truncated read, not as anything a caller could act on.
+// Chunking trades one request for a bounded number of them.
+const idLookupChunk = 50
+
+// recordsByID fetches rows by id, in chunks, and returns them keyed by id.
+//
+// Returns a PARTIAL map rather than failing when a row is missing or
+// unreadable: on a shared board the caller may not be able to read every user
+// row, and a name they cannot resolve must not fail the whole listing. The
+// callers render the gap (see names and labelNames, which differ deliberately
+// on how).
+func recordsByID[T any](
+	ctx context.Context, c *client.Client, collection string, ids []string, keyOf func(T) string,
+) (map[string]T, error) {
+	out := map[string]T{}
 	unique := map[string]bool{}
-	var terms []string
+	var wanted []string
 	for _, id := range ids {
 		if id == "" || unique[id] {
 			continue
 		}
 		unique[id] = true
-		terms = append(terms, client.Filter("id = {:i}", map[string]any{"i": id}))
+		wanted = append(wanted, id)
 	}
-	out := map[string]user{}
-	if len(terms) == 0 {
-		return out, nil
-	}
-	users, err := client.ListAll[user](ctx, c, "users", strings.Join(terms, " || "), "")
-	if err != nil {
-		return nil, err
-	}
-	for _, u := range users {
-		out[u.ID] = u
+	for start := 0; start < len(wanted); start += idLookupChunk {
+		end := min(start+idLookupChunk, len(wanted))
+		terms := make([]string, 0, end-start)
+		for _, id := range wanted[start:end] {
+			terms = append(terms, client.Filter("id = {:i}", map[string]any{"i": id}))
+		}
+		rows, err := client.ListAll[T](ctx, c, collection, strings.Join(terms, " || "), "")
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range rows {
+			out[keyOf(r)] = r
+		}
 	}
 	return out, nil
+}
+
+// usersByID fetches the named users for rendering assignee and author columns.
+func usersByID(ctx context.Context, c *client.Client, ids []string) (map[string]user, error) {
+	return recordsByID(ctx, c, "users", ids, func(u user) string { return u.ID })
 }
 
 // names renders resolved user ids for a table cell. An id with no readable

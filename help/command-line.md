@@ -128,3 +128,16 @@ messages go to the error stream, so what you pipe stays clean:
 tinycld cards board list --json | jq '.[].name'
 tinycld cards board view "Product launch" --json | jq '.[].cards[].title'
 ```
+
+`--output csv` is there too, for a spreadsheet or `cut`. Commands that change
+something print the row they wrote, so you can capture a new card's id:
+
+```
+tinycld cards board list --output csv > boards.csv
+tinycld cards card add "Ship it" --board "Product launch" --list "To do" --output csv
+```
+
+Positions count from zero and are never negative — a negative index is refused
+rather than read as "the top", because it is almost always a slip in the
+arithmetic that produced it. An index past the end of a column simply puts the
+card last.
