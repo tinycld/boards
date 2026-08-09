@@ -1768,11 +1768,54 @@ wants them rather than guessing the shape now.
       Since then: `keyboard-shortcuts.spec.ts` covers `e`/`n`/`⇧N`,
       `card-description.spec.ts` covers markdown rendering, and
       `board-view-modes.spec.ts` has been run for the first time and passes.
-      Remaining scope is the editor-path flow — **stepper move, due date and
-      checklist add/complete**, which no spec drives today (`board-dnd` covers
-      checklist REORDER only, and `board-sharing` only asserts the stepper is
-      display-only for a viewer). Attach + preview is now covered by
-      `card-attachments.spec.ts` (M6), and `board-presence.spec.ts` is green.
+      Attach + preview is now covered by `card-attachments.spec.ts` (M6), and
+      `board-presence.spec.ts` is green.
+
+      **The editor-path flow shipped** as `card-editing.spec.ts` — 12 specs
+      over every field an owner can change: stepper move (including the
+      current-list no-op), due date by preset AND by calendar grid, the
+      overdue state, checklist add/complete/uncomplete/rename/delete, the
+      empty-rename revert, title rename, assignee toggle, label
+      create→apply→remove, archive, delete (both the cancel and the confirm
+      path), and a multi-field card re-read after leaving the board and
+      coming back.
+
+      **Writing it found four real bugs, none of which any existing test
+      could have caught — the suite only ever asserted these affordances were
+      ABSENT for a viewer, never that they worked for an owner.**
+
+      - **Every card property was inert on web.** `Menu.Trigger` cloned its
+        child to inject `onPress` on native but passed it straight through
+        inside a wrapper `div` on web. Cards' assignee/label/due values branch
+        on `onPress` to decide whether they are interactive (that is how a
+        read-only card is drawn), so an OWNER'S properties rendered as
+        unpressable "None" text — three of the six editable fields, with no
+        way to open any picker. Fixed in core so both platforms honour the
+        same contract. Every other `Menu.Trigger` caller in the ecosystem
+        passes a self-contained `Pressable`, which is why this only ever
+        surfaced here.
+      - **Due dates were off by one day, west of Greenwich.** The picker
+        writes `YYYY-MM-DD`; PocketBase stores it in a `date` field and
+        returns `YYYY-MM-DD 00:00:00Z`; `new Date()` on that is UTC midnight,
+        which is the PREVIOUS day in any negative offset. "Tomorrow" read back
+        as today. `toBoardCard` now rebuilds the day from the UTC parts at
+        local midnight. The old unit test asserted only that the value was a
+        valid Date — never WHICH day — which is exactly how this shipped.
+      - **A card due today rendered "· overdue".** `dueStateFor` subtracted
+        raw timestamps, so local midnight is already in the past by 00:00:01.
+        Now compared day-to-day, which is the only question a day-granular
+        field can answer.
+      - **The due popover never closed.** Unlike the assignee and label
+        pickers — which stay open BECAUSE they multi-select — picking a date
+        is one terminal choice, so the sheet sat over the chip it had just
+        written. Now controlled and dismissed on choose.
+
+      Two smaller fixes fell out: `cards_checklist_items`' checkbox rendered
+      `role="checkbox"` with no `aria-checked` (RN Web does not translate
+      `accessibilityState.checked`), leaving screen readers with only a
+      background colour to go on; and `CardPeek` gained a `cards-card-peek`
+      testID, because the board face behind it renders the same title, due
+      chip and checklist ratio, so unscoped queries match two elements.
 
       **Two more load-sensitive helpers were fixed at source** while running
       the full suite for M6, both the same shape as the earlier `focusedTitle`
@@ -1800,12 +1843,39 @@ wants them rather than guessing the shape now.
       cards e2e **35/35** (incl. `board-presence.spec.ts`), core unit 957,
       text unit 920, calc unit 1378, core Go realtime green under `-race`.
 
-      **Known flake, not caused by the presence work:**
-      `keyboard-shortcuts.spec.ts` ("walks cards with j/k") intermittently
-      fails its `cards-focused-*` assertion under full-suite parallel load —
-      seen once in four full runs, 60/60 green when the file runs alone. It is
-      single-session and touches no realtime code. Fix it at the source rather
-      than by re-running.
+      **Two keystroke/pointer-delivery races were fixed at source** while
+      adding `card-editing.spec.ts`, both the shape the earlier `focusedTitle`
+      fix had: the assertion retried the READ while the press that was meant
+      to change it sat outside the retry loop, so a keystroke the app never
+      received could never be recovered.
+      - `expectFocused` now re-presses the adopting `j` when NO focus marker
+        exists at all — that state means the press was dropped, not that the
+        ring is mid-transition, so waiting only times out. Safe because `j`
+        adopts the first card when nothing is focused rather than stepping.
+      - `pressUntil` drives the card-move assertions. It checks the outcome
+        BEFORE re-pressing, because `Shift+Arrow` is not idempotent — a blind
+        repeat would send the card a column too far.
+
+      **Still open, and it needs a decision rather than another helper fix:
+      the suite no longer fits the machine.** With `card-editing.spec.ts`'s 12
+      specs the file count went 52 → 64, and at that size two tests fail per
+      full run on a 14-core box already carrying a load average of ~11 before
+      Playwright starts. It is genuinely environmental, not a logic bug, and
+      the evidence is specific: **52/52 green with the new file removed and
+      every other fix in place**, a DIFFERENT test fails on each run
+      (`board-dnd` checklist reorder, three different `keyboard-shortcuts`
+      cases), and all of them pass when their file runs alone — 18/18 for
+      `keyboard-shortcuts` + `board-dnd` together. The starved operations are
+      the two that need sustained event delivery: Drax drags (which activate
+      on a CONTINUOUS pointer stream) and single keystrokes.
+
+      Do NOT resolve this by re-running, by adding `retries`, or by forcing
+      `--workers=1` — the config's own comment says a flake is a bug, and
+      serialising hides the delivery problem rather than fixing it. The honest
+      options are to cap workers to what the box can actually feed, or to
+      split the suite into shards. That is a config decision for the app
+      shell, not something a package spec should paper over, so it is filed
+      here rather than worked around.
 - [ ] Follow-ups to file, not block on: (public share links are now M6a),
       core extraction of the members-junction + ShareDialog pattern once a
       third package needs sharing, a drive-exported file-picker component if

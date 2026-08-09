@@ -202,10 +202,17 @@ function ChecklistCheckbox({
     }`
     const check = item.isDone ? <Check size={10} color={checkColor} strokeWidth={3.5} /> : null
 
+    // `aria-checked` alongside accessibilityState, not instead of it: RN Web
+    // renders `role="checkbox"` from accessibilityRole but does NOT translate
+    // accessibilityState.checked into the ARIA attribute, so the web output was
+    // a checkbox with no checked state at all — invalid to a screen reader,
+    // which has only the background colour to go on. accessibilityState is
+    // what native reads, so both are required.
     if (!onToggle) {
         return (
             <View
                 accessibilityState={{ checked: item.isDone }}
+                aria-checked={item.isDone}
                 accessibilityLabel={item.title}
                 className={boxClassName}
             >
@@ -218,6 +225,7 @@ function ChecklistCheckbox({
         <Pressable
             accessibilityRole="checkbox"
             accessibilityState={{ checked: item.isDone }}
+            aria-checked={item.isDone}
             accessibilityLabel={item.title}
             onPress={onToggle}
             hitSlop={6}

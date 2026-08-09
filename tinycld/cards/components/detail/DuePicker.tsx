@@ -1,7 +1,7 @@
 import { MiniCalendar } from '@tinycld/core/components/MiniCalendar'
 import { addDays, startOfDay, toDateString } from '@tinycld/core/lib/dates'
 import { Menu } from '@tinycld/core/ui/menu'
-import type { ReactElement } from 'react'
+import { type ReactElement, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 
 interface DuePickerProps {
@@ -23,13 +23,25 @@ interface DuePickerProps {
  * without hunting is one people stop setting.
  */
 export function DuePicker({ due, onChange, children }: DuePickerProps) {
+    // Controlled so a choice can dismiss the popover. Picking a due date is a
+    // single terminal choice, unlike the assignee and label pickers, which
+    // stay open BECAUSE they multi-select — leaving this one up meant the chip
+    // it had just written was hidden behind the sheet that wrote it, with the
+    // grid still inviting a second pick.
+    const [isOpen, setIsOpen] = useState(false)
+
+    const choose = (value: string) => {
+        onChange(value)
+        setIsOpen(false)
+    }
+
     return (
-        <Menu>
+        <Menu isOpen={isOpen} onOpenChange={setIsOpen}>
             <Menu.Trigger>{children}</Menu.Trigger>
             <Menu.Portal>
                 <Menu.Overlay />
                 <Menu.Content presentation="popover" placement="bottom" align="start">
-                    <DuePickerContent due={due} onChange={onChange} />
+                    <DuePickerContent due={due} onChange={choose} />
                 </Menu.Content>
             </Menu.Portal>
         </Menu>

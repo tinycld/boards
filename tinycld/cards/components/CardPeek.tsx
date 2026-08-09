@@ -114,6 +114,11 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
         <>
             <PeekBackdrop onPress={closeCard} />
             <View
+                // Scopes assertions to the open card. Several values render
+                // BOTH here and on the board face behind it (the title, the due
+                // chip, the checklist ratio), so an unscoped query matches two
+                // elements and fails strict mode.
+                testID="cards-card-peek"
                 // The workspace pane insets its content on the housing side in
                 // landscape, so a right-anchored panel stops short of the
                 // physical edge with a band of app background beside it. Extend

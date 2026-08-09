@@ -279,13 +279,20 @@ test.describe('Cards — drag and drop', () => {
         for (let i = 1; i <= 14; i++) {
             await page.mouse.move(start.x, start.y + ((endY - start.y) * i) / 14)
         }
-        // Settle on the final hit-test before releasing: Drax commits the drop
-        // to whatever slot was last computed, and under load that computation
-        // can still be in flight when the button comes up.
-        await page.waitForTimeout(300)
+
+        // Nudge either side of the target before releasing. Drax commits to
+        // the slot its LAST hit-test computed, and a hit-test only re-runs on
+        // movement — so arriving in one sweep can leave the computation still
+        // describing the pre-drag slot when the button comes up, and the drop
+        // lands back where it started.
+        await page.mouse.move(start.x, endY - 6)
         await page.mouse.move(start.x, endY)
+        // Confirm the grab survived the travel: under load the whole gesture
+        // can be starved mid-flight, and releasing a dead drag silently does
+        // nothing.
+        expect(await isDragLive()).toBe(true)
         await page.mouse.up()
 
-        await expect.poll(rows).toEqual(['beta', 'gamma', 'alpha'])
+        await expect.poll(rows, { timeout: 10_000 }).toEqual(['beta', 'gamma', 'alpha'])
     })
 })
