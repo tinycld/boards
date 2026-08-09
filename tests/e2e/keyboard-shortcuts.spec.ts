@@ -18,7 +18,17 @@ function focusedCard(page: import('@playwright/test').Page) {
     return page.getByTestId(/^cards-focused-/)
 }
 
+/**
+ * The title of the card holding the focus ring.
+ *
+ * Waits for the marker first. A keypress moves the ring through React state, so
+ * a bare `page.evaluate` can run in the window before it has painted and read
+ * back `null` — which then fails a `toContain` with "received value must not be
+ * null", a message that says nothing about the real cause. The wait is the
+ * difference between this helper being deterministic and being load-sensitive.
+ */
 async function focusedTitle(page: import('@playwright/test').Page): Promise<string | null> {
+    await focusedCard(page).first().waitFor({ state: 'attached' })
     return page.evaluate(() => {
         const marker = document.querySelector('[data-testid^="cards-focused-"]')
         // The marker is a child of the card face, so the face is its parent.

@@ -232,18 +232,58 @@ test.describe('Cards — drag and drop', () => {
         await page.getByText('alpha', { exact: true }).hover()
         const handle = page.getByTestId('checklist-drag-handle').first()
         const from = await handle.boundingBox()
-        const target = await page.getByText('gamma', { exact: true }).boundingBox()
-        if (!from || !target) throw new Error('handle or target not visible')
+        if (!from) throw new Error('drag handle not visible')
 
         const start = { x: from.x + from.width / 2, y: from.y + from.height / 2 }
-        await page.mouse.move(start.x, start.y)
-        await page.mouse.down()
-        await page.waitForTimeout(80)
-        const endY = target.y + target.height
+
+        // Wait for the grab to actually take, rather than assuming a fixed
+        // delay covers it. Drax activates on MOVEMENT, and under parallel load
+        // the whole press→move burst can be starved; the drop then lands with
+        // no drag in flight and the order never changes — which is exactly how
+        // this failed in a full-suite run while passing on its own.
+        //
+        // The live-drag signal is SortableList's floating hover COPY: while a
+        // row is held it is rendered twice, so a duplicated `Edit <label>`
+        // means the drag is real. (Card and column drags poll
+        // `cards-drag-active` through activateDrag, but that marker is mounted
+        // by BoardCanvas and does not cover this list.)
+        const isDragLive = () =>
+            page.evaluate(() => {
+                const labels = Array.from(document.querySelectorAll('[aria-label^="Edit "]')).map(
+                    el => el.getAttribute('aria-label') ?? ''
+                )
+                return labels.length !== new Set(labels).size
+            })
+        await expect(async () => {
+            if (!(await isDragLive())) {
+                await page.mouse.up().catch(() => {})
+                await page.mouse.move(start.x, start.y)
+                await page.mouse.down()
+                for (let px = 4; px <= 24; px += 4) {
+                    await page.mouse.move(start.x, start.y + px)
+                }
+            }
+            expect(await isDragLive()).toBe(true)
+        }).toPass({ timeout: 10_000 })
+
+        // Travel past the LAST row's bottom edge rather than to gamma's
+        // pre-drag box. Holding a row makes SortableList shift the others to
+        // preview the gap, so coordinates measured before the grab no longer
+        // describe where anything is — aiming at the stale one lands the drop
+        // short of the end and leaves the order untouched.
+        const endY = await page.evaluate(() => {
+            const rows = Array.from(document.querySelectorAll('[aria-label^="Edit "]'))
+            const bottoms = rows.map(el => el.getBoundingClientRect().bottom)
+            return Math.max(...bottoms)
+        })
         for (let i = 1; i <= 14; i++) {
             await page.mouse.move(start.x, start.y + ((endY - start.y) * i) / 14)
         }
+        // Settle on the final hit-test before releasing: Drax commits the drop
+        // to whatever slot was last computed, and under load that computation
+        // can still be in flight when the button comes up.
         await page.waitForTimeout(300)
+        await page.mouse.move(start.x, endY)
         await page.mouse.up()
 
         await expect.poll(rows).toEqual(['beta', 'gamma', 'alpha'])
