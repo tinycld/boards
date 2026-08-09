@@ -1,12 +1,13 @@
 import { eq } from '@tanstack/db'
 import { DocumentTitle } from '@tinycld/core/components/DocumentTitle'
 import { LoadingState } from '@tinycld/core/components/LoadingState'
+import { ShareLinkSignIn } from '@tinycld/core/components/share/ShareLinkSignIn'
 import { useAuth } from '@tinycld/core/lib/auth'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { setShareToken } from '@tinycld/core/lib/share-token'
 import { Redirect, useLocalSearchParams } from 'expo-router'
 import { useEffect, useState } from 'react'
-import { Text, View } from 'react-native'
+import { Pressable, Text, View } from 'react-native'
 import { BoardCanvas } from '../../components/BoardCanvas'
 import { CardPeek } from '../../components/CardPeek'
 import { useBoardContent } from '../../hooks/useActiveBoard'
@@ -72,7 +73,11 @@ export default function PublicBoardScreen() {
     return (
         <View className="flex-1 bg-background">
             <DocumentTitle pkg="Cards" title={project.name} />
-            <PublicBoardHeader name={project.name} />
+            <PublicBoardHeader
+                name={project.name}
+                token={token}
+                onSignedIn={() => setShareToken(null)}
+            />
             <BoardCanvas project={project} />
             <CardPeek project={project} />
         </View>
@@ -144,17 +149,94 @@ function usePublicProjectId(token: string): { projectId: string; isResolved: boo
     return { projectId, isResolved: isReady }
 }
 
-function PublicBoardHeader({ name }: { name: string }) {
+function PublicBoardHeader({
+    name,
+    token,
+    onSignedIn,
+}: {
+    name: string
+    token: string
+    onSignedIn: () => void
+}) {
+    const [isSigningIn, setIsSigningIn] = useState(false)
+    const signInRole = useSignInRole(token)
+
     return (
-        <View className="flex-row items-center gap-3 px-4 py-3 border-b border-border">
-            <Text className="text-[15px] font-semibold text-foreground" numberOfLines={1}>
-                {name}
-            </Text>
-            <View className="px-2 py-0.5 rounded-md bg-muted/15">
-                <Text className="text-[11px] font-medium text-muted">Read only</Text>
+        <View className="border-b border-border">
+            <View className="flex-row items-center gap-3 px-4 py-3">
+                <Text className="text-[15px] font-semibold text-foreground" numberOfLines={1}>
+                    {name}
+                </Text>
+                <View className="px-2 py-0.5 rounded-md bg-muted/15">
+                    <Text className="text-[11px] font-medium text-muted">Read only</Text>
+                </View>
+                <View className="flex-1" />
+                {signInRole && !isSigningIn ? (
+                    <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                            signInRole === 'editor'
+                                ? 'Sign in to edit this board'
+                                : 'Sign in to comment on this board'
+                        }
+                        onPress={() => setIsSigningIn(true)}
+                        className="shrink-0 px-3 py-1.5 rounded-md bg-primary"
+                    >
+                        <Text className="text-[12px] font-medium text-primary-foreground">
+                            {signInRole === 'editor' ? 'Sign in to edit' : 'Sign in to comment'}
+                        </Text>
+                    </Pressable>
+                ) : null}
             </View>
+
+            {signInRole && isSigningIn ? (
+                <View className="px-4 pb-4">
+                    <ShareLinkSignIn
+                        slug="cards"
+                        token={token}
+                        role={signInRole}
+                        subject="board"
+                        onSuccess={() => {
+                            setIsSigningIn(false)
+                            // Stop presenting the token: the visitor now holds
+                            // a real membership, and the OTHER half of the rule
+                            // disjunct is what authorizes them from here. The
+                            // routing decision re-runs and sends them to the
+                            // live board.
+                            onSignedIn()
+                        }}
+                    />
+                </View>
+            ) : null}
         </View>
     )
+}
+
+/**
+ * The role a link offers to someone willing to sign in, or null when it offers
+ * nothing.
+ *
+ * A viewer link needs no account — anonymous read is its entire grant — so no
+ * button is offered and the server refuses the flow anyway. cards_share_links
+ * is owner-only by rule, so a VISITOR reads no row here and sees no button
+ * either; the affordance appears once they are someone the rules will show the
+ * link to. That is a conservative default rather than a limitation: the board
+ * is readable regardless, and offering a sign-in the server would refuse is the
+ * dead-affordance mistake this package already made once.
+ */
+function useSignInRole(token: string): 'commentor' | 'editor' | null {
+    const [linksCollection] = useStore('cards_share_links')
+
+    const { data } = useBoardLiveQuery(
+        query => {
+            if (!token) return null
+            return query.from({ link: linksCollection }).where(({ link }) => eq(link.token, token))
+        },
+        [token, linksCollection]
+    )
+
+    const role = data?.[0]?.role
+    return role === 'editor' || role === 'commentor' ? role : null
 }
 
 function LinkGone({ reason }: { reason: 'revoked' | 'missing' }) {

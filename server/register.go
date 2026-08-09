@@ -138,6 +138,18 @@ func bindShareLinkRoutes(e *core.ServeEvent) {
 	e.Router.DELETE("/api/cards/share-link/{id}", func(re *core.RequestEvent) error {
 		return handleRevokeShareLink(e.App, re)
 	}).BindFunc(requireAuth)
+
+	// PUBLIC — no requireAuth, deliberately. These are how someone with no
+	// account gets one: a commentor/editor link holder proves an email address
+	// and is minted a membership. A public route here is simply one that omits
+	// the middleware; there is no exemptPaths list to add to.
+	e.Router.POST("/api/cards/share-link/{token}/otp-request", func(re *core.RequestEvent) error {
+		return handleShareOTPRequest(e.App, re)
+	})
+
+	e.Router.POST("/api/cards/share-link/{token}/otp-verify", func(re *core.RequestEvent) error {
+		return handleShareOTPVerify(e.App, re)
+	})
 }
 
 func requireAuth(re *core.RequestEvent) error {

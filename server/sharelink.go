@@ -102,3 +102,14 @@ func isProjectOwner(app core.App, projectID, userID string) bool {
 // not limited here — it is the collection rules, i.e. ordinary REST, and
 // limiting it would mean limiting every authenticated board read too.
 var shareLinkLimiter = ratelimit.New(60, time.Minute)
+
+// otpLimiter is deliberately far stricter, and the arithmetic is why: an OTP is
+// six digits, a ~10^6 keyspace. At 60/min a single IP gets roughly 900 guesses
+// inside one 15-minute TTL, which is uncomfortably close to meaningful. 10/min
+// gives ~150 — still generous for a person who mistypes a couple of times, and
+// materially tighter for a script.
+//
+// It is one layer, not the defence. Single-use deletion on success and the TTL
+// are what make the code safe; this bounds how fast someone can attack it from
+// one host, and in-memory state does not hold across instances.
+var otpLimiter = ratelimit.New(10, time.Minute)
