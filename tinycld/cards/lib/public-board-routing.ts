@@ -8,6 +8,14 @@
  * the wrong screen (see drive/tinycld/drive/lib/share-routing.ts's header).
  */
 
+/**
+ * Why a link cannot be opened. Three distinct facts, deliberately not collapsed
+ * into one: an owner who revoked a link, a link that lapsed on its own, and a
+ * URL that never named a board are different situations, and the person who
+ * shared the board can act on each of them differently.
+ */
+export type PublicBoardGoneReason = 'revoked' | 'expired' | 'missing'
+
 export type PublicBoardRoute =
     /** Still resolving auth or the board. Render a spinner, decide nothing. */
     | { kind: 'wait' }
@@ -16,7 +24,7 @@ export type PublicBoardRoute =
     /** Show the read-only public board. */
     | { kind: 'public' }
     /** The link is revoked, expired, or was never real. */
-    | { kind: 'gone'; reason: 'revoked' | 'missing' }
+    | { kind: 'gone'; reason: PublicBoardGoneReason }
 
 export interface PublicBoardRouteInput {
     /** Auth is still rehydrating; nothing below is trustworthy yet. */
@@ -29,8 +37,14 @@ export interface PublicBoardRouteInput {
     isMember: boolean
     /** Set once the board query has settled, member or not. */
     isBoardResolved: boolean
-    /** The token resolved to nothing readable. */
+    /**
+     * The SERVER refused the token. Not a client guess: a revoked, expired or
+     * fabricated token is a perfectly well-formed string, so nothing about the
+     * URL itself reveals this — only the metadata endpoint's 404/410 does.
+     */
     isTokenRejected: boolean
+    /** Which refusal it was. Ignored unless `isTokenRejected`. */
+    rejectionReason?: PublicBoardGoneReason
 }
 
 export function decidePublicBoardRoute(input: PublicBoardRouteInput): PublicBoardRoute {
@@ -41,7 +55,9 @@ export function decidePublicBoardRoute(input: PublicBoardRouteInput): PublicBoar
     // dead link is told the link is dead rather than being silently redirected
     // as if it had worked — they may well be the person who needs to re-issue
     // it.
-    if (input.isTokenRejected) return { kind: 'gone', reason: 'revoked' }
+    if (input.isTokenRejected) {
+        return { kind: 'gone', reason: input.rejectionReason ?? 'revoked' }
+    }
 
     if (!input.isBoardResolved) return { kind: 'wait' }
 

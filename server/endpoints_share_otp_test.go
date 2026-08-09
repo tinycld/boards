@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
@@ -96,6 +97,120 @@ func userByEmail(t testing.TB, app *tests.TestApp, email string) *core.Record {
 		return nil
 	}
 	return rec
+}
+
+// --------------------------------------------------------------------------
+// The public metadata endpoint.
+//
+// Small, and load-bearing out of proportion to its size: cards_share_links is
+// owner-only by rule, so this is the ONLY way a visitor's client can learn
+// which board their token names or whether signing in would gain them
+// anything. The board screen resolves through it, so a wrong answer here is a
+// visitor reading the wrong board or being offered no way to contribute.
+//
+// It must also stay a poor oracle. It answers exactly what the link already
+// discloses and nothing about the roster, the owner, or any other link.
+
+func TestShareLinkMetadata_DescribesALiveLink(t *testing.T) {
+	env := setupOTPEnv(t)
+	tok := shareLink(t, env.cardsEnv, env.project.Id, tok64("metalive"), "editor", true, "")
+
+	mintReq{
+		method: http.MethodGet,
+		url:    "/api/cards/share-link/" + tok,
+		want:   http.StatusOK,
+		// project_id is what the client resolves the board by. Before it was
+		// returned, a signed-in NON-member fell back to guessing the first
+		// project they could read — i.e. one of their own boards, rendered as
+		// though it were the shared one.
+		content: []string{`"role":"editor"`, `"project_id":"` + env.project.Id + `"`,
+			`"project_name":"Board"`, `"needs_signin":true`},
+	}.run(t, env.cardsEnv)
+}
+
+// A viewer link is a perfectly good link: it resolves, and it simply offers no
+// sign-in. Refusing it here would blank the board title for the commonest kind
+// of link, which is why metadata does NOT route through resolveLinkForSignIn.
+func TestShareLinkMetadata_ViewerLinkResolvesButOffersNoSignIn(t *testing.T) {
+	env := setupOTPEnv(t)
+	tok := shareLink(t, env.cardsEnv, env.project.Id, tok64("metaviewer"), "viewer", true, "")
+
+	mintReq{
+		method:  http.MethodGet,
+		url:     "/api/cards/share-link/" + tok,
+		want:    http.StatusOK,
+		content: []string{`"role":"viewer"`, `"needs_signin":false`},
+	}.run(t, env.cardsEnv)
+}
+
+// 410 with "revoked", distinct from the expiry case below. The client reads
+// these two apart by message text to tell a visitor whether an owner switched
+// the link off or it simply lapsed, so the wording is a contract.
+func TestShareLinkMetadata_RevokedLinkIsGone(t *testing.T) {
+	env := setupOTPEnv(t)
+	tok := shareLink(t, env.cardsEnv, env.project.Id, tok64("metarevoked"), "editor", false, "")
+
+	mintReq{
+		method:  http.MethodGet,
+		url:     "/api/cards/share-link/" + tok,
+		want:    http.StatusGone,
+		content: []string{"revoked"},
+	}.run(t, env.cardsEnv)
+}
+
+func TestShareLinkMetadata_ExpiredLinkIsGone(t *testing.T) {
+	env := setupOTPEnv(t)
+	past := time.Now().UTC().Add(-24 * time.Hour).Format("2006-01-02 15:04:05.000Z")
+	tok := shareLink(t, env.cardsEnv, env.project.Id, tok64("metaexpired"), "editor", true, past)
+
+	mintReq{
+		method:  http.MethodGet,
+		url:     "/api/cards/share-link/" + tok,
+		want:    http.StatusGone,
+		content: []string{"expired"},
+	}.run(t, env.cardsEnv)
+}
+
+// An unknown token is a plain 404 carrying nothing, so the endpoint cannot be
+// walked to discover which tokens exist.
+func TestShareLinkMetadata_UnknownTokenIsNotFound(t *testing.T) {
+	env := setupOTPEnv(t)
+
+	mintReq{
+		method:     http.MethodGet,
+		url:        "/api/cards/share-link/" + tok64("metanosuch"),
+		want:       http.StatusNotFound,
+		content:    []string{`"error"`},
+		notContent: []string{env.project.Id, "Board"},
+	}.run(t, env.cardsEnv)
+}
+
+// A token of the wrong length is refused before it reaches the database.
+func TestShareLinkMetadata_MalformedTokenIsNotFound(t *testing.T) {
+	env := setupOTPEnv(t)
+
+	mintReq{
+		method:  http.MethodGet,
+		url:     "/api/cards/share-link/short",
+		want:    http.StatusNotFound,
+		content: []string{`"error"`},
+	}.run(t, env.cardsEnv)
+}
+
+// The disclosure boundary. A link says "this board, this role" and no more —
+// in particular nothing about who is on the board, which is the whole reason
+// 1980000003 adds no token disjunct to cards_project_members.
+func TestShareLinkMetadata_DisclosesNothingAboutTheRoster(t *testing.T) {
+	env := setupOTPEnv(t)
+	tok := shareLink(t, env.cardsEnv, env.project.Id, tok64("metaquiet"), "commentor", true, "")
+
+	mintReq{
+		method: http.MethodGet,
+		url:    "/api/cards/share-link/" + tok,
+		want:   http.StatusOK,
+		// No member emails, and not the token itself echoed back.
+		notContent: []string{env.owner.Email(), env.editor.Email(), tok},
+	}.run(t, env.cardsEnv)
 }
 
 // --------------------------------------------------------------------------

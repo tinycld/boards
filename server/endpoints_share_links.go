@@ -200,7 +200,12 @@ func handleRevokeShareLink(app core.App, re *core.RequestEvent) error {
 //
 // Deliberately not swept on expiry: that would need a cron, and a board whose
 // only link lapsed yesterday showing a stale badge is a cosmetic wrong.
-// Errors are swallowed for the same reason — a badge must never fail a mint.
+//
+// A failure here never fails the mint or revoke that triggered it — the badge
+// is not worth losing a link over — but it is LOGGED rather than discarded. A
+// systematic desync (a renamed field, a rule change that starts refusing the
+// save) would otherwise be invisible, and "the badge is wrong on every board"
+// is a bug someone should be able to find without reading this function.
 func syncProjectVisibility(app core.App, projectID string) {
 	if projectID == "" {
 		return
@@ -208,10 +213,14 @@ func syncProjectVisibility(app core.App, projectID string) {
 	n, err := app.CountRecords("cards_share_links",
 		dbx.HashExp{"project": projectID, "is_active": true})
 	if err != nil {
+		app.Logger().Warn("cards: counting share links for the visibility badge",
+			"project", projectID, "error", err)
 		return
 	}
 	project, err := app.FindRecordById("cards_projects", projectID)
 	if err != nil || project == nil {
+		app.Logger().Warn("cards: loading the board for the visibility badge",
+			"project", projectID, "error", err)
 		return
 	}
 	want := "private"
@@ -222,5 +231,8 @@ func syncProjectVisibility(app core.App, projectID string) {
 		return
 	}
 	project.Set("visibility", want)
-	_ = app.Save(project)
+	if err := app.Save(project); err != nil {
+		app.Logger().Warn("cards: saving the visibility badge",
+			"project", projectID, "visibility", want, "error", err)
+	}
 }

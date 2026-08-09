@@ -942,20 +942,23 @@ migrate(
         })
         app.save(commentsRulesCol)
 
-        // cards_attachments: viewRule gates the record. It does NOT currently
-        // gate the file BLOB — PB consults the viewRule before serving
-        // /api/files/... only for a file field marked `protected`
-        // (apis/file.go:108), and cards_attach_file is not one, so a blob is
-        // served to anyone who knows the record id and filename. That is a
-        // pre-existing gap shared by every file field in this workspace (mail,
-        // drive, text), not something the M6a share-token rules introduced;
-        // share_token_rls_test.go characterizes it. Marking the field protected
-        // is the fix and is a breaking client change — a protected file needs a
-        // short-lived file token, so Thumbnail/PreviewModal must be updated with
-        // it. Filed, not done here.
+        // cards_attachments: the viewRule gates BOTH the record and the file
+        // BLOB, so one expression decides who reads a row and who is served its
+        // bytes.
         //
-        // (This comment previously asserted the opposite. It was wrong, and the
-        // rule below is unchanged — only the claim about what it reaches.)
+        // That equivalence is not stock PocketBase. Upstream consults the
+        // viewRule before serving /api/files/... only for a file field marked
+        // `protected` (apis/file.go, `if fileField.Protected`), and no file
+        // field in this workspace was — not cards', not mail's, not drive's,
+        // not text's — so every attachment in every package was downloadable by
+        // anyone who knew a record id and a filename, with no auth at all.
+        // Writing M6a's share-token tests is what uncovered it.
+        //
+        // Fixed in the vendored fork (apis/file.go:111-152): the check is now
+        // unconditional and `protected` means only "ALSO accept a ?token= file
+        // token". share_token_rls_test.go pins the result — in particular
+        // TestShareToken_ServesNoFileWithoutAToken is the regression guard for
+        // the hole itself and would catch the gate being removed again.
         const attachmentsCol = app.findCollectionByNameOrId('cards_attachments')
         setRules(attachmentsCol, {
             list: `${enabled} && ${viaMember}`,

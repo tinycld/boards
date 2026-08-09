@@ -1,6 +1,6 @@
 import type { Browser, Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
+import { createInvitedUser, login, navigateToPackage } from '@tinycld/core/e2e-helpers'
 import { addCard, boardCard, createBoard } from './helpers'
 
 // A board opened by share link, end to end through the UI.
@@ -143,6 +143,66 @@ test.describe('Cards — a board opened by share link', () => {
         await expect(visitor.getByRole('button', { name: /^Add card/ })).toHaveCount(0)
 
         await visitor.context().close()
+    })
+
+    test('a signed-in NON-member is refused a DEAD link rather than shown one of their own boards', async ({
+        page,
+    }) => {
+        // The caller every other spec in this file structurally cannot reach.
+        // Their visitor is a fresh anonymous context, and anonymity is what
+        // made the old board resolution right by accident: the access rules
+        // scope cards_projects to exactly the shared board, so "the first
+        // project I can read" could only ever BE the shared board.
+        //
+        // A signed-in non-member reads their OWN boards from that collection
+        // too, so the fallback had something wrong to find. A revoked link is
+        // what makes the difference observable rather than order-dependent:
+        // the correct answer is "this link is no longer available", while
+        // resolving by "first project I can read" finds a perfectly readable
+        // board and renders it under a Read only badge — someone else's link
+        // silently showing you your own work.
+        await login(page)
+        await navigateToPackage(page, 'cards')
+        await createBoard(page, 'Owner board')
+        await addCard(page, 0, CARD_TITLE)
+
+        const url = await mintShareLink(page, 'Owner board', 'Viewer')
+
+        // A real second account, signed in, holding a board of its own and no
+        // membership on the shared one.
+        const invited = await createInvitedUser(page, 'linkstranger')
+        await navigateToPackage(invited.inviteePage, 'cards')
+        await createBoard(invited.inviteePage, 'Stranger own board')
+
+        // While it is still live, the link resolves to the SHARED board — not
+        // the stranger's own, which they can equally well read.
+        await invited.inviteePage.goto(url)
+        await expect(invited.inviteePage.getByText('Owner board').first()).toBeVisible()
+        await expect(boardCard(invited.inviteePage, CARD_TITLE)).toBeVisible()
+        await expect(invited.inviteePage.getByText('Stranger own board')).toHaveCount(0)
+
+        // Now kill it. createInvitedUser walked the owner's page through
+        // Settings to send the invite, so the share dialog is long closed —
+        // reopen it rather than assuming it survived.
+        await navigateToPackage(page, 'cards')
+        await openShareDialog(page, 'Owner board')
+        await page.getByRole('button', { name: 'Revoke share link' }).click()
+        await expect(page.getByText('Restricted', { exact: false })).toBeVisible()
+
+        await invited.inviteePage.reload()
+
+        // Refused, in the visitor's own words. Nothing to fall back to: the
+        // token is the only thing that ever named a board, and it is dead.
+        await expect(
+            invited.inviteePage.getByText('This link is no longer available')
+        ).toBeVisible()
+        // The failure this pins — a readable board of their own standing in
+        // for the one the dead link pointed at.
+        await expect(invited.inviteePage.getByText('Stranger own board')).toHaveCount(0)
+        await expect(invited.inviteePage.getByText('Read only')).toHaveCount(0)
+        await expect(boardCard(invited.inviteePage, CARD_TITLE)).toHaveCount(0)
+
+        await invited.close()
     })
 
     test('revoking a link closes it immediately', async ({ page, browser }) => {

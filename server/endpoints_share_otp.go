@@ -59,6 +59,30 @@ func needsSignIn(role string) bool {
 // between request and verify takes effect immediately rather than at the end of
 // some session's life.
 func resolveLinkForSignIn(app core.App, token string) (*core.Record, *core.Record, int, string) {
+	link, project, status, msg := resolveLiveLink(app, token)
+	if link == nil {
+		return nil, nil, status, msg
+	}
+	if !needsSignIn(link.GetString("role")) {
+		return nil, nil, http.StatusBadRequest, "this link does not require sign-in"
+	}
+	return link, project, 0, ""
+}
+
+// resolveLiveLink loads a link that is real, active and unexpired, plus the
+// board it names.
+//
+// The one place those four checks live. Every public entry point resolves
+// through it, so the metadata endpoint and the two OTP endpoints cannot drift
+// on what "live" means or on which status a given refusal earns — and the
+// statuses are load-bearing beyond this file: the client reads 410-vs-404 to
+// decide whether to tell a visitor the link was switched off, lapsed, or never
+// existed, and it distinguishes revoked from expired by THIS message text.
+//
+// Returns a nil link with the status and message to send on any refusal.
+func resolveLiveLink(app core.App, token string) (*core.Record, *core.Record, int, string) {
+	// Length-checked before the query: the column is a fixed 64 hex chars, so
+	// anything else cannot match and should not reach the database.
 	if len(token) != 64 {
 		return nil, nil, http.StatusNotFound, "share link not found"
 	}
@@ -73,9 +97,6 @@ func resolveLinkForSignIn(app core.App, token string) (*core.Record, *core.Recor
 	expiresAt := link.GetDateTime("expires_at")
 	if !expiresAt.IsZero() && expiresAt.Time().Before(nowUTC()) {
 		return nil, nil, http.StatusGone, "this link has expired"
-	}
-	if !needsSignIn(link.GetString("role")) {
-		return nil, nil, http.StatusBadRequest, "this link does not require sign-in"
 	}
 	project, err := app.FindRecordById("cards_projects", link.GetString("project"))
 	if err != nil || project == nil {
@@ -103,26 +124,13 @@ func handleShareLinkMetadata(app core.App, re *core.RequestEvent) error {
 			shareLinkErrorResponse{Error: "rate limit exceeded"})
 	}
 
-	token := re.Request.PathValue("token")
-	if len(token) != 64 {
-		return re.JSON(http.StatusNotFound, shareLinkErrorResponse{Error: "share link not found"})
-	}
-	link, err := app.FindFirstRecordByFilter(
-		"cards_share_links", "token = {:t}", dbx.Params{"t": token})
-	if err != nil || link == nil {
-		return re.JSON(http.StatusNotFound, shareLinkErrorResponse{Error: "share link not found"})
-	}
-	if !link.GetBool("is_active") {
-		return re.JSON(http.StatusGone, shareLinkErrorResponse{Error: "this link has been revoked"})
-	}
-	expiresAt := link.GetDateTime("expires_at")
-	if !expiresAt.IsZero() && expiresAt.Time().Before(nowUTC()) {
-		return re.JSON(http.StatusGone, shareLinkErrorResponse{Error: "this link has expired"})
-	}
-
-	project, err := app.FindRecordById("cards_projects", link.GetString("project"))
-	if err != nil || project == nil {
-		return re.JSON(http.StatusNotFound, shareLinkErrorResponse{Error: "board not found"})
+	// Note this does NOT go through resolveLinkForSignIn: a viewer link is a
+	// perfectly good link and its metadata is what tells the client to offer no
+	// sign-in button. Refusing it here would blank the board's title for exactly
+	// the most common kind of link.
+	link, project, status, msg := resolveLiveLink(app, re.Request.PathValue("token"))
+	if link == nil {
+		return re.JSON(status, shareLinkErrorResponse{Error: msg})
 	}
 
 	return re.JSON(http.StatusOK, map[string]any{

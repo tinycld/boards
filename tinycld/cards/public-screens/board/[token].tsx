@@ -1,10 +1,7 @@
-import { eq } from '@tanstack/db'
-import { useQuery } from '@tanstack/react-query'
 import { DocumentTitle } from '@tinycld/core/components/DocumentTitle'
 import { LoadingState } from '@tinycld/core/components/LoadingState'
 import { ShareLinkSignIn } from '@tinycld/core/components/share/ShareLinkSignIn'
 import { useAuth } from '@tinycld/core/lib/auth'
-import { PB_SERVER_ADDR, useStore } from '@tinycld/core/lib/pocketbase'
 import { setShareToken } from '@tinycld/core/lib/share-token'
 import { Redirect, useLocalSearchParams } from 'expo-router'
 import { useEffect, useState } from 'react'
@@ -12,9 +9,9 @@ import { Pressable, Text, View } from 'react-native'
 import { BoardCanvas } from '../../components/BoardCanvas'
 import { CardPeek } from '../../components/CardPeek'
 import { useBoardContent } from '../../hooks/useActiveBoard'
-import { useBoardLiveQuery } from '../../hooks/useBoardLiveQuery'
 import { useProjectRole } from '../../hooks/useProjectRole'
-import { decidePublicBoardRoute } from '../../lib/public-board-routing'
+import { type ShareLinkSignInRole, useShareLinkMeta } from '../../hooks/useShareLinkMeta'
+import { decidePublicBoardRoute, type PublicBoardGoneReason } from '../../lib/public-board-routing'
 
 /**
  * A board opened by share link, at `/p/cards/board/<token>`.
@@ -39,9 +36,12 @@ export default function PublicBoardScreen() {
     useInstalledShareToken(token)
 
     const auth = useAuth({ throwIfAnon: false })
-    const { projectId, isResolved } = usePublicProjectId(token)
-    const { project, isLoading } = useBoardContent(projectId)
-    const { role, isReady: roleReady } = useProjectRole(projectId)
+    // The metadata endpoint is the ONLY authority on which board a token names.
+    // It is public by design precisely because cards_share_links is owner-only,
+    // so no client-side query can answer this for the caller who needs it.
+    const meta = useShareLinkMeta(token)
+    const { project, isLoading } = useBoardContent(meta.projectId)
+    const { role, isReady: roleReady } = useProjectRole(meta.projectId)
 
     const route = decidePublicBoardRoute({
         isAuthLoading: auth.isInitializing,
@@ -50,8 +50,12 @@ export default function PublicBoardScreen() {
         // A signed-in visitor who already holds a membership gets the live
         // board instead of this read-only rendering of it.
         isMember: !!role,
-        isBoardResolved: isResolved && !isLoading && roleReady,
-        isTokenRejected: !token,
+        isBoardResolved: meta.isResolved && !isLoading && roleReady,
+        // A revoked, expired or fabricated token is rejected by the SERVER —
+        // an empty string is only the degenerate case of a malformed URL. The
+        // endpoint distinguishes them, so `gone.reason` can too.
+        isTokenRejected: !token || meta.isRejected,
+        rejectionReason: meta.rejectionReason,
     })
 
     if (route.kind === 'wait') {
@@ -77,6 +81,7 @@ export default function PublicBoardScreen() {
             <PublicBoardHeader
                 name={project.name}
                 token={token}
+                signInRole={meta.signInRole}
                 onSignedIn={() => setShareToken(null)}
             />
             <BoardCanvas project={project} />
@@ -106,61 +111,19 @@ function useInstalledShareToken(token: string) {
     }, [installed, token])
 }
 
-/**
- * The board a token names.
- *
- * There is no id to look up and no endpoint to ask. `cards_projects` syncs
- * eagerly and the access rules scope it to the token's board, so for an
- * anonymous visitor the collection holds EXACTLY ONE row: theirs. Reading it
- * this way keeps the public path on the same queries as the private one —
- * asking the server "which board is this token for?" would be a second read
- * path to keep in step.
- *
- * A signed-in member opening a link sees their own boards here too, so the row
- * is matched against the token's project rather than assumed to be the only
- * one — see the `shareProject` filter below.
- */
-function usePublicProjectId(token: string): { projectId: string; isResolved: boolean } {
-    const [projectsCollection, linksCollection] = useStore('cards_projects', 'cards_share_links')
-
-    // The link row itself is owner-only by rule, so a visitor reads nothing
-    // here and this resolves empty — which is correct. It matters only for a
-    // signed-in OWNER following their own link, where it disambiguates their
-    // several boards.
-    const { data: linkRows } = useBoardLiveQuery(
-        query => {
-            if (!token) return null
-            return query.from({ link: linksCollection }).where(({ link }) => eq(link.token, token))
-        },
-        [token, linksCollection]
-    )
-
-    const { data: projectRows, isReady } = useBoardLiveQuery(
-        query => query.from({ project: projectsCollection }),
-        [projectsCollection]
-    )
-
-    const linkedProjectId = linkRows?.[0]?.project ?? ''
-    const projects = projectRows ?? []
-
-    const projectId = linkedProjectId
-        ? (projects.find(p => p.id === linkedProjectId)?.id ?? '')
-        : (projects[0]?.id ?? '')
-
-    return { projectId, isResolved: isReady }
-}
-
 function PublicBoardHeader({
     name,
     token,
+    signInRole,
     onSignedIn,
 }: {
     name: string
     token: string
+    /** The role a sign-in would grant, or null when the link offers none. */
+    signInRole: ShareLinkSignInRole | null
     onSignedIn: () => void
 }) {
     const [isSigningIn, setIsSigningIn] = useState(false)
-    const signInRole = useSignInRole(token)
 
     return (
         <View className="border-b border-border">
@@ -213,48 +176,20 @@ function PublicBoardHeader({
     )
 }
 
-/**
- * The role a link offers to someone willing to sign in, or null when it offers
- * nothing.
- *
- * Read from the public metadata endpoint, NOT from cards_share_links. The
- * collection is owner-only by rule, so a visitor reads no row — the obvious
- * implementation renders the button only for people who already have access,
- * i.e. nobody who needs it. That is precisely the bug the e2e caught.
- *
- * A viewer link returns needs_signin=false and no button appears, which matches
- * the server: anonymous read is its whole grant, and the OTP endpoints refuse
- * it outright.
- */
-function useSignInRole(token: string): 'commentor' | 'editor' | null {
-    const { data } = useQuery({
-        queryKey: ['cards', 'share-link-meta', token],
-        enabled: !!token,
-        queryFn: async () => {
-            const res = await fetch(
-                `${PB_SERVER_ADDR}/api/cards/share-link/${encodeURIComponent(token)}`
-            )
-            if (!res.ok) return null
-            return (await res.json()) as { role?: string; needs_signin?: boolean }
-        },
-    })
-
-    if (!data?.needs_signin) return null
-    return data.role === 'editor' || data.role === 'commentor' ? data.role : null
+const GONE_MESSAGE: Record<PublicBoardGoneReason, string> = {
+    revoked: 'It has been switched off by whoever shared the board. Ask them for a new link.',
+    expired: 'It reached its expiry date. Ask whoever shared the board for a new link.',
+    missing: 'The board it pointed at could not be found.',
 }
 
-function LinkGone({ reason }: { reason: 'revoked' | 'missing' }) {
+function LinkGone({ reason }: { reason: PublicBoardGoneReason }) {
     return (
         <View className="flex-1 items-center justify-center bg-background px-6">
             <DocumentTitle pkg="Cards" title="Link unavailable" />
             <Text className="text-[17px] font-semibold text-foreground">
                 This link is no longer available
             </Text>
-            <Text className="mt-2 text-[13px] text-muted text-center">
-                {reason === 'revoked'
-                    ? 'It may have been revoked or reached its expiry date. Ask whoever shared the board for a new link.'
-                    : 'The board it pointed at could not be found.'}
-            </Text>
+            <Text className="mt-2 text-[13px] text-muted text-center">{GONE_MESSAGE[reason]}</Text>
         </View>
     )
 }

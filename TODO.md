@@ -1222,6 +1222,38 @@ suites because none of them mounts the board unauthenticated:
   with a small public metadata endpoint returning the board name and the link's
   role — strictly less than the link already discloses.
 
+**And the same mistake had survived one function above it**, caught in review
+rather than by the e2e. `usePublicProjectId` resolved the board by reading
+`cards_share_links` for the token and falling back to `projects[0]` when that
+read came back empty — which it always does for anyone who is not the owner.
+An anonymous visitor was fine by accident (the rules scope `cards_projects` to
+exactly one row, so `projects[0]` IS the shared board), but a SIGNED-IN
+NON-MEMBER — someone with an account here who was sent a link to a board they
+are not on — got an arbitrary one of their OWN boards rendered under a "Read
+only" badge as though it were the shared one. The e2e could not see it: its
+visitor is a fresh anonymous context, which is the one case the fallback gets
+right. `decidePublicBoardRoute` already had a test for that caller; the bug was
+in the input handed to it.
+
+Both are now the same fix: `useShareLinkMeta` calls the metadata endpoint once
+and is the single authority for which board a token names AND what it offers.
+The endpoint already returned `project_id` — the client was discarding it.
+**The rule this leaves behind: on a public route, the server is the only thing
+that can answer a question about the visitor's own credential.** A collection
+read cannot, however natural it looks, because the rule that protects the
+collection is precisely the rule that blanks it for that caller.
+
+A second review finding, same file: `isTokenRejected` was wired to `!token`,
+which is only ever true for a malformed URL. A revoked, expired or fabricated
+token is a well-formed 64-char string, so the `gone: 'revoked'` branch was dead
+and every dead link fell through to "the board could not be found" — the less
+actionable of the two messages, in the commonest case. It now reads the
+endpoint's 404/410, and `expired` was split out from `revoked` because they are
+different facts with different remedies. `toRejectionReason` is pure and
+tested; the 410 message text is a contract between the two, so
+`resolveLiveLink` is now the single place all four liveness checks live and
+`share-link-meta.test.ts` pins the mapping.
+
 Two more findings worth keeping:
 
 - **`EXPLAIN QUERY PLAN` says the token join is a full `SCAN`**, not an index

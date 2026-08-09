@@ -84,7 +84,8 @@ never when you create it. **General access** shows the expiry date, and
 **Revoke** switches the link off.
 
 Revoking takes effect immediately — the next person to open the link is told
-it's no longer available.
+it's no longer available, and whether that's because it was switched off or
+because it reached its expiry date.
 
 **Revoking does not remove people who already signed in.** Once someone has
 joined, they hold a real place on the board's member list, and the link has

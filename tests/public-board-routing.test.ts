@@ -60,6 +60,31 @@ describe('decidePublicBoardRoute', () => {
         })
     })
 
+    it('distinguishes an EXPIRED link from a revoked one', () => {
+        // Two different facts with two different remedies, so they must not
+        // collapse into one message. The metadata endpoint separates them by
+        // status body; this is the branch that carries that through to what the
+        // visitor reads.
+        expect(
+            decidePublicBoardRoute(input({ isTokenRejected: true, rejectionReason: 'expired' }))
+        ).toEqual({ kind: 'gone', reason: 'expired' })
+    })
+
+    it('reports a token that never named a board as missing', () => {
+        expect(
+            decidePublicBoardRoute(input({ isTokenRejected: true, rejectionReason: 'missing' }))
+        ).toEqual({ kind: 'gone', reason: 'missing' })
+    })
+
+    it('falls back to revoked when no reason is supplied', () => {
+        // `revoked` is the safe default: it is the only reason whose message
+        // tells the visitor to go ask for a new link, which is the right advice
+        // whichever of the three actually happened.
+        expect(
+            decidePublicBoardRoute(input({ isTokenRejected: true, rejectionReason: undefined }))
+        ).toEqual({ kind: 'gone', reason: 'revoked' })
+    })
+
     it('tells a MEMBER the link is dead rather than silently redirecting', () => {
         // Checked before membership on purpose. An owner following their own
         // revoked link is likely the person who needs to re-issue it; bouncing
