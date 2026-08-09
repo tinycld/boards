@@ -66,9 +66,11 @@ immediately.
 ## Card details
 
 An open card shows its assignees, labels, and due date, followed by the
-description, checklist, and comments. A due date turns amber when it's less
-than two days away and red once it has passed — the same colors the board
-shows on the card itself.
+description, attachments, checklist, and comments. A due date turns amber when
+it's less than two days away and red once it has passed — the same colors the
+board shows on the card itself.
+
+To add a file, see [Attaching files to cards](help://cards:attaching-files).
 
 ## Writing a description
 

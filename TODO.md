@@ -16,7 +16,7 @@ ordered by dependency; tasks within one are small and mostly independent.
 | M3b | Role-gated UI and sharing | ✅ shipped |
 | M4 | Mail: create a card from an email | touches `mail/` |
 | M5 | Calendar: due dates on the calendar | touches `calendar/` |
-| M6 | File attachments with previews | |
+| M6 | File attachments with previews | ✅ core loop shipped; Drive picker + covers filed |
 | M6a | Public boards: the share-link flow | schema shipped, flow missing |
 | M7 | Package plumbing, tests, docs | |
 | M9 | Collaborative markdown editing | web + native shipped, carets included |
@@ -1038,33 +1038,76 @@ touches the `calendar/` repo:
 
 ## M6 — File attachments with previews
 
-Blueprint: mail's attachment surface (`mail/tinycld/mail/components/
-AttachmentStrip.tsx`) on top of core's viewer (`@tinycld/core/file-viewer`:
-`Thumbnail`, `PreviewModal`, `FilePreviewSource`, `use-pick-files`,
-`preview-action-registry`). Storage per the M0 decision: `cards_attachments`
-file field (schema lands in M1, rules in M2).
+**The core loop shipped**, on top of core's viewer. Four e2e specs are green
+and the full cards suite is 47/47.
 
-- [ ] Attachment strip on `CardDetail` (peek + page): core `Thumbnail` per
-      attachment, name + size, tap → core `PreviewModal` fed a
-      `FilePreviewSource` built from the record's authed file URL
-      (`use-authed-file-url`). Follow AttachmentStrip's structure; keep the
-      strip its own component, not inline JSX.
-- [ ] Drive's registered preview actions ("Save to Drive", export-PDF) render
-      automatically in the modal toolbar via `getPreviewActionFactories` —
-      verify they appear when drive is installed and are simply absent when
-      it isn't; no cards-side code should reference drive for this.
-- [ ] Upload: "Attach file" affordance in the strip using core's
-      `use-pick-files`; mutation inserts the `cards_attachments` record with
-      the picked file. Show an uploading/pending state (optimistic insert).
-- [ ] Drag-and-drop a file onto the open card detail to attach (web) —
-      drive's `DropZone` is the interaction reference, but implement locally
-      against core primitives; don't import drive.
-- [ ] Delete attachment (uploader or project owner — matches the M2 rule),
-      with confirm.
-- [ ] Board card face: attachment presence — paperclip + count in the badge
-      row, and use the first image attachment as a card cover (classic kanban
-      affordance; make the cover optional per card if it's cheap, otherwise
-      skip covers for v1).
+**There was no schema or Go work left, and that is worth knowing before
+touching this.** M1 shipped `cards_attachments` complete with a `size` column
+added expressly "to declare a manifest quota against later" and a 100MB
+`maxSize`; M2 shipped its rules; `1980000001` appended `attachment_count`; and
+`server/counters.go:34` was ALREADY binding create/update/delete on
+`cards_attachments` and recomputing the badge. M6 turned out to be a purely
+client-side milestone plus one promotion into core.
+
+- [x] Attachment strip on `CardDetail` (peek + page) —
+      `components/detail/DetailAttachments.tsx`, core `Thumbnail` per row,
+      tap → core `PreviewModal` with index-derived next/previous.
+      **Mounted AFTER the description body (child index 3).** `CardDetail`
+      pins `stickyHeaderIndices={[TOOLBAR_INDEX]}` with `TOOLBAR_INDEX = 2`,
+      so a section inserted above it silently pins the wrong child.
+- [x] Drive's registered preview actions appear automatically. The whole
+      tie-in is one line — `getPreviewActionFactories().map(f => f())` fed to
+      `PreviewModal`'s `actions`. No cards-side reference to drive, and the
+      array is simply empty when drive is absent.
+- [x] Upload with **real progress**. This is the one place the never-bypass-
+      pbtsdb rule is deliberately set aside, for file BYTES only: the PB SDK
+      is built on `fetch`, which cannot report upload progress, and a 100MB
+      cap makes a progress bar mandatory rather than polish. Drive's XHR
+      uploader was **promoted to core** (`@tinycld/core/file-viewer/
+      upload-file`) rather than copied, and mail is adopting it too.
+      Uploads run SEQUENTIALLY — eight parallel 100MB uploads from a phone
+      starve each other and make every bar crawl.
+- [x] Drag-and-drop onto the open card (web). Drive's `DropZone` was promoted
+      to `@tinycld/core/components/DropZone`, file-only; drive keeps the
+      `webkitGetAsEntry` folder recursion, being the only package with a
+      folder model. The overlay gained `pointerEvents="none"` so it cannot
+      swallow the drop it invites.
+- [x] Delete: uploader-or-owner, matching the rule exactly, via core's
+      `ConfirmDialog`.
+- [x] Board card face: paperclip + count, modelled on `CommentsPill`.
+      Deliberately absent from the compact and done faces, matching the
+      documented density policy.
+- [x] Storage accounting: `quota: [{ collection: 'cards_attachments',
+      sizeField: 'size', ownerField: 'uploaded_by' }]`. **The client writes
+      `size` on upload** — nothing populates it server-side, so an unwritten
+      column would leave cards invisible to the org storage screen while
+      still consuming disk.
+- [x] Unit tests (`tests/attachment-source.test.ts`, 16) plus 25 in core for
+      the uploader and its store.
+- [x] Help topic: `help/attaching-files.md`, cross-linked from
+      `working-with-cards.md`.
+
+Three things surfaced, all load-bearing:
+
+- **A real bug in core's `Thumbnail`, found by this work.** Its icon fallback
+  branch carried `w-full`, so a thumbnail asked for a 56px box returned one as
+  wide as its parent — 413px here. The filename beside it then resolved to
+  width ZERO and the size text was pushed off the row. Drive only ever renders
+  it in a fixed-width grid cell, which hid it for as long as drive was the
+  only caller. **Three plausible caller-side fixes were tried and all failed**
+  before a DOM probe measured the thumbnail itself. Reach for the running app
+  early on layout, exactly as the collapsed-column work concluded.
+- **An upload placeholder and its settled row can both render.** The
+  placeholder id IS the record id (pre-generated and posted as the record's
+  own), so the strip drops any in-flight row whose record has arrived; the
+  store's auto-clear timer is only a backstop for a live query that never
+  delivers. Without that, every attachment appeared twice for 2.5s.
+- **`throttleProgress` dropped its first event** — inherited from drive, where
+  a real clock mostly masks it. The first event is the one that turns a bar
+  from empty into moving. Fixed in core, mutation-checked.
+
+Still filed, deliberately not built:
+
 - [ ] "Attach from Drive" (presence-gated with `usePackages()`):
       copy-on-attach — fetch the drive file via its authed URL and insert a
       normal `cards_attachments` record, so project members' access never
@@ -1072,13 +1115,9 @@ file field (schema lands in M1, rules in M2).
       `drive_items` read via the minimal-local-interface pattern (core's
       contact-suggestions bridge is the shape); if that picker grows beyond
       trivial, file a follow-up for drive to export a picker instead.
-- [ ] Storage accounting: check how mail/drive report usage (mail's manifest
-      `quota` field, drive's `useTotalStorage`) and declare cards'
-      attachment usage the same way so the org storage screen stays honest.
-- [ ] Unit tests: attachment mutation + `FilePreviewSource` mapping (mail's
-      `tests/attachment-preview-source.test.ts` is the reference).
-- [ ] Help topic: attaching files to cards (previews, save-to-drive when
-      drive is present).
+- [ ] Image card covers — use the first image attachment as a card cover.
+      Skipped for v1; `attachment_count` on the board face carries the
+      "this card has files" signal on its own.
 
 ## M6a — Public boards: the share-link flow
 
@@ -1503,9 +1542,18 @@ project-delete WAL cascade. The generic Yjs machinery was promoted from
       Since then: `keyboard-shortcuts.spec.ts` covers `e`/`n`/`⇧N`,
       `card-description.spec.ts` covers markdown rendering, and
       `board-view-modes.spec.ts` has been run for the first time and passes.
-      Remaining scope is the editor-path flow — stepper move, due, checklist,
-      attach + preview (M6) — plus repairing the RED
-      `board-presence.spec.ts` (see M3).
+      Remaining scope is the editor-path flow — **stepper move, due date and
+      checklist add/complete**, which no spec drives today (`board-dnd` covers
+      checklist REORDER only, and `board-sharing` only asserts the stepper is
+      display-only for a viewer). Attach + preview is now covered by
+      `card-attachments.spec.ts` (M6), and `board-presence.spec.ts` is green.
+
+      **Two more load-sensitive helpers were fixed at source** while running
+      the full suite for M6, both the same shape as the earlier `focusedTitle`
+      fix: `centerOf` and `dragColumn` read `boundingBox()` without waiting,
+      and it returns null for an element that is attached but not yet laid
+      out. `centerOf` is the entry point for every drag helper, so a bare read
+      there made all of them load-sensitive rather than just one.
 - [ ] Update `help/working-with-cards.md` for behavior that changed
       (creating boards/lists/cards); add topics from M4–M6; run
       `pnpm run packages:generate`. Sharing is already covered — M3b shipped

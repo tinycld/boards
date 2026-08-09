@@ -1,7 +1,14 @@
 import { LabelBadge } from '@tinycld/core/components/LabelBadge'
 import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
-import { CalendarDays, CircleCheck, Clock, MessageSquare, SquareCheck } from 'lucide-react-native'
+import {
+    CalendarDays,
+    CircleCheck,
+    Clock,
+    MessageSquare,
+    Paperclip,
+    SquareCheck,
+} from 'lucide-react-native'
 import { Pressable, Text, View } from 'react-native'
 import type { RemoteCardsPresence } from '../hooks/useBoardPresence'
 import { dueStateFor, formatDueDate } from '../lib/due-state'
@@ -273,7 +280,8 @@ function CardMeta({ card }: { card: BoardCardView }) {
     // same row as the other metadata. Per-card, so only the cards a peer moved
     // between re-render.
     const watchers = useCardPresence(card.id)
-    const hasPills = card.due || card.checklistTotal > 0 || card.commentCount > 0
+    const hasPills =
+        card.due || card.checklistTotal > 0 || card.commentCount > 0 || card.attachmentCount > 0
     // Someone viewing this card is reason enough to render the row, even on a
     // card that has no other metadata at all.
     if (!hasPills && card.assignees.length === 0 && watchers.length === 0) return null
@@ -283,6 +291,7 @@ function CardMeta({ card }: { card: BoardCardView }) {
             <DuePill due={card.due} />
             <ChecklistPill done={card.checklistDone} total={card.checklistTotal} />
             <CommentsPill count={card.commentCount} />
+            <AttachmentsPill count={card.attachmentCount} />
             <View className="flex-1" />
             <CardWatchers watchers={watchers} cardId={card.id} />
             <CardAssignees assignees={card.assignees} />
@@ -389,6 +398,18 @@ function CommentsPill({ count }: { count: number }) {
     return (
         <View className="flex-row items-center gap-1">
             <MessageSquare size={12} color={mutedColor} strokeWidth={2.2} />
+            <Text className="text-[11px] font-medium text-muted">{count}</Text>
+        </View>
+    )
+}
+
+function AttachmentsPill({ count }: { count: number }) {
+    const mutedColor = useThemeColor('muted')
+    if (!count) return null
+
+    return (
+        <View className="flex-row items-center gap-1">
+            <Paperclip size={12} color={mutedColor} strokeWidth={2.2} />
             <Text className="text-[11px] font-medium text-muted">{count}</Text>
         </View>
     )

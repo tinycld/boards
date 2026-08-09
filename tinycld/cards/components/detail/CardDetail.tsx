@@ -1,5 +1,8 @@
+import { DropZone } from '@tinycld/core/components/DropZone'
+import { useAuth } from '@tinycld/core/lib/auth'
 import { type RefObject, useRef, useState } from 'react'
 import { ScrollView, Text, View } from 'react-native'
+import { useAttachmentMutations } from '../../hooks/useAttachmentMutations'
 import { useCardDetail } from '../../hooks/useCardDetail'
 import { useUpdateCard } from '../../hooks/useCardMutations'
 import { useCommentMutations } from '../../hooks/useCommentMutations'
@@ -15,6 +18,7 @@ import {
     useDescriptionEditor,
 } from './DescriptionEditor'
 import { DetailActivity } from './DetailActivity'
+import { DetailAttachments, filesToPicked } from './DetailAttachments'
 import { DetailChecklist } from './DetailChecklist'
 import { DetailProperties } from './DetailProperties'
 import { EditableText, type EditableTextHandle } from './EditableText'
@@ -76,10 +80,15 @@ export function CardDetail({
     const widthClass = variant === 'page' ? 'w-full max-w-[720px] self-center' : ''
     // Fetched here rather than threaded in as props, so the peek and the page
     // both get it without either container knowing about on-demand collections.
-    const { checklist, comments } = useCardDetail(card.id)
+    const { checklist, comments, attachments } = useCardDetail(card.id)
     // Resolved here for the same reason — both containers share the gates.
     const { canEdit, canComment, isOwner } = useProjectRole(projectId)
     const updateCard = useUpdateCard()
+    // Only the drop path needs this here — the strip owns the picker and the
+    // rows. Both write through the same store, so the two callers of
+    // useAttachmentMutations cannot disagree about what is in flight.
+    const { user } = useAuth()
+    const { uploadFiles } = useAttachmentMutations(card.id, projectId, user?.id ?? '')
     const { createComment, deleteComment } = useCommentMutations(card.id, projectId)
     // Which comment the composer is replying to. Local because it is transient
     // UI state that dies with the open card, and it lives HERE rather than in
@@ -102,67 +111,85 @@ export function CardDetail({
 
     return (
         <>
-            {/* Flat children, not one padded wrapper: `stickyHeaderIndices`
+            {/* Dropping a file anywhere on the card attaches it. Web-only in
+                effect — DropZone renders a plain View on native, where there
+                is no drag source to begin with. */}
+            <DropZone
+                isEnabled={canEdit}
+                onDrop={files => uploadFiles(filesToPicked(files))}
+                label="Drop to attach"
+            >
+                {/* Flat children, not one padded wrapper: `stickyHeaderIndices`
                 only pins a DIRECT child of the ScrollView, so the toolbar has
                 to sit at this level. The section padding therefore lives on
                 each child. TOOLBAR_INDEX below must match the toolbar's
                 position in this list. */}
-            <ScrollView className="flex-1" stickyHeaderIndices={[TOOLBAR_INDEX]}>
-                <View className={`px-6 mt-1 mb-[18px] ${widthClass}`}>
-                    <EditableText
-                        ref={titleRef}
-                        value={card.title}
-                        onSave={title => updateCard.mutate({ cardId: card.id, title })}
-                        placeholder="Card title"
-                        accessibilityLabel="Edit card title"
-                        textClassName="text-[20px] font-semibold leading-[27px] tracking-tight text-foreground"
-                        isDisabled={!canEdit}
-                    />
-                </View>
-                <View className={`px-6 ${widthClass}`}>
-                    <DetailProperties
-                        card={card}
-                        projectLabels={projectLabels}
-                        projectMembers={projectMembers}
-                        onManageLabels={() => setIsManagingLabels(true)}
-                        canEdit={canEdit}
-                    />
-                </View>
-                {/* Index TOOLBAR_INDEX — the sticky one. Always rendered, at a
+                <ScrollView className="flex-1" stickyHeaderIndices={[TOOLBAR_INDEX]}>
+                    <View className={`px-6 mt-1 mb-[18px] ${widthClass}`}>
+                        <EditableText
+                            ref={titleRef}
+                            value={card.title}
+                            onSave={title => updateCard.mutate({ cardId: card.id, title })}
+                            placeholder="Card title"
+                            accessibilityLabel="Edit card title"
+                            textClassName="text-[20px] font-semibold leading-[27px] tracking-tight text-foreground"
+                            isDisabled={!canEdit}
+                        />
+                    </View>
+                    <View className={`px-6 ${widthClass}`}>
+                        <DetailProperties
+                            card={card}
+                            projectLabels={projectLabels}
+                            projectMembers={projectMembers}
+                            onManageLabels={() => setIsManagingLabels(true)}
+                            canEdit={canEdit}
+                        />
+                    </View>
+                    {/* Index TOOLBAR_INDEX — the sticky one. Always rendered, at a
                     FIXED height: the label and the toolbar take turns in this
                     one row, so focusing the editor swaps what is drawn without
                     changing what the row occupies. Reserving the space is also
                     what keeps sticky working — an out-of-flow overlay has no
                     box for either platform to pin. */}
-                <View className={`px-6 ${widthClass}`}>
-                    {description.body ? description.header : null}
-                </View>
-                <View className={`px-6 mb-6 overflow-visible ${widthClass}`}>
-                    {description.body}
-                </View>
-                <View className={`px-6 ${widthClass}`}>
-                    <DetailChecklist
-                        items={checklist}
-                        cardId={card.id}
-                        projectId={projectId}
-                        canEdit={canEdit}
-                    />
-                </View>
-                <View className={`px-6 pb-6 ${widthClass}`}>
-                    <DetailActivity
-                        comments={comments}
-                        canComment={canComment}
-                        canModerate={isOwner}
-                        onReply={comment =>
-                            setReplyingTo({
-                                id: comment.id,
-                                authorName: comment.author.firstName || 'this comment',
-                            })
-                        }
-                        onDelete={commentId => deleteComment.mutate(commentId)}
-                    />
-                </View>
-            </ScrollView>
+                    <View className={`px-6 ${widthClass}`}>
+                        {description.body ? description.header : null}
+                    </View>
+                    <View className={`px-6 mb-6 overflow-visible ${widthClass}`}>
+                        {description.body}
+                    </View>
+                    <View className={`px-6 ${widthClass}`}>
+                        <DetailAttachments
+                            attachments={attachments}
+                            cardId={card.id}
+                            projectId={projectId}
+                            canEdit={canEdit}
+                            isOwner={isOwner}
+                        />
+                    </View>
+                    <View className={`px-6 ${widthClass}`}>
+                        <DetailChecklist
+                            items={checklist}
+                            cardId={card.id}
+                            projectId={projectId}
+                            canEdit={canEdit}
+                        />
+                    </View>
+                    <View className={`px-6 pb-6 ${widthClass}`}>
+                        <DetailActivity
+                            comments={comments}
+                            canComment={canComment}
+                            canModerate={isOwner}
+                            onReply={comment =>
+                                setReplyingTo({
+                                    id: comment.id,
+                                    authorName: comment.author.firstName || 'this comment',
+                                })
+                            }
+                            onDelete={commentId => deleteComment.mutate(commentId)}
+                        />
+                    </View>
+                </ScrollView>
+            </DropZone>
             {/* Commentors keep the composer — that is what the role means. */}
             {canComment ? (
                 <CommentComposer

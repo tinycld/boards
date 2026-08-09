@@ -132,6 +132,21 @@ export interface BoardComment {
     parent: string
 }
 
+export interface BoardAttachment {
+    id: string
+    /** PocketBase's stored name, `{name}_{random10}.{ext}` — what URLs use. */
+    fileName: string
+    /** The stored name with PB's random suffix stripped, for display. */
+    displayName: string
+    /** Bytes, written by the client on upload (PB stores no size of its own). */
+    size: number
+    /** Derived from the extension: PocketBase keeps no mime for a file field. */
+    mimeType: string
+    uploadedBy: BoardMember
+    /** ISO timestamp from `created`. Format at render, never store a string. */
+    created: string
+}
+
 export interface BoardCardView {
     id: string
     listId: string
@@ -148,7 +163,6 @@ export interface BoardCardView {
     checklistTotal: number
     checklistDone: number
     commentCount: number
-    /** No board-face badge yet — M6 renders it with the attachment UI. */
     attachmentCount: number
 }
 

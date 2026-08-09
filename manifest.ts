@@ -18,6 +18,11 @@ const manifest = {
     // the palette calls when a cards row is chosen.
     search: { adapter: 'search-adapter' },
     migrations: { directory: 'pb-migrations' },
+    // Card attachments count against the org's storage ceiling. `size` is
+    // written by the client on upload — PocketBase keeps no size of its own
+    // for a file field, so an unwritten column would make cards invisible to
+    // the storage screen while still consuming disk.
+    quota: [{ collection: 'cards_attachments', sizeField: 'size', ownerField: 'uploaded_by' }],
     // Cards is rule-first: every authorization decision lives in the access
     // rules the migrations ship, because those rules are the whole story for
     // any caller that does not pass through a hook — a Go guard adds to them

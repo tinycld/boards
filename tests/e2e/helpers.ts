@@ -80,6 +80,10 @@ export async function travelTo(
 }
 
 export async function centerOf(locator: Locator): Promise<{ x: number; y: number }> {
+    // Wait before measuring: `boundingBox()` is null for an element that is
+    // attached but not yet laid out, and every drag helper starts here — so a
+    // bare read makes all of them load-sensitive rather than just one.
+    await locator.waitFor({ state: 'visible' })
     const box = await locator.boundingBox()
     if (!box) throw new Error('locator has no bounding box (not visible?)')
     return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
@@ -159,6 +163,12 @@ export async function dragColumn(
 ) {
     const start = await centerOf(columnHeader(page, columnName))
     const targetHeader = columnHeader(page, targetColumnName)
+    // Wait for the header before measuring it. `boundingBox()` returns null
+    // for an element that exists but has not been laid out yet, and under
+    // full-suite parallel load that window is wide enough to hit — which
+    // surfaced as "target column header not visible" from a spec that passes
+    // every time it runs alone.
+    await targetHeader.waitFor({ state: 'visible' })
     const box = await targetHeader.boundingBox()
     if (!box) throw new Error('target column header not visible')
     // Header text sits near the column's left edge (COLUMN_WIDTH=284):
