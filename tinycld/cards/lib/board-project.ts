@@ -78,7 +78,7 @@ export function toBoardCard(
         description: card.description,
         // PocketBase returns '' for an unset date, and new Date('') is an
         // Invalid Date that formats as "Invalid Date" rather than throwing.
-        due: card.due === '' ? undefined : new Date(card.due),
+        due: toDueDate(card.due),
         labels: card.labels.flatMap(id => {
             const label = labelsById.get(id)
             return label ? [label] : []
@@ -100,6 +100,28 @@ export function toBoardCard(
         commentCount: card.comment_count,
         attachmentCount: card.attachment_count,
     }
+}
+
+/**
+ * A stored due value → the LOCAL calendar day it names, or undefined.
+ *
+ * `due` is a day, not an instant: the picker writes `toDateString(date)` — a
+ * bare `YYYY-MM-DD` — and PocketBase stores it in a `date` field, handing it
+ * back as `YYYY-MM-DD 00:00:00Z`. That midnight is UTC, so `new Date(...)` on
+ * it lands on the PREVIOUS day for every user west of Greenwich: picking
+ * "Tomorrow" in US Central saved fine and read back as today, and a date set
+ * for today read back as yesterday · overdue.
+ *
+ * Taking the UTC parts (never the local getters, which have already been
+ * shifted) and rebuilding at local midnight recovers the day the user picked.
+ * The result is what `dueStateFor` compares against `new Date()`, so it has to
+ * sit in the same local frame as "now" for overdue/soon to mean anything.
+ */
+function toDueDate(due: string): Date | undefined {
+    if (due === '') return undefined
+    const parsed = new Date(due)
+    if (Number.isNaN(parsed.getTime())) return undefined
+    return new Date(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate())
 }
 
 /**

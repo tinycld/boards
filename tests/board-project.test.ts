@@ -125,6 +125,28 @@ describe('toBoardCard', () => {
         expect(Number.isNaN(due?.getTime())).toBe(false)
     })
 
+    // The day is the whole point, and asserting only "is a valid Date" is what
+    // let this ship broken: PocketBase hands back UTC midnight, so `new Date()`
+    // on it resolved to Aug 4 for every user west of Greenwich. Read through
+    // the LOCAL getters — the same ones the chip and dueStateFor use.
+    it('maps a due date to the local calendar day it names, not the UTC instant', () => {
+        const due = toBoardCard(
+            card('c1', 'list1', 'a0', { due: '2026-08-05 00:00:00Z' }),
+            labels,
+            users
+        ).due
+        expect([due?.getFullYear(), (due?.getMonth() ?? 0) + 1, due?.getDate()]).toEqual([
+            2026, 8, 5,
+        ])
+        // Local midnight, so the day survives any later comparison against now.
+        expect([due?.getHours(), due?.getMinutes()]).toEqual([0, 0])
+    })
+
+    it('maps an unparseable due date to undefined rather than an Invalid Date', () => {
+        const due = toBoardCard(card('c1', 'list1', 'a0', { due: 'not a date' }), labels, users).due
+        expect(due).toBeUndefined()
+    })
+
     it('resolves label ids to rows', () => {
         const result = toBoardCard(card('c1', 'list1', 'a0', { labels: ['l1'] }), labels, users)
         expect(result.labels).toEqual([{ id: 'l1', name: 'Bug', color: '#ef4444' }])
