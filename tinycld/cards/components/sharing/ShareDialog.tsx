@@ -14,6 +14,7 @@ import { memberRowActionsFor } from '../../lib/permissions'
 import type { BoardProject, CardsMemberRole } from '../../types'
 import { AddMemberDialog } from './AddMemberDialog'
 import { MemberRow } from './MemberRow'
+import { ShareLinkSection } from './ShareLinkSection'
 
 interface ShareDialogProps {
     isVisible: boolean
@@ -33,7 +34,9 @@ interface ShareDialogProps {
  * where a caller who bypasses this dialog lands. The two cover different paths
  * — do not simplify either away.
  *
- * Share links deliberately absent: that flow is M6a.
+ * Share links live in the owner-only General access section at the foot of the
+ * roster (M6a). Everything above it is about people who already have accounts;
+ * that section is about handing access to someone who does not.
  */
 export function ShareDialog({ isVisible, onClose, project }: ShareDialogProps) {
     if (!isVisible) return null
@@ -111,6 +114,7 @@ function ShareDialogContent({ onClose, project }: { onClose: () => void; project
                         ))}
                     </View>
                     <GuestRosterNote isVisible={isGuest && orgRoleReady} />
+                    <ShareLinkSection projectId={project.id} isVisible={isOwner} />
                 </ScrollView>
 
                 <View className="flex-row items-center px-4 py-3 border-t border-border">
