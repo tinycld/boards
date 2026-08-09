@@ -11,6 +11,7 @@
         "./collections": "./tinycld/cards/collections.ts",
         "./seed": "./tinycld/cards/seed.ts",
         "./screens/*": "./tinycld/cards/screens/*.tsx",
+        "./public-screens/*": "./tinycld/cards/public-screens/*.tsx",
         "./sidebar": "./tinycld/cards/sidebar.tsx",
         "./hooks/*": "./tinycld/cards/hooks/*.ts",
         "./lib/*": "./tinycld/cards/lib/*.ts",

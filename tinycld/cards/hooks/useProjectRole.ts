@@ -1,4 +1,5 @@
 import { and, eq } from '@tanstack/db'
+import { useAuth } from '@tinycld/core/lib/auth'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
 import { capabilitiesFor, type ProjectCapabilities } from '../lib/permissions'
@@ -30,6 +31,7 @@ export interface ProjectRole extends ProjectCapabilities {
  */
 export function useProjectRole(projectId: string): ProjectRole {
     const [membersCollection] = useStore('cards_project_members')
+    const { user } = useAuth()
 
     const { data: rows, isReady } = useOrgLiveQuery(
         (query, { userId }) => {
@@ -42,5 +44,14 @@ export function useProjectRole(projectId: string): ProjectRole {
     )
 
     const role = rows?.[0]?.role ?? null
-    return { role, isReady, ...capabilitiesFor(role) }
+
+    // A share-link visitor is unauthenticated, so useOrgLiveQuery disables
+    // itself and `isReady` never settles. Left alone that would be a board with
+    // every capability correctly denied but its read-only notice permanently
+    // suppressed — the query is not "still loading", it is never going to run.
+    // Settling it here makes the refusal chrome render, which is the honest
+    // state: no membership, and none coming.
+    const ready = user ? isReady : true
+
+    return { role, isReady: ready, ...capabilitiesFor(role) }
 }

@@ -39,6 +39,17 @@ export function toBoardMember(user: UserLike): BoardMember {
     }
 }
 
+/**
+ * The stand-in for an assignee whose user row the caller cannot read.
+ *
+ * Keeps the id so identity-based memoization and structural sharing behave
+ * exactly as they do for a resolved member — two renders of the same
+ * unresolvable assignee compare equal.
+ */
+export function anonymousMember(id: string): BoardMember {
+    return { id, firstName: 'Board', lastName: 'member' }
+}
+
 export function toBoardLabel(label: CardsLabels): BoardLabel {
     return { id: label.id, name: label.name, color: label.color }
 }
@@ -72,10 +83,18 @@ export function toBoardCard(
             const label = labelsById.get(id)
             return label ? [label] : []
         }),
-        assignees: card.assignees.flatMap(id => {
-            const member = usersById.get(id)
-            return member ? [member] : []
-        }),
+        // An assignee whose user row the caller cannot read becomes an
+        // ANONYMOUS placeholder rather than vanishing.
+        //
+        // This is the share-link case: a visitor reads no `users` rows at all
+        // (core's rule admits only a non-guest member, or your own row), so
+        // every assignee would otherwise silently disappear and a card that IS
+        // assigned would read as unassigned — misleading on a board where
+        // assignment is the point. A faceless avatar says "someone owns this"
+        // without naming them, which is exactly the amount a link should
+        // disclose. Labels above still drop, deliberately: a deleted label
+        // leaves its id behind and there is nothing to say about it.
+        assignees: card.assignees.map(id => usersById.get(id) ?? anonymousMember(id)),
         checklistTotal: card.checklist_total,
         checklistDone: card.checklist_done,
         commentCount: card.comment_count,

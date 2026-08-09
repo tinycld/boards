@@ -4,6 +4,12 @@ const manifest = {
     version: '0.2.0',
     description: 'Kanban boards for tracking work across lists.',
     routes: { directory: 'screens' },
+    // Share links open at /p/cards/board/<token>, outside the workspace shell
+    // and with no auth gate. The board renders through the ordinary queries —
+    // the token satisfies the access rules — so this is a route, not a second
+    // implementation. Needs the matching `./public-screens/*` entry in
+    // package.json exports, or the generator warns and skips it silently.
+    publicRoutes: { directory: 'public-screens' },
     nav: {
         label: 'Cards',
         icon: 'square-kanban',
