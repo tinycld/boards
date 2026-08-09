@@ -39,6 +39,19 @@ const manifest = {
     // (server/*_rls_test.go), maintain the board-face counters, authorize the
     // presence room, and mint share-link tokens (M6a).
     server: { package: 'server', module: 'tinycld.org/packages/cards' },
+    // `tinycld cards ...` commands, compiled into the per-org CLI binary by
+    // gen-cli.ts. Cobra is the source of truth for the command list and --help.
+    //
+    // The scopes are asymmetric on purpose. cards:write covers board CONTENT;
+    // the sharing surface (cards_project_members, cards_share_links) is
+    // registered READ-ONLY in core's collectionScopes, so there are
+    // deliberately no `cards share` commands — adding one means widening that
+    // grant first, which is a security decision rather than a CLI one.
+    cli: {
+        package: 'cli',
+        module: 'tinycld.org/packages/cards/cli',
+        scopes: ['cards:read', 'cards:write'],
+    },
     collections: { register: 'collections', types: 'types' },
     seed: { script: 'seed' },
     peerVersions: { '@tinycld/core': '>=0.0.6 <0.1.0' },
