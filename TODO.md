@@ -17,7 +17,7 @@ ordered by dependency; tasks within one are small and mostly independent.
 | M4 | Mail: create a card from an email | touches `mail/` |
 | M5 | Calendar: due dates on the calendar | touches `calendar/` |
 | M6 | File attachments with previews | ✅ core loop shipped; Drive picker + covers filed |
-| M6a | Public boards: the share-link flow | schema shipped, flow missing |
+| M6a | Public boards: the share-link flow | ✅ shipped — rules, not a snapshot |
 | M7 | Package plumbing, tests, docs | |
 | M9 | Collaborative markdown editing | web + native shipped, carets included |
 
@@ -1119,43 +1119,130 @@ Still filed, deliberately not built:
       Skipped for v1; `attachment_count` on the board face carries the
       "this card has files" signal on its own.
 
-## M6a — Public boards: the share-link flow
+## M6a — Public boards: the share-link flow ✅
 
-The SCHEMA shipped in M1 (`cards_share_links`, `cards_projects.visibility`,
-owner-only rules). Nothing else exists: no token minting, no redemption, no
-public route, no UI. Drive is the working end-to-end precedent — read
-`drive/server/endpoints_public_share.go`, `endpoints_share_otp.go`, and
-`tinycld/core/server/sharelink/` before designing anything.
+**Shipped.** An owner mints a link from the Share dialog; anyone with the URL
+reads the board at `/p/cards/board/<token>` with no account; a commentor or
+editor link offers an email-OTP sign-in that mints a real membership. Four e2e
+specs drive the whole thing through the UI, cards e2e is 51/51, Go 189.
 
-The load-bearing insight from drive: **a redeemed link MINTS a
-`cards_project_members` row** rather than being consulted by the content
-rules. That is why every rule in M2 resolves through membership alone and
-none of them mention links.
+**The design changed in the one place that mattered, and everything else
+followed from it.** The plan of record was drive's: a server-rendered board
+SNAPSHOT endpoint, because "PocketBase has no anonymous auth identity, so no
+rule can admit a share session." **That premise was wrong.** The rule resolver
+allows `@request.headers.*` and `@collection.*`
+(`core/record_field_resolver.go:95-106`), so a token CAN be validated inside a
+rule. `1980000003` therefore extends list/view on the seven board collections
+to `<existing member rule> || <valid share token>`, and the payoff is large:
 
-- [ ] Token minting — server-side only: 32 bytes of entropy, hex, into the
-      64-char `token` field. The Go module this was filed to create already
-      exists (M2a built `server/` for the RLS suites; the counters and M3b's
-      last-owner guard live there too), so this is just the endpoint.
-- [ ] Redemption: create the `cards_project_members` row at the link's role,
-      never upgrading an existing membership (the link's role is a ceiling,
-      not a grant). Re-resolve the link on every call so revoking
-      (`is_active = false`) takes effect immediately.
-- [ ] Decide the visitor identity model: drive has TWO — an email-OTP guest
-      with a real `users` row, and a stateless HMAC-signed anon session with
-      no account. Write boards likely need the OTP path so edits attribute
-      to someone; confirm before building.
-- [ ] Public route under a `publicRoutes` manifest directory (`/p/cards/...`),
-      plus the `PackageProviderWrapper` (drive's public route needs it or the
-      registry is empty).
-- [ ] Share-link UI in the project Share dialog: mint, pick role, copy URL,
-      revoke. Note drive's dialog hardcodes `role: 'viewer'` at both creation
-      sites — editor links exist in its schema but cannot be made from its
-      UI. Do not inherit that gap.
-- [ ] Abuse safeguards — **deliberately deferred, not forgotten**: rate
-      limiting, a default expiry, a discoverable revoke path. A write link
-      means anyone with the URL can create cards. Drive's rate limiter is
-      in-process and in-memory, so it does not hold across instances.
-- [ ] Help topic: sharing a board publicly, and what a link recipient can do.
+- **No parallel renderer.** The public screen installs the token and renders
+  the ORDINARY `BoardCanvas` through the ORDINARY queries. A visitor's view
+  cannot drift from a member's, because it is the same view. The snapshot
+  design would have meant a second board implementation plus a `people`
+  derivation to keep in step.
+- **No snapshot endpoint, and no second read path to audit.**
+- **Revocation is immediate by construction** — the rule re-reads `is_active`
+  and `expires_at` on every request. There is no session to expire.
+
+Six upstream mechanics this leans on are documented with source references in
+the migration and pinned BEHAVIOURALLY, because PocketBase is vendored and a
+bump could change any of them. Two would have been silent:
+
+- **The disjunct must be TOP-LEVEL.** `@request.auth.*` is SQL NULL for an anon
+  and `NULL != true` is falsy, so folding the token clause inside `enabled &&`
+  makes it unsatisfiable for exactly the caller it serves — while looking right.
+- **`project ?= <ref>` is the entire board isolation.** `@collection` registers
+  an UNCONSTRAINED join (`registerJoin(..., nil)`), so without it any valid
+  token matches every board's rows. Mutation-checked: removing it fails ten
+  tests across both list and view. A single-board fixture cannot see this,
+  which is why the suite carries two projects and two links.
+
+Also load-bearing and undocumented upstream: `cards_share_links`' owner-only
+`listRule` would normally be AND-ed into the join and make the disjunct
+permanently false — it isn't, only because every rule path passes
+`allowHiddenFields=true`.
+
+- [x] Token minting — 32 bytes of entropy, hex, owner-only, plus list and
+      revoke. Cards' first HTTP routes; the slot had been reserved in
+      `register.go` since M2a. Two deliberate divergences from drive: an
+      unknown role is REFUSED rather than coerced to viewer (coercion is how a
+      UI bug ships as "the link works, just not as asked"), and expiry is a
+      server-resolved DURATION rather than a client timestamp, which is
+      clock-skew dependent and forgeable into the far future.
+- [x] Redemption at the link's role, NEVER upgrading an existing membership and
+      never minting an owner. Both mutation-checked. One transaction, so a
+      half-joined visitor is unreachable; the OTP is consumed LAST so a
+      transient failure leaves the visitor their code.
+- [x] **Visitor identity: BOTH models, as drive has.** Anonymous read via the
+      token rule; writing requires OTP. That is STRUCTURAL, not a product
+      choice — `author`, `created_by` and `uploaded_by` are required relations
+      to `users` and the create rules pin them to `@request.auth.id`, so an
+      anon cannot write whatever the link says. **A link's role is therefore a
+      CEILING FOR REDEMPTION, not an anonymous grant**; anyone reading
+      `role: "editor"` and expecting an anonymous editor is reading it wrong.
+- [x] Public route under `publicRoutes`. **`PackageProviderWrapper` turned out
+      NOT to be needed** — drive's requirement comes from its share-editor
+      registry, populated by provider import side effects, and cards' public
+      board registers nothing.
+- [x] Share-link UI in the Share dialog, with a real role picker.
+      `SHARE_LINK_ROLE_OPTIONS` is DERIVED from `ROLE_OPTIONS` minus owner so a
+      role cannot silently go missing — drive's omission is what makes its
+      entire OTP flow unreachable from its own UI, and a unit test pins ours.
+- [x] Abuse safeguards, no longer deferred: per-IP rate limits (60/min on
+      minting, 10/min on OTP — the arithmetic is in `sharelink.go`), a **7-day
+      default expiry** where drive has none, and a discoverable revoke path.
+      The limiter was promoted to `tinycld.org/core/ratelimit` and gained the
+      tests drive's copy never had. Still in-process and in-memory, so it does
+      not hold across instances; that caveat is on the package.
+- [x] Help topic: `help/sharing-boards.md` covers the three link kinds,
+      attachment downloads, the 7-day default, and the distinction people get
+      wrong — revoking stops new joins but leaves anyone who already signed in.
+
+Promoted to core rather than copied, because cards was about to be the second
+member needing each: `core/server/ratelimit`, `core/server/guestauth` (~200
+lines of account and OTP machinery drive had alone), and `core/lib/share-token`
+for the header. `requestShareOtp`/`verifyShareOtp` and `ShareLinkSignIn` now
+take a package slug — REQUIRED, not defaulted, since a silent default is how
+drive's viewer-only hardcode survived unnoticed.
+
+**Three bugs only the running app could find**, all invisible to unit and Go
+suites because none of them mounts the board unauthenticated:
+
+- `useOrgLiveQuery` threw `AuthRequiredError` for an anonymous caller, so the
+  public board rendered an error boundary. The hook already disables itself
+  when there is no user, so the throw contradicted its own contract. Fixed in
+  core; it would have broken any package's public route.
+- The mutation hooks `BoardColumn` constructs unconditionally threw the same
+  way. They are never INVOKED on a public board, but merely rendering did it.
+- `useSignInRole` read `cards_share_links` to decide whether to offer a
+  sign-in. **That collection is owner-only by rule**, so a visitor read nothing
+  and the button appeared only for people who already had access. The lesson
+  generalizes: an owner-only collection cannot tell a visitor anything about
+  their own link, however natural the query looks from inside the app. Replaced
+  with a small public metadata endpoint returning the board name and the link's
+  role — strictly less than the link already discloses.
+
+Two more findings worth keeping:
+
+- **`EXPLAIN QUERY PLAN` says the token join is a full `SCAN`**, not an index
+  probe: the unconstrained join puts the token predicate in the `WHERE` under
+  an `OR`, so `idx_cards_sl_token` goes unused. Measured at **0.09ms/read with
+  5,006 links**, so it is a non-issue at any realistic table size. Recorded
+  rather than optimized.
+- **An assignee whose user row the caller cannot read now renders as a faceless
+  placeholder instead of vanishing.** A visitor reads no `users` rows, so
+  dropping made every assigned card on a shared board read as UNASSIGNED —
+  worse than saying nothing, because it says something false about who owns the
+  work. Labels still drop; the asymmetry is deliberate.
+
+Still deliberately not built:
+
+- [ ] Per-link use caps and an access log — both need new columns, and the
+      schema is frozen.
+- [ ] A shared rate limiter. The in-memory one does not hold across instances.
+- [ ] `visibility` goes stale when a link EXPIRES (revoking syncs it). It is
+      decorative — the rules never consult it — so a desync is cosmetic. **If
+      it is ever put in a rule it must be an AND, never an OR.**
 
 ## M9 — Collaborative markdown editing
 
