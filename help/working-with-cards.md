@@ -127,6 +127,17 @@ working on something.
 These appear and disappear as people come and go — nothing is recorded, and
 you'll never see yourself.
 
+## Finding a card
+
+Press `/` anywhere to open the search palette and start typing. Opened from a
+board it is already scoped to cards, so you are searching your cards straight
+away; choosing a result opens that card on its board. Press ⌫ with an empty box
+to drop the scope and search every app at once. See
+[Searching across packages](help://core:search) for the full grammar.
+
+Archived cards are left out on purpose — search shows active work. To find one,
+open its board and look through the archive.
+
 ## Keyboard shortcuts
 
 You can work a board without touching the mouse. Press **J** to start — the
@@ -169,6 +180,12 @@ With a card open:
 
 Press **⇧?** anywhere to see every shortcut the app knows, including the ones
 for jumping between apps.
+
+## Working from a terminal
+
+Boards, lists and cards are all reachable from the `tinycld` command line, which
+is the quicker path for bulk edits and for scripting a board from another tool —
+see [Cards from the command line](help://cards:command-line).
 
 ## Missing a button?
 
