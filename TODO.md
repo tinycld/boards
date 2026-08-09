@@ -19,6 +19,7 @@ ordered by dependency; tasks within one are small and mostly independent.
 | M6 | File attachments with previews | ✅ core loop shipped; Drive picker + covers filed |
 | M6a | Public boards: the share-link flow | ✅ shipped — rules, not a snapshot |
 | M7 | Package plumbing, tests, docs | |
+| M8 | CLI | ✅ shipped — needed a core scope-table fix |
 | M9 | Collaborative markdown editing | web + native shipped, carets included |
 
 The lettered milestones (M2a, M3b, M6a) were split out once the data model
@@ -1631,9 +1632,104 @@ project-delete WAL cascade. The generic Yjs machinery was promoted from
       passed on every other run. That is a real gap in how those specs drive
       input, not something the toolbar introduced, and it wants its own pass.
 
-## M8 — CLI 
+## M8 — CLI ✅
 
-- [ ] Integerate with CLI, add manifest fields and support CRUD on lists and cards
+**Shipped.** `tinycld cards` carries `board list|view`, `list
+show|add|rename|move|done|remove` and `card view|add|edit|move|archive|remove`.
+40 Go tests in `cli/`, and the real per-org binary was built and driven, not
+just unit-tested.
+
+**The infrastructure was already waiting.** `gen-cli.ts` reads a manifest
+`cli: { package, module, scopes }` block and emits `cli_extensions.go`, the
+CLI `go.work` and a per-member one; `drive/cli` and `mail/cli` were directly
+copyable. gen-cli.ts even names the gap in its own comment ("cards and
+contacts contribute a search source but ship no CLI commands"). So the cards
+side was one module plus five lines of manifest.
+
+**What was NOT waiting, and would have shipped broken:** every `cards_*`
+collection was absent from core's `collectionScopes`, whose default is DENY.
+`cards:read`/`cards:write` existed and `/api/cards/search` was classified, but
+no board row was reachable — so every CRUD command would have 403'd against a
+real server *while its own tests passed*, because a fake test server runs no
+scope middleware. Fixed in core (`feat/cards-cli-support`, stacked on the
+share-link branch), with the classification pinned by tests.
+
+- [x] Manifest `cli` block + the Go module. Scopes are `cards:read` and
+      `cards:write`, asserted exactly in `tests/manifest.test.ts` — a missing
+      scope 403s everything while the Go suite stays green, and an extra one
+      silently widens a grant on the consent screen.
+- [x] **The sharing surface is READ-ONLY for OAuth callers**, so there are
+      deliberately no `cards share` commands. `cards_project_members` and
+      `cards_share_links` map read-only in `collectionScopes`: a write there
+      adds a person to a board or mints a URL that opens it to anyone holding
+      it, which is categorically larger than editing cards and is not what
+      "cards:write" reads as on a consent screen. Starting closed is
+      reversible in one line; the reverse would revoke a capability
+      integrations had already built on. Every write VERB is asserted refused,
+      not just POST — revoking a link is a DELETE and a role change is a PATCH.
+- [x] Addressing: **`cards <id>`**, with names where a name is what people
+      know. A board resolves by id OR name (the sidebar shows names, never
+      ids); a list by id or name WITHIN its board; a card by id only, because
+      a title is free text, is not unique in a column, and is the field most
+      likely to be edited — a name lookup would make `card edit` act on a
+      different row after a rename. An ambiguous name ERRORS with the
+      candidates listed rather than picking one.
+- [x] **Ranks had to be ported, and that is the risky part of this milestone.**
+      `position` is a fractional index and no endpoint hands one out, so
+      `cli/rank.go` reimplements what `lib/rank.ts` wraps. A restatement
+      cannot fail for the reason it was written, and this one fails SILENTLY:
+      a CLI-created card just sorts somewhere the app would not have put it,
+      with no error anywhere. So `rank_test.go` never asserts what the Go code
+      does — it asserts against 400 (a, b, want) triples plus 18 hand-picked
+      cases captured by RUNNING the npm library through a deterministic
+      sequence of appends, prepends and gap splits.
+      That caught a real bug on the way in: **JS `Math.round` rounds half UP**,
+      so the midpoint digit needs `(a+b+1)/2` where Go's `/2` truncates.
+      Mutation-checked — and note the property test ("keys sort between their
+      neighbours") stayed GREEN under that mutation, which is exactly why the
+      captured vectors carry the weight.
+      The tied-run widening is ported too, and mutation-checked: ranks are not
+      unique, `rankBetween` refuses equal neighbours, so an insert into a tied
+      run widens its window backwards instead of failing.
+- [x] Destructive paths carry the app's warnings rather than a generic prompt.
+      `list remove` names the card count the cascade will take — **including
+      archived cards, since the cascade does not care** — and skips the
+      confirm entirely for an empty column, because prompting for a no-risk
+      action trains people to pass `--yes` reflexively. `card remove` names
+      the checklist/comments/attachments and points at `card archive` as the
+      reversible option.
+- [x] A move writes `list` + `position` in ONE PATCH, as `useMoveCard` does;
+      two calls would leave the card in the target column at its OLD rank —
+      visible to every other client, and permanent if the second failed.
+      Asserted by counting PATCHes, mutation-checked. Within-column moves
+      exclude the mover before indexing (lib/move.ts's off-by-one).
+- [x] Every rank-ordered read sorts `position,id`, asserted **at the wire** by
+      the fake server: sorting by `position` alone would let two tied rows
+      render in a different order in the CLI than on the board.
+- [x] `--json` emits the typed record and status chatter goes to stderr, so
+      stdout stays pipeable.
+
+Two things worth knowing before extending this:
+
+- **The fake server runs no access rules and no scope middleware.** It proves
+  the commands send the right requests, never that a real server would allow
+  them. That split is deliberate — the rules are proven by `server/*_rls_test.go`
+  and the scope classification by core's `route_classification_test.go` — but
+  it is precisely why the scope table had to be widened before any of this
+  worked, and why a green `cli/` suite is not evidence a command functions.
+  The fake FAILS the test if a write is attempted against the sharing
+  collections, so a future `cards share` command cannot be built against a
+  fake that permits what the real server refuses.
+- **`cli/` needed a biome exclusion.** A CLI module is Go, but its testdata is
+  JSON and biome formats JSON — which would rewrite golden vectors whose whole
+  value is being a faithful capture. `server/` was already excluded; `cli/`
+  was not, only because drive and mail ship no `cli/testdata`. Verified no
+  `cli/` directory in the workspace holds any `.ts`/`.tsx`.
+
+Deliberately not built: checklist, comment, label and attachment subcommands.
+The board/list/card loop is what "CRUD on lists and cards" asked for, and each
+of those is a separate noun with its own flags — worth adding when someone
+wants them rather than guessing the shape now.
 
 ## M7 — Package plumbing, tests, docs
 
