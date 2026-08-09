@@ -51,6 +51,16 @@ type fakeCards struct {
 	deletedCards   []string
 	deletedLists   []string
 	patchCount     int
+
+	// cardListCount counts LIST reads of cards_cards, so a test can prove the
+	// board view stays one request rather than one per column.
+	cardListCount int
+
+	// userListCount and longestUserFilter pin the id-lookup chunking: the
+	// filter rides in the GET query string, so its length is the thing that
+	// must stay bounded, not just the request count.
+	userListCount     int
+	longestUserFilter int
 }
 
 func newFakeCards(t *testing.T) *fakeCards {
@@ -93,10 +103,15 @@ var (
 	reProjectEq  = regexp.MustCompile(`^project = "((?:[^"\\]|\\.)*)"$`)
 	reListEq     = regexp.MustCompile(`^list = "((?:[^"\\]|\\.)*)"$`)
 	reListActive = regexp.MustCompile(`^list = "((?:[^"\\]|\\.)*)" && archived = false$`)
-	reCardEq     = regexp.MustCompile(`^card = "((?:[^"\\]|\\.)*)"$`)
-	reIDTerm     = regexp.MustCompile(`id = "((?:[^"\\]|\\.)*)"`)
-	reIDList     = regexp.MustCompile(`^id = "((?:[^"\\]|\\.)*)"( \|\| id = "(?:(?:[^"\\]|\\.)*)")*$`)
-	reUnquote    = strings.NewReplacer(`\"`, `"`, `\\`, `\`)
+
+	// The board view reads a whole board's cards at once rather than one
+	// request per column, so cards_cards accepts a project-scoped filter too
+	// (reProjectEq above, plus this archived-excluding variant).
+	reCardProjectActive = regexp.MustCompile(`^project = "((?:[^"\\]|\\.)*)" && archived = false$`)
+	reCardEq            = regexp.MustCompile(`^card = "((?:[^"\\]|\\.)*)"$`)
+	reIDTerm            = regexp.MustCompile(`id = "((?:[^"\\]|\\.)*)"`)
+	reIDList            = regexp.MustCompile(`^id = "((?:[^"\\]|\\.)*)"( \|\| id = "(?:(?:[^"\\]|\\.)*)")*$`)
+	reUnquote           = strings.NewReplacer(`\"`, `"`, `\\`, `\`)
 )
 
 func unquote(s string) string { return reUnquote.Replace(s) }
@@ -220,23 +235,39 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 	// --- cards --------------------------------------------------------------
 	mux.HandleFunc("GET /api/collections/cards_cards/records", func(w http.ResponseWriter, r *http.Request) {
 		filter := r.URL.Query().Get("filter")
-		f.assertRankSort(r)
+		f.cardListCount++
 		var (
-			listID   string
-			onlyLive bool
+			listID    string
+			projectID string
+			onlyLive  bool
 		)
-		if m := reListActive.FindStringSubmatch(filter); m != nil {
-			listID, onlyLive = unquote(m[1]), true
-		} else if m := reListEq.FindStringSubmatch(filter); m != nil {
-			listID = unquote(m[1])
-		} else {
+		switch {
+		case reListActive.MatchString(filter):
+			listID, onlyLive = unquote(reListActive.FindStringSubmatch(filter)[1]), true
+		case reListEq.MatchString(filter):
+			listID = unquote(reListEq.FindStringSubmatch(filter)[1])
+		case reCardProjectActive.MatchString(filter):
+			projectID, onlyLive = unquote(reCardProjectActive.FindStringSubmatch(filter)[1]), true
+		case reProjectEq.MatchString(filter):
+			projectID = unquote(reProjectEq.FindStringSubmatch(filter)[1])
+		default:
 			f.t.Errorf("unsupported cards_cards filter: %q", filter)
 			listResponse(w, []card{})
 			return
 		}
+		// A project-scoped read spans columns, so it must additionally GROUP by
+		// list — `position` orders only within one column.
+		if projectID != "" {
+			f.assertGroupedRankSort(r)
+		} else {
+			f.assertRankSort(r)
+		}
 		var out []card
 		for _, c := range f.cards {
-			if c.List != listID {
+			if listID != "" && c.List != listID {
+				continue
+			}
+			if projectID != "" && c.Project != projectID {
 				continue
 			}
 			if onlyLive && c.Archived {
@@ -245,6 +276,11 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 			out = append(out, *c)
 		}
 		sortByRank(out, func(c card) (string, string) { return c.Position, c.ID })
+		if projectID != "" {
+			// Stable-sort by list on top of the rank order, mirroring
+			// `sort=list,position,id` and leaving within-column order intact.
+			sort.SliceStable(out, func(i, j int) bool { return out[i].List < out[j].List })
+		}
 		listResponse(w, out)
 	})
 	mux.HandleFunc("GET /api/collections/cards_cards/records/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -362,6 +398,10 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 	})
 	mux.HandleFunc("GET /api/collections/users/records", func(w http.ResponseWriter, r *http.Request) {
 		filter := r.URL.Query().Get("filter")
+		f.userListCount++
+		if len(filter) > f.longestUserFilter {
+			f.longestUserFilter = len(filter)
+		}
 		if !reIDList.MatchString(filter) {
 			f.t.Errorf("unsupported users filter: %q", filter)
 			listResponse(w, []user{})
@@ -411,6 +451,18 @@ func (f *fakeCards) assertRankSort(r *http.Request) {
 		f.t.Errorf("%s: sort = %q, want %q — ranks are not unique, so `id` is "+
 			"the tiebreaker that keeps a tie ordered the same here as on the board",
 			r.URL.Path, s, rankSort)
+	}
+}
+
+// assertGroupedRankSort is assertRankSort for a read that spans columns. The
+// grouping key may lead, but `position,id` must still TRAIL it — a cross-column
+// read sorted `list,position` alone reorders ties against the board, and one
+// sorted `position,id` alone interleaves the columns.
+func (f *fakeCards) assertGroupedRankSort(r *http.Request) {
+	if s := r.URL.Query().Get("sort"); s != "list,"+rankSort {
+		f.t.Errorf("%s: sort = %q, want %q — a cross-column read must group by "+
+			"list while keeping `position,id` as the within-column order",
+			r.URL.Path, s, "list,"+rankSort)
 	}
 }
 

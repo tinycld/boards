@@ -1,9 +1,12 @@
 package cli
 
 import (
+	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // board builds the standard fixture:
@@ -636,5 +639,229 @@ func TestAmbiguousListNameOnOneBoardIsRefused(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "ambiguous") {
 		t.Errorf("error should say ambiguous, got %q", err)
+	}
+}
+
+// The board view reads every column's cards in ONE request. A read per column
+// is ten sequential round trips on a ten-column board, and `project` is
+// denormalized onto the card precisely so it does not have to be.
+func TestBoardViewReadsCardsInOneRequest(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+	before := f.cardListCount
+	out, _, err := runCmd(t, c, "cards", "board", "view", "prjA")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := f.cardListCount - before; got != 1 {
+		t.Errorf("board view issued %d cards_cards list reads, want exactly 1", got)
+	}
+	// The single read must still produce the same board.
+	for _, want := range []string{"Write copy", "Book venue", "Design deck"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("board view lost %q when it stopped reading per column:\n%s", want, out)
+		}
+	}
+	// A card on ANOTHER board must not leak in through the wider filter.
+	if strings.Contains(out, "Fix the fence") {
+		t.Errorf("board view showed another board's card:\n%s", out)
+	}
+}
+
+// Grouping a cross-column read by list must not disturb the within-column rank
+// order — that order is what `position,id` exists to pin.
+func TestBoardViewKeepsWithinColumnOrder(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+	out, _, err := runCmd(t, c, "cards", "board", "view", "prjA")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// "Write copy" is a0 and "Book venue" a1 in To do, so copy comes first.
+	copyAt, venueAt := strings.Index(out, "Write copy"), strings.Index(out, "Book venue")
+	if copyAt < 0 || venueAt < 0 {
+		t.Fatalf("both To do cards should render:\n%s", out)
+	}
+	if copyAt > venueAt {
+		t.Errorf("rank order within a column was lost by the grouped read:\n%s", out)
+	}
+}
+
+// A truncated body must stay valid UTF-8. Slicing at a byte offset cuts a
+// multi-byte rune in half, so a description of accented text rendered as a
+// broken rune — and the visible limit silently depended on the alphabet.
+func TestLongMultibyteBodyTruncatesOnRunes(t *testing.T) {
+	f := board(t)
+	long := strings.Repeat("é", 200)
+	f.cards["crdCopy"].Description = long
+	_, c := f.serve()
+	out, _, err := runCmd(t, c, "cards", "card", "view", "crdCopy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !utf8.ValidString(out) {
+		t.Error("card view emitted invalid UTF-8 — a rune was cut in half")
+	}
+	if strings.ContainsRune(out, utf8.RuneError) {
+		t.Error("card view emitted U+FFFD — a rune was cut in half")
+	}
+}
+
+// firstLine's cap counts runes, so the visible width does not depend on the
+// alphabet: 80 accented characters must survive where 80 ASCII ones would.
+func TestFirstLineCapCountsRunesNotBytes(t *testing.T) {
+	ascii := firstLine(strings.Repeat("a", 80))
+	accented := firstLine(strings.Repeat("é", 80))
+	if len([]rune(ascii)) != len([]rune(accented)) {
+		t.Errorf("rune counts differ by alphabet: ascii=%d accented=%d",
+			len([]rune(ascii)), len([]rune(accented)))
+	}
+	if got := len([]rune(firstLine(strings.Repeat("é", 200)))); got != 80 {
+		t.Errorf("truncated to %d runes, want 80", got)
+	}
+}
+
+// `-o csv` must emit the record. It used to take the CSV branch with nil
+// headers and nil rows, which writes a bare newline and silently drops it —
+// a scripted consumer got an empty result rather than an error.
+func TestCSVOutputEmitsTheRecord(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"card add", []string{"cards", "card", "add", "Ship it", "--board", "prjA", "--list", "To do"}, "Ship it"},
+		{"card edit", []string{"cards", "card", "edit", "crdCopy", "--title", "Rewritten"}, "Rewritten"},
+		{"card move", []string{"cards", "card", "move", "crdCopy", "--list", "Doing"}, "crdCopy"},
+		{"card archive", []string{"cards", "card", "archive", "crdVenue"}, "crdVenue"},
+		{"card view", []string{"cards", "card", "view", "crdDeck"}, "Design deck"},
+		{"list add", []string{"cards", "list", "add", "Blocked", "--board", "prjA"}, "Blocked"},
+		{"list rename", []string{"cards", "list", "rename", "Done", "Shipped", "--board", "prjA"}, "Shipped"},
+		{"list done", []string{"cards", "list", "done", "Doing", "--board", "prjA"}, "Doing"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out, _, err := runCmd(t, c, append(tc.args, "--output", "csv")...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.TrimSpace(out) == "" {
+				t.Fatal("-o csv produced no output — the record was dropped")
+			}
+			records, err := csv.NewReader(strings.NewReader(out)).ReadAll()
+			if err != nil {
+				t.Fatalf("-o csv did not emit parseable CSV: %v\n%s", err, out)
+			}
+			if len(records) < 2 {
+				t.Fatalf("-o csv emitted headers but no row:\n%s", out)
+			}
+			if !strings.Contains(out, tc.want) {
+				t.Errorf("-o csv did not carry %q:\n%s", tc.want, out)
+			}
+		})
+	}
+}
+
+// A negative index is a typo or a caller's arithmetic slip, never a request to
+// prepend. Clamping it silently carries out a move nobody asked for.
+func TestNegativeIndexIsRefused(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{"card add", []string{"cards", "card", "add", "X", "--board", "prjA", "--list", "To do", "--index", "-1"}},
+		{"card move", []string{"cards", "card", "move", "crdCopy", "--index", "-1"}},
+		{"list add", []string{"cards", "list", "add", "X", "--board", "prjA", "--index", "-1"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, err := runCmd(t, c, tc.args...)
+			if err == nil {
+				t.Fatal("a negative index was accepted and silently clamped")
+			}
+			if !strings.Contains(err.Error(), "negative") {
+				t.Errorf("error should name the negative index, got %q", err)
+			}
+		})
+	}
+}
+
+// `list move` takes its index POSITIONALLY, so cobra's flag parser rejects a
+// leading-dash value before RunE ever sees it. The message is its own, but the
+// guarantee that matters is the same one: the column must not move.
+func TestListMoveRejectsANegativeIndex(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+	before := f.lists["lstDoing"].Position
+	if _, _, err := runCmd(t, c, "cards", "list", "move", "Doing", "-1", "--board", "prjA"); err == nil {
+		t.Fatal("a negative index was accepted")
+	}
+	if f.lists["lstDoing"].Position != before {
+		t.Error("the column moved despite the negative index being refused")
+	}
+}
+
+// checkIndex is the guard behind all four paths, including any caller that
+// reaches the rank helpers without going through cobra's parser.
+func TestRankHelpersRefuseANegativeIndex(t *testing.T) {
+	positions := []string{"a0", "a1", "a2"}
+	if _, err := rankAt(positions, -1, true); err == nil {
+		t.Error("rankAt clamped a negative index instead of refusing it")
+	}
+	if _, err := rankForReorder(positions, -3); err == nil {
+		t.Error("rankForReorder clamped a negative index instead of refusing it")
+	}
+	// An index past the end still CLAMPS — "one too far" means "last", and
+	// that is a different intent from a negative.
+	if _, err := rankAt(positions, 99, true); err != nil {
+		t.Errorf("an out-of-range-high index should clamp, got %v", err)
+	}
+}
+
+// An id lookup chunks its `id = ... || id = ...` filter rather than building
+// one unbounded query string. The filter rides in the GET query string, so an
+// unchunked lookup over a few hundred assignees fails as an opaque 414.
+func TestIDLookupChunksItsFilter(t *testing.T) {
+	f := board(t)
+	var ids []string
+	for i := range idLookupChunk*2 + 5 {
+		id := fmt.Sprintf("usr%03d", i)
+		f.users[id] = &user{ID: id, Email: id + "@example.com"}
+		ids = append(ids, id)
+	}
+	_, c := f.serve()
+
+	before := f.userListCount
+	users, err := usersByID(t.Context(), c, ids)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(users) != len(ids) {
+		t.Errorf("resolved %d of %d users — chunking dropped rows", len(users), len(ids))
+	}
+	if got := f.userListCount - before; got != 3 {
+		t.Errorf("%d requests for %d ids at a chunk of %d, want 3", got, len(ids), idLookupChunk)
+	}
+	if f.longestUserFilter > idLookupChunk*40 {
+		t.Errorf("filter grew to %d bytes — it is not chunked", f.longestUserFilter)
+	}
+}
+
+// Duplicate and empty ids must not each cost a term.
+func TestIDLookupDedupesBeforeChunking(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+	before := f.userListCount
+	users, err := usersByID(t.Context(), c, []string{"user1", "user1", "", "user1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(users) != 1 {
+		t.Errorf("want 1 resolved user, got %d", len(users))
+	}
+	if got := f.userListCount - before; got != 1 {
+		t.Errorf("a deduped lookup took %d requests, want 1", got)
 	}
 }
