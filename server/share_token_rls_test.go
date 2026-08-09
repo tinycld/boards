@@ -850,27 +850,21 @@ func TestShareToken_DisabledUserReadsSharedBoardButNotTheirOwn(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// The file blob — and a PRE-EXISTING hole this suite uncovered.
+// The file blob.
 //
-// 1980000000's comment claims "viewRule is what gates the FILE BLOB — PB checks
-// it before serving /api/files/...". That is only true for a file field marked
-// `protected`. cards_attach_file is not (nor is any file field in any package
-// in this workspace), and apis/file.go:108 gates the viewRule check behind
-// `if fileField.Protected`.
+// These three tests exist because writing them uncovered a pre-existing hole
+// well outside cards: PocketBase consulted the collection's viewRule before
+// serving /api/files/... ONLY for a file field marked `protected`
+// (apis/file.go, `if fileField.Protected`). No file field in this workspace was
+// — not cards', not mail's, not drive's, not text's — so every attachment in
+// every package was downloadable by anyone who knew a record id and a filename,
+// with no auth at all. 1980000000's own comment asserted the opposite.
 //
-// So a cards attachment blob is served to ANY caller who knows the record id
-// and filename — no auth, no token, before this migration and after it. That is
-// a pre-existing bug in shipped cards, not something the share-token rules
-// introduced, and it is filed rather than fixed here: `protected` changes how
-// EVERY existing attachment is fetched (a protected file needs a short-lived
-// file token, so the app's own <Thumbnail>/<PreviewModal> break without a
-// matching client change), and the same gap exists in mail, drive and text.
-//
-// These two tests therefore assert what the system ACTUALLY does. They are
-// written as characterization, not endorsement: when the field is made
-// protected, DoesNotServeAnotherBoardsFile flips to 404 and should be updated
-// to expect it — at which point it becomes the cross-board assertion it was
-// originally written to be.
+// Fixed in the vendored fork: the viewRule now gates every file, and
+// `protected` means only "ALSO accept a ?token= file token". So the blob path
+// now enforces exactly what the record path does, and the cross-board case
+// below is a real isolation assertion rather than the characterization of a
+// leak it was first written as.
 
 func TestShareToken_ServesSharedBoardFile(t *testing.T) {
 	env := setupShareTokenEnv(t)
@@ -885,11 +879,8 @@ func TestShareToken_ServesSharedBoardFile(t *testing.T) {
 	}.run(t, env)
 }
 
-// Characterizes the hole rather than proving isolation: with an unprotected
-// file field PB never consults the viewRule, so board A's token — indeed no
-// token at all — reaches board B's bytes. The record API is correctly isolated
-// (see BoardATokenSeesNoBoardBAttachments); only the blob path is not.
-func TestShareToken_UnprotectedFileFieldServesAnyBoardsBlob(t *testing.T) {
+// The correlation clause again, on the path that hands out actual bytes.
+func TestShareToken_DoesNotServeAnotherBoardsFile(t *testing.T) {
 	env := setupShareTokenEnv(t)
 
 	anonReq{
@@ -897,7 +888,20 @@ func TestShareToken_UnprotectedFileFieldServesAnyBoardsBlob(t *testing.T) {
 		url: fmt.Sprintf("/api/files/cards_attachments/%s/%s",
 			env.bAttach.Id, env.bAttach.GetString("file")),
 		shareToken: env.tokLive,
-		want:       http.StatusOK,
-		content:    []string{"attachment body for b-file.txt"},
+		want:       http.StatusNotFound,
+	}.run(t, env)
+}
+
+// No token at all reaches no bytes at all. This is the regression guard for the
+// hole itself: before the fork change this returned the file contents, and it
+// is the single assertion that would catch the gate being removed again.
+func TestShareToken_ServesNoFileWithoutAToken(t *testing.T) {
+	env := setupShareTokenEnv(t)
+
+	anonReq{
+		method: http.MethodGet,
+		url: fmt.Sprintf("/api/files/cards_attachments/%s/%s",
+			env.aAttach.Id, env.aAttach.GetString("file")),
+		want: http.StatusNotFound,
 	}.run(t, env)
 }
