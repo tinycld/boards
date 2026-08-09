@@ -1744,10 +1744,26 @@ wants them rather than guessing the shape now.
 
 ## M7 — Package plumbing, tests, docs
 
-- [ ] Manifest completeness pass: `repository`, `tests: { directory: 'tests' }`,
-      bump `version`, review `nav.order`/shortcut against installed packages.
-- [ ] Decide if cards needs a `settings` screen (e.g. default board) — add
-      via manifest `settings: [...]` if so.
+- [x] Manifest completeness pass. **`repository` was not bookkeeping** —
+      `useReportIssue` returns null without a `repository.url` and every caller
+      gates the Help menu's "Report an issue" item on that return, so cards was
+      the only member in the workspace with no way to report a bug. Now
+      declared and pinned by a mutation-checked test.
+      `tests: { directory: 'tests' }` added to match contacts; it is purely
+      descriptive (`use-packages.ts` surfaces it, nothing consumes it).
+      `nav.order: 25` / `shortcut: 'k'` were reviewed and are both correct —
+      unique across installed packages and sequenced after calc's 20.
+      **`version` deliberately NOT bumped.** Main is at 0.1.0 with no release
+      tags, so 0.2.0 is the unreleased version this entire stack ships under;
+      bumping to 0.2.1 would assert that 0.2.0 had been released.
+- [x] Settings screen: **decided against.** Mail is the only member that
+      declares one, and its entries (provider, mailboxes) are server-side
+      account state. Every cards preference is per-device UI state already
+      persisted in `cards-ui-store` (`activeProjectId`, `collapsedColumnIds`,
+      `isCompactCards`) and set where it is used — a board is chosen from the
+      sidebar, density from the board header. Moving any of those to a settings
+      screen would put the control further from the thing it changes. Revisit
+      only if a preference appears that is genuinely account-wide.
 - [ ] Unit tests: mutations (position assignment on move, project-create
       bootstrap), due-state logic against real records. Mock only via
       `tests/unit.helpers.tsx`. The `useProjectRole` gating logic is already
@@ -1830,9 +1846,27 @@ wants them rather than guessing the shape now.
       **Partly done:** the M3 pass added the new shortcuts, a "Formatting a
       description" section and a "Who else is here" section, fixed the
       pre-existing `Shift +` spellings to the mandated ⇧ glyph, and extended
-      core's `docs/keyboard-shortcuts.md`. The presence section describes
-      behavior that does not currently work — revisit it with that fix.
-      Still open: the M4–M6 topics.
+      core's `docs/keyboard-shortcuts.md`.
+      **The presence caveat above is now stale** — it was written while
+      presence was red, and `board-presence.spec.ts` has been green since the
+      M3 core lifecycle fix. The section was re-read and needs no change.
+      A later pass closed two discoverability gaps, both features that had
+      shipped with no help at all:
+    - **"Finding a card"** — the `/` palette has been cards-searchable since
+      M3 and was documented nowhere here. Core owns the grammar
+      (`core:search`), so this links there and carries only what is
+      cards-specific: the palette opens already scoped to cards
+      (`CoreShortcuts` calls `open(activeSlug)`; the store seeds `"cards: "`),
+      and **archived cards are deliberately excluded** (`ExcludeField:
+      "archived"`). That exclusion is the one someone would otherwise read as
+      a broken search. Note the user-facing chip syntax is a bare package name
+      plus colon (`cards:`) — `pkg:` is the internal parser token and does not
+      belong in a help body.
+    - **`help/command-line.md` was an orphan** — shipped with M8 with nothing
+      linking to it, so it was reachable only by browsing the hub.
+      `working-with-cards.md`, the package's entry point, now points at it.
+      Still open: the M4–M6 topics (M6's `attaching-files.md` exists and is
+      cross-linked; M4 and M5 are unbuilt, so their topics come with them).
 - [ ] Website docs: offer a cards page for `web/` once the feature set is
       final.
 - [ ] Full gate: `pnpm exec tinycld-pkg check` + `test:e2e` in `cards/`,
