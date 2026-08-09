@@ -4,19 +4,24 @@ import (
 	"encoding/json"
 	"os"
 	"sort"
-	"strings"
 	"testing"
 )
 
-// rank.go is a hand-port of the `fractional-indexing` npm package the app uses
-// through lib/rank.ts. A restatement cannot fail for the reason it was
-// written, so these tests never assert what the Go code does — every expected
-// value here was produced by RUNNING the real library and captured verbatim.
+// The CLI ranks with `roci.dev/fracdex`; the app ranks with npm
+// `fractional-indexing`. They are the same authors' implementations of the
+// same algorithm, and fracdex's README claims byte-for-byte compatibility.
 //
-// If a port bug ever slips in, the symptom in production is silent: a card
-// created from the CLI sorts into a different place than the same card created
-// in the app, and no error is raised anywhere. These vectors are the only
-// thing standing between that and a shipped release.
+// THIS FILE EXISTS TO CHECK THAT CLAIM, not to test fracdex. Compatibility is
+// what the CLI actually depends on: a rank is computed by whoever inserts the
+// row, and both surfaces insert rows — so if the two implementations ever
+// diverged, a card created from the CLI would sort somewhere the app would not
+// have put it, silently, with no error anywhere. A README is not evidence, a
+// pseudo-versioned dependency can move, and neither project promises the other
+// stays in step.
+//
+// So every expected value below was produced by RUNNING the npm package the
+// app actually resolves, and captured verbatim. Nothing here asserts what the
+// Go code does.
 
 // Captured from `generateKeyBetween(a, b)`. "" stands in for null.
 var goldenBetween = []struct {
@@ -235,18 +240,41 @@ func TestRankForInsertWidensPastATiedRun(t *testing.T) {
 	}
 }
 
-// The alphabet must stay ASCII-ascending: the whole scheme rests on byte order
-// matching digit order, and SQLite compares these as plain strings.
-func TestDigitAlphabetIsAscending(t *testing.T) {
-	if len(base62Digits) != 62 {
-		t.Fatalf("alphabet has %d digits, want 62", len(base62Digits))
-	}
-	if !sort.SliceIsSorted([]byte(base62Digits), func(i, j int) bool {
-		return base62Digits[i] < base62Digits[j]
-	}) {
-		t.Error("alphabet is not in ascending byte order")
-	}
-	if strings.Contains(base62Digits, "0") != true || base62Digits[0] != '0' {
-		t.Error("the zero digit must be first")
+// Ranks must stay in the ASCII-ordered key space the scheme rests on: SQLite
+// compares `position` as a plain string, so a key containing anything outside
+// 0-9/A-Z/a-z would sort by byte value in a way the generator did not intend.
+//
+// Checked against GENERATED keys rather than against the library's alphabet
+// constant — the constant is fracdex's business, while what reaches the
+// database is ours.
+func TestGeneratedRanksStayInTheASCIIKeySpace(t *testing.T) {
+	var keys []string
+	for i := 0; i < 100; i++ {
+		var a, b string
+		if len(keys) > 0 {
+			switch i % 3 {
+			case 0:
+				b = keys[0]
+			case 1:
+				a = keys[len(keys)-1]
+			default:
+				if len(keys) >= 2 {
+					a, b = keys[0], keys[1]
+				}
+			}
+		}
+		k, err := rankBetween(a, b)
+		if err != nil {
+			t.Fatalf("iteration %d: %v", i, err)
+		}
+		for j := 0; j < len(k); j++ {
+			c := k[j]
+			ok := (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+			if !ok {
+				t.Fatalf("rank %q contains %q, outside the base-62 key space", k, string(c))
+			}
+		}
+		keys = append(keys, k)
+		sort.Strings(keys)
 	}
 }

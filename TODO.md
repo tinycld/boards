@@ -1674,23 +1674,34 @@ share-link branch), with the classification pinned by tests.
       likely to be edited — a name lookup would make `card edit` act on a
       different row after a rename. An ambiguous name ERRORS with the
       candidates listed rather than picking one.
-- [x] **Ranks had to be ported, and that is the risky part of this milestone.**
-      `position` is a fractional index and no endpoint hands one out, so
-      `cli/rank.go` reimplements what `lib/rank.ts` wraps. A restatement
-      cannot fail for the reason it was written, and this one fails SILENTLY:
-      a CLI-created card just sorts somewhere the app would not have put it,
-      with no error anywhere. So `rank_test.go` never asserts what the Go code
-      does — it asserts against 400 (a, b, want) triples plus 18 hand-picked
-      cases captured by RUNNING the npm library through a deterministic
-      sequence of appends, prepends and gap splits.
-      That caught a real bug on the way in: **JS `Math.round` rounds half UP**,
-      so the midpoint digit needs `(a+b+1)/2` where Go's `/2` truncates.
-      Mutation-checked — and note the property test ("keys sort between their
-      neighbours") stayed GREEN under that mutation, which is exactly why the
-      captured vectors carry the weight.
-      The tied-run widening is ported too, and mutation-checked: ranks are not
-      unique, `rankBetween` refuses equal neighbours, so an insert into a tied
-      run widens its window backwards instead of failing.
+- [x] **Ranks: use `roci.dev/fracdex`, do NOT port the algorithm.**
+      `position` is a fractional index and no endpoint hands one out, so the
+      CLI has to compute its own — but it does NOT have to reimplement
+      anything. The app's npm `fractional-indexing` is
+      `rocicorp/fractional-indexing`, and `fracdex` is the same authors' Go
+      sibling, byte-for-byte compatible with it. `cli/rank.go` is a thin
+      naming layer over it, exactly as `lib/rank.ts` is over the npm package.
+      **This was written as a hand-port first, and that was the wrong call** —
+      ~360 lines of restated algorithm where a dependency existed. Recorded
+      because the reasoning that led there ("no Go fractional-indexing in the
+      tree") only checked THIS tree; it never asked whether the library had a
+      Go edition. It does, from the same authors, linked from the npm repo.
+      The port did work — it matched all 400 captured vectors — so this is not
+      a story about a bug that shipped. It is about 360 lines of avoidable
+      surface area, and about how close it came: **JS `Math.round` rounds half
+      UP**, so the midpoint digit needs `(a+b+1)/2` where Go's `/2` truncates,
+      and the port got that wrong on the first pass.
+      **The captured vectors stayed, and their job changed.** They no longer
+      guard a port; they check fracdex's compatibility CLAIM, which is what the
+      CLI actually depends on and which a README does not establish — the
+      dependency is pseudo-versioned, so it can move, and neither project
+      promises the other stays in step. All 400 vectors pass against fracdex
+      unmodified.
+      Two behaviours worth knowing, both pinned: fracdex REFUSES a reversed or
+      equal pair rather than returning a plausible key (npm 4.0.0 silently
+      swaps them, which is what `lib/rank.ts` guards against — mutation-checked
+      here), and an insert into a TIED RUN must widen its window backwards,
+      since ranks are not unique and `KeyBetween` refuses equal neighbours.
 - [x] Destructive paths carry the app's warnings rather than a generic prompt.
       `list remove` names the card count the cascade will take — **including
       archived cards, since the cascade does not care** — and skips the

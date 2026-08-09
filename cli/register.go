@@ -7,9 +7,11 @@
 // Two things a reader should know before extending this package:
 //
 //   - RANKS ARE COMPUTED HERE. `position` is a fractional index and there is
-//     no endpoint that hands one out, so rank.go ports the same algorithm the
-//     app uses. Its golden vectors are the guard against divergence; see the
-//     comment there before touching it.
+//     no endpoint that hands one out, so rank.go computes them with
+//     `roci.dev/fracdex` — the Go sibling of the npm package the app uses,
+//     byte-for-byte compatible with it. rank_test.go re-checks that
+//     compatibility against vectors captured from npm, because it is what the
+//     CLI actually depends on and a divergence would be silent.
 //   - THE SHARING SURFACE IS READ-ONLY. cards_project_members and
 //     cards_share_links are registered read-only for OAuth callers in core's
 //     scope table, so there are deliberately no `cards share` commands. Adding
