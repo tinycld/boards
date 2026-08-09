@@ -149,6 +149,80 @@ test.describe('Cards — collaborative descriptions', () => {
         }
     })
 
+    test("you can see where the other person's cursor is", async ({ page }) => {
+        // Carets were shipped, wired correctly, and completely invisible: the
+        // extension's spans reached the DOM with no CSS behind them, so they
+        // rendered as a zero-width, zero-height nothing. Nothing failed, because
+        // nothing asserted they were DRAWN — the helper above even strips them
+        // out to read text.
+        //
+        // Hence the geometry assertion. Presence in the DOM is not the property
+        // that matters here.
+        test.slow()
+
+        const boardName = `carets-${Date.now()}`
+        await login(page)
+        await navigateToPackage(page, 'cards')
+        await createBoard(page, boardName)
+        await addCard(page, 0, CARD_TITLE)
+
+        const {
+            user: bob,
+            inviteePage: bobPage,
+            close,
+        } = await createInvitedUser(page, 'cardcaret')
+        try {
+            await login(page)
+            await navigateToPackage(page, 'cards')
+            await openBoard(page, boardName)
+            await shareBoard(page, boardName, bob.email, 'Editor')
+
+            await navigateToPackage(bobPage, 'cards')
+            await openBoard(bobPage, boardName)
+            await openCard(bobPage, CARD_TITLE)
+            await openCard(page, CARD_TITLE)
+
+            // Bob types, which both seeds the document and puts his caret in it.
+            // His editor must KEEP focus from here on: y-tiptap nulls the cursor
+            // field on blur, and a blurred peer correctly has no caret to draw.
+            await typeDescription(bobPage, 'Bob was here.')
+            await expectDescriptionToContain(page, 'Bob was here.')
+
+            const caret = page.locator('.collaboration-carets__caret').first()
+            await expect(caret).toHaveCount(1)
+
+            // Measured, not `toBeVisible()`. The caret is a zero-width span
+            // drawn entirely by its left border, so Playwright's visibility
+            // check — which demands a non-empty box — calls a perfectly good
+            // caret "hidden". Height and a real border are what "drawn" means
+            // here; before the CSS landed both were absent.
+            await expect(async () => {
+                const drawn = await caret.evaluate(el => {
+                    const style = getComputedStyle(el)
+                    return {
+                        height: el.getBoundingClientRect().height,
+                        borderWidth: Number.parseFloat(style.borderLeftWidth),
+                        borderStyle: style.borderLeftStyle,
+                    }
+                })
+                expect(drawn.height).toBeGreaterThan(4)
+                expect(drawn.borderWidth).toBeGreaterThan(0)
+                expect(drawn.borderStyle).not.toBe('none')
+            }).toPass({ timeout: 15_000 })
+
+            // The label is what makes a caret legible rather than a bare tick.
+            // Read its text directly for the same reason as above — it lives
+            // inside that zero-width span, so locator visibility does not apply.
+            // `createInvitedUser` fills this display name during the invite; the
+            // InvitedUser record itself carries only username/email/password.
+            const label = page.locator('.collaboration-carets__label').first()
+            await expect(label).toHaveCount(1)
+            expect(await label.textContent()).toContain('Invited Tester')
+        } finally {
+            await close()
+        }
+    })
+
     test('the full-page card is collaborative too, not just the peek', async ({ page }) => {
         // The peek and the full-page route are separate screens, and only the
         // board screen used to open the presence room. On the full page the
