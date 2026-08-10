@@ -80,9 +80,22 @@ export function CardDetail({
     const widthClass = variant === 'page' ? 'w-full max-w-[720px] self-center' : ''
     // Fetched here rather than threaded in as props, so the peek and the page
     // both get it without either container knowing about on-demand collections.
-    const { checklist, comments, attachments } = useCardDetail(card.id)
+    const { checklist, comments, attachments, isReady } = useCardDetail(card.id)
     // Resolved here for the same reason — both containers share the gates.
     const { canEdit, canComment, isOwner } = useProjectRole(projectId)
+    // The card's CHILDREN are not editable until the detail query has SETTLED,
+    // and this is a correctness gate rather than a cosmetic one: before it
+    // settles, an empty result is indistinguishable from a card that genuinely
+    // has no checklist, comments or attachments, so a live composer invites the
+    // user to re-add items they already have and end up with duplicates.
+    //
+    // Scoped to the children DELIBERATELY. The title, description and labels
+    // live on the card record itself, which both containers already resolved
+    // before mounting this component — they have nothing to wait for, and
+    // gating them on the children's query made the description render blank and
+    // uneditable for the life of that fetch.
+    const canEditChildren = canEdit && isReady
+    const canCommentNow = canComment && isReady
     const updateCard = useUpdateCard()
     // Only the drop path needs this here — the strip owns the picker and the
     // rows. Both write through the same store, so the two callers of
@@ -165,7 +178,7 @@ export function CardDetail({
                             attachments={attachments}
                             cardId={card.id}
                             projectId={projectId}
-                            canEdit={canEdit}
+                            canEdit={canEditChildren}
                             isOwner={isOwner}
                         />
                     </View>
@@ -174,13 +187,13 @@ export function CardDetail({
                             items={checklist}
                             cardId={card.id}
                             projectId={projectId}
-                            canEdit={canEdit}
+                            canEdit={canEditChildren}
                         />
                     </View>
                     <View className={`px-6 pb-6 ${widthClass}`}>
                         <DetailActivity
                             comments={comments}
-                            canComment={canComment}
+                            canComment={canCommentNow}
                             canModerate={isOwner}
                             onReply={comment =>
                                 setReplyingTo({
