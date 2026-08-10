@@ -247,11 +247,16 @@ test.describe('Cards — drag and drop', () => {
         // means the drag is real. (Card and column drags poll
         // `cards-drag-active` through activateDrag, but that marker is mounted
         // by BoardCanvas and does not cover this list.)
+        // Restricted to the three checklist labels. The card's own editable
+        // TITLE is also an `Edit <title>` row in the same peek, so an unfiltered
+        // read counts it as a fourth row — and it reported a live drag from a
+        // duplicate that had nothing to do with the checklist, which masked a
+        // drag that had actually died.
         const isDragLive = () =>
             page.evaluate(() => {
-                const labels = Array.from(document.querySelectorAll('[aria-label^="Edit "]')).map(
-                    el => el.getAttribute('aria-label') ?? ''
-                )
+                const labels = Array.from(document.querySelectorAll('[aria-label^="Edit "]'))
+                    .map(el => (el.getAttribute('aria-label') ?? '').replace(/^Edit /, ''))
+                    .filter(label => ['alpha', 'beta', 'gamma'].includes(label))
                 return labels.length !== new Set(labels).size
             })
         await expect(async () => {
@@ -271,10 +276,23 @@ test.describe('Cards — drag and drop', () => {
         // preview the gap, so coordinates measured before the grab no longer
         // describe where anything is — aiming at the stale one lands the drop
         // short of the end and leaves the order untouched.
+        // Measured over the CHECKLIST rows only, and aimed HALF A ROW past the
+        // last one rather than at its edge. The card title is an `Edit <title>`
+        // row too, so the old max() ran over a set that did not describe this
+        // list; and the slot boundary sits at the midpoint between rows, with
+        // Drax computing the drop from the hover copy's CENTRE (which trails the
+        // pointer) — so resting exactly on the last row's bottom still computes
+        // as that row's own slot.
         const endY = await page.evaluate(() => {
-            const rows = Array.from(document.querySelectorAll('[aria-label^="Edit "]'))
-            const bottoms = rows.map(el => el.getBoundingClientRect().bottom)
-            return Math.max(...bottoms)
+            const boxes = Array.from(document.querySelectorAll('[aria-label^="Edit "]'))
+                .filter(el =>
+                    ['alpha', 'beta', 'gamma'].includes(
+                        (el.getAttribute('aria-label') ?? '').replace(/^Edit /, '')
+                    )
+                )
+                .map(el => el.getBoundingClientRect())
+            const last = boxes.reduce((lowest, box) => (box.bottom > lowest.bottom ? box : lowest))
+            return last.bottom + last.height / 2
         })
         for (let i = 1; i <= 14; i++) {
             await page.mouse.move(start.x, start.y + ((endY - start.y) * i) / 14)

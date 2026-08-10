@@ -1890,26 +1890,120 @@ wants them rather than guessing the shape now.
         BEFORE re-pressing, because `Shift+Arrow` is not idempotent — a blind
         repeat would send the card a column too far.
 
-      **Still open, and it needs a decision rather than another helper fix:
-      the suite no longer fits the machine.** With `card-editing.spec.ts`'s 12
-      specs the file count went 52 → 64, and at that size two tests fail per
-      full run on a 14-core box already carrying a load average of ~11 before
-      Playwright starts. It is genuinely environmental, not a logic bug, and
-      the evidence is specific: **52/52 green with the new file removed and
-      every other fix in place**, a DIFFERENT test fails on each run
-      (`board-dnd` checklist reorder, three different `keyboard-shortcuts`
-      cases), and all of them pass when their file runs alone — 18/18 for
-      `keyboard-shortcuts` + `board-dnd` together. The starved operations are
-      the two that need sustained event delivery: Drax drags (which activate
-      on a CONTINUOUS pointer stream) and single keystrokes.
+      **The "starvation" diagnosis above was WRONG, and the real bug is
+      fixed.** It was never a machine-capacity problem: the keystroke was
+      always DELIVERED (`target: BODY`, `defaultPrevented: false`, not in an
+      input, both cards rendered in the DOM at keydown time — measured, and
+      byte-for-byte identical in passing and failing runs). Seven parallel
+      copies of the single `x`-then-`j` spec, on an idle box with trivial
+      boards, failed HARDER (3/7) than the whole 64-spec suite; failure rate
+      tracked concurrent peers, not load (1 worker 0/5, 2 workers 0/8, 4
+      workers 2/8, 7 workers 3/7). And it was not "a different test each run"
+      — `keyboard-shortcuts.spec.ts:187` failed in all three full runs.
 
-      Do NOT resolve this by re-running, by adding `retries`, or by forcing
-      `--workers=1` — the config's own comment says a flake is a bug, and
-      serialising hides the delivery problem rather than fixing it. The honest
-      options are to cap workers to what the box can actually feed, or to
-      split the suite into shards. That is a config decision for the app
-      shell, not something a package spec should paper over, so it is filed
-      here rather than worked around.
+      Root cause was **scope-id mis-stamping in core's shortcut registry.**
+      Cards and mail both register `j` at `scope: 'list'`, and `scopeId`
+      decides which fires. On web `freezeOnBlur` does NOT freeze — the web
+      `Screen` implementation has no `Freeze`, it only sets `display: none`
+      — so a blurred mail list stays fully live, its live queries keep
+      emitting, and its memoised shortcut array keeps changing identity.
+      Every re-registration re-derived the stamp from the mutable scope stack
+      (`currentScopeId`, which answers "who holds this scope NOW" rather than
+      "who is registering"), so a mail re-register landing while a cards board
+      held the keyboard stamped mail's `j` with the BOARD's id. Mail's
+      `nav.order: 5` is the lowest, so login lands there and its `j` occupies
+      the registry Map's first slot forever — `findExactMatch` short-circuits
+      on it, ran MAIL's handler for a keypress meant for the board, and the
+      board's own handler never ran at all. Directly measured: every failing
+      run logged `M:2` (mail re-stamped with cards' id) immediately before the
+      keypress; no passing run ever did. 14/14 correlation.
+
+      The fix binds the id to the OWNER instead of the stack: an instance gets
+      its id once on MOUNT and keeps it, focus governs only stack membership
+      (so a blurred screen simply holds no entry and cannot be on top), and
+      the register hooks stamp from that owner. Mount and focus had to be
+      split — `useFocusEffect` fires on ROUTE focus and never re-runs for a
+      dialog opened inside an already-focused route, so a focus-keyed identity
+      left every modal shortcut unstamped and unable to fire. Verified:
+      `keyboard-shortcuts.spec.ts` 30/30 under `--workers=7 --repeat-each=3`,
+      and two of three full-suite runs fully green (64/64).
+
+      **Still open — a real bug, and it is a WRITE/READ ORDERING race, not
+      autocancellation.** (An earlier note here blamed pbtsdb's autocancel
+      fallback. That was wrong and is corrected: `fetchRecords` returns
+      `queryClient.getQueryData(queryKey) ?? []`, so an autocancelled refetch
+      returns the CACHED rows and only yields `[]` on a cold cache — verified
+      by replaying that code against a real QueryClient.)
+
+      The actual sequence, captured from the network with request-issue and
+      response timestamps:
+
+          REQ GET  t=28728            ← on-demand fetch issued; card has 0 items
+          REQ POST t=28783 …          ← the three checklist items are created
+          RES POST … t=28892          ← all three confirmed
+          RES GET  n=0 t=28954        ← the GET finally answers: ZERO items
+
+      The GET was correct when issued and stale by the time it resolved. TanStack
+      DB's query collection treats a settled result as the authoritative row set
+      for that query key: `applySuccessfulResult` diffs it against the rows the
+      key previously owned and `write({type: 'delete'})`s every row missing from
+      it (`@tanstack/query-db-collection/dist/esm/query.js`). So the late empty
+      response DELETES the three items the client had already inserted — the
+      component sees `items` go `3 → 0` with `isLoading: false`, the rows unmount
+      under the pointer, and the drag dies.
+
+      Load only changes the timing, not the mechanism: alone the GET returns in
+      ~11–18ms, before the first POST is even issued (`GETpos=0`, harmless);
+      under 7 workers it takes 226–443ms and lands last (`GETpos=3`). Ordering
+      predicted the outcome perfectly — 4 runs `GETpos=0` all passed, 3 runs
+      `GETpos=3` all failed.
+
+      This is reachable in production wherever a card is opened and items are
+      added before the initial fetch settles.
+
+      **Mitigated in the package, and the write window is now closed.**
+      `useCardDetail` is ONE query anchored on `cards_cards`, with each child set
+      joining in as a subquery pre-filtered to the card (LEFT joins, so a
+      childless card still returns its own row). Anchoring on the card matters
+      beyond tidiness: the three per-child reads it replaces were three
+      consecutive filtered reads returning ZERO rows on a fresh card, which is
+      exactly what PocketBase throttles — >3 empty filtered responses in 3s trips
+      `randomizedThrottle(500)` upstream (`apis/record_crud.go`), sleeping a
+      random 0-500ms while the SQL measures 0.00ms. That self-inflicted ~300ms
+      stall was what made the window wide enough to hit. A result carrying the
+      card row is never empty, so the gate never fires.
+
+      `useCardDetail` now also returns `isReady`, and CardDetail gates the
+      CHILD-backed affordances on it (checklist, attachments, comment composer).
+      Before the query settles an empty result is indistinguishable from a card
+      that genuinely has no children, so a live composer invited the user to
+      re-add items they already had. Scope it to the children only: title,
+      description and labels live on the card record, which both containers
+      resolve before mounting CardDetail — gating those on the children's query
+      renders the description blank and uneditable for the life of the fetch
+      (caught by `card-description-collab.spec.ts`).
+
+      Measured after the change: the row-loss probe goes 3/7 losing all items →
+      **7/7 correct** under `--workers=7`.
+
+      **Still open, upstream.** Two things this does NOT fix:
+        - It is still 3 REQUESTS, not one. Each subquery references an
+          `on-demand` collection and TanStack issues a subset fetch per
+          collection however the query is composed. Reaching one request means
+          changing how those children sync, not how they are queried.
+        - The stale-absence delete itself. The real fix is a fetch
+          generation/sequence guard — a subset fetch must not apply a result
+          older than writes already committed to that key. pbtsdb's
+          `shouldDropSyncedWrite` guards stale inserts/updates but exempts
+          deletes as "terminal"; an attempt to close that gap broke two of
+          pbtsdb's own tests, because a reconcile-delete is indistinguishable
+          from legitimate GC pruning by timestamp alone.
+
+      `board-dnd.spec.ts:202` (checklist drag) therefore still fails ~1 run in 3.
+      Verified pre-existing: with these two files stashed, baseline runs fail on
+      the same spec 2/2. Do NOT resolve it by re-running, by adding `retries`,
+      or by forcing `--workers=1` — it is a genuine data-layer defect and
+      serialising would only hide it.
 - [ ] Follow-ups to file, not block on: (public share links are now M6a),
       core extraction of the members-junction + ShareDialog pattern once a
       third package needs sharing, a drive-exported file-picker component if
