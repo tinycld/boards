@@ -1621,6 +1621,13 @@ project-delete WAL cascade. The generic Yjs machinery was promoted from
       measured BEFORE the grab, but holding a row makes `SortableList` shift the
       others to preview the gap, so the drop landed short of the end.
 
+      **That second diagnosis was wrong — see the M7 entry on
+      `board-dnd.spec.ts:202`.** Drax computes slot boundaries from the RESTING
+      layout on purpose and never recomputes the destination on release, so
+      pre-grab coordinates were the right thing to measure and switching to
+      live ones made it worse. The real gate is that the destination slot has
+      to be ENTERED by a drag-over during travel.
+
       **Still owed: a device pass.** Web and native pin by different mechanisms
       and only the web path has e2e coverage; `stickyHeaderIndices` and the
       `isFocused` relay are unit-tested and reasoned about, not run on a
@@ -1873,9 +1880,11 @@ wants them rather than guessing the shape now.
       `pnpm run pkg:check` at the root; fix anything red.
       **Note `pkg:check` does not exist in a bootstrap-assembled root** — the
       equivalents are `pnpm run checks` (lint + app typecheck) from `tinycld/`
-      plus `tinycld-pkg typecheck` per member. Last full run: cards unit 177,
-      cards e2e **35/35** (incl. `board-presence.spec.ts`), core unit 957,
-      text unit 920, calc unit 1378, core Go realtime green under `-race`.
+      plus `tinycld-pkg typecheck` per member. Last full run: cards unit **237**,
+      cards e2e **63/64** (the one red is `board-dnd.spec.ts:202`, below), core
+      unit **1039**, mail unit 151, drive unit 118, contacts unit 21, calendar
+      unit 5. (An older line here recorded cards unit 177 / e2e 35/35, from
+      before the shortcut-scope and card-detail work.)
 
       **Two keystroke/pointer-delivery races were fixed at source** while
       adding `card-editing.spec.ts`, both the shape the earlier `focusedTitle`
@@ -2002,8 +2011,65 @@ wants them rather than guessing the shape now.
       `board-dnd.spec.ts:202` (checklist drag) therefore still fails ~1 run in 3.
       Verified pre-existing: with these two files stashed, baseline runs fail on
       the same spec 2/2. Do NOT resolve it by re-running, by adding `retries`,
-      or by forcing `--workers=1` — it is a genuine data-layer defect and
-      serialising would only hide it.
+      or by forcing `--workers=1` — serialising would only hide it.
+
+      **It has TWO distinct failure modes, and they need separate fixes.** They
+      are told apart by which assertion trips:
+        - **line 229** (setup, `Array []`) — the three items never render at
+          all, so the drag never runs. That is the stale-absence delete above,
+          not a drag problem.
+        - **line 327** (the drop assertion) — the items are there, the drag is
+          live the whole way, and the order comes back untouched.
+
+      For the drop mode, drax's source (`react-native-drax/src/`, the pinned
+      fork) settles what is actually happening — this replaced several wrong
+      guesses, so it is recorded here rather than re-derived:
+
+        - Slot boundaries come from the RESTING layout, deliberately.
+          `useSortableList.ts` (getSlotFromPosition): *"slot boundaries must NOT
+          shift when items are reordered during drag"*. For a reorder they sit
+          at the midpoint of the gap AFTER each row (`cursor + size + gap/2`),
+          and slots run 0..N-1 — "take item i's place". Measuring mid-drag is
+          therefore wrong on principle, however carefully it is done.
+
+        - Mid-drag geometry cannot be measured anyway. Drax mounts a floating
+          hover COPY carrying the same `Edit <label>` as the row it clones, and
+          it tracks the pointer — so the dragged label appears twice and a
+          `max()` over live rows chases the cursor. There is also no settled
+          state to wait for: while the grab is held the gap stays open, so two
+          rows keep sharing a top for the whole drag (measured:
+          `alpha:491, beta:491, gamma:536, alpha:577`).
+
+        - **The drop commits nothing on release.** `SortableContainer.tsx`:
+          `didReorder = startIdx !== undefined && endIdx !== undefined &&
+          startIdx !== endIdx && pending.length > 0`, where `endIdx` is
+          `draggedDisplayIndexRef.current` — updated ONLY by drag-over events
+          during travel (`targetSlot !== currentDragIdx` → `moveDraggedItem`).
+          So the destination slot must be ENTERED mid-gesture; a sweep that
+          arrives past the final boundary before the first usable drag-over
+          fires leaves the ref at its start value, every later event computes
+          the same targetSlot, the `!==` never trips again, and the drop is a
+          silent no-op. Measured: `onReorder` fires in ~385ms on a passing run
+          and never fires at all on a failing one.
+
+      **Consequence: no endpoint tweak can fix this.** The fix has to walk the
+      pointer through each intermediate slot and confirm each one before
+      advancing. That was attempted and is NOT yet working — at
+      `restingBoundary[0] + 4` the order is still `alpha, beta, gamma`, i.e.
+      that position still maps to slot 0, so the waypoint arithmetic is off by
+      an offset not yet pinned down (most likely the grab offset within the row,
+      which is what feeds `monitorOffset` and hence `contentPos`).
+
+      Next step is measurement, not another coordinate guess: instrument
+      `getSlotFromPosition` to log `contentPos` and the returned `targetSlot`
+      per drag-over, and derive the waypoints from that.
+
+      For the record, approaches already tried and ruled out, each landing at
+      roughly the same failure rate: aiming half a row past the last live row;
+      excluding the dragged label from the live measurement; polling for a
+      "settled" layout; and measuring at rest but still sweeping in one go
+      (this one is a real improvement — ~5/7 failing to ~1/14, with drops
+      landing first time — but it is not a fix, and it was NOT committed).
 - [ ] Follow-ups to file, not block on: (public share links are now M6a),
       core extraction of the members-junction + ShareDialog pattern once a
       third package needs sharing, a drive-exported file-picker component if
