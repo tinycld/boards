@@ -45,7 +45,7 @@ function usePeekShortcuts(
     const closeCard = useCardsUIStore(s => s.closeCard)
     // Pushed ABOVE the registration below, and in the same component as it, so
     // every shortcut is stamped with this instance — see core's withScopeId.
-    useShortcutScope('modal')
+    const scopeOwner = useShortcutScope('modal')
 
     const shortcuts = useMemo<Shortcut[]>(() => {
         const step = (delta: number) => {
@@ -92,7 +92,7 @@ function usePeekShortcuts(
             },
         ]
     }, [project, cardId, openCard, closeCard, canEdit, titleRef])
-    useRegisterShortcuts(shortcuts)
+    useRegisterShortcuts(shortcuts, scopeOwner)
 }
 
 /** Base panel width, before any safe-area extension. */
