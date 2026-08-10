@@ -33,7 +33,7 @@ function usePageShortcuts(
     // router.canGoBack() and surfaces a GO_BACK error toast — leave at most
     // once per mounted card page.
     const leavingRef = useRef(false)
-    useShortcutScope('thread')
+    const scopeOwner = useShortcutScope('thread')
 
     const shortcuts = useMemo<Shortcut[]>(() => {
         const step = (delta: number) => {
@@ -86,7 +86,7 @@ function usePageShortcuts(
             },
         ]
     }, [project, cardId, goBack, router, orgHref, canEdit, titleRef])
-    useRegisterShortcuts(shortcuts)
+    useRegisterShortcuts(shortcuts, scopeOwner)
 }
 
 export default function CardDetailScreen() {
