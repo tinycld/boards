@@ -514,6 +514,10 @@ where there's a form, `captureException` context strings like
       every cross-column drop. The fork reads `event.canceled` with a
       legacy fallback (`isFinalizeCanceled`), keeps a board-level stale-
       cancel guard as defense in depth, and adds the repo's first tests.
+      The branch has since gained two more fixes: the phantom-slot preview
+      reset (`e9b5dcd`, below) and the call-time `onItemSnapEnd` lookup
+      (`eccc8b6` — a drop after a same-pass cell re-render silently
+      committed nothing; the M7 checklist-drag entry has the diagnosis).
       The pin lives in tinycld/package.json + the workspace override; swap
       back to the npm release once upstream merges.
     - Drax pads monitor bounds by ~100px, so adjacent columns both "contain"
@@ -1625,8 +1629,11 @@ project-delete WAL cascade. The generic Yjs machinery was promoted from
       `board-dnd.spec.ts:202`.** Drax computes slot boundaries from the RESTING
       layout on purpose and never recomputes the destination on release, so
       pre-grab coordinates were the right thing to measure and switching to
-      live ones made it worse. The real gate is that the destination slot has
-      to be ENTERED by a drag-over during travel.
+      live ones made it worse. (An intermediate theory here — that the
+      destination slot was never ENTERED by a drag-over — also proved wrong;
+      instrumentation showed the slot registering fine and the loss sitting in
+      the fork's snap-end dispatch. The M7 entry has the full story and both
+      fixes.)
 
       **Still owed: a device pass.** Web and native pin by different mechanisms
       and only the web path has e2e coverage; `stickyHeaderIndices` and the
@@ -1881,10 +1888,11 @@ wants them rather than guessing the shape now.
       **Note `pkg:check` does not exist in a bootstrap-assembled root** — the
       equivalents are `pnpm run checks` (lint + app typecheck) from `tinycld/`
       plus `tinycld-pkg typecheck` per member. Last full run: cards unit **237**,
-      cards e2e **63/64** (the one red is `board-dnd.spec.ts:202`, below), core
-      unit **1039**, mail unit 151, drive unit 118, contacts unit 21, calendar
-      unit 5. (An older line here recorded cards unit 177 / e2e 35/35, from
-      before the shortcut-scope and card-detail work.)
+      cards e2e **63/64** (the one red was `board-dnd.spec.ts:202` — since
+      fixed at source, see below; the full suite has not been re-run since),
+      core unit **1039**, mail unit 151, drive unit 118, contacts unit 21,
+      calendar unit 5. (An older line here recorded cards unit 177 / e2e
+      35/35, from before the shortcut-scope and card-detail work.)
 
       **Two keystroke/pointer-delivery races were fixed at source** while
       adding `card-editing.spec.ts`, both the shape the earlier `focusedTitle`
@@ -1995,81 +2003,91 @@ wants them rather than guessing the shape now.
       Measured after the change: the row-loss probe goes 3/7 losing all items →
       **7/7 correct** under `--workers=7`.
 
-      **Still open, upstream.** Two things this does NOT fix:
+      **Still open, upstream.** One thing this does NOT fix:
         - It is still 3 REQUESTS, not one. Each subquery references an
           `on-demand` collection and TanStack issues a subset fetch per
           collection however the query is composed. Reaching one request means
           changing how those children sync, not how they are queried.
-        - The stale-absence delete itself. The real fix is a fetch
-          generation/sequence guard — a subset fetch must not apply a result
-          older than writes already committed to that key. pbtsdb's
-          `shouldDropSyncedWrite` guards stale inserts/updates but exempts
-          deletes as "terminal"; an attempt to close that gap broke two of
-          pbtsdb's own tests, because a reconcile-delete is indistinguishable
-          from legitimate GC pruning by timestamp alone.
 
-      `board-dnd.spec.ts:202` (checklist drag) therefore still fails ~1 run in 3.
-      Verified pre-existing: with these two files stashed, baseline runs fail on
-      the same spec 2/2. Do NOT resolve it by re-running, by adding `retries`,
-      or by forcing `--workers=1` — serialising would only hide it.
+      **`board-dnd.spec.ts:202` is now green — 28/28 under `--workers=7` —
+      and BOTH of its failure modes were real bugs fixed at source, neither
+      of them in the spec's coordinates.** The two modes, what each actually
+      was, and where the fix landed:
 
-      **It has TWO distinct failure modes, and they need separate fixes.** They
-      are told apart by which assertion trips:
-        - **line 229** (setup, `Array []`) — the three items never render at
-          all, so the drag never runs. That is the stale-absence delete above,
-          not a drag problem.
-        - **line 327** (the drop assertion) — the items are there, the drag is
-          live the whole way, and the order comes back untouched.
+      - **Setup mode (line 229, one item missing).** The stale-absence delete
+        above — and the earlier "the write window is now closed" claim was
+        WRONG. The one-query rework only removed the self-inflicted PB
+        empty-filter throttle; under 7-worker load the checklist GET still
+        takes ~400ms, and an item created inside that window was deleted when
+        the empty result landed. Captured from a failing trace: GET issued
+        t=.638 (0 rows server-side), alpha POSTed .997 and confirmed 1.001,
+        GET resolved .030 → alpha reconcile-deleted; beta/gamma, inserted
+        after it settled, survived. The ownership riddle (a first-ever query
+        key owns nothing, so what did the diff delete against?) resolves in
+        query-db-collection's manual-write path: every pbtsdb write-back runs
+        `updateCacheData`, which pushes the full synced store into EVERY
+        cached query whose key prefix-matches the collection — including the
+        in-flight subset key — so the fresh row became owned, and the late
+        result's diff deleted it.
+        **Fixed at source in pbtsdb** (`fix/stale-absence-reconcile-delete`,
+        `~/code/pbtsdb`): `fetchRecords` snapshots a per-collection
+        authoritative-write sequence when a fetch is ISSUED and merges back
+        any synced row confirmed after that point that the result omits.
+        Fixing the RESULT rather than dropping the delete also preserves the
+        row's query ownership. Two regression tests (the repro, red before
+        the fix, plus a legit-prune control); suite 98/98. This is the fetch
+        generation/sequence guard the note above asked for — the earlier
+        attempt failed because it keyed on `updated` timestamps (server
+        clock); the sequence is client-side bookkeeping, so GC pruning stays
+        distinguishable. **Published as pbtsdb 0.7.2** (PR #10) and the
+        workspace now resolves it everywhere. Note the trap hit getting
+        there: the lockfile held THREE pbtsdb resolutions (0.6.3 for the
+        `>=0.6.3` members, 0.7.1 for cards, 0.7.2 for the shell) and the
+        hoisted root copy was the MAJORITY version, so `pnpm update -r
+        pbtsdb` left 0.6.3 — without the fix — installed at the root.
+        `pnpm dedupe pbtsdb` is what collapses the importers onto the single
+        highest version every range accepts.
 
-      For the drop mode, drax's source (`react-native-drax/src/`, the pinned
-      fork) settles what is actually happening — this replaced several wrong
-      guesses, so it is recorded here rather than re-derived:
+      - **Drop mode (final assertion, order untouched).** The previous
+        analysis here — waypoints, slot entry, grab-offset arithmetic — was
+        chasing the wrong layer. Instrumenting the bundled drax showed the
+        slot registration working in every failing run (`moveDraggedItem
+        0→1→2`, `internalDragEnd cancelled=false dispIdx=2`, snap animation
+        completing `finished=true`) and `finalizeDrag` never being CALLED.
+        The break: `useSortableList` rebuilds `_internal` as a fresh literal
+        (`onItemSnapEnd: undefined`) every render and `SortableContainer`
+        patches it in a layout effect AFTER the pass — while `SortableItem`
+        destructured the callback at render time, freezing `undefined` into
+        the registered `onSnapEnd` closure whenever a cell re-rendered in the
+        same pass that rebuilt `_internal`. Cells normally render a pass
+        later (FlatList batching), which is why drops usually worked; a
+        live-query emission re-rendering cells synchronously (routine under
+        parallel workers sharing one org) opened the window, and a drop
+        landing before the cell's next render dispatched `undefined?.()` —
+        snap completes, nothing commits, no cancel either, the list left
+        stuck mid-shift (the failure screenshot shows alpha and beta
+        overlapping). **Fixed in the fork** — `SortableItem` now reads
+        `sortable._internal.onItemSnapEnd` at CALL time — commit `eccc8b6`
+        on `consumer/1.1.0-finalize-fix`, with the repo's first SortableItem
+        regression test (fails against the render-time destructure). The
+        workspace pin in tinycld/package.json + pnpm-workspace.yaml is
+        updated to it.
 
-        - Slot boundaries come from the RESTING layout, deliberately.
-          `useSortableList.ts` (getSlotFromPosition): *"slot boundaries must NOT
-          shift when items are reordered during drag"*. For a reorder they sit
-          at the midpoint of the gap AFTER each row (`cursor + size + gap/2`),
-          and slots run 0..N-1 — "take item i's place". Measuring mid-drag is
-          therefore wrong on principle, however carefully it is done.
+      The spec changed too, but as hardening, not as the fix: after the
+      sweep it now polls for the PREVIEW SHIFT (beta and gamma rising into
+      the vacated slot) — the one observable that means drax registered the
+      destination — wiggling to force fresh hit-tests until confirmed, and
+      only then releases. A silent no-op drop is thereby impossible to
+      reproduce from the spec's side: either the shift confirms and the
+      (fixed) snap-end commits it, or the poll fails loudly.
 
-        - Mid-drag geometry cannot be measured anyway. Drax mounts a floating
-          hover COPY carrying the same `Edit <label>` as the row it clones, and
-          it tracks the pointer — so the dragged label appears twice and a
-          `max()` over live rows chases the cursor. There is also no settled
-          state to wait for: while the grab is held the gap stays open, so two
-          rows keep sharing a top for the whole drag (measured:
-          `alpha:491, beta:491, gamma:536, alpha:577`).
-
-        - **The drop commits nothing on release.** `SortableContainer.tsx`:
-          `didReorder = startIdx !== undefined && endIdx !== undefined &&
-          startIdx !== endIdx && pending.length > 0`, where `endIdx` is
-          `draggedDisplayIndexRef.current` — updated ONLY by drag-over events
-          during travel (`targetSlot !== currentDragIdx` → `moveDraggedItem`).
-          So the destination slot must be ENTERED mid-gesture; a sweep that
-          arrives past the final boundary before the first usable drag-over
-          fires leaves the ref at its start value, every later event computes
-          the same targetSlot, the `!==` never trips again, and the drop is a
-          silent no-op. Measured: `onReorder` fires in ~385ms on a passing run
-          and never fires at all on a failing one.
-
-      **Consequence: no endpoint tweak can fix this.** The fix has to walk the
-      pointer through each intermediate slot and confirm each one before
-      advancing. That was attempted and is NOT yet working — at
-      `restingBoundary[0] + 4` the order is still `alpha, beta, gamma`, i.e.
-      that position still maps to slot 0, so the waypoint arithmetic is off by
-      an offset not yet pinned down (most likely the grab offset within the row,
-      which is what feeds `monitorOffset` and hence `contentPos`).
-
-      Next step is measurement, not another coordinate guess: instrument
-      `getSlotFromPosition` to log `contentPos` and the returned `targetSlot`
-      per drag-over, and derive the waypoints from that.
-
-      For the record, approaches already tried and ruled out, each landing at
-      roughly the same failure rate: aiming half a row past the last live row;
-      excluding the dragged label from the live measurement; polling for a
-      "settled" layout; and measuring at rest but still sweeping in one go
-      (this one is a real improvement — ~5/7 failing to ~1/14, with drops
-      landing first time — but it is not a fix, and it was NOT committed).
+      Fork-test infra note, hit while adding the drax regression test: a
+      fresh `npm ci` of the fork cannot run jest at all on Node 25 — the
+      react-native preset's nested `jest-environment-node@29` mismatches
+      hoisted jest 30.4.x (`clearMocksOnScope`), and Node 25's `localStorage`
+      global needs `NODE_OPTIONS='--localstorage-file=…'` exactly as
+      pbtsdb's test script already sets. Locally: pin `jest@30.2.0` and set
+      that env var; neither is committed.
 - [ ] Follow-ups to file, not block on: (public share links are now M6a),
       core extraction of the members-junction + ShareDialog pattern once a
       third package needs sharing, a drive-exported file-picker component if
