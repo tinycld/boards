@@ -1,10 +1,20 @@
+import { type PickedFile, webFileToPickedFile } from '@tinycld/core/file-viewer/picked-file'
+import { usePickFiles } from '@tinycld/core/file-viewer/use-pick-files'
+import { useAuth } from '@tinycld/core/lib/auth'
 import { useRichEditor } from '@tinycld/core/lib/editor/rich'
+import type { EditorCommands } from '@tinycld/core/lib/editor/types'
+import { captureException } from '@tinycld/core/lib/errors'
+import { PromptDialog } from '@tinycld/core/ui/PromptDialog'
 import { type ReactNode, useRef, useState } from 'react'
 import { Platform, Text, View, type ViewStyle } from 'react-native'
 import type { Awareness } from 'y-protocols/awareness'
 import type * as Y from 'yjs'
+import { uploadCardFiles } from '../../hooks/useAttachmentMutations'
 import type { PresenceUser } from '../../hooks/useBoardPresence'
+import { buildDescriptionImageSrc, insertDroppedImages } from '../../lib/description-image'
+import type { BoardAttachment } from '../../types'
 import { DescriptionToolbar } from './DescriptionToolbar'
+import { ImageAttachmentPicker } from './ImageAttachmentPicker'
 
 /** Mirrors the max on cards_cards.description; the server clamps at the same. */
 const DESCRIPTION_LIMIT = 5000
@@ -13,6 +23,10 @@ const COUNTER_VISIBLE_FROM = 4500
 
 interface DescriptionEditorProps {
     cardId: string
+    /** For the image-attachment uploads — the create rule resolves through it. */
+    projectId: string
+    /** The card's attachments; the image chooser offers the image ones. */
+    attachments: BoardAttachment[]
     /**
      * The board's shared document, or null before the room is ready. Nullable
      * so the hook can be called UNCONDITIONALLY — the caller decides between
@@ -75,6 +89,8 @@ const STICKY_HEADER = { position: 'sticky', top: 0, zIndex: 10 } as unknown as V
  */
 export function useDescriptionEditor({
     cardId,
+    projectId,
+    attachments,
     doc,
     awareness,
     identity,
@@ -83,6 +99,22 @@ export function useDescriptionEditor({
 }: DescriptionEditorProps): DescriptionEditorSlots {
     const containerRef = useRef<View>(null)
     const [isFocused, setIsFocused] = useState(false)
+    const [isImagePickerOpen, setIsImagePickerOpen] = useState(false)
+    const [isLinkOpen, setIsLinkOpen] = useState(false)
+    const { pickFiles } = usePickFiles()
+    // Non-throwing for the same reason as CardDetail's read: a public board
+    // renders this hook with no session, and canEdit is false there anyway.
+    const { user } = useAuth({ throwIfAnon: false })
+    const userId = user?.id ?? ''
+
+    // The onImageDrop option below must reference `commands`, which useRichEditor
+    // has not returned yet at options-construction time — a direct reference is
+    // a TDZ error. The ref is assigned right after the hook returns, and the
+    // handler only fires on user events, long after that.
+    const commandsRef = useRef<EditorCommands | null>(null)
+
+    const uploadImages = (files: PickedFile[]) =>
+        uploadCardFiles({ cardId, projectId, userId, files })
 
     const { EditorComponent, editor, commands, toolbarState } = useRichEditor({
         contentFormat: 'markdown',
@@ -106,6 +138,18 @@ export function useDescriptionEditor({
             return true
         },
         onSubmitShortcut: blurActiveElement,
+        // Image files dropped (or pasted) onto the editor become attachments
+        // and land in the document at the drop point. Web only — the option is
+        // a no-op on native.
+        onImageDrop: (files, pos) => {
+            // uploadCardFiles resolves per-file failures into the strip's
+            // error rows; a rejection here is something unexpected upstream of
+            // the upload loop, so it is captured rather than left unhandled.
+            insertDroppedImages(files.map(webFileToPickedFile), pos, {
+                upload: uploadImages,
+                insertAt: (src, at, alt) => commandsRef.current?.insertImageAt?.(src, at, alt),
+            }).catch(err => captureException('cards.description.imageDrop', err, { card: cardId }))
+        },
         // Undefined before the room is ready: useRichEditor treats a missing
         // collab option as a plain local editor, which is exactly the
         // non-collaborative fallback, and it starts collaborating the moment a
@@ -124,7 +168,57 @@ export function useDescriptionEditor({
               },
     })
 
-    const showToolbar = canEdit && isFocused
+    commandsRef.current = commands
+
+    // Both dialogs steal focus, which blurs the editor — keeping the toolbar
+    // row alive while either is open is what stops the row from swapping back
+    // to the label mid-flow (and unmounting the button that opened it). The
+    // link dialog originally lived INSIDE the toolbar without this keep-alive
+    // and closed itself the instant its input autofocused.
+    const showToolbar = canEdit && (isFocused || isImagePickerOpen || isLinkOpen)
+
+    const insertExisting = (attachment: BoardAttachment) => {
+        setIsImagePickerOpen(false)
+        // Through the REF, not the closure's `commands`: the dialog's press
+        // path can hold a handler captured while a previous editor instance
+        // was current (the plain pre-collab editor is destroyed when the room
+        // latches), and a command bound to a destroyed editor no-ops silently.
+        // The ref is reassigned every render, so it always names the live one.
+        //
+        // chain().focus() (web) / the page's own focus (native) restores the
+        // selection the editor held before the dialog opened, so this lands at
+        // the caret rather than the document end.
+        commandsRef.current?.insertImage?.(
+            buildDescriptionImageSrc(attachment.id, attachment.fileName),
+            attachment.displayName
+        )
+    }
+
+    const uploadAndInsert = async () => {
+        setIsImagePickerOpen(false)
+        try {
+            const picked = await pickFiles({ mimeTypes: ['image/*'] })
+            // The documents picker can return non-images despite the mime
+            // filter (it is advisory on some platforms); inserting one
+            // produces a broken image node, so they are dropped instead.
+            const images = picked.filter(file => file.type.startsWith('image/'))
+            if (images.length === 0) return
+            const results = await uploadImages(images)
+            for (const result of results) {
+                if (result.storedFile === null) continue
+                // Ref for the same staleness reason as insertExisting — and
+                // doubly so here, where an upload separates capture from use.
+                commandsRef.current?.insertImage?.(
+                    buildDescriptionImageSrc(result.id, result.storedFile),
+                    result.name
+                )
+            }
+        } catch (err) {
+            // Upload failures already settle into the strip's error rows; this
+            // guards the picker itself so a rejection is not left unhandled.
+            captureException('cards.description.imageUpload', err, { card: cardId })
+        }
+    }
 
     return {
         header: (
@@ -147,7 +241,13 @@ export function useDescriptionEditor({
                 }
             >
                 {showToolbar ? (
-                    <DescriptionToolbar commands={commands} toolbarState={toolbarState} isVisible />
+                    <DescriptionToolbar
+                        commands={commands}
+                        toolbarState={toolbarState}
+                        isVisible
+                        onOpenImagePicker={() => setIsImagePickerOpen(true)}
+                        onOpenLinkDialog={() => setIsLinkOpen(true)}
+                    />
                 ) : (
                     <Text className="text-[13px] font-semibold text-foreground">Description</Text>
                 )}
@@ -167,6 +267,31 @@ export function useDescriptionEditor({
                     <EditorComponent />
                 </View>
                 <DescriptionStatus isConnected={isConnected} />
+                <ImageAttachmentPicker
+                    isOpen={isImagePickerOpen}
+                    onClose={() => setIsImagePickerOpen(false)}
+                    attachments={attachments}
+                    onPick={insertExisting}
+                    onUploadNew={() => void uploadAndInsert()}
+                />
+                <PromptDialog
+                    isOpen={isLinkOpen}
+                    onClose={() => setIsLinkOpen(false)}
+                    onSubmit={url => {
+                        setIsLinkOpen(false)
+                        // chain().focus() restores the selection the editor
+                        // held before the dialog took focus, so the link
+                        // applies to the text the user selected. An empty
+                        // value is how you remove a link — PromptDialog is
+                        // deliberately left un-`required` so it can reach us.
+                        if (url.trim()) commands.setLink(url.trim())
+                        else commands.removeLink()
+                    }}
+                    title="Link"
+                    placeholder="https://example.com"
+                    defaultValue={toolbarState.currentLink ?? ''}
+                    confirmLabel="Apply"
+                />
             </View>
         ),
     }
