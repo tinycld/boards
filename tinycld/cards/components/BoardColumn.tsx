@@ -257,6 +257,7 @@ export const BoardColumn = memo(function BoardColumn({
                 ) : (
                     <ColumnCards
                         list={list}
+                        projectId={projectId}
                         registerMeasure={registerBothMeasures}
                         onReceivingChange={setIsReceiving}
                         canEdit={canEdit}
@@ -628,6 +629,7 @@ const PHANTOM_SLOT_HEIGHT = 40
 
 interface ColumnCardsProps {
     list: BoardListView
+    projectId: string
     registerMeasure: (listId: string, measure: (() => void) | null) => void
     /** Reports whether a card from ANOTHER column is dragged over this one.
      *  Consumed by BoardColumn (border + e2e marker) — never fed back here,
@@ -654,6 +656,7 @@ interface ColumnCardsProps {
  */
 const ColumnCards = memo(function ColumnCards({
     list,
+    projectId,
     registerMeasure,
     onReceivingChange,
     canEdit,
@@ -751,7 +754,12 @@ const ColumnCards = memo(function ColumnCards({
                         fixed={!canEdit}
                     >
                         <NoNativeDrag>
-                            <BoardCard card={card} isDone={list.isDone} canDrag={canEdit} />
+                            <BoardCard
+                                card={card}
+                                projectId={projectId}
+                                isDone={list.isDone}
+                                canDrag={canEdit}
+                            />
                         </NoNativeDrag>
                     </SortableItem>
                 ))}
