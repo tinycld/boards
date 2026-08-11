@@ -60,7 +60,14 @@ export function MarkdownText({ body, variant = 'description' }: MarkdownTextProp
                 translateModifierKeys={false}
                 shortcutTableHeuristic={false}
                 transformImageUri={transformImageUri}
+                // A comment sits in a tight activity row; a full-width
+                // screenshot would dominate the thread, so images letterbox
+                // into a strip there. Descriptions keep the library sizing.
+                imageMaxHeight={variant === 'comment' ? COMMENT_IMAGE_MAX_HEIGHT : undefined}
             />
         </View>
     )
 }
+
+/** Tall enough to read a screenshot's gist, short enough to scan past. */
+const COMMENT_IMAGE_MAX_HEIGHT = 180

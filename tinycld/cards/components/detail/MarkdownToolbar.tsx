@@ -19,25 +19,38 @@ import {
 import { useMemo } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
-interface DescriptionToolbarProps {
+interface MarkdownToolbarProps {
     commands: EditorCommands
     toolbarState: EditorToolbarState
     /** False while the editor is unfocused or the viewer cannot write. */
     isVisible: boolean
     /**
      * Open the image chooser / link dialog. The dialogs themselves are owned
-     * by useDescriptionEditor, NOT rendered here: this toolbar unmounts on
-     * editor blur, and a dialog's input taking focus IS a blur — a dialog
-     * mounted here closes itself the instant it opens. The link dialog shipped
-     * with exactly that bug (visible for one frame, then gone) before it was
-     * hoisted to match the image picker.
+     * by the editor host (useDescriptionEditor / CommentEditor), NOT rendered
+     * here: this toolbar unmounts on editor blur, and a dialog's input taking
+     * focus IS a blur — a dialog mounted here closes itself the instant it
+     * opens. The link dialog shipped with exactly that bug (visible for one
+     * frame, then gone) before it was hoisted to match the image picker.
      */
     onOpenImagePicker: () => void
     onOpenLinkDialog: () => void
+    /**
+     * Row height for the buttons. The description keeps the default; the
+     * inline comment editor passes a compact one so the toolbar fits the
+     * fixed-height row it swaps into in place of the author line.
+     */
+    height?: number
+    /**
+     * Pinned to the right edge, never folded into the overflow menu — the
+     * inline comment editor puts Save/Cancel here so the whole editing
+     * session lives in one row.
+     */
+    rightItems?: ToolbarItem[]
 }
 
 /**
- * Formatting controls for a card description.
+ * Formatting controls for the markdown surfaces — card descriptions and
+ * comments.
  *
  * Every button here has a working command on web and native. That rules out
  * several the schema can still hold: strikethrough and task lists have no
@@ -51,13 +64,15 @@ interface DescriptionToolbarProps {
  * Buttons deliberately do not take focus (see FormatButton) — every command
  * acts on the editor's selection, and taking focus collapses it.
  */
-export function DescriptionToolbar({
+export function MarkdownToolbar({
     commands,
     toolbarState,
     isVisible,
     onOpenImagePicker,
     onOpenLinkDialog,
-}: DescriptionToolbarProps) {
+    height = 38,
+    rightItems,
+}: MarkdownToolbarProps) {
     const iconColor = useThemeColor('muted-foreground')
     const activeColor = useThemeColor('primary')
 
@@ -136,7 +151,7 @@ export function DescriptionToolbar({
         // reflow that row exists to prevent. Stickiness lives on the row, not
         // on this — the row is the child that is always present to be pinned.
         <View className="border border-border rounded-[10px] bg-background">
-            <ResponsiveToolbar items={items} height={38} />
+            <ResponsiveToolbar items={items} rightItems={rightItems} height={height} />
         </View>
     )
 }
