@@ -105,17 +105,27 @@ export function CardDetail({
     // read below already tolerates a null user.
     const { user } = useAuth({ throwIfAnon: false })
     const { uploadFiles } = useAttachmentMutations(card.id, projectId, user?.id ?? '')
-    const { createComment, deleteComment } = useCommentMutations(card.id, projectId)
+    const { createComment, updateComment, deleteComment } = useCommentMutations(card.id, projectId)
     // Which comment the composer is replying to. Local because it is transient
     // UI state that dies with the open card, and it lives HERE rather than in
     // the composer because the activity list is what sets it.
     const [replyingTo, setReplyingTo] = useState<{ id: string; authorName: string } | null>(null)
+    // Which comment is open for inline editing — at most one; starting a new
+    // edit closes the previous one.
+    const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
 
     const submitComment = (body: string) => {
         createComment.mutate(
             { body, parent: replyingTo?.id ?? '' },
             { onSuccess: () => setReplyingTo(null) }
         )
+    }
+
+    const saveComment = (commentId: string, body: string) => {
+        // Close immediately — the pbtsdb update is optimistic, so the new
+        // body renders at once; failures surface through the mutation.
+        updateComment.mutate({ commentId, body })
+        setEditingCommentId(null)
     }
 
     const description = useDescriptionSection({
@@ -197,6 +207,14 @@ export function CardDetail({
                             comments={comments}
                             canComment={canCommentNow}
                             canModerate={isOwner}
+                            cardId={card.id}
+                            projectId={projectId}
+                            attachments={attachments}
+                            editingCommentId={editingCommentId}
+                            isSaving={updateComment.isPending}
+                            onStartEdit={setEditingCommentId}
+                            onCancelEdit={() => setEditingCommentId(null)}
+                            onSaveEdit={saveComment}
                             onReply={comment =>
                                 setReplyingTo({
                                     id: comment.id,
@@ -212,6 +230,9 @@ export function CardDetail({
             {canComment ? (
                 <CommentComposer
                     widthClass={widthClass}
+                    cardId={card.id}
+                    projectId={projectId}
+                    attachments={attachments}
                     onSubmit={submitComment}
                     isPending={createComment.isPending}
                     replyingTo={replyingTo ?? undefined}

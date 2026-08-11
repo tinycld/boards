@@ -24,7 +24,7 @@ interface ImageAttachmentPickerProps {
  * Chooser behind the description toolbar's image button: the card's image
  * attachments plus an upload action, both funneling into one insert path.
  *
- * Deliberately NOT mounted inside DescriptionToolbar — the toolbar renders
+ * Deliberately NOT mounted inside MarkdownToolbar — the toolbar renders
  * only while the editor is focused, and this dialog taking focus blurs the
  * editor, so a dialog owned by the toolbar would unmount itself the moment it
  * opened. useDescriptionEditor owns it (and keeps the toolbar row alive while
