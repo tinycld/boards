@@ -121,6 +121,116 @@ test.describe('Cards — description formatting toolbar', () => {
         await expect(descriptionEditor(page).locator('strong').first()).toHaveText('review')
     })
 
+    test('every toolbar button applies its formatting, and it all survives a reload', async ({
+        page,
+    }) => {
+        test.slow()
+        const board = await freshBoard(page, 'allbtns')
+        await addCard(page, 0, CARD_TITLE)
+        await openCard(page, CARD_TITLE)
+
+        const editor = descriptionEditor(page)
+        await expect(editor).toBeVisible()
+        await editor.click()
+        await expect(boldButton(page)).toBeVisible()
+        // One line per button. Typed up front so applying a block format to
+        // one line cannot disturb the caret gymnastics of the next.
+        await page.keyboard.type(
+            [
+                'boldword',
+                'italword',
+                'underword',
+                'codeword',
+                'linkword',
+                'headone',
+                'headtwo',
+                'headthree',
+                'bulletline',
+                'orderedline',
+                'quoteline',
+            ].join('\n'),
+            { delay: 5 }
+        )
+        await expect(editor).toContainText('quoteline')
+
+        // Marks apply to a selection; double-click selects the word. The
+        // position matters: getByText resolves to the full-width <p>, and a
+        // default (center) dblclick lands in the empty space right of the
+        // text — selecting nothing, so the mark silently applies to a
+        // collapsed selection. Aim at the first characters instead.
+        const mark = async (word: string, buttonName: string) => {
+            await editor.getByText(word, { exact: true }).dblclick({ position: { x: 12, y: 10 } })
+            await page.getByRole('button', { name: buttonName, exact: true }).click()
+        }
+        await mark('boldword', 'Bold')
+        await expect(editor.locator('strong', { hasText: 'boldword' })).toBeVisible()
+        await mark('italword', 'Italic')
+        await expect(editor.locator('em', { hasText: 'italword' })).toBeVisible()
+        await mark('underword', 'Underline')
+        await expect(editor.locator('u', { hasText: 'underword' })).toBeVisible()
+        await mark('codeword', 'Code')
+        await expect(editor.locator('code', { hasText: 'codeword' })).toBeVisible()
+
+        // The link dialog. Asserted OPEN twice with a settle between — it
+        // used to live inside the focus-gated toolbar, so opening it blurred
+        // the editor, unmounted the toolbar, and took the dialog with it: on
+        // screen for a frame, then gone. A single visibility check can pass
+        // inside that frame; the second is what pins the fix.
+        await editor.getByText('linkword', { exact: true }).dblclick({ position: { x: 12, y: 10 } })
+        await page.getByRole('button', { name: 'Link', exact: true }).click()
+        const linkInput = page.getByPlaceholder('https://example.com')
+        await expect(linkInput).toBeVisible()
+        await page.waitForTimeout(500)
+        await expect(linkInput).toBeVisible()
+        await linkInput.fill('https://example.com/docs')
+        await page.getByRole('button', { name: 'Apply' }).click()
+        await expect(
+            editor.locator('a[href="https://example.com/docs"]', { hasText: 'linkword' })
+        ).toBeVisible()
+
+        // Block formats act on the paragraph at the caret; a click places it.
+        // Same left-edge aim as the marks — a click in the paragraph's empty
+        // right half still lands the caret on the line, but only because
+        // ProseMirror maps it there; aiming at the text removes the reliance.
+        const block = async (line: string, buttonName: string) => {
+            await editor.getByText(line, { exact: true }).click({ position: { x: 12, y: 10 } })
+            await page.getByRole('button', { name: buttonName, exact: true }).click()
+        }
+        await block('headone', 'Heading 1')
+        await expect(editor.locator('h1', { hasText: 'headone' })).toBeVisible()
+        await block('headtwo', 'Heading 2')
+        await expect(editor.locator('h2', { hasText: 'headtwo' })).toBeVisible()
+        await block('headthree', 'Heading 3')
+        await expect(editor.locator('h3', { hasText: 'headthree' })).toBeVisible()
+        await block('bulletline', 'Bullet list')
+        await expect(editor.locator('ul li', { hasText: 'bulletline' })).toBeVisible()
+        await block('orderedline', 'Numbered list')
+        await expect(editor.locator('ol li', { hasText: 'orderedline' })).toBeVisible()
+        await block('quoteline', 'Quote')
+        await expect(editor.locator('blockquote', { hasText: 'quoteline' })).toBeVisible()
+
+        // Every node type at once, after a reload: proves each command's
+        // output was persisted and re-parsed, not just painted. (Underline is
+        // the one markdown has no native syntax for — it rides ++text++.)
+        await page.reload()
+        await navigateToPackage(page, 'cards')
+        await openBoard(page, board)
+        await openCard(page, CARD_TITLE)
+        await expect(editor.locator('strong', { hasText: 'boldword' })).toBeVisible()
+        await expect(editor.locator('em', { hasText: 'italword' })).toBeVisible()
+        await expect(editor.locator('u', { hasText: 'underword' })).toBeVisible()
+        await expect(editor.locator('code', { hasText: 'codeword' })).toBeVisible()
+        await expect(
+            editor.locator('a[href="https://example.com/docs"]', { hasText: 'linkword' })
+        ).toBeVisible()
+        await expect(editor.locator('h1', { hasText: 'headone' })).toBeVisible()
+        await expect(editor.locator('h2', { hasText: 'headtwo' })).toBeVisible()
+        await expect(editor.locator('h3', { hasText: 'headthree' })).toBeVisible()
+        await expect(editor.locator('ul li', { hasText: 'bulletline' })).toBeVisible()
+        await expect(editor.locator('ol li', { hasText: 'orderedline' })).toBeVisible()
+        await expect(editor.locator('blockquote', { hasText: 'quoteline' })).toBeVisible()
+    })
+
     test('active state follows the caret', async ({ page }) => {
         // The regression test for the missing shouldRerenderOnTransaction in
         // core's web hook: without it the button's active state freezes at its
