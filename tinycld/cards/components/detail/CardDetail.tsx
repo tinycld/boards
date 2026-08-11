@@ -8,7 +8,7 @@ import { useUpdateCard } from '../../hooks/useCardMutations'
 import { useCommentMutations } from '../../hooks/useCommentMutations'
 import { useProjectRole } from '../../hooks/useProjectRole'
 import { type DescriptionMode, descriptionMode } from '../../lib/description-mode'
-import type { BoardCardView, BoardLabel, BoardMember } from '../../types'
+import type { BoardAttachment, BoardCardView, BoardLabel, BoardMember } from '../../types'
 import { useBoardPresenceContext } from '../BoardPresenceProvider'
 import { LabelManagerDialog } from '../LabelManagerDialog'
 import { CommentComposer } from './CommentComposer'
@@ -120,6 +120,8 @@ export function CardDetail({
 
     const description = useDescriptionSection({
         cardId: card.id,
+        projectId,
+        attachments,
         description: card.description,
         onSave: value => updateCard.mutate({ cardId: card.id, description: value }),
         canEdit,
@@ -236,11 +238,15 @@ export function CardDetail({
  */
 function useDescriptionSection({
     cardId,
+    projectId,
+    attachments,
     description,
     onSave,
     canEdit,
 }: {
     cardId: string
+    projectId: string
+    attachments: BoardAttachment[]
     description?: string
     onSave: (value: string) => void
     canEdit: boolean
@@ -265,6 +271,8 @@ function useDescriptionSection({
     // because the collaborative branch is the only one that renders it.
     const editorSlots = useDescriptionEditor({
         cardId,
+        projectId,
+        attachments,
         doc: isCollab ? doc : null,
         awareness,
         identity,

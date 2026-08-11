@@ -1,4 +1,8 @@
 import { MarkdownRenderer } from '@tinycld/core/components/help/MarkdownRenderer'
+import { useFileToken } from '@tinycld/core/file-viewer/use-authed-file-url'
+import { resolveProtectedFileSrc } from '@tinycld/core/lib/editor/rich/authed-image'
+import { pb } from '@tinycld/core/lib/pocketbase'
+import { useCallback } from 'react'
 import { View } from 'react-native'
 
 interface MarkdownTextProps {
@@ -36,12 +40,26 @@ interface MarkdownTextProps {
  * applied outside to keep the display and edit states from jumping.
  */
 export function MarkdownText({ body, variant = 'description' }: MarkdownTextProps) {
+    // Description images are stored as tokenless protected-file paths (see
+    // lib/description-image.ts); without a fresh ?token= the bytes 404. The
+    // transform is a useCallback keyed on the token because its IDENTITY keys
+    // the renderer cache in MarkdownRenderer — an inline closure would mint a
+    // renderer per render. An anonymous public-board viewer has no token, so
+    // protected images stay broken there; they cannot fetch the bytes under
+    // any renderer, and that is the viewRule doing its job.
+    const { data: token } = useFileToken()
+    const transformImageUri = useCallback(
+        (uri: string) => resolveProtectedFileSrc(uri, pb.baseURL, token),
+        [token]
+    )
+
     return (
         <View className={variant === 'comment' ? '-my-2' : '-my-1.5'}>
             <MarkdownRenderer
                 body={body}
                 translateModifierKeys={false}
                 shortcutTableHeuristic={false}
+                transformImageUri={transformImageUri}
             />
         </View>
     )

@@ -1,7 +1,6 @@
 import { ResponsiveToolbar, type ToolbarItem } from '@tinycld/core/components/ResponsiveToolbar'
 import type { EditorCommands, EditorToolbarState } from '@tinycld/core/lib/editor/types'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
-import { PromptDialog } from '@tinycld/core/ui/PromptDialog'
 import type { LucideIcon } from 'lucide-react-native'
 import {
     Bold,
@@ -9,6 +8,7 @@ import {
     Heading1,
     Heading2,
     Heading3,
+    Image as ImageIcon,
     Italic,
     Link2,
     List,
@@ -16,7 +16,7 @@ import {
     Quote,
     Underline,
 } from 'lucide-react-native'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
 interface DescriptionToolbarProps {
@@ -24,23 +24,40 @@ interface DescriptionToolbarProps {
     toolbarState: EditorToolbarState
     /** False while the editor is unfocused or the viewer cannot write. */
     isVisible: boolean
+    /**
+     * Open the image chooser / link dialog. The dialogs themselves are owned
+     * by useDescriptionEditor, NOT rendered here: this toolbar unmounts on
+     * editor blur, and a dialog's input taking focus IS a blur — a dialog
+     * mounted here closes itself the instant it opens. The link dialog shipped
+     * with exactly that bug (visible for one frame, then gone) before it was
+     * hoisted to match the image picker.
+     */
+    onOpenImagePicker: () => void
+    onOpenLinkDialog: () => void
 }
 
 /**
  * Formatting controls for a card description.
  *
- * Every button here has both a working command AND a live active state on web
- * and native. That rules out several the schema can still hold: strikethrough
- * and task lists have no command on `EditorCommands`, and tables/images/colors
- * are `undefined` on web while on native they are defined but land on a
- * `default: break` in the WebView's dispatcher — so a button for them would
- * look enabled and do nothing.
+ * Every button here has a working command on web and native. That rules out
+ * several the schema can still hold: strikethrough and task lists have no
+ * command on `EditorCommands`, and tables/colors are `undefined` on web while
+ * on native they are defined but land on a `default: break` in the WebView's
+ * dispatcher — so a button for them would look enabled and do nothing.
+ * (Images cleared that bar: `insertImage` works on both platforms, and the
+ * button opens a chooser rather than toggling a mark, so it needs no active
+ * state.)
  *
  * Buttons deliberately do not take focus (see FormatButton) — every command
  * acts on the editor's selection, and taking focus collapses it.
  */
-export function DescriptionToolbar({ commands, toolbarState, isVisible }: DescriptionToolbarProps) {
-    const [isLinkOpen, setIsLinkOpen] = useState(false)
+export function DescriptionToolbar({
+    commands,
+    toolbarState,
+    isVisible,
+    onOpenImagePicker,
+    onOpenLinkDialog,
+}: DescriptionToolbarProps) {
     const iconColor = useThemeColor('muted-foreground')
     const activeColor = useThemeColor('primary')
 
@@ -106,9 +123,10 @@ export function DescriptionToolbar({ commands, toolbarState, isVisible }: Descri
             button('code', Code, 'Code', toolbarState.isCodeActive ?? false, () =>
                 commands.toggleCode?.()
             ),
-            button('link', Link2, 'Link', toolbarState.isLinkActive, () => setIsLinkOpen(true)),
+            button('link', Link2, 'Link', toolbarState.isLinkActive, onOpenLinkDialog),
+            button('image', ImageIcon, 'Insert image', false, onOpenImagePicker),
         ]
-    }, [commands, toolbarState, iconColor, activeColor])
+    }, [commands, toolbarState, iconColor, activeColor, onOpenImagePicker, onOpenLinkDialog])
 
     if (!isVisible) return null
 
@@ -119,21 +137,6 @@ export function DescriptionToolbar({ commands, toolbarState, isVisible }: Descri
         // on this — the row is the child that is always present to be pinned.
         <View className="border border-border rounded-[10px] bg-background">
             <ResponsiveToolbar items={items} height={38} />
-            <PromptDialog
-                isOpen={isLinkOpen}
-                onClose={() => setIsLinkOpen(false)}
-                onSubmit={url => {
-                    // An empty value is how you remove a link — PromptDialog is
-                    // deliberately left un-`required` so it can reach us.
-                    if (url.trim()) commands.setLink(url.trim())
-                    else commands.removeLink()
-                    setIsLinkOpen(false)
-                }}
-                title="Link"
-                placeholder="https://example.com"
-                defaultValue={toolbarState.currentLink ?? ''}
-                confirmLabel="Apply"
-            />
         </View>
     )
 }
