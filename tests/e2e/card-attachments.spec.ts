@@ -32,7 +32,16 @@ async function openBoard(page: Page, name: string) {
     await expect(boardCard(page, CARD_TITLE)).toBeVisible()
 }
 
-/** Attaches a file by driving the real picker. */
+/**
+ * Attaches a file by driving the real picker.
+ *
+ * Playwright's chooser interception suppresses the native dialog — and with it
+ * the window blur → focus round trip a real dialog causes. The picker code
+ * runs inside that round trip for every real user, so the spec restores it:
+ * blur as the chooser opens, refocus as it closes, and only then deliver the
+ * selection — the change event always lands after focus, and how long after
+ * is up to the OS, so no grace-period in the picker can be waited out here.
+ */
 async function attachFile(
     page: Page,
     file: { name: string; mimeType: string; buffer: Buffer }
@@ -40,6 +49,9 @@ async function attachFile(
     const chooserPromise = page.waitForEvent('filechooser')
     await page.getByTestId('cards-attach-file').click()
     const chooser = await chooserPromise
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')))
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+    await page.waitForTimeout(250)
     await chooser.setFiles(file)
 }
 
@@ -133,6 +145,88 @@ test.describe('card attachments', () => {
         })
     })
 
+    test('renames an attachment from the pencil, committing on blur', async ({ page }) => {
+        const boardName = await freshBoard(page, 'rename')
+        await addCard(page, 0, CARD_TITLE)
+        await openCard(page, CARD_TITLE)
+
+        await attachFile(page, textFile('draft.txt'))
+        await expect(page.getByText('draft.txt', { exact: true })).toBeVisible({ timeout: 15_000 })
+
+        await page.getByRole('button', { name: 'Rename draft.txt' }).click()
+        const nameInput = page.getByLabel('Attachment name')
+        // Seeded with the current name, not empty — a rename usually edits.
+        await expect(nameInput).toHaveValue('draft.txt')
+        await nameInput.fill('release-notes.txt')
+        // Commit is on BLUR, not Enter — click elsewhere in the card.
+        await page.getByText('Description', { exact: true }).click()
+
+        await expect(page.getByText('release-notes.txt', { exact: true })).toBeVisible({
+            timeout: 15_000,
+        })
+        await expect(page.getByText('draft.txt', { exact: true })).toBeHidden()
+
+        // Escape reverts rather than saving.
+        await page.getByRole('button', { name: 'Rename release-notes.txt' }).click()
+        await nameInput.fill('discarded.txt')
+        await page.keyboard.press('Escape')
+        await expect(page.getByText('release-notes.txt', { exact: true })).toBeVisible()
+        await expect(page.getByText('discarded.txt', { exact: true })).toBeHidden()
+
+        // The name is a column, not client state — it must survive a reload.
+        await page.reload()
+        await navigateToPackage(page, 'cards')
+        await openBoard(page, boardName)
+        await openCard(page, CARD_TITLE)
+        await expect(page.getByText('release-notes.txt', { exact: true })).toBeVisible({
+            timeout: 15_000,
+        })
+    })
+
+    test('dropping a file on a board card face attaches it without opening', async ({ page }) => {
+        await freshBoard(page, 'facedrop')
+        await addCard(page, 0, CARD_TITLE)
+
+        const face = boardCard(page, CARD_TITLE)
+        // A real HTML5 file drag: dragenter first (the highlight state
+        // machine counts enters), then the drop. Constructed in-page because
+        // Playwright has no first-class OS file drag.
+        await face.evaluate(el => {
+            const file = new File([new Uint8Array([104, 105])], 'face-note.txt', {
+                type: 'text/plain',
+            })
+            const dataTransfer = new DataTransfer()
+            dataTransfer.items.add(file)
+            el.dispatchEvent(
+                new DragEvent('dragenter', { bubbles: true, cancelable: true, dataTransfer })
+            )
+        })
+        // The hovered card highlights — the marker mounts only while a file
+        // drag is over the face, so this pins the affordance, not just the
+        // upload.
+        await expect(page.getByTestId(/^cards-card-dropping-/)).toHaveCount(1)
+        await face.evaluate(el => {
+            const file = new File([new Uint8Array([104, 105])], 'face-note.txt', {
+                type: 'text/plain',
+            })
+            const dataTransfer = new DataTransfer()
+            dataTransfer.items.add(file)
+            el.dispatchEvent(
+                new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer })
+            )
+        })
+        await expect(page.getByTestId(/^cards-card-dropping-/)).toHaveCount(0)
+
+        // The card was never opened: the paperclip badge (server-recomputed
+        // attachment_count) is the first visible proof the upload landed.
+        await expect(face.getByText('1', { exact: true })).toBeVisible({ timeout: 15_000 })
+
+        await openCard(page, CARD_TITLE)
+        await expect(page.getByText('face-note.txt', { exact: true })).toBeVisible({
+            timeout: 15_000,
+        })
+    })
+
     test('a viewer can read an attachment but not add or remove one', async ({ page }) => {
         test.slow()
 
@@ -168,6 +262,7 @@ test.describe('card attachments', () => {
             await openCard(page, CARD_TITLE)
             await expect(page.getByTestId('cards-attach-file')).toBeVisible()
             await expect(page.getByRole('button', { name: 'Delete shared.txt' })).toBeVisible()
+            await expect(page.getByRole('button', { name: 'Rename shared.txt' })).toBeVisible()
 
             await navigateToPackage(bobPage, 'cards')
             await openBoard(bobPage, boardName)
@@ -182,6 +277,7 @@ test.describe('card attachments', () => {
             })
             await expect(bobPage.getByTestId('cards-attach-file')).toHaveCount(0)
             await expect(bobPage.getByRole('button', { name: 'Delete shared.txt' })).toHaveCount(0)
+            await expect(bobPage.getByRole('button', { name: 'Rename shared.txt' })).toHaveCount(0)
         } finally {
             await close()
         }
