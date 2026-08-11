@@ -20,7 +20,7 @@ ordered by dependency; tasks within one are small and mostly independent.
 | M6a | Public boards: the share-link flow | ✅ shipped — rules, not a snapshot |
 | M7 | Package plumbing, tests, docs | |
 | M8 | CLI | ✅ shipped — needed a core scope-table fix |
-| M9 | Collaborative markdown editing | web + native shipped, carets included |
+| M9 | Collaborative markdown editing | web + native shipped, carets + rich comment editing included |
 
 The lettered milestones (M2a, M3b, M6a) were split out once the data model
 landed and the real dependency order became clear: the rules are enforceable
@@ -1769,6 +1769,153 @@ project-delete WAL cascade. The generic Yjs machinery was promoted from
       the app sees them — three different keyboard specs each failed once and
       passed on every other run. That is a real gap in how those specs drive
       input, not something the toolbar introduced, and it wants its own pass.
+
+- [x] **Rich markdown COMMENTS — composer, inline editing of your own, and
+      two bugs.** This deliberately reverses the "composer stays plain text"
+      call recorded in the comment-markdown commit: the rendering shipped
+      first because it was cheap, and the editor followed once the toolbar and
+      the WebView-cost mitigation existed. What shipped, and what it took:
+    - `components/detail/CommentEditor.tsx` owns `useRichEditor` for
+      comments — NON-collab, markdown in/out (`initialContent` →
+      `editor.getMarkdown()`), 10000-char limit matching
+      `cards_comments.body`. A comment is a discrete record with one author,
+      so unlike the description there IS a commit, and save/cancel semantics
+      follow `EditableText`: Save/⌘↩/click-away commit, Escape reverts to a
+      baseline snapshotted at mount, an unchanged edit is a cancel not a
+      write. One shared `useCommentEditorCore` hook carries all of that;
+      `CommentEditor` (the composer's variant: framed input, Send below) and
+      `InlineCommentEditor` (the in-place edit) are thin layouts over it.
+    - **The composer is collapsed-until-tap on BOTH platforms.** On native
+      every rich editor is a TenTap WebView and the card detail already
+      carries the description's permanently; a second one for a composer most
+      card-opens never touch would double the cost of LOOKING at a card. Once
+      opened it stays mounted (unmount = dropped draft + re-paid WebView
+      boot). Web collapses too so the e2e path is the real one.
+    - **The comment toolbar is NOT focus-gated** — it renders for the life of
+      the writing session. The description's focus-gating exists because its
+      editor never unmounts; here the session is explicit, and a focus-gated
+      toolbar unmounts the instant the Send/Save button takes focus, shifting
+      the button under the pointer mid-press.
+    - **The inline edit swaps in place, like the description's label↔toolbar
+      row.** The author line and the editing toolbar share ONE fixed-height
+      box (`COMMENT_HEADER_HEIGHT`, exported from `CommentEditor.tsx`), with
+      Save/Cancel pinned at the toolbar's right edge (`ResponsiveToolbar`'s
+      `rightItems`, so the compact button set overflows into ⋮ without them)
+      — so there is no button row below to grow the block. The editing
+      surface carries no border or padding (the description's rule), and its
+      bottom padding reproduces the RENDERED comment's trailing rhythm (12px
+      paragraph margins + the renderer's 8px list padding, measured live) —
+      entering an edit moves neither the prose nor the comments below by a
+      pixel, and `comment-editing.spec.ts` pins both anchors.
+    - **Core bug found: an overflowing `ResponsiveToolbar` could strand
+      itself invisible.** `recalculate` measured item widths lazily inside
+      the fitting loop, which BREAKS at the first item that does not fit —
+      items past the break were never cached, `allCached` could never come
+      true once overflow engaged, and the next re-render reset the toolbar
+      to its hidden measuring state with nothing left to re-measure (the
+      layout effect only re-runs when items change). Never seen before
+      because no existing toolbar both overflowed and had stable item
+      identity; the inline comment toolbar (compact, in a 500px peek) hit it
+      immediately. Fixed in core by measuring every item up front, while the
+      measuring pass still has them all in the DOM.
+    - **The Cancel button must never take focus** (FormatButton's
+      `onMouseDown preventDefault`, not a core Button): pressing a focusable
+      Cancel blurs the editor, the blur-commit SAVES the edit, and cancel
+      then runs on a session that already wrote. A `settledRef` additionally
+      keeps the blur-commit and the Save press from double-writing, and a
+      trailing blur after Escape from resurrecting the edit.
+    - The edit affordance is gated `isAuthor && canComment`, the exact mirror
+      of the update rule (`isAuthor && viaCommenter` — a demoted author keeps
+      the comments, not the pencil). "(edited)" keys on `updated !== created`.
+      Comment-rendered images letterbox via a new optional `imageMaxHeight`
+      on core's `MarkdownRenderer` (in the renderer-cache key, like every
+      other option).
+    - **Core gap found: `deriveToolbarState` never mapped `isEmpty`**, so the
+      field the type says "drives send-button enabling in composers" was
+      undefined on native — the WebView broadcasts it; core dropped it. One
+      line + its first test file. Consumers read `isEmpty ?? true` so the
+      pre-first-stateUpdate window disables Send rather than sending empty.
+    - **Core bug found: Escape inside ANY editor closed the peek — including
+      the description's, despite its comment promising "only a second Escape
+      reaches the panel".** The e2e caught it on the comment editor first;
+      probing both phases of the window keydown showed why reasoning kept
+      failing: at window CAPTURE the focus is still in ProseMirror, but React
+      flushes the discrete update (the blur/unmount the editor's own Escape
+      handler causes) while the event is still bubbling, so at window BUBBLE
+      — where tinykeys listens — `document.activeElement` is already BODY.
+      `isFocusInInput()` therefore said "not in an input" on the very
+      keystroke the editor had handled, and the modal-scope Escape fired.
+      Fixed in core's web provider: `inInput` is now decided from the event
+      TARGET (immutable for the dispatch, still names the node the key was
+      typed into even after detach — where `isContentEditable` reads false,
+      hence an attribute fallback) with `activeElement` kept as a fallback.
+      `tests/unit/input-key-event.test.ts` pins the detached-editor case.
+    - The toolbar is renamed `MarkdownToolbar` (shared surface, unchanged
+      props); the image plumbing (chooser/upload/drop) is extracted to
+      `hooks/useEditorImageActions.ts`, shared by both editors, images still
+      landing as CARD attachments.
+    - **Bug: saving a reply crashed the peek**
+      (`undefined.localeCompare`). An optimistic pbtsdb insert draft is
+      exactly the object handed to `insert()` — no `created` at all — while
+      the `useCardDetail` comparators guarded only `''`. Which comparator SLOT
+      the optimistic row lands in decides whether it throws, which is why
+      top-level posts happened to survive and replies crashed reliably. Fixed
+      by normalizing `?? ''` at the map plus extracting the comparator to
+      `lib/created-order.ts` (unit-tested); `useShareLinks` looked identical
+      but already normalized at :84 — not touched.
+    - **Bug: every comment header rendered "clipped" — and it was never
+      clipping.** Three layout diagnoses in a row were wrong (baseline
+      alignment, RN-Web view clipping, line-box metrics); DOM measurement in
+      the running app showed box == ink == no overflow while the pixels still
+      lost their bottom half. The truth: react-native-marked hardcodes an
+      OPAQUE `#fff`/`#000` background on its FlatList, and `MarkdownText`'s
+      `-my-2` pulls that box 6px up over the header row — an opaque sibling
+      painting OVER the glyphs, indistinguishable from a clip in a
+      screenshot. Its own `style` loses to `flatListProps`, so core's
+      `MarkdownRenderer` now forces it transparent — which also retires a
+      latent theme bug, since a raw hex behind every markdown surface never
+      matched the themed background it sat on. The header row itself was
+      innocent; it has since become a FIXED-height `items-center` row anyway
+      (the swap-in-place entry above — text has to center into a box taller
+      than its line), and the name gained `numberOfLines={1}` + shrink with
+      the actions on `ml-auto`, so long author names ellipsize instead of
+      pushing Reply/Delete out of the panel. (Diagnosed by hiding the body
+      live — the TODO's own "reach for the real app on layout bugs" lesson,
+      again.)
+    - E2E: `comment-editing.spec.ts` (8 specs — save/persist, Escape, blur
+      commit, toolbar bold + markdown round-trip via re-edit, the
+      height-stability anchors, reply-crash regression, "(edited)",
+      commentor gating). Locator fallout handled by testIDs: `.ProseMirror`
+      is no longer unique, so the description specs scope under
+      `cards-description-editor` and the composer under
+      `cards-comment-composer`; `board-sharing`'s RBAC matrix now asserts on
+      the composer testID (present collapsed or open) instead of the input
+      placeholder, and comments are TYPED, never `.fill()`ed — a filled
+      contenteditable is literal text the serializer escapes to `\*\*`.
+      Two of those specs earned their shape the hard way:
+        - the height-stability spec asserts RELATIVE spacing (edited comment
+          → neighbor below), never absolute y — autofocus can scroll the
+          panel to reveal the caret, shifting every box by the same amount,
+          which failed a ±2px absolute assertion by the scroll distance.
+        - the "(edited)" assertion carries the suite's extended window for
+          server-dependent state, and the budget was MEASURED before it was
+          widened: the marker keys on the server's `updated` landing back
+          (the body is optimistic and instant; the marker cannot be), the
+          client applies that response in ~2ms, and pbtsdb's
+          `writeServerRecords` is the write-back path — so the only latency
+          is the PATCH round-trip itself, which one run of the loaded e2e
+          server stretched past the 5s default while sqlite showed the row
+          committed 0.5s after create. That server starvation is the same
+          filed infra gap as the login-page failures above, not a client
+          sync bug.
+      The full parallel run also showed a SECOND shape of the loaded-machine
+      gap the toolbar entry records (dropped keystrokes): five unrelated
+      specs failed with the LOGIN PAGE never mounting ("waiting for
+      getByTestId('identifier')", an empty-body JSON parse) — the app server
+      itself starving under 8 workers, before any spec code ran. All five
+      pass in isolation; that infra pass is still its own filed work, not
+      this change's.
+      **Still owed: the same device pass as the toolbar entry above.**
 
 ## M8 — CLI ✅
 
