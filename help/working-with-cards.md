@@ -82,10 +82,17 @@ so a description written here reads the same anywhere else.
 
 If you would rather click than remember the syntax, a row of formatting buttons
 appears above the description as soon as you start writing: bold, italic and
-underline, three heading sizes, bullet and numbered lists, a quote, code, and a
-link. They act on whatever you have selected. The usual shortcuts work too —
-⌘B for bold, ⌘I for italic. The buttons are there only while you are writing,
-so a description you are only reading stays clean.
+underline, three heading sizes, bullet and numbered lists, a quote, code, a
+link, and an image. They act on whatever you have selected. The usual shortcuts
+work too — ⌘B for bold, ⌘I for italic. The buttons are there only while you are
+writing, so a description you are only reading stays clean.
+
+To put a picture in a description, press the image button and choose one of the
+card's image attachments — or upload a new one from the same dialog. On a
+computer you can also drop an image file straight onto the description, and it
+lands where you dropped it. Either way the picture is stored as a card
+attachment, so it also appears in the Attachments section and follows the same
+rules described in [Attaching files to cards](help://cards:attaching-files).
 
 There is no save button: every change is kept as you type. Esc leaves the
 description without discarding anything, and plain Enter starts a new line,
