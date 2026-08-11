@@ -2,6 +2,7 @@ import { cleanFilename, mimeFromFilename } from '@tinycld/core/file-viewer/file-
 import { describe, expect, it } from 'vitest'
 import {
     ATTACHMENTS_COLLECTION_ID,
+    attachmentDisplayName,
     attachmentToSource,
 } from '~/tinycld/cards/lib/attachment-source'
 import type { BoardAttachment } from '~/tinycld/cards/types'
@@ -47,6 +48,28 @@ describe('attachmentToSource', () => {
         // Getting these two backwards yields a 404 on every attachment.
         expect(source.fileName).toBe('budget_a1b2c3d4e5.pdf')
         expect(source.displayName).toBe('budget.pdf')
+    })
+})
+
+describe('attachmentDisplayName', () => {
+    it('prefers the user-editable name column', () => {
+        expect(attachmentDisplayName({ name: 'Q3 budget', file: 'budget_a1b2c3d4e5.pdf' })).toBe(
+            'Q3 budget'
+        )
+    })
+
+    it('falls back to the cleaned stored name for a pre-column row', () => {
+        // Rows uploaded before the `name` column existed carry '' — nothing
+        // backfills them, so the fallback is what keeps them labeled.
+        expect(attachmentDisplayName({ name: '', file: 'budget_a1b2c3d4e5.pdf' })).toBe(
+            'budget.pdf'
+        )
+    })
+
+    it('treats a whitespace-only name as unset', () => {
+        expect(attachmentDisplayName({ name: '   ', file: 'budget_a1b2c3d4e5.pdf' })).toBe(
+            'budget.pdf'
+        )
     })
 })
 

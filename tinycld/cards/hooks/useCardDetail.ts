@@ -1,8 +1,9 @@
 import { eq } from '@tanstack/db'
-import { cleanFilename, mimeFromFilename } from '@tinycld/core/file-viewer/file-naming'
+import { mimeFromFilename } from '@tinycld/core/file-viewer/file-naming'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
 import { useMemo } from 'react'
+import { attachmentDisplayName } from '../lib/attachment-source'
 import { toBoardMember } from '../lib/board-project'
 import type { BoardAttachment, BoardChecklistItem, BoardComment } from '../types'
 
@@ -166,7 +167,7 @@ export function useCardDetail(cardId: string) {
                 joined => ({
                     id: joined.attachment.id,
                     fileName: joined.attachment.file,
-                    displayName: cleanFilename(joined.attachment.file),
+                    displayName: attachmentDisplayName(joined.attachment),
                     size: joined.attachment.size ?? 0,
                     mimeType: mimeFromFilename(joined.attachment.file),
                     uploadedBy: toBoardMember(joined.uploader),

@@ -136,7 +136,11 @@ export interface BoardAttachment {
     id: string
     /** PocketBase's stored name, `{name}_{random10}.{ext}` — what URLs use. */
     fileName: string
-    /** The stored name with PB's random suffix stripped, for display. */
+    /**
+     * The user-editable `name` column when set (the upload writes the picked
+     * file's original name; rename edits it), else the stored name with PB's
+     * random suffix stripped — the fallback for pre-column rows.
+     */
     displayName: string
     /** Bytes, written by the client on upload (PB stores no size of its own). */
     size: number
