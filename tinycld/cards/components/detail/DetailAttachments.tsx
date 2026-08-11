@@ -13,8 +13,9 @@ import { useAuth } from '@tinycld/core/lib/auth'
 import { formatBytes } from '@tinycld/core/lib/format-utils'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { ConfirmDialog } from '@tinycld/core/ui/ConfirmDialog'
+import { PlainInput } from '@tinycld/core/ui/PlainInput'
 import { Image } from 'expo-image'
-import { Paperclip, Plus, Trash2, X } from 'lucide-react-native'
+import { Paperclip, Pencil, Plus, Trash2, X } from 'lucide-react-native'
 import { useState } from 'react'
 import { Platform, Pressable, Text, View } from 'react-native'
 import { useAttachmentMutations } from '../../hooks/useAttachmentMutations'
@@ -46,13 +47,10 @@ export function DetailAttachments({
     // off. Throwing here made merely RENDERING a shared board an error.
     const { user } = useAuth({ throwIfAnon: false })
     const currentUserId = user?.id ?? ''
-    const { uploadFiles, deleteAttachment, dismissUpload } = useAttachmentMutations(
-        cardId,
-        projectId,
-        currentUserId
-    )
+    const { uploadFiles, deleteAttachment, renameAttachment, dismissUpload } =
+        useAttachmentMutations(cardId, projectId, currentUserId)
     const uploads = useUploadsForScope(cardId)
-    const { pickFiles, ActionSheetElement } = usePickFiles()
+    const { pickFiles } = usePickFiles()
     const mutedColor = useThemeColor('muted')
 
     const [previewIndex, setPreviewIndex] = useState<number | null>(null)
@@ -104,6 +102,13 @@ export function DetailAttachments({
                     // Mirrors the delete rule exactly: uploader or project owner.
                     canDelete={isOwner || attachment.uploadedBy.id === currentUserId}
                     onDelete={() => setPendingDelete(attachment)}
+                    // Mirrors the UPDATE rule, which is narrower than delete's:
+                    // writer role AND uploader — an owner cannot rename someone
+                    // else's file.
+                    canRename={canEdit && attachment.uploadedBy.id === currentUserId}
+                    onRename={name =>
+                        renameAttachment.mutate({ attachmentId: attachment.id, name })
+                    }
                 />
             ))}
 
@@ -127,8 +132,6 @@ export function DetailAttachments({
                     <Text className="text-[13px] text-muted">Attach file</Text>
                 </Pressable>
             ) : null}
-
-            {ActionSheetElement}
 
             <PreviewModal
                 isVisible={activeSource !== null}
@@ -167,10 +170,69 @@ interface AttachmentRowProps {
     onOpen: () => void
     canDelete: boolean
     onDelete: () => void
+    canRename: boolean
+    onRename: (name: string) => void
 }
 
-function AttachmentRow({ attachment, onOpen, canDelete, onDelete }: AttachmentRowProps) {
+function AttachmentRow({
+    attachment,
+    onOpen,
+    canDelete,
+    onDelete,
+    canRename,
+    onRename,
+}: AttachmentRowProps) {
     const mutedColor = useThemeColor('muted')
+    const [isRenaming, setIsRenaming] = useState(false)
+    const [draft, setDraft] = useState('')
+
+    const beginRename = () => {
+        setDraft(attachment.displayName)
+        setIsRenaming(true)
+    }
+
+    const commitRename = () => {
+        setIsRenaming(false)
+        const trimmed = draft.trim()
+        // An emptied name reverts rather than saving a blank row — same
+        // contract as the checklist rename.
+        if (trimmed === '' || trimmed === attachment.displayName) return
+        onRename(trimmed)
+    }
+
+    // Escape reseeds the draft BEFORE closing, so the blur that follows the
+    // unmount commits a value equal to the current one and the guard above
+    // swallows it — EditableText's cancel works the same way.
+    const cancelRename = () => {
+        setDraft(attachment.displayName)
+        setIsRenaming(false)
+    }
+
+    if (isRenaming) {
+        return (
+            <View className="flex-row items-center gap-3 py-1.5">
+                <Thumbnail source={attachmentToSource(attachment)} size={THUMB_SIZE} />
+                <View className="flex-1 bg-background border border-border rounded-lg px-2.5 py-1.5">
+                    <PlainInput
+                        value={draft}
+                        onChangeText={setDraft}
+                        accessibilityLabel="Attachment name"
+                        autoFocus
+                        blurOnSubmit
+                        onSubmitEditing={commitRename}
+                        onBlur={commitRename}
+                        onKeyPress={e => {
+                            if (e.nativeEvent.key === 'Escape') cancelRename()
+                        }}
+                        className="text-[13px] text-foreground"
+                    />
+                </View>
+                <Text numberOfLines={1} className="text-[11px] text-muted shrink-0">
+                    {formatBytes(attachment.size)} · {attachment.uploadedBy.firstName}
+                </Text>
+            </View>
+        )
+    }
 
     return (
         <View className="flex-row items-center gap-3 py-1.5">
@@ -201,10 +263,22 @@ function AttachmentRow({ attachment, onOpen, canDelete, onDelete }: AttachmentRo
                 >
                     {attachment.displayName}
                 </Text>
-                <Text numberOfLines={1} className="text-[11px] text-muted shrink-0">
-                    {formatBytes(attachment.size)} · {attachment.uploadedBy.firstName}
-                </Text>
             </Pressable>
+            {/* Outside the preview Pressable — a press target nested inside
+                another fires both on react-native-web. */}
+            {canRename ? (
+                <Pressable
+                    onPress={beginRename}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Rename ${attachment.displayName}`}
+                    className="p-1.5 shrink-0 active:opacity-60"
+                >
+                    <Pencil size={14} color={mutedColor} strokeWidth={2.2} />
+                </Pressable>
+            ) : null}
+            <Text numberOfLines={1} className="text-[11px] text-muted shrink-0">
+                {formatBytes(attachment.size)} · {attachment.uploadedBy.firstName}
+            </Text>
             {canDelete ? (
                 <Pressable
                     onPress={onDelete}
