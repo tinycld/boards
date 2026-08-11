@@ -127,6 +127,11 @@ export interface BoardComment {
     author: BoardMember
     /** ISO timestamp from `created`. Format at render, never store a string. */
     created: string
+    /**
+     * ISO timestamp from `updated`; '' on an optimistic row. Differs from
+     * `created` only after an edit — what the "(edited)" marker keys on.
+     */
+    updated: string
     body: string
     /** '' for a top-level comment; otherwise the comment being replied to. */
     parent: string
