@@ -77,7 +77,7 @@ export function CardDetail({
     titleRef,
 }: CardDetailProps) {
     const [isManagingLabels, setIsManagingLabels] = useState(false)
-    const widthClass = variant === 'page' ? 'w-full max-w-[720px] self-center' : ''
+    const widthClass = variant === 'page' ? 'w-full max-w-[1200px] self-center' : ''
     // Fetched here rather than threaded in as props, so the peek and the page
     // both get it without either container knowing about on-demand collections.
     const { checklist, comments, attachments, isReady } = useCardDetail(card.id)
