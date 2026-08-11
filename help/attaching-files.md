@@ -13,6 +13,16 @@ Open a card and find the **Attachments** section, under the description. Press
 On a computer you can also drag files straight onto the open card — anywhere on
 it will do, and a dashed outline appears to confirm the card will take them.
 
+You don't even have to open the card first: drop a file onto any card on the
+board and it attaches there. The card you are over highlights so you can see
+which one will take the file, and its paperclip count updates when the upload
+finishes.
+
+An image dropped onto a card's *description* does a little more: it uploads as
+an attachment and appears in the text right where you dropped it. See
+[Working with cards](help://cards:working-with-cards) for the rest of the
+description editor.
+
 Each file uploads with a progress bar, so you can see how far a large one has
 got. Images show a thumbnail of the picture while they upload, rather than a
 generic row, so you can tell at a glance that the right file is going up. Files
@@ -35,6 +45,15 @@ If you also use Drive, a **Save to Drive** button appears in the preview
 toolbar, so a file someone attached to a card can be filed properly without
 downloading it first.
 
+## Renaming a file
+
+Press the pencil beside an attachment's name to rename it. The name saves when
+you click away or press Enter; Escape discards the change. You can rename files
+you uploaded yourself.
+
+Renaming changes only the label shown on the card — the file's contents are
+untouched.
+
 ## Removing a file
 
 You can delete an attachment you uploaded yourself. A board owner can delete
@@ -48,7 +67,8 @@ Deleting a card deletes its attachments too — the confirmation says so.
 Attachments follow the same roles as the rest of a board, described in
 [Sharing boards](help://cards:sharing-boards):
 
-- **Owners** and **editors** can attach files and delete any attachment.
+- **Owners** and **editors** can attach files. An owner can delete any
+  attachment; an editor can rename or delete the ones they uploaded.
 - **Commentors** and **viewers** can open and download attachments, but cannot
   add or remove them.
 

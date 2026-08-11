@@ -1111,6 +1111,130 @@ Three things surfaced, all load-bearing:
   a real clock mostly masks it. The first event is the one that turns a bar
   from empty into moving. Fixed in core, mutation-checked.
 
+**Follow-on shipped: board-face drops, images in descriptions, and the
+chooser-sheet fix.** Three attachment features in one pass:
+
+- [x] **Drop a file on any board card face (web)** — no need to open the card.
+      Mail's `useFileDrop` + `fileDropController` were **promoted to core**
+      (`core/lib/file-drop/`, mail retrofitted, tests moved to core) rather
+      than wrapping every memoized drax card in `DropZone`'s raw `<div>`. The
+      promotion added a `dataTransfer.types.includes('Files')` gate mail never
+      had, so in-page text drags no longer light up drop targets. No drax
+      conflict: drax rides pointer gestures, and HTML5 drag events never reach
+      it. The upload path is `uploadCardFiles`, extracted from
+      `useAttachmentMutations` as a plain function — BoardCard must not mount
+      mutation hooks per card (constructing throwing hooks is what broke
+      public boards in M6a). Errors toast via `notify.emit`
+      (`cards.attachment_failed`, a new core event): the strip's error row is
+      the only other surface and it isn't mounted while the card is closed.
+      Hover ring + `cards-card-dropping-<id>` marker; gated on the same role
+      check as `canDrag`, so a viewer's drop is a no-op.
+- [x] **Images in card descriptions.** Toolbar image button (chooser over the
+      card's image attachments + an upload action) on web AND native; on web an
+      image file dropped or pasted onto the editor uploads and lands at the
+      drop point (`view.posAtCoords`), stopPropagation preventing the wrapping
+      DropZone from attaching it twice. Storage is `cards_attachments` — an
+      inserted image is deliberately also a visible attachment row.
+      **The stored src is root-relative and tokenless**
+      (`/api/files/cards_attachments/<id>/<file>`, `lib/description-image.ts`):
+      a baked-in file token is per-user, hour-lived and would leak to every
+      collaborator (text's rule), and an absolute URL bakes in a host that can
+      change (the `{{server-host}}` reason) — text stores absolute URLs, and
+      that divergence is deliberate, the resolver accepts both. Each of the
+      THREE render surfaces re-signs at render time via core's new
+      `rich/authed-image.ts` resolver (foreign-origin srcs never get our
+      token): a core `AuthedImageView.web` node view (new `imageNodeView`
+      option on `buildRichEditorExtensions`); the native WebView page's own
+      node view fed by a **token relay** (`fileAuth` in the init payload +
+      `APP_FILE_TOKEN` re-posts on rotation — **text's native editor has no
+      such relay and its protected images are broken there**, do not copy it);
+      and `MarkdownRenderer`'s new `transformImageUri` for the non-collab
+      `MarkdownText` fallback. Anonymous public-board viewers have no token,
+      so protected images stay broken there — the viewRule gates the bytes
+      regardless of renderer; accepted. Insert-after-upload, no placeholder
+      node (a temp node syncs to peers and needs cross-client failure
+      cleanup); the drop position is clamped at call time in `insertImageAt`.
+      The picker dialog is owned by `useDescriptionEditor`, NOT the toolbar —
+      the toolbar unmounts on blur and the dialog taking focus IS a blur, so
+      `showToolbar` keeps the row alive while the picker is open. The WebView
+      dispatcher gained its `insert-image` case (the host was already sending
+      it) and the bundle was rebuilt; the bundle artifact test now pins
+      `insert-image` + `file-auth` so a stale bundle fails CI.
+- [x] **The native source-chooser sheet no longer renders inside the peek.**
+      `usePickFiles` returned a `BottomDrawer` element that cards mounted deep
+      inside `CardPeek`'s `zIndex: 20` panel — a stacking context the sheet's
+      `z-[250]` can never escape, so it sat at the panel's bottom instead of on
+      the tab bar (BottomDrawer's own docs call this arrangement out). Now a
+      store-driven host (`core/file-viewer/picker-sheet-store.ts` +
+      `FilePickerSheetHost`), the `MoreDrawer` pattern, mounted in BOTH
+      layouts — `MobileLayout`'s content region and `WorkspaceLayout`'s
+      content pane, because a native tablet takes the docked branch.
+      `pickFiles`' Promise contract is unchanged; cards and mail just dropped
+      `{ActionSheetElement}`. Needs a device pass to confirm the sheet rests
+      on the tab bar.
+
+**Toolbar coverage follow-on: one client bug and two CORE bugs, all found by
+one new e2e.** "Do we have coverage for all toolbar items?" — we did not
+(Bold only), and writing `card-description-toolbar.spec.ts`'s all-buttons +
+reload case surfaced three real bugs:
+
+- [x] **The Link dialog closed itself the instant it opened.** It lived
+      INSIDE `DescriptionToolbar`, which renders only while the editor is
+      focused — and the dialog's input autofocusing IS a blur, so opening it
+      unmounted the toolbar and the dialog with it (visible for one frame).
+      Hoisted to `useDescriptionEditor` with the same keep-alive the image
+      picker shipped with (`showToolbar` includes `isLinkOpen`). Any future
+      dialog a toolbar button opens must follow this shape.
+- [x] **Every close-and-reopen duplicated the whole board document** (core,
+      `realtime.SaveCoordinator`). Only the timer-driven flush path truncated
+      the journal; the TEARDOWN flush (`OnRoomEmpty`) and `FlushNow` did not.
+      A session shorter than the 3s debounce — edit, close the board — reaches
+      teardown with the journal still covering every edit the flush wrote, and
+      the next room creation seeds the flushed snapshot AND replays those rows
+      on top: everything twice, compounding per reopen. **The existing collab
+      specs had been tolerating this** via `.first()` on node assertions
+      (misdiagnosed in a comment as "the peek renders the document twice");
+      the new spec's strict-mode locator is what finally refused it.
+      Diagnosed by measurement (journals always ran seq 1→N, zero truncates
+      ever, column written mid-session), fixed by making EVERY successful
+      flush truncate (`truncateJournal` helper), pinned by three coordinator
+      tests. Text and drive share the coordinator and inherit the fix.
+- [x] **Underline was silently dropped by the server serializer** (core,
+      `tinycld.org/core/markdown`): the editor schema has it and the client
+      emits `++u++`, but the Go vocabulary had no `MarkUnderline` — so the
+      flushed column lost every underline, and (before the truncate fix)
+      users kept theirs only BECAUSE the duplication bug replayed the
+      journal. Added `++` both directions: emit in `pm_to_md.go` (innermost,
+      matching @tiptap/markdown), parse via a goldmark inline extension
+      (`underline.go`, exactly-two-delimiter, modeled on strikethrough), and
+      corpus entries pinning parity on both sides. `+` is deliberately NOT
+      escaped on serialize — the client doesn't either, and flanking rules
+      keep "C++" and "+1" literal in both parsers.
+- [x] **Images died on close-and-reopen, twice over** (core, same package —
+      found by the description-images e2e once the truncate fix made the
+      flushed column authoritative on reopen):
+    - `FromPM` dropped a TOP-LEVEL image: tiptap's Image is a BLOCK node, so
+      a description that is just a picture (or has one between paragraphs)
+      holds it directly under doc — and `renderBlock` had no `NodeImage`
+      case, so the default branch walked the image's empty children and the
+      flush wrote an empty document. Pinned by `image_block_test.go`; the
+      corpus cannot express this shape because markdown parses images as
+      inline.
+    - `ToPM` seeded images INSIDE paragraphs (goldmark's inline position),
+      which is schema-invalid for a block Image — **the first client to bind
+      the re-seeded fragment repaired its document by DELETING the node, the
+      repair synced as an edit, and the next flush persisted the loss.**
+      Diagnosed from a flush-time PM-JSON probe showing the doc regress
+      between two flushes. `liftBlockImages` now hoists images to sibling
+      blocks wherever paragraphs are built; the corpus image moved to a
+      standalone line, which is the canonical spelling on both sides.
+    - The e2e itself gained the collab spec's two-page shape: a same-context
+      peer proves the pipe is live before the insert (pre-latch edits die
+      when the Yjs editor replaces the plain one) and acks the edit reached
+      the broker before the reload (fan-out happens only after the journal
+      append — reloading straight off a local-only assertion races the last
+      Yjs frame against socket teardown and tests scheduler luck).
+
 Still filed, deliberately not built:
 
 - [ ] "Attach from Drive" (presence-gated with `usePackages()`):
