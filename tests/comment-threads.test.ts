@@ -7,6 +7,7 @@ function comment(id: string, parent = '', body = id): BoardComment {
         id,
         author: { id: 'u1', firstName: 'Maya', lastName: 'Kim' },
         created: '2026-08-05T10:00:00Z',
+        updated: '2026-08-05T10:00:00Z',
         body,
         parent,
     }

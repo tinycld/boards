@@ -5,6 +5,7 @@ import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
 import { useMemo } from 'react'
 import { attachmentDisplayName } from '../lib/attachment-source'
 import { toBoardMember } from '../lib/board-project'
+import { byCreatedThenId } from '../lib/created-order'
 import type { BoardAttachment, BoardChecklistItem, BoardComment } from '../types'
 
 /**
@@ -140,21 +141,19 @@ export function useCardDetail(cardId: string) {
                 joined => ({
                     id: joined.comment.id,
                     author: toBoardMember(joined.author),
-                    created: joined.comment.created,
+                    // ?? '': the optimistic insert draft carries NO created at
+                    // all — the comparator's ''-is-newest handling only works
+                    // if the miss is normalized here rather than reaching
+                    // localeCompare as undefined (the reply-save crash).
+                    created: joined.comment.created ?? '',
+                    updated: joined.comment.updated ?? '',
                     body: joined.comment.body,
                     parent: joined.comment.parent,
                 })
             )
-                // Oldest first. An optimistically-inserted comment has created
-                // '' until PocketBase answers, which would sort it to the TOP
-                // of the thread and then jump it to the bottom — so '' is
-                // treated as newest, where the composer just put it.
-                .sort((a, b) => {
-                    if (a.created === b.created) return a.id.localeCompare(b.id)
-                    if (a.created === '') return 1
-                    if (b.created === '') return -1
-                    return a.created.localeCompare(b.created)
-                }),
+                // Oldest first; '' (optimistic) sorts last, where the composer
+                // just put it.
+                .sort(byCreatedThenId),
         [rows]
     )
 
@@ -171,19 +170,14 @@ export function useCardDetail(cardId: string) {
                     size: joined.attachment.size ?? 0,
                     mimeType: mimeFromFilename(joined.attachment.file),
                     uploadedBy: toBoardMember(joined.uploader),
-                    created: joined.attachment.created,
+                    created: joined.attachment.created ?? '',
                 })
             )
                 // Newest last, matching the comment thread: an attachment is
                 // appended to a list the reader is already scanning downwards.
-                // '' is an optimistic row PocketBase has not answered for yet,
-                // and it belongs where the upload just put it — at the end.
-                .sort((a, b) => {
-                    if (a.created === b.created) return a.id.localeCompare(b.id)
-                    if (a.created === '') return 1
-                    if (b.created === '') return -1
-                    return a.created.localeCompare(b.created)
-                }),
+                // '' (optimistic) belongs where the upload just put it — at
+                // the end.
+                .sort(byCreatedThenId),
         [rows]
     )
 
