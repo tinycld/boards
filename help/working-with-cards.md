@@ -117,12 +117,21 @@ formatting buttons never appear for them.
 
 ## Comments
 
-The box at the bottom of an open card posts a comment. Markdown works here too,
-so `**bold**`, `` `code` ``, lists and links all render once the comment is
-posted — type the source and it formats when it appears.
+Click the box at the bottom of an open card to write a comment. It works the
+same way as the description: the text formats as you type — `**bold**`,
+`` `code` ``, `- ` lists, links — and the same row of formatting buttons sits
+above it while you write, including the image button, which stores the picture
+as a card attachment.
 
-Press ⌘↩ to post. Plain Enter starts a new line, so a longer comment does not
-send itself half-written. Reply to a comment to keep a thread together.
+Press ⌘↩ or the Send button to post. Plain Enter starts a new line, so a
+longer comment does not send itself half-written. Reply to a comment to keep a
+thread together.
+
+To fix or expand one of your own comments, click it — it opens for editing
+with the same formatting buttons. Save (⌘↩, or clicking elsewhere) keeps the
+change; Esc closes without keeping it. Comments changed after posting show a
+small *(edited)* mark next to their time, and only you can edit yours — other
+people's comments are read-only, however a project owner may delete them.
 
 ## Who else is here
 
