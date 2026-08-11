@@ -117,7 +117,7 @@ test.describe('Cards — board sharing and role gates', () => {
             await boardCard(bobPage, CARD_TITLE).click()
             await expect(bobPage.getByText('No comments yet.', { exact: true })).toBeVisible()
             await expect(bobPage.getByRole('button', { name: 'Move to Doing' })).toHaveCount(0)
-            await expect(bobPage.getByPlaceholder('Write a comment…')).toHaveCount(0)
+            await expect(bobPage.getByTestId('cards-comment-composer')).toHaveCount(0)
             await bobPage.keyboard.press('Escape')
             await expect(bobPage.getByText('No comments yet.', { exact: true })).toHaveCount(0)
 
@@ -145,10 +145,26 @@ test.describe('Cards — board sharing and role gates', () => {
             await expect(bobPage.getByText('Add card', { exact: true })).toHaveCount(0)
 
             await boardCard(bobPage, CARD_TITLE).click()
-            const composer = bobPage.getByPlaceholder('Write a comment…')
-            await composer.fill('Looks good — shipping it.')
+            // The composer collapses until first use; the editor behind it is
+            // a contenteditable, so the body is TYPED (fill would insert
+            // literal text the markdown serializer escapes).
+            const composer = bobPage.getByTestId('cards-comment-composer')
+            await composer.getByRole('button', { name: 'Write a comment' }).click()
+            const composerEditor = composer.locator('.ProseMirror')
+            await expect(composerEditor).toBeVisible()
+            await composerEditor.click()
+            await expect(async () => {
+                if (!((await composerEditor.textContent()) ?? '').includes('shipping it.')) {
+                    await bobPage.keyboard.press('ControlOrMeta+A')
+                    await bobPage.keyboard.press('Backspace')
+                    await bobPage.keyboard.type('Looks good — shipping it.', { delay: 20 })
+                }
+                expect((await composerEditor.textContent()) ?? '').toContain('shipping it.')
+            }).toPass({ timeout: 15_000 })
             await bobPage.getByRole('button', { name: 'Send', exact: true }).click()
-            await expect(bobPage.getByText('Looks good — shipping it.')).toBeVisible()
+            await expect(
+                bobPage.getByTestId('cards-card-peek').getByText('Looks good — shipping it.')
+            ).toBeVisible()
             await expect(bobPage.getByRole('button', { name: 'Move to Doing' })).toHaveCount(0)
 
             // --- Last-owner lock, with bob's row as the positive control ---

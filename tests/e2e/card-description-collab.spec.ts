@@ -40,7 +40,7 @@ async function shareBoard(page: Page, boardName: string, email: string, role: 'E
 
 /** The description editor's typing surface. */
 function descriptionEditor(page: Page) {
-    return page.locator('.ProseMirror').first()
+    return page.getByTestId('cards-description-editor').locator('.ProseMirror')
 }
 
 /**
@@ -54,7 +54,9 @@ function descriptionEditor(page: Page) {
  */
 async function descriptionText(page: Page): Promise<string> {
     return page.evaluate(() => {
-        const editor = document.querySelector('.ProseMirror')
+        const editor = document.querySelector(
+            '[data-testid="cards-description-editor"] .ProseMirror'
+        )
         if (!editor) return ''
         const clone = editor.cloneNode(true) as HTMLElement
         for (const caret of clone.querySelectorAll(
@@ -268,9 +270,13 @@ test.describe('Cards — collaborative descriptions', () => {
             await expect(page.getByRole('button', { name: 'Back to board' })).toBeVisible()
             // The collaborative editor is a ProseMirror surface; the fallback
             // path is a plain text input, so this is the load-bearing check.
-            // Scoped to the VISIBLE one — the peek's editor is still in the
-            // DOM behind the page, and it is the one `.first()` finds.
-            const pageEditor = page.locator('.ProseMirror:visible').first()
+            // Scoped to the DESCRIPTION editors and to the VISIBLE one — the
+            // peek's editor is still in the DOM behind the page, and comment
+            // editors are ProseMirror surfaces too now.
+            const pageEditor = page
+                .getByTestId('cards-description-editor')
+                .locator('.ProseMirror:visible')
+                .first()
             await expect(pageEditor).toBeVisible()
 
             await pageEditor.click()
