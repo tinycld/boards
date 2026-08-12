@@ -143,6 +143,36 @@ working on something.
 These appear and disappear as people come and go — nothing is recorded, and
 you'll never see yourself.
 
+## Card keys
+
+Every board can have a **key** — a short code like `OTTER` — and every card on
+it is numbered in the order it was created. Together they name the card:
+`OTTER-1`, `OTTER-2`, and so on. A key is what you paste into a chat message, a
+commit message, or a stand-up note when you need to point at a specific card.
+
+To set a board's key, type it in the **Key** box when you create the board. It
+is filled in for you from the board's name — "Product launch" suggests `PL` —
+and you can replace it with anything up to ten letters and numbers. Keys are
+capitals only, and no two boards can share one; if the key you want is taken,
+the box tells you so and you can pick another.
+
+A card's key appears on the card itself and at the top of the card panel, where
+you can select and copy it. The link button beside it copies a web address that
+opens the card on its board.
+
+You can also open a card straight from its key. Put it in the address bar after
+your board's web address — `{{server-host}}/cards/OTTER-1` — and the card
+opens, even if you were last looking at a different board. Opening a card this
+way does not switch the board you have open; use the back button to return to
+where you were.
+
+Numbers are never reused. If you delete `OTTER-7`, the next card you make is
+`OTTER-8` — so a key you wrote down last month never quietly comes to mean a
+different card.
+
+A board without a key still works normally; its cards simply have no key to
+quote.
+
 ## Finding a card
 
 Press `/` anywhere to open the search palette and start typing. Opened from a

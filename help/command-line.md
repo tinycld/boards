@@ -24,17 +24,20 @@ Names are matched ignoring case. If two boards share a name, the command stops
 and shows you both ids rather than guessing which one you meant — pass the id
 in that case.
 
-A **card** is always named by its id, which every listing prints in the last
-column. Card titles are not unique and are the thing most likely to be edited,
-so a command that found a card by title would start acting on a different card
-after someone renamed it.
+A **card** is named by its key — `OTTER-12` — or by its id. Both appear in
+every listing, in the `KEY` and `ID` columns. The key is the one you can read
+off a card in the app and type here.
+
+Card titles are never accepted. They are not unique and are the thing most
+likely to be edited, so a command that found a card by title would start acting
+on a different card after someone renamed it.
 
 ## Looking at a board
 
 ```
 tinycld cards board list                    # the boards you are a member of
 tinycld cards board view "Product launch"   # every column, with its cards
-tinycld cards card view <card-id>           # one card, in full
+tinycld cards card view OTTER-12            # one card, in full
 ```
 
 `board list` and `board view` hide archived boards and cards; add `--all` to
@@ -55,9 +58,9 @@ New cards go to the bottom of the column. `--index 0` puts one at the top, and
 any other number places it at that position, counting from zero.
 
 ```
-tinycld cards card edit <card-id> --title "Write the launch post"
-tinycld cards card edit <card-id> --due 2026-09-15
-tinycld cards card edit <card-id> --clear-due
+tinycld cards card edit <card> --title "Write the launch post"
+tinycld cards card edit <card> --due 2026-09-15
+tinycld cards card edit <card> --clear-due
 ```
 
 `edit` only changes what you name. Editing the title leaves the description
@@ -67,9 +70,9 @@ days, written as `YYYY-MM-DD`.
 ## Moving cards
 
 ```
-tinycld cards card move <card-id> --list Doing        # to another column
-tinycld cards card move <card-id> --index 0           # to the top of its column
-tinycld cards card move <card-id> --list Done --index 0
+tinycld cards card move <card> --list Doing        # to another column
+tinycld cards card move <card> --index 0           # to the top of its column
+tinycld cards card move <card> --list Done --index 0
 ```
 
 Moving to another column with no `--index` puts the card at the bottom, which
@@ -78,9 +81,9 @@ is where a dragged card lands when you do not aim at a particular slot.
 ## Archiving and deleting
 
 ```
-tinycld cards card archive <card-id>            # hide it, reversibly
-tinycld cards card archive <card-id> --unset    # bring it back
-tinycld cards card remove <card-id> --yes       # delete it for good
+tinycld cards card archive <card>            # hide it, reversibly
+tinycld cards card archive <card> --unset    # bring it back
+tinycld cards card remove <card> --yes       # delete it for good
 ```
 
 Archiving is the reversible option and is almost always what you want.
