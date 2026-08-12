@@ -10,6 +10,7 @@ import type { BoardCardView, BoardLabel, BoardMember } from '../../types'
 import { AssigneePicker } from './AssigneePicker'
 import { DuePicker } from './DuePicker'
 import { LabelPicker } from './LabelPicker'
+import { ReporterPicker } from './ReporterPicker'
 
 interface DetailPropertiesProps {
     card: BoardCardView
@@ -42,6 +43,9 @@ export function DetailProperties({
     if (!canEdit) {
         return (
             <View className="gap-3 mb-[22px]">
+                <PropertyRow name="Reporter">
+                    <ReporterValue card={card} />
+                </PropertyRow>
                 <PropertyRow name="Assignees">
                     <AssigneesValue card={card} />
                 </PropertyRow>
@@ -57,6 +61,15 @@ export function DetailProperties({
 
     return (
         <View className="gap-3 mb-[22px]">
+            <PropertyRow name="Reporter">
+                <ReporterPicker
+                    members={projectMembers}
+                    selectedId={card.reporter?.id}
+                    onSelect={reporter => updateCard.mutate({ cardId: card.id, reporter })}
+                >
+                    <ReporterValue card={card} />
+                </ReporterPicker>
+            </PropertyRow>
             <PropertyRow name="Assignees">
                 <AssigneePicker
                     members={projectMembers}
@@ -122,6 +135,45 @@ const GhostChip = forwardRef<View, { label: string; onPress?: () => void }>(func
 })
 
 /**
+ * The reporter chip, and the ReporterPicker's trigger. See AssigneesValue for
+ * the one-Pressable rule and what a missing onPress means.
+ *
+ * `card.reporter` is already the created_by fallback — toBoardCard resolves it
+ * — so the empty branch here means the card has no creator either, which is
+ * only true of bootstrap-written rows.
+ */
+const ReporterValue = forwardRef<View, { card: BoardCardView; onPress?: () => void }>(
+    function ReporterValue({ card, onPress }, ref) {
+        const reporter = card.reporter
+
+        if (!onPress) {
+            if (!reporter) return <EmptyValue />
+            return (
+                <View className="flex-row flex-wrap items-center gap-1.5">
+                    <MemberChip member={reporter} />
+                </View>
+            )
+        }
+
+        if (!reporter) {
+            return <GhostChip ref={ref} label="Set reporter" onPress={onPress} />
+        }
+
+        return (
+            <Pressable
+                ref={ref}
+                accessibilityRole="button"
+                accessibilityLabel="Change reporter"
+                onPress={onPress}
+                className="flex-row flex-wrap items-center gap-1.5 rounded-full web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+            >
+                <MemberChip member={reporter} />
+            </Pressable>
+        )
+    }
+)
+
+/**
  * The assignee chips, and the AssigneePicker's trigger.
  *
  * A populated row wraps its chips in ONE Pressable rather than returning a
@@ -159,24 +211,28 @@ const AssigneesValue = forwardRef<View, { card: BoardCardView; onPress?: () => v
     }
 )
 
+/** One person, as a pill. Shared by the Reporter and Assignees rows. */
+function MemberChip({ member }: { member: BoardMember }) {
+    return (
+        <View className="flex-row items-center gap-1.5 bg-foreground/[0.06] rounded-full pl-[3px] pr-2.5 py-[2px]">
+            <NameAvatar
+                firstName={member.firstName}
+                lastName={member.lastName}
+                size={20}
+                colorKey={member.id}
+            />
+            <Text className="text-[12.5px] font-medium text-foreground">
+                {member.firstName} {member.lastName}
+            </Text>
+        </View>
+    )
+}
+
 function AssigneeChips({ card }: { card: BoardCardView }) {
     return (
         <>
             {card.assignees.map(member => (
-                <View
-                    key={member.id}
-                    className="flex-row items-center gap-1.5 bg-foreground/[0.06] rounded-full pl-[3px] pr-2.5 py-[2px]"
-                >
-                    <NameAvatar
-                        firstName={member.firstName}
-                        lastName={member.lastName}
-                        size={20}
-                        colorKey={member.id}
-                    />
-                    <Text className="text-[12.5px] font-medium text-foreground">
-                        {member.firstName} {member.lastName}
-                    </Text>
-                </View>
+                <MemberChip key={member.id} member={member} />
             ))}
         </>
     )

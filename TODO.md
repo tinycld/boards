@@ -993,7 +993,60 @@ precedent for everything except the Modal shell.
       membership-driven project query drops it and `useActiveBoard`'s
       render-time fallback picks the next one. Help topic:
       `help/sharing-boards.md`.
-- [ ] Add reporter field to track who opened card.  Broaden assignment to support multiple users 
+- [x] Add reporter field to track who opened card. **Shipped** —
+      `cards_cards.reporter` (relation → users, maxSelect 1), a Reporter row
+      above Assignees on the card detail with a `ReporterPicker` over project
+      members, `--reporter`/`--clear-reporter` on the CLI, and a seed that
+      demonstrates it. Distinct from `created_by`, which stays immutable
+      provenance and was never read by anything. Four decisions worth not
+      re-litigating:
+    - **The default is `created_by`, applied in TWO places, and there is NO Go
+      hook.** The obvious design — an `OnRecordCreate` hook filling the field
+      with the authenticated caller — CANNOT BE WRITTEN: `core.RecordEvent`
+      carries no request auth (verified against the pinned PocketBase v0.39.8
+      source; no method in `pocketbase/core` takes a `*RecordEvent` receiver and
+      exposes an identity). Only `OnRecordCreateRequest`/`*core.RecordRequestEvent`
+      reaches `e.Auth`, and request hooks do not fire for server-side
+      `app.Save()`. It would also be redundant — every insert path already
+      writes `created_by` with exactly the id such a hook would recover. So:
+      the migration BACKFILLS `reporter = created_by` for existing rows, and
+      `toBoardCard` falls back to `created_by` at render time for anything that
+      still arrives empty. The CLI's `reporterID()` duplicates that fallback
+      deliberately, so the terminal and the app can never disagree about who a
+      card reports to.
+    - **No create-rule pin**, unlike `cards_comments`' `isAuthor`. A pin would
+      forbid the file-on-behalf case that justifies the field existing. The
+      write is already gated by `viaWriter` and the value can only be a users
+      id. Stated in the migration header so it does not read as an oversight.
+    - **`''` is the empty state, not `undefined`.** The schema generator
+      (`core/server/coreserver/schema_gen.go:149-156`) does not consult
+      `required` for a `maxSelect:1` relation, so this emits as
+      `reporter: string` regardless. Every fallback is `||`, never `??`. The
+      optionality lives on the hand-written `BoardCardView`. There are THREE
+      states, and the third is easy to miss: resolvable → the member;
+      unresolvable → `anonymousMember` (the share-link case); neither reporter
+      nor creator → `undefined`. That last one is real — `created_by` is `''`
+      by convention on bootstrap-written rows — and a placeholder there would
+      claim someone owns a card when nobody does.
+    - **`tests/` IS NOT TYPECHECKED.** `tsconfig.json` includes only
+      `tinycld/**`, so adding a field to a generated record type does NOT break
+      the fixture factories — `tinycld-pkg typecheck` passed with `card()` still
+      missing `reporter`. Nothing will catch a fixture that drifts from the
+      schema; the behavioural tests are the only guard. The `sameCard`
+      comparison line was verified by REMOVING it and watching
+      `replaces a card node when only its reporter changed` go red — the
+      companion `keeps the card node when the reporter is unchanged` stayed
+      green, so the test detects the real bug rather than any change.
+    - The assignee UI was deliberately NOT touched: `AssigneePicker` is already
+      a checkable multi-select over `BoardMember[]`, which is the Linear/Jira
+      shape and what drive and `AddMemberDialog` chose. `ReporterPicker` is its
+      single-select sibling; `MemberChip` was extracted so both rows render one
+      chip rather than two copies of it.
+- [ ] Add support for @<user> in description and comments.  Doing so should trigger notification 
+      to them.  This may branch out into larger issue of how to handle notifications and allowing
+      users to customize delivery
+      
+
 
 ## M4 — Mail integration: create a card from an email
 
@@ -2479,3 +2532,33 @@ wants them rather than guessing the shape now.
       third package needs sharing, a drive-exported file-picker component if
       the M6 attach-from-drive picker outgrows its minimal version, image
       card covers if skipped in M6, board filtering/search, CSV export.
+- [ ] **Board filtering** (by label / assignee / due state / reporter). Filed
+      out of the reporter work, which deliberately shipped the field without
+      it: there is no board filter UI at all to add a control to — the original
+      Filter button was removed as dead chrome (it was a plain `View`, not even
+      pressable), and `DensityToggle` (`BoardHeader.tsx`) is the template for
+      what replaces it.
+      **Apply the predicate in `buildBoardProject`**, beside the existing
+      `if (card.archived) continue`, so `list.cards` and the rendered list stay
+      in ONE index space. The hazard if you instead pass a filtered array to
+      `useSortableList`: `BoardColumn.tsx` calls `rankForReorder(list.cards, …)`
+      and `useBoardDnd.ts` calls `rankForInsert(target.cards, …)` against the
+      UNFILTERED array, while `event.toIndex` comes from the RENDERED one — so
+      ranks get computed in the wrong index space and a drop lands in the wrong
+      place, silently and only while a filter is on.
+      Keep the filter slice OUT of the store's `partialize`. A persisted filter
+      is not "inert when stale" (the store's own rule): a user reloads into a
+      near-empty board with no explanation of why their cards are missing.
+- [ ] **Field-scoped search** (`reporter:me`, `assignee:me`). Also filed out of
+      the reporter work, and it is a CORE-WIDE change, not a cards one: the
+      grammar in `core/lib/search/parse-query.ts` supports only `pkg:` chips and
+      `-term` exclusion, so `reporter:me` currently parses as one garbage
+      include term. Doing it properly means `ParsedQuery` + `parse-query.ts` +
+      core's Go `search.Query` + every package's source.
+      Cheap middle ground if only DECORATION is wanted: add `{Name: "reporter"}`
+      to `ftsConfig.Output` (`server/register.go`) plus a batched user lookup in
+      `searchCards` mirroring `projectSlugs` — that shows the reporter on a
+      result row without making it queryable.
+      Do **NOT** add reporter to `ftsConfig.Columns`: FTS5 cannot ALTER-add a
+      column, so it means dropping, recreating and backfilling `fts_cards`. The
+      `number` field settled this same tradeoff the same way.

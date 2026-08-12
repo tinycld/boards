@@ -61,6 +61,9 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 			}
 
 			ids := append([]string{}, cd.Assignees...)
+			if reporterID := cd.reporterID(); reporterID != "" {
+				ids = append(ids, reporterID)
+			}
 			for _, cm := range comments {
 				ids = append(ids, cm.Author)
 			}
@@ -114,6 +117,11 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 			if cardKey != "" {
 				rows = append(rows, []string{"Key", cardKey})
 			}
+			// Appended for the same reason Key is: the row order above is what
+			// the existing output tests read.
+			if reporterID := cd.reporterID(); reporterID != "" {
+				rows = append(rows, []string{"Reporter", names([]string{reporterID}, users)})
+			}
 			if cd.Description != "" {
 				rows = append(rows, []string{"Description", firstLine(cd.Description)})
 			}
@@ -138,7 +146,7 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 }
 
 func newCardAddCmd(c *client.Client) *cobra.Command {
-	var boardRef, listRef, description, due string
+	var boardRef, listRef, description, due, reporter string
 	var index int
 	cmd := &cobra.Command{
 		Use:   "add <title>",
@@ -177,6 +185,15 @@ func newCardAddCmd(c *client.Client) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// Defaults to the caller, which is what created_by records anyway.
+			// No server hook fills this in — core.RecordEvent carries no request
+			// auth, so it could not recover the caller — so every insert path
+			// writes it, and `cards card add --reporter <id>` is how the CLI
+			// files a card on someone else's behalf.
+			reporterID := userID
+			if cmd.Flags().Changed("reporter") {
+				reporterID = reporter
+			}
 			// `project` is written explicitly even though `list` implies it:
 			// the column is DENORMALIZED onto the card so the access rules can
 			// resolve membership without a two-hop back-relation, and the
@@ -189,6 +206,7 @@ func newCardAddCmd(c *client.Client) *cobra.Command {
 				"description": description,
 				"due":         dueValue,
 				"created_by":  userID,
+				"reporter":    reporterID,
 				"archived":    false,
 			}
 			created, err := client.CreateRecord[card](ctx, c, cardsCollection, body)
@@ -204,15 +222,20 @@ func newCardAddCmd(c *client.Client) *cobra.Command {
 	cmd.Flags().StringVar(&description, "description", "", "markdown description")
 	cmd.Flags().StringVar(&due, "due", "", "due date as YYYY-MM-DD")
 	cmd.Flags().IntVar(&index, "index", 0, "insert at this position (default: append)")
+	// A user id, not an email or a name: there is no by-email user lookup in
+	// this CLI (usersByID is id-only), and inventing one here would be a
+	// resolver nobody has specified. Stated in the help so it is a documented
+	// limit rather than a surprise.
+	cmd.Flags().StringVar(&reporter, "reporter", "", "user id to report to (default: you)")
 	return cmd
 }
 
 func newCardEditCmd(c *client.Client) *cobra.Command {
-	var title, description, due string
-	var clearDue bool
+	var title, description, due, reporter string
+	var clearDue, clearReporter bool
 	cmd := &cobra.Command{
 		Use:   "edit <id>",
-		Short: "Change a card's title, description, or due date",
+		Short: "Change a card's title, description, due date, or reporter",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o, _, err := output.FromCommand(cmd)
@@ -246,8 +269,24 @@ func newCardEditCmd(c *client.Client) *cobra.Command {
 				}
 				body["due"] = v
 			}
+			// Same shape as --due/--clear-due, and for the same reason: an
+			// empty --reporter is indistinguishable from not passing it, so
+			// clearing needs its own flag. Note that clearing restores the
+			// created_by fallback rather than emptying the field — the card
+			// reports to its creator again.
+			switch {
+			case clearReporter && cmd.Flags().Changed("reporter"):
+				return fmt.Errorf("--reporter and --clear-reporter contradict each other")
+			case clearReporter:
+				body["reporter"] = ""
+			case cmd.Flags().Changed("reporter"):
+				if strings.TrimSpace(reporter) == "" {
+					return fmt.Errorf("--reporter cannot be empty (use --clear-reporter)")
+				}
+				body["reporter"] = reporter
+			}
 			if len(body) == 0 {
-				return fmt.Errorf("nothing to change — pass --title, --description, --due, or --clear-due")
+				return fmt.Errorf("nothing to change — pass --title, --description, --due, --clear-due, --reporter, or --clear-reporter")
 			}
 			updated, err := client.UpdateRecord[card](ctx, c, cardsCollection, args[0], body)
 			if err != nil {
@@ -261,6 +300,8 @@ func newCardEditCmd(c *client.Client) *cobra.Command {
 	cmd.Flags().StringVar(&description, "description", "", "new markdown description")
 	cmd.Flags().StringVar(&due, "due", "", "due date as YYYY-MM-DD")
 	cmd.Flags().BoolVar(&clearDue, "clear-due", false, "remove the due date")
+	cmd.Flags().StringVar(&reporter, "reporter", "", "user id to report to")
+	cmd.Flags().BoolVar(&clearReporter, "clear-reporter", false, "report to the card's creator again")
 	return cmd
 }
 

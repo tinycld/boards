@@ -177,6 +177,16 @@ export interface BoardCardView {
     due?: Date
     labels: BoardLabel[]
     assignees: BoardMember[]
+    /**
+     * Who to ask about this card. Falls back to whoever created it, so this is
+     * undefined only when the card has no creator either — the bootstrap-path
+     * rows that store `created_by: ''` by convention.
+     *
+     * The optionality lives HERE rather than on `CardsCards.reporter`, which is
+     * generated as a bare `string` ('' when unset) because the schema generator
+     * ignores `required` for a maxSelect:1 relation.
+     */
+    reporter?: BoardMember
     /** Denormalized counters, maintained by server/counters.go. */
     checklistTotal: number
     checklistDone: number

@@ -315,6 +315,85 @@ func TestCardEditDueAndClearDue(t *testing.T) {
 	}
 }
 
+func TestCardEditReporterAndClearReporter(t *testing.T) {
+	f := board(t)
+	f.users["user2"] = &user{ID: "user2", Email: "sam@example.com", FirstName: "Sam"}
+	_, c := f.serve()
+
+	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--reporter", "user2"); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.cards["crdCopy"].Reporter; got != "user2" {
+		t.Errorf("reporter = %q, want user2", got)
+	}
+	// Clearing restores the created_by fallback rather than emptying the row,
+	// which is why the flag is named for the effect and not for the field.
+	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--clear-reporter"); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.cards["crdCopy"].Reporter; got != "" {
+		t.Errorf("reporter = %q after --clear-reporter, want empty", got)
+	}
+	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy",
+		"--reporter", "user2", "--clear-reporter"); err == nil {
+		t.Error("--reporter together with --clear-reporter was accepted")
+	}
+	// An empty --reporter is indistinguishable from an unpassed one, so it must
+	// be refused rather than silently clearing the field.
+	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--reporter", ""); err == nil {
+		t.Error("an empty --reporter was accepted")
+	}
+}
+
+// No server hook fills the reporter in, so the CLI has to write it on create —
+// otherwise a card added from the terminal would report to nobody until someone
+// opened it in the app.
+func TestCardAddDefaultsReporterToCaller(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	if _, _, err := runCmd(t, c, "cards", "card", "add", "Ship it",
+		"--board", "prjA", "--list", "lstTodo"); err != nil {
+		t.Fatal(err)
+	}
+	if got := str(f.lastCardCreate["reporter"]); got == "" {
+		t.Error("card add wrote no reporter")
+	} else if got != str(f.lastCardCreate["created_by"]) {
+		t.Errorf("reporter = %q, want it to match created_by %q",
+			got, str(f.lastCardCreate["created_by"]))
+	}
+
+	// Filing on someone else's behalf is the case the field exists for.
+	if _, _, err := runCmd(t, c, "cards", "card", "add", "For Sam",
+		"--board", "prjA", "--list", "lstTodo", "--reporter", "user2"); err != nil {
+		t.Fatal(err)
+	}
+	if got := str(f.lastCardCreate["reporter"]); got != "user2" {
+		t.Errorf("reporter = %q, want user2", got)
+	}
+	if got := str(f.lastCardCreate["created_by"]); got == "user2" {
+		t.Error("--reporter overwrote created_by; provenance must record the actual caller")
+	}
+}
+
+// The view falls back to created_by, so a card nobody has explicitly assigned a
+// reporter to still names someone — the behaviour that makes the field useful
+// on rows that predate it.
+func TestCardViewFallsBackToCreator(t *testing.T) {
+	f := board(t)
+	f.cards["crdCopy"].CreatedBy = "user1"
+	f.cards["crdCopy"].Reporter = ""
+	_, c := f.serve()
+
+	out, _, err := runCmd(t, c, "cards", "card", "view", "crdCopy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "Reporter") || !strings.Contains(out, "Nathan") {
+		t.Errorf("card view did not report the creator:\n%s", out)
+	}
+}
+
 func TestCardArchiveAndRestore(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
