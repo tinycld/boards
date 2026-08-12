@@ -164,6 +164,68 @@ describe('usePeekUrl', () => {
         expect(openCard).not.toHaveBeenCalled()
     })
 
+    // THE KEY-ARRIVAL REGRESSION, and the most expensive of the three: a
+    // needless replace() REMOUNTS the screen, taking the peek, the card detail
+    // and their editors with it — a half-typed comment is destroyed mid-word.
+    //
+    // A card's key is assigned server-side, so the optimistic insert carries
+    // none and the confirmed row brings one. Open the card in that window and
+    // the URL is written as the record id; when the key lands, `desiredParam`
+    // changes to HOME-3 and the naive rule ("desired disagrees with focused, so
+    // write") fires a second replace for the SAME card. Both spellings already
+    // resolve to it, so the rewrite buys nothing and costs the remount.
+    it('does not rewrite the URL when the key arrives for the card already focused', () => {
+        const keyless = board({
+            lists: [
+                {
+                    id: 'l1',
+                    name: 'To do',
+                    position: 'a0',
+                    isDone: false,
+                    cards: [card('c3', '')],
+                },
+            ],
+        })
+        // The peek opened before the key landed, so the URL names the record id.
+        h.focusedParam = 'c3'
+        h.openCardId = 'c3'
+        const { rerender } = renderHook(({ p }) => usePeekUrl(p), {
+            initialProps: { p: keyless },
+        })
+        expect(replace).not.toHaveBeenCalled()
+
+        // The server's row arrives and the card gains HOME-3.
+        const keyed = board({
+            lists: [
+                {
+                    id: 'l1',
+                    name: 'To do',
+                    position: 'a0',
+                    isDone: false,
+                    cards: [card('c3', 'HOME-3')],
+                },
+            ],
+        })
+        rerender({ p: keyed })
+        expect(replace).not.toHaveBeenCalled()
+    })
+
+    // The guard above keys on the param RESOLVING to the open card, so it must
+    // not swallow a genuine switch to a different one.
+    it('still rewrites the URL when the open card changes', () => {
+        h.focusedParam = 'HOME-1'
+        h.openCardId = 'c1'
+        const { rerender } = renderHook(() => usePeekUrl(board()))
+        expect(replace).not.toHaveBeenCalled()
+
+        h.openCardId = 'c2'
+        rerender()
+        expect(replace).toHaveBeenCalledWith({
+            pathname: '/cards',
+            params: { focused: 'HOME-2' },
+        })
+    })
+
     // A board with no slug still gets linkable cards, by record id.
     it('falls back to the record id for a board with no key', () => {
         h.openCardId = 'c1'
