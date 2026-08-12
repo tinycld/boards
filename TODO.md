@@ -2212,39 +2212,64 @@ wants them rather than guessing the shape now.
       `pnpm run pkg:check` at the root; fix anything red.
       **Note `pkg:check` does not exist in a bootstrap-assembled root** — the
       equivalents are `pnpm run checks` (lint + app typecheck) from `tinycld/`
-      plus `tinycld-pkg typecheck` per member. Last full run: cards unit **237**,
-      cards e2e **63/64** (the one red was `board-dnd.spec.ts:202` — since
-      fixed at source, see below; the full suite has not been re-run since),
-      core unit **1039**, mail unit 151, drive unit 118, contacts unit 21,
-      calendar unit 5. (An older line here recorded cards unit 177 / e2e
-      35/35, from before the shortcut-scope and card-detail work.)
+      plus `tinycld-pkg typecheck` per member. Last full run (2026-08-11, after
+      the `usePeekUrl` fix below): cards unit **305**, cards e2e **83/83**,
+      cards Go green under `-count=1`. Earlier lines here recorded cards unit
+      237 / e2e 63-64, and before that 177 / 35 — the growth is the
+      shortcut-scope, card-detail, comment-editor and card-key work.
+      Not re-measured in this pass: core unit 1039, mail 151, drive 118,
+      contacts 21, calendar 5.
 
-      **OPEN — a consistent 5-spec failing cluster, every one a SECOND-
-      browser-context spec** (found running the M5 full gate, 2026-08-11
-      evening; reproduced across three full runs, a serial `--workers=1` run,
-      and single-spec isolation, so this is NOT the parallel-load flake
-      documented below — it is deterministic):
-      - `board-presence.spec.ts:44` (two sessions on one board)
-      - `board-sharing.spec.ts:47` — the sharpest repro: line 122, the
-        VIEWER's Escape leaves the peek open ("No comments yet." still
-        counted after the press; screenshot confirms the panel never closed)
-      - `card-attachments.spec.ts:230` (viewer; 90s timeout)
-      - `card-description-collab.spec.ts:299` (viewer cannot edit)
-      - `card-description-toolbar.spec.ts:316` (viewer gets no toolbar)
-      (`comment-editing.spec.ts:266`, the own-comments affordance, fails in
-      most runs too — same second-user shape.)
-      **Isolated to NOT be the M5 event-source work**: with every M5 change
-      stashed out of `tinycld/` and `calendar/` and the config regenerated,
-      `board-sharing.spec.ts` fails identically. The cluster sits in the
-      surfaces the in-flight comment-editor/card-keys work touches — core's
-      Escape/`isInputKeyEvent` rework (`tinycld` commit `6a8bffb`,
-      2026-08-11 18:11) and the shortcut scope-owner change landed the same
-      evening, and the uncommitted cards WIP touches `CardPeek` — so it was
-      deliberately left to that branch rather than debugged underneath it
-      mid-edit. Repro: `pnpm exec tinycld-pkg test:e2e --
-      tests/e2e/board-sharing.spec.ts`. Whoever picks this up: the question
-      to answer first is why the modal-scope Escape works for the OWNER
-      context (dozens of green specs) but not the invited second context.
+      **The 5-spec cluster is CLOSED, and it was one bug in `usePeekUrl` —
+      not the second browser context, and not core's Escape rework.** Full
+      suite now **83/83**; `comment-editing.spec.ts` 24/24 under
+      `--repeat-each=3`. The framing in the original note was wrong in a way
+      worth recording, because it cost the first hour: the cluster was read as
+      "every one a SECOND-browser-context spec", so the search started at
+      invited users, roles and Escape scope. The second context was a
+      CORRELATE, not the cause — a spec that invites a user spends longer on
+      the board before touching a card, which is precisely what changes the
+      race's outcome. Two of the listed specs (`board-sharing`,
+      `card-attachments`) were already green on this branch before any fix.
+
+      **Root cause: a card's key arrives after the optimistic insert, and
+      `usePeekUrl` rewrote the URL when it did — remounting the screen.**
+      `desiredParam` is `entry.card.key || entry.card.id`. The client's
+      optimistic row carries NO key (the server assigns it inside the INSERT,
+      see `server/card_number.go`), so for a freshly-created card the param is
+      first written as the record id and then, when the confirmed row lands,
+      changes to `OTTER-7`. The store->URL effect saw a disagreement and issued
+      a second `router.replace` — and a replace REMOUNTS the screen, taking
+      `CardPeek` -> `CardDetail` -> `CommentComposer` and both editors with it.
+      `CommentComposer`'s `wasOpened` reset to false, the ProseMirror surface
+      was destroyed, and the spec's next read found no `.ProseMirror` at all
+      ("element(s) not found" at the `postComment` helper, never at the line
+      the failure was attributed to).
+
+      **This is a user-facing data-loss bug, not a test artifact:** type a
+      comment on a card you just made and it is wiped mid-word when the key
+      lands. The e2e suite hits it reliably only because a spec creates a card
+      and opens it within milliseconds; by hand the window is the same, just
+      harder to land in.
+
+      The fix is three lines in `usePeekUrl`: if the current param already
+      RESOLVES to the open card, leave it alone. `resolveOnBoard` accepts both
+      spellings, so id and key are two names for one card and the upgrade buys
+      nothing. Pinned by two unit tests in `tests/peek-url.test.ts` — one for
+      the key arrival, one asserting a genuine card switch still rewrites, so
+      the guard cannot be widened into swallowing that.
+
+      **Method note, since three earlier theories here were all wrong:** the
+      cause was found by logging component mount/unmount and gate values in the
+      browser and correlating against `router.replace`, not by reading source.
+      Two theories died on measurement — `canComment` flipping (it never
+      changed: `true` across the collapse) and `CardsIndex`'s `isLoading`
+      early-return remounting the tree (`isLoading` stayed `false`). The
+      probes are also a Heisenbug: enough `console.log` in the render path
+      shifts the timing and the failure rate drops to zero, so a "0 collapses"
+      run proves nothing on its own. Correlate on a captured failure instead —
+      12 runs produced exactly 2 double-`replace` sequences and exactly 2
+      failures, which is what made it conclusive.
 
       **Also from that gate, both fixed at source in `calendar/`:**
       `calendar-drag.spec.ts` computed "today" via `toISOString()` — the UTC

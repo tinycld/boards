@@ -102,6 +102,25 @@ export function usePeekUrl(project: BoardProject | null) {
         // `adoptedRef` records every param this hook has seen the store agree
         // with, which is precisely "the URL already had its turn".
         if (incoming && incoming !== openCardId && adoptedRef.current !== focusedParam) return
+        // The URL already names the open card, just by its other spelling —
+        // leave it alone.
+        //
+        // A card's KEY is assigned server-side and arrives after the optimistic
+        // insert, so `desiredParam` for a freshly-created card goes record-id ->
+        // `OTTER-7` the moment the confirmed row lands. Both spellings resolve
+        // to the same card (resolveOnBoard accepts either), so rewriting buys
+        // nothing — and it is not free: router.replace REMOUNTS the screen,
+        // taking the peek, the card detail and their editors with it. That
+        // destroyed a half-typed comment (the composer's ProseMirror surface is
+        // unmounted mid-session) whenever the key landed while the peek was
+        // open, which is a race the user loses by opening the card quickly.
+        // Deterministic in e2e, where a spec creates a card and opens it at
+        // once; in the app it is the same window, just harder to hit by hand.
+        if (incoming && incoming === openCardId) {
+            lastWrittenRef.current = focusedParam
+            adoptedRef.current = focusedParam
+            return
+        }
         // Guard against re-writing what we just wrote: the param arrives one
         // render later, and without this the effect would fire again on that
         // render and replace the entry a second time.
