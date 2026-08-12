@@ -50,6 +50,14 @@ interface ListSeed {
 
 interface BoardSeed {
     name: string
+    /**
+     * The board half of a card key (`PL` -> PL-1, PL-2, …). Spelled out rather
+     * than derived so the seeded boards demo distinct keys — deriveSlug would
+     * give "Product launch" and "Home projects" the initials PL and HP anyway,
+     * but a future rename of a board should not silently change its cards' keys
+     * in the fixture.
+     */
+    slug: string
     color: string
     owner: Who
     /**
@@ -69,6 +77,7 @@ interface BoardSeed {
 const BOARDS: BoardSeed[] = [
     {
         name: 'Product launch',
+        slug: 'PL',
         color: '#4A86E8',
         owner: 'me',
         memberRoles: ['editor', 'commentor', 'viewer'],
@@ -210,6 +219,7 @@ const BOARDS: BoardSeed[] = [
     },
     {
         name: 'Home projects',
+        slug: 'HOME',
         color: '#2E7D32',
         owner: 'me',
         memberRoles: [],
@@ -231,6 +241,7 @@ const BOARDS: BoardSeed[] = [
     },
     {
         name: 'Team retrospective',
+        slug: 'RETRO',
         color: '#E64A19',
         owner: 'teammate',
         memberRoles: ['commentor'],
@@ -295,6 +306,7 @@ async function seedBoard(
 
     const project = await pb.collection('cards_projects').create({
         name: board.name,
+        slug: board.slug,
         color: board.color,
         visibility: 'private',
         created_by: ownerId,

@@ -15,12 +15,12 @@ ordered by dependency; tasks within one are small and mostly independent.
 | M3 | Wire the UI to live data | ✅ shortcuts + markdown + presence shipped |
 | M3b | Role-gated UI and sharing | ✅ shipped |
 | M4 | Mail: create a card from an email | touches `mail/` |
-| M5 | Calendar: due dates on the calendar | touches `calendar/` |
+| M5 | Calendar: due dates on the calendar | ✅ shipped — event-source registry in calendar |
 | M6 | File attachments with previews | ✅ core loop shipped; Drive picker + covers filed |
 | M6a | Public boards: the share-link flow | ✅ shipped — rules, not a snapshot |
 | M7 | Package plumbing, tests, docs | |
 | M8 | CLI | ✅ shipped — needed a core scope-table fix |
-| M9 | Collaborative markdown editing | web + native shipped, carets included |
+| M9 | Collaborative markdown editing | web + native shipped, carets + rich comment editing included |
 
 The lettered milestones (M2a, M3b, M6a) were split out once the data model
 landed and the real dependency order became clear: the rules are enforceable
@@ -514,6 +514,10 @@ where there's a form, `captureException` context strings like
       every cross-column drop. The fork reads `event.canceled` with a
       legacy fallback (`isFinalizeCanceled`), keeps a board-level stale-
       cancel guard as defense in depth, and adds the repo's first tests.
+      The branch has since gained two more fixes: the phantom-slot preview
+      reset (`e9b5dcd`, below) and the call-time `onItemSnapEnd` lookup
+      (`eccc8b6` — a drop after a same-pass cell re-render silently
+      committed nothing; the M7 checklist-drag entry has the diagnosis).
       The pin lives in tinycld/package.json + the workspace override; swap
       back to the npm release once upstream merges.
     - Drax pads monitor bounds by ~100px, so adjacent columns both "contain"
@@ -989,6 +993,7 @@ precedent for everything except the Modal shell.
       membership-driven project query drops it and `useActiveBoard`'s
       render-time fallback picks the next one. Help topic:
       `help/sharing-boards.md`.
+- [ ] Add reporter field to track who opened card.  Broaden assignment to support multiple users 
 
 ## M4 — Mail integration: create a card from an email
 
@@ -1015,27 +1020,80 @@ Via the new thread-action contribution point (M0 decision) — this touches the
       behind the manifest so it only loads when mail loads it.
 - [ ] Help topic: creating cards from email (`help/cards-from-email.md`).
 
-## M5 — Calendar integration: due dates on the calendar
+## M5 — Calendar integration: due dates on the calendar ✅
 
-Via a new event-source registry in the calendar package (M0 decision) — this
-touches the `calendar/` repo:
+**Shipped**, via the new event-source registry (M0 decision) — the generic
+contribution kind now lives in the generator + core, calendar is its first
+host, and cards its first contributor. `due-date-calendar.spec.ts` drives the
+whole pipeline through the UI and is green.
 
-- [ ] Calendar repo: define an event-source contribution (manifest-declared,
-      generator-wired like slots): a hook/module returning
-      `{ id, title, start, end, allDay, color, href }[]` for a date range,
-      merged into `useCalendarEvents` output; a sidebar toggle in
-      `sidebar.after-calendars` to show/hide each source. Sources are
-      read-only on the grid (no drag/edit of contributed items).
-- [ ] Cards: contribute a source that live-queries `cards_cards` with
-      `due != ''` across the user's member projects (this is why M1 indexes
-      `due`), mapping due → all-day event, href → card detail route.
-- [ ] Clicking a cards item on the grid opens the card (cross-package href
-      via the org route helper, presence-gated).
-- [ ] Cards must typecheck/run with no calendar installed (lean-shell
-      guarantee): the contributed source component only loads when calendar
-      loads it; any shared types live in a minimal local interface.
-- [ ] Help topic update: due dates on the calendar (cards side; note the
-      source toggle in calendar's sidebar).
+- [x] The contribution kind is GENERIC, not calendar-specific: manifest
+      `eventSources` (target/id/label/module/color/order) + `eventSourceHost`
+      on the host, wired through the same six generator layers as
+      sidebarContributions. **The generated config emits a bare `load` thunk,
+      NOT `React.lazy`** — the module exports a HOOK, exactly the `search`
+      block's precedent (its comment says why lazy can't wrap it). Contract
+      types live in `@tinycld/core/lib/event-sources/` (like search's), so
+      neither package ever imports the other. Validation fails generation on
+      a present-but-non-host target (version drift must not render as an
+      empty grid), a duplicate (target, id), or an id outside `[a-z0-9-]`;
+      an ABSENT target warns and stays inert — that warn IS the lean-shell
+      guarantee, same as sidebar contributions.
+- [x] Calendar host: one renderless `SourceCollector` per loaded, non-hidden
+      source (`EventSourcesHost.tsx`), mirroring SearchPalette's
+      PackageActions split — a module resolves ASYNC and a hook must be
+      called unconditionally, so the hook call lives in a component that only
+      mounts once the module is non-null. Items masquerade as CalendarEvents
+      rows (`src:<sourceId>:<itemId>`, synthetic calendar FK) and pseudo-
+      calendars merge into `useCalendarMap`, so **AllDayBar, MonthCell,
+      MonthView and ScheduleView needed zero changes** — their existing
+      `calendarMap.get(e.calendar)` color lookup just works. Press
+      interception is ONE check in `useCalendarView.openEventDetail` (every
+      view funnels through it): a `src:` id routes to the item's href instead
+      of the detail popover, which would query a row that doesn't exist.
+- [x] Toggle state is a parallel `hiddenSourceIds` in a new
+      `event-sources-store` — NEVER folded into `visibleIds`, which feeds the
+      `calendar_events` server filter and would silently poison the query
+      with a synthetic id. Inverted polarity (hidden, not visible) means
+      empty = all shown, no init handshake. A hidden source's collector
+      UNMOUNTS, so its live query stops running. Host-rendered toggle rows
+      (`EventSourceToggles`), so contributors ship zero toggle UI.
+- [x] Cards source: `tinycld/cards/calendar-source.ts` — ONE query joining
+      `cards_cards`→`cards_projects` (the M1 `due` indexes exist for exactly
+      this), due within the range as LOCAL `'YYYY-MM-DD'` string bounds
+      (orders correctly against both the bare day the picker writes and the
+      `'YYYY-MM-DD 00:00:00Z'` PB normalizes it to; the half-open window
+      excludes `due = ''` for free), archived cards AND cards on archived
+      boards excluded (search's policy). Due → local all-day item via the
+      same UTC-parts rebuild as `toBoardCard`'s (the off-by-one-west-of-
+      Greenwich trap, pinned by a unit test this time). Routes by plain
+      record id — deliberately not the in-flight key-or-id resolver.
+- [x] Lean shell: cards has no calendar import anywhere (grep stays empty);
+      absent-target inertness is pinned by a describe-packages unit test.
+- [x] Help: cards `help/due-dates-on-the-calendar.md` + calendar
+      `help/event-sources.md`, cross-linked; website doc
+      `web/.../anatomy/event-sources.md`. (The working-with-cards cross-link
+      is deferred — that file is dirty in the card-keys branch.)
+- [x] Tests: generator (mapping, all four validations, emission incl. the
+      thunk-not-lazy pin and unsafe-subpath rejection), core registry
+      (derive sort, loader caching, malformed module → null), calendar
+      (id round-trip incl. colons in item ids, store, mapping/hiding/
+      clipping via renderHook), cards (`buildDueItems` day-boundary tests).
+      E2E `due-date-calendar.spec.ts`: due set through the UI → schedule row
+      → click-through to the card → toggle off/on.
+      Three e2e locator traps surfaced, worth keeping:
+    - **Month cells CAP visible rows** — the seed plants due-today cards, so
+      a titled chip can silently land in "+N more". Schedule view has no
+      overflow and is the deterministic assertion surface.
+    - **Playwright counts the frozen cards board behind the calendar as
+      VISIBLE**, and `pkg-active-<slug>` is ONE wrapper whose testID tracks
+      the active package — so neither text nor visibility nor that testID
+      can name the calendar's copy of a card title. Schedule rows now carry
+      `calendar-event-<id>` (for source items: `calendar-event-src:...`),
+      which no other surface renders.
+    - Every view-mode switch PUSHES a new calendar screen instance that
+      stays mounted, so even a correct locator needs the visible filter for
+      the stacked duplicates.
 
 ## M6 — File attachments with previews
 
@@ -1106,6 +1164,130 @@ Three things surfaced, all load-bearing:
 - **`throttleProgress` dropped its first event** — inherited from drive, where
   a real clock mostly masks it. The first event is the one that turns a bar
   from empty into moving. Fixed in core, mutation-checked.
+
+**Follow-on shipped: board-face drops, images in descriptions, and the
+chooser-sheet fix.** Three attachment features in one pass:
+
+- [x] **Drop a file on any board card face (web)** — no need to open the card.
+      Mail's `useFileDrop` + `fileDropController` were **promoted to core**
+      (`core/lib/file-drop/`, mail retrofitted, tests moved to core) rather
+      than wrapping every memoized drax card in `DropZone`'s raw `<div>`. The
+      promotion added a `dataTransfer.types.includes('Files')` gate mail never
+      had, so in-page text drags no longer light up drop targets. No drax
+      conflict: drax rides pointer gestures, and HTML5 drag events never reach
+      it. The upload path is `uploadCardFiles`, extracted from
+      `useAttachmentMutations` as a plain function — BoardCard must not mount
+      mutation hooks per card (constructing throwing hooks is what broke
+      public boards in M6a). Errors toast via `notify.emit`
+      (`cards.attachment_failed`, a new core event): the strip's error row is
+      the only other surface and it isn't mounted while the card is closed.
+      Hover ring + `cards-card-dropping-<id>` marker; gated on the same role
+      check as `canDrag`, so a viewer's drop is a no-op.
+- [x] **Images in card descriptions.** Toolbar image button (chooser over the
+      card's image attachments + an upload action) on web AND native; on web an
+      image file dropped or pasted onto the editor uploads and lands at the
+      drop point (`view.posAtCoords`), stopPropagation preventing the wrapping
+      DropZone from attaching it twice. Storage is `cards_attachments` — an
+      inserted image is deliberately also a visible attachment row.
+      **The stored src is root-relative and tokenless**
+      (`/api/files/cards_attachments/<id>/<file>`, `lib/description-image.ts`):
+      a baked-in file token is per-user, hour-lived and would leak to every
+      collaborator (text's rule), and an absolute URL bakes in a host that can
+      change (the `{{server-host}}` reason) — text stores absolute URLs, and
+      that divergence is deliberate, the resolver accepts both. Each of the
+      THREE render surfaces re-signs at render time via core's new
+      `rich/authed-image.ts` resolver (foreign-origin srcs never get our
+      token): a core `AuthedImageView.web` node view (new `imageNodeView`
+      option on `buildRichEditorExtensions`); the native WebView page's own
+      node view fed by a **token relay** (`fileAuth` in the init payload +
+      `APP_FILE_TOKEN` re-posts on rotation — **text's native editor has no
+      such relay and its protected images are broken there**, do not copy it);
+      and `MarkdownRenderer`'s new `transformImageUri` for the non-collab
+      `MarkdownText` fallback. Anonymous public-board viewers have no token,
+      so protected images stay broken there — the viewRule gates the bytes
+      regardless of renderer; accepted. Insert-after-upload, no placeholder
+      node (a temp node syncs to peers and needs cross-client failure
+      cleanup); the drop position is clamped at call time in `insertImageAt`.
+      The picker dialog is owned by `useDescriptionEditor`, NOT the toolbar —
+      the toolbar unmounts on blur and the dialog taking focus IS a blur, so
+      `showToolbar` keeps the row alive while the picker is open. The WebView
+      dispatcher gained its `insert-image` case (the host was already sending
+      it) and the bundle was rebuilt; the bundle artifact test now pins
+      `insert-image` + `file-auth` so a stale bundle fails CI.
+- [x] **The native source-chooser sheet no longer renders inside the peek.**
+      `usePickFiles` returned a `BottomDrawer` element that cards mounted deep
+      inside `CardPeek`'s `zIndex: 20` panel — a stacking context the sheet's
+      `z-[250]` can never escape, so it sat at the panel's bottom instead of on
+      the tab bar (BottomDrawer's own docs call this arrangement out). Now a
+      store-driven host (`core/file-viewer/picker-sheet-store.ts` +
+      `FilePickerSheetHost`), the `MoreDrawer` pattern, mounted in BOTH
+      layouts — `MobileLayout`'s content region and `WorkspaceLayout`'s
+      content pane, because a native tablet takes the docked branch.
+      `pickFiles`' Promise contract is unchanged; cards and mail just dropped
+      `{ActionSheetElement}`. Needs a device pass to confirm the sheet rests
+      on the tab bar.
+
+**Toolbar coverage follow-on: one client bug and two CORE bugs, all found by
+one new e2e.** "Do we have coverage for all toolbar items?" — we did not
+(Bold only), and writing `card-description-toolbar.spec.ts`'s all-buttons +
+reload case surfaced three real bugs:
+
+- [x] **The Link dialog closed itself the instant it opened.** It lived
+      INSIDE `DescriptionToolbar`, which renders only while the editor is
+      focused — and the dialog's input autofocusing IS a blur, so opening it
+      unmounted the toolbar and the dialog with it (visible for one frame).
+      Hoisted to `useDescriptionEditor` with the same keep-alive the image
+      picker shipped with (`showToolbar` includes `isLinkOpen`). Any future
+      dialog a toolbar button opens must follow this shape.
+- [x] **Every close-and-reopen duplicated the whole board document** (core,
+      `realtime.SaveCoordinator`). Only the timer-driven flush path truncated
+      the journal; the TEARDOWN flush (`OnRoomEmpty`) and `FlushNow` did not.
+      A session shorter than the 3s debounce — edit, close the board — reaches
+      teardown with the journal still covering every edit the flush wrote, and
+      the next room creation seeds the flushed snapshot AND replays those rows
+      on top: everything twice, compounding per reopen. **The existing collab
+      specs had been tolerating this** via `.first()` on node assertions
+      (misdiagnosed in a comment as "the peek renders the document twice");
+      the new spec's strict-mode locator is what finally refused it.
+      Diagnosed by measurement (journals always ran seq 1→N, zero truncates
+      ever, column written mid-session), fixed by making EVERY successful
+      flush truncate (`truncateJournal` helper), pinned by three coordinator
+      tests. Text and drive share the coordinator and inherit the fix.
+- [x] **Underline was silently dropped by the server serializer** (core,
+      `tinycld.org/core/markdown`): the editor schema has it and the client
+      emits `++u++`, but the Go vocabulary had no `MarkUnderline` — so the
+      flushed column lost every underline, and (before the truncate fix)
+      users kept theirs only BECAUSE the duplication bug replayed the
+      journal. Added `++` both directions: emit in `pm_to_md.go` (innermost,
+      matching @tiptap/markdown), parse via a goldmark inline extension
+      (`underline.go`, exactly-two-delimiter, modeled on strikethrough), and
+      corpus entries pinning parity on both sides. `+` is deliberately NOT
+      escaped on serialize — the client doesn't either, and flanking rules
+      keep "C++" and "+1" literal in both parsers.
+- [x] **Images died on close-and-reopen, twice over** (core, same package —
+      found by the description-images e2e once the truncate fix made the
+      flushed column authoritative on reopen):
+    - `FromPM` dropped a TOP-LEVEL image: tiptap's Image is a BLOCK node, so
+      a description that is just a picture (or has one between paragraphs)
+      holds it directly under doc — and `renderBlock` had no `NodeImage`
+      case, so the default branch walked the image's empty children and the
+      flush wrote an empty document. Pinned by `image_block_test.go`; the
+      corpus cannot express this shape because markdown parses images as
+      inline.
+    - `ToPM` seeded images INSIDE paragraphs (goldmark's inline position),
+      which is schema-invalid for a block Image — **the first client to bind
+      the re-seeded fragment repaired its document by DELETING the node, the
+      repair synced as an edit, and the next flush persisted the loss.**
+      Diagnosed from a flush-time PM-JSON probe showing the doc regress
+      between two flushes. `liftBlockImages` now hoists images to sibling
+      blocks wherever paragraphs are built; the corpus image moved to a
+      standalone line, which is the canonical spelling on both sides.
+    - The e2e itself gained the collab spec's two-page shape: a same-context
+      peer proves the pipe is live before the insert (pre-latch edits die
+      when the Yjs editor replaces the plain one) and acks the edit reached
+      the broker before the reload (fan-out happens only after the journal
+      append — reloading straight off a local-only assertion races the last
+      Yjs frame against socket teardown and tests scheduler luck).
 
 Still filed, deliberately not built:
 
@@ -1621,6 +1803,16 @@ project-delete WAL cascade. The generic Yjs machinery was promoted from
       measured BEFORE the grab, but holding a row makes `SortableList` shift the
       others to preview the gap, so the drop landed short of the end.
 
+      **That second diagnosis was wrong — see the M7 entry on
+      `board-dnd.spec.ts:202`.** Drax computes slot boundaries from the RESTING
+      layout on purpose and never recomputes the destination on release, so
+      pre-grab coordinates were the right thing to measure and switching to
+      live ones made it worse. (An intermediate theory here — that the
+      destination slot was never ENTERED by a drag-over — also proved wrong;
+      instrumentation showed the slot registering fine and the loss sitting in
+      the fork's snap-end dispatch. The M7 entry has the full story and both
+      fixes.)
+
       **Still owed: a device pass.** Web and native pin by different mechanisms
       and only the web path has e2e coverage; `stickyHeaderIndices` and the
       `isFocused` relay are unit-tested and reasoned about, not run on a
@@ -1631,6 +1823,153 @@ project-delete WAL cascade. The generic Yjs machinery was promoted from
       the app sees them — three different keyboard specs each failed once and
       passed on every other run. That is a real gap in how those specs drive
       input, not something the toolbar introduced, and it wants its own pass.
+
+- [x] **Rich markdown COMMENTS — composer, inline editing of your own, and
+      two bugs.** This deliberately reverses the "composer stays plain text"
+      call recorded in the comment-markdown commit: the rendering shipped
+      first because it was cheap, and the editor followed once the toolbar and
+      the WebView-cost mitigation existed. What shipped, and what it took:
+    - `components/detail/CommentEditor.tsx` owns `useRichEditor` for
+      comments — NON-collab, markdown in/out (`initialContent` →
+      `editor.getMarkdown()`), 10000-char limit matching
+      `cards_comments.body`. A comment is a discrete record with one author,
+      so unlike the description there IS a commit, and save/cancel semantics
+      follow `EditableText`: Save/⌘↩/click-away commit, Escape reverts to a
+      baseline snapshotted at mount, an unchanged edit is a cancel not a
+      write. One shared `useCommentEditorCore` hook carries all of that;
+      `CommentEditor` (the composer's variant: framed input, Send below) and
+      `InlineCommentEditor` (the in-place edit) are thin layouts over it.
+    - **The composer is collapsed-until-tap on BOTH platforms.** On native
+      every rich editor is a TenTap WebView and the card detail already
+      carries the description's permanently; a second one for a composer most
+      card-opens never touch would double the cost of LOOKING at a card. Once
+      opened it stays mounted (unmount = dropped draft + re-paid WebView
+      boot). Web collapses too so the e2e path is the real one.
+    - **The comment toolbar is NOT focus-gated** — it renders for the life of
+      the writing session. The description's focus-gating exists because its
+      editor never unmounts; here the session is explicit, and a focus-gated
+      toolbar unmounts the instant the Send/Save button takes focus, shifting
+      the button under the pointer mid-press.
+    - **The inline edit swaps in place, like the description's label↔toolbar
+      row.** The author line and the editing toolbar share ONE fixed-height
+      box (`COMMENT_HEADER_HEIGHT`, exported from `CommentEditor.tsx`), with
+      Save/Cancel pinned at the toolbar's right edge (`ResponsiveToolbar`'s
+      `rightItems`, so the compact button set overflows into ⋮ without them)
+      — so there is no button row below to grow the block. The editing
+      surface carries no border or padding (the description's rule), and its
+      bottom padding reproduces the RENDERED comment's trailing rhythm (12px
+      paragraph margins + the renderer's 8px list padding, measured live) —
+      entering an edit moves neither the prose nor the comments below by a
+      pixel, and `comment-editing.spec.ts` pins both anchors.
+    - **Core bug found: an overflowing `ResponsiveToolbar` could strand
+      itself invisible.** `recalculate` measured item widths lazily inside
+      the fitting loop, which BREAKS at the first item that does not fit —
+      items past the break were never cached, `allCached` could never come
+      true once overflow engaged, and the next re-render reset the toolbar
+      to its hidden measuring state with nothing left to re-measure (the
+      layout effect only re-runs when items change). Never seen before
+      because no existing toolbar both overflowed and had stable item
+      identity; the inline comment toolbar (compact, in a 500px peek) hit it
+      immediately. Fixed in core by measuring every item up front, while the
+      measuring pass still has them all in the DOM.
+    - **The Cancel button must never take focus** (FormatButton's
+      `onMouseDown preventDefault`, not a core Button): pressing a focusable
+      Cancel blurs the editor, the blur-commit SAVES the edit, and cancel
+      then runs on a session that already wrote. A `settledRef` additionally
+      keeps the blur-commit and the Save press from double-writing, and a
+      trailing blur after Escape from resurrecting the edit.
+    - The edit affordance is gated `isAuthor && canComment`, the exact mirror
+      of the update rule (`isAuthor && viaCommenter` — a demoted author keeps
+      the comments, not the pencil). "(edited)" keys on `updated !== created`.
+      Comment-rendered images letterbox via a new optional `imageMaxHeight`
+      on core's `MarkdownRenderer` (in the renderer-cache key, like every
+      other option).
+    - **Core gap found: `deriveToolbarState` never mapped `isEmpty`**, so the
+      field the type says "drives send-button enabling in composers" was
+      undefined on native — the WebView broadcasts it; core dropped it. One
+      line + its first test file. Consumers read `isEmpty ?? true` so the
+      pre-first-stateUpdate window disables Send rather than sending empty.
+    - **Core bug found: Escape inside ANY editor closed the peek — including
+      the description's, despite its comment promising "only a second Escape
+      reaches the panel".** The e2e caught it on the comment editor first;
+      probing both phases of the window keydown showed why reasoning kept
+      failing: at window CAPTURE the focus is still in ProseMirror, but React
+      flushes the discrete update (the blur/unmount the editor's own Escape
+      handler causes) while the event is still bubbling, so at window BUBBLE
+      — where tinykeys listens — `document.activeElement` is already BODY.
+      `isFocusInInput()` therefore said "not in an input" on the very
+      keystroke the editor had handled, and the modal-scope Escape fired.
+      Fixed in core's web provider: `inInput` is now decided from the event
+      TARGET (immutable for the dispatch, still names the node the key was
+      typed into even after detach — where `isContentEditable` reads false,
+      hence an attribute fallback) with `activeElement` kept as a fallback.
+      `tests/unit/input-key-event.test.ts` pins the detached-editor case.
+    - The toolbar is renamed `MarkdownToolbar` (shared surface, unchanged
+      props); the image plumbing (chooser/upload/drop) is extracted to
+      `hooks/useEditorImageActions.ts`, shared by both editors, images still
+      landing as CARD attachments.
+    - **Bug: saving a reply crashed the peek**
+      (`undefined.localeCompare`). An optimistic pbtsdb insert draft is
+      exactly the object handed to `insert()` — no `created` at all — while
+      the `useCardDetail` comparators guarded only `''`. Which comparator SLOT
+      the optimistic row lands in decides whether it throws, which is why
+      top-level posts happened to survive and replies crashed reliably. Fixed
+      by normalizing `?? ''` at the map plus extracting the comparator to
+      `lib/created-order.ts` (unit-tested); `useShareLinks` looked identical
+      but already normalized at :84 — not touched.
+    - **Bug: every comment header rendered "clipped" — and it was never
+      clipping.** Three layout diagnoses in a row were wrong (baseline
+      alignment, RN-Web view clipping, line-box metrics); DOM measurement in
+      the running app showed box == ink == no overflow while the pixels still
+      lost their bottom half. The truth: react-native-marked hardcodes an
+      OPAQUE `#fff`/`#000` background on its FlatList, and `MarkdownText`'s
+      `-my-2` pulls that box 6px up over the header row — an opaque sibling
+      painting OVER the glyphs, indistinguishable from a clip in a
+      screenshot. Its own `style` loses to `flatListProps`, so core's
+      `MarkdownRenderer` now forces it transparent — which also retires a
+      latent theme bug, since a raw hex behind every markdown surface never
+      matched the themed background it sat on. The header row itself was
+      innocent; it has since become a FIXED-height `items-center` row anyway
+      (the swap-in-place entry above — text has to center into a box taller
+      than its line), and the name gained `numberOfLines={1}` + shrink with
+      the actions on `ml-auto`, so long author names ellipsize instead of
+      pushing Reply/Delete out of the panel. (Diagnosed by hiding the body
+      live — the TODO's own "reach for the real app on layout bugs" lesson,
+      again.)
+    - E2E: `comment-editing.spec.ts` (8 specs — save/persist, Escape, blur
+      commit, toolbar bold + markdown round-trip via re-edit, the
+      height-stability anchors, reply-crash regression, "(edited)",
+      commentor gating). Locator fallout handled by testIDs: `.ProseMirror`
+      is no longer unique, so the description specs scope under
+      `cards-description-editor` and the composer under
+      `cards-comment-composer`; `board-sharing`'s RBAC matrix now asserts on
+      the composer testID (present collapsed or open) instead of the input
+      placeholder, and comments are TYPED, never `.fill()`ed — a filled
+      contenteditable is literal text the serializer escapes to `\*\*`.
+      Two of those specs earned their shape the hard way:
+        - the height-stability spec asserts RELATIVE spacing (edited comment
+          → neighbor below), never absolute y — autofocus can scroll the
+          panel to reveal the caret, shifting every box by the same amount,
+          which failed a ±2px absolute assertion by the scroll distance.
+        - the "(edited)" assertion carries the suite's extended window for
+          server-dependent state, and the budget was MEASURED before it was
+          widened: the marker keys on the server's `updated` landing back
+          (the body is optimistic and instant; the marker cannot be), the
+          client applies that response in ~2ms, and pbtsdb's
+          `writeServerRecords` is the write-back path — so the only latency
+          is the PATCH round-trip itself, which one run of the loaded e2e
+          server stretched past the 5s default while sqlite showed the row
+          committed 0.5s after create. That server starvation is the same
+          filed infra gap as the login-page failures above, not a client
+          sync bug.
+      The full parallel run also showed a SECOND shape of the loaded-machine
+      gap the toolbar entry records (dropped keystrokes): five unrelated
+      specs failed with the LOGIN PAGE never mounting ("waiting for
+      getByTestId('identifier')", an empty-body JSON parse) — the app server
+      itself starving under 8 workers, before any spec code ran. All five
+      pass in isolation; that infra pass is still its own filed work, not
+      this change's.
+      **Still owed: the same device pass as the toolbar entry above.**
 
 ## M8 — CLI ✅
 
@@ -1873,9 +2212,73 @@ wants them rather than guessing the shape now.
       `pnpm run pkg:check` at the root; fix anything red.
       **Note `pkg:check` does not exist in a bootstrap-assembled root** — the
       equivalents are `pnpm run checks` (lint + app typecheck) from `tinycld/`
-      plus `tinycld-pkg typecheck` per member. Last full run: cards unit 177,
-      cards e2e **35/35** (incl. `board-presence.spec.ts`), core unit 957,
-      text unit 920, calc unit 1378, core Go realtime green under `-race`.
+      plus `tinycld-pkg typecheck` per member. Last full run (2026-08-11, after
+      the `usePeekUrl` fix below): cards unit **305**, cards e2e **83/83**,
+      cards Go green under `-count=1`. Earlier lines here recorded cards unit
+      237 / e2e 63-64, and before that 177 / 35 — the growth is the
+      shortcut-scope, card-detail, comment-editor and card-key work.
+      Not re-measured in this pass: core unit 1039, mail 151, drive 118,
+      contacts 21, calendar 5.
+
+      **The 5-spec cluster is CLOSED, and it was one bug in `usePeekUrl` —
+      not the second browser context, and not core's Escape rework.** Full
+      suite now **83/83**; `comment-editing.spec.ts` 24/24 under
+      `--repeat-each=3`. The framing in the original note was wrong in a way
+      worth recording, because it cost the first hour: the cluster was read as
+      "every one a SECOND-browser-context spec", so the search started at
+      invited users, roles and Escape scope. The second context was a
+      CORRELATE, not the cause — a spec that invites a user spends longer on
+      the board before touching a card, which is precisely what changes the
+      race's outcome. Two of the listed specs (`board-sharing`,
+      `card-attachments`) were already green on this branch before any fix.
+
+      **Root cause: a card's key arrives after the optimistic insert, and
+      `usePeekUrl` rewrote the URL when it did — remounting the screen.**
+      `desiredParam` is `entry.card.key || entry.card.id`. The client's
+      optimistic row carries NO key (the server assigns it inside the INSERT,
+      see `server/card_number.go`), so for a freshly-created card the param is
+      first written as the record id and then, when the confirmed row lands,
+      changes to `OTTER-7`. The store->URL effect saw a disagreement and issued
+      a second `router.replace` — and a replace REMOUNTS the screen, taking
+      `CardPeek` -> `CardDetail` -> `CommentComposer` and both editors with it.
+      `CommentComposer`'s `wasOpened` reset to false, the ProseMirror surface
+      was destroyed, and the spec's next read found no `.ProseMirror` at all
+      ("element(s) not found" at the `postComment` helper, never at the line
+      the failure was attributed to).
+
+      **This is a user-facing data-loss bug, not a test artifact:** type a
+      comment on a card you just made and it is wiped mid-word when the key
+      lands. The e2e suite hits it reliably only because a spec creates a card
+      and opens it within milliseconds; by hand the window is the same, just
+      harder to land in.
+
+      The fix is three lines in `usePeekUrl`: if the current param already
+      RESOLVES to the open card, leave it alone. `resolveOnBoard` accepts both
+      spellings, so id and key are two names for one card and the upgrade buys
+      nothing. Pinned by two unit tests in `tests/peek-url.test.ts` — one for
+      the key arrival, one asserting a genuine card switch still rewrites, so
+      the guard cannot be widened into swallowing that.
+
+      **Method note, since three earlier theories here were all wrong:** the
+      cause was found by logging component mount/unmount and gate values in the
+      browser and correlating against `router.replace`, not by reading source.
+      Two theories died on measurement — `canComment` flipping (it never
+      changed: `true` across the collapse) and `CardsIndex`'s `isLoading`
+      early-return remounting the tree (`isLoading` stayed `false`). The
+      probes are also a Heisenbug: enough `console.log` in the render path
+      shifts the timing and the failure rate drops to zero, so a "0 collapses"
+      run proves nothing on its own. Correlate on a captured failure instead —
+      12 runs produced exactly 2 double-`replace` sequences and exactly 2
+      failures, which is what made it conclusive.
+
+      **Also from that gate, both fixed at source in `calendar/`:**
+      `calendar-drag.spec.ts` computed "today" via `toISOString()` — the UTC
+      day — so it failed deterministically every evening west of Greenwich
+      (fixed to the runner's local day); and two playwright runs sharing one
+      machine collide on port 7200 (`reuseExistingServer` piggybacks the
+      second run on the first's server, whose teardown then kills it
+      mid-suite and whose `e2e:serve` DB reset nukes the other run's data) —
+      an e2e verdict is only trustworthy with the port uncontended.
 
       **Two keystroke/pointer-delivery races were fixed at source** while
       adding `card-editing.spec.ts`, both the shape the earlier `focusedTitle`
@@ -1890,26 +2293,187 @@ wants them rather than guessing the shape now.
         BEFORE re-pressing, because `Shift+Arrow` is not idempotent — a blind
         repeat would send the card a column too far.
 
-      **Still open, and it needs a decision rather than another helper fix:
-      the suite no longer fits the machine.** With `card-editing.spec.ts`'s 12
-      specs the file count went 52 → 64, and at that size two tests fail per
-      full run on a 14-core box already carrying a load average of ~11 before
-      Playwright starts. It is genuinely environmental, not a logic bug, and
-      the evidence is specific: **52/52 green with the new file removed and
-      every other fix in place**, a DIFFERENT test fails on each run
-      (`board-dnd` checklist reorder, three different `keyboard-shortcuts`
-      cases), and all of them pass when their file runs alone — 18/18 for
-      `keyboard-shortcuts` + `board-dnd` together. The starved operations are
-      the two that need sustained event delivery: Drax drags (which activate
-      on a CONTINUOUS pointer stream) and single keystrokes.
+      **The "starvation" diagnosis above was WRONG, and the real bug is
+      fixed.** It was never a machine-capacity problem: the keystroke was
+      always DELIVERED (`target: BODY`, `defaultPrevented: false`, not in an
+      input, both cards rendered in the DOM at keydown time — measured, and
+      byte-for-byte identical in passing and failing runs). Seven parallel
+      copies of the single `x`-then-`j` spec, on an idle box with trivial
+      boards, failed HARDER (3/7) than the whole 64-spec suite; failure rate
+      tracked concurrent peers, not load (1 worker 0/5, 2 workers 0/8, 4
+      workers 2/8, 7 workers 3/7). And it was not "a different test each run"
+      — `keyboard-shortcuts.spec.ts:187` failed in all three full runs.
 
-      Do NOT resolve this by re-running, by adding `retries`, or by forcing
-      `--workers=1` — the config's own comment says a flake is a bug, and
-      serialising hides the delivery problem rather than fixing it. The honest
-      options are to cap workers to what the box can actually feed, or to
-      split the suite into shards. That is a config decision for the app
-      shell, not something a package spec should paper over, so it is filed
-      here rather than worked around.
+      Root cause was **scope-id mis-stamping in core's shortcut registry.**
+      Cards and mail both register `j` at `scope: 'list'`, and `scopeId`
+      decides which fires. On web `freezeOnBlur` does NOT freeze — the web
+      `Screen` implementation has no `Freeze`, it only sets `display: none`
+      — so a blurred mail list stays fully live, its live queries keep
+      emitting, and its memoised shortcut array keeps changing identity.
+      Every re-registration re-derived the stamp from the mutable scope stack
+      (`currentScopeId`, which answers "who holds this scope NOW" rather than
+      "who is registering"), so a mail re-register landing while a cards board
+      held the keyboard stamped mail's `j` with the BOARD's id. Mail's
+      `nav.order: 5` is the lowest, so login lands there and its `j` occupies
+      the registry Map's first slot forever — `findExactMatch` short-circuits
+      on it, ran MAIL's handler for a keypress meant for the board, and the
+      board's own handler never ran at all. Directly measured: every failing
+      run logged `M:2` (mail re-stamped with cards' id) immediately before the
+      keypress; no passing run ever did. 14/14 correlation.
+
+      The fix binds the id to the OWNER instead of the stack: an instance gets
+      its id once on MOUNT and keeps it, focus governs only stack membership
+      (so a blurred screen simply holds no entry and cannot be on top), and
+      the register hooks stamp from that owner. Mount and focus had to be
+      split — `useFocusEffect` fires on ROUTE focus and never re-runs for a
+      dialog opened inside an already-focused route, so a focus-keyed identity
+      left every modal shortcut unstamped and unable to fire. Verified:
+      `keyboard-shortcuts.spec.ts` 30/30 under `--workers=7 --repeat-each=3`,
+      and two of three full-suite runs fully green (64/64).
+
+      **Still open — a real bug, and it is a WRITE/READ ORDERING race, not
+      autocancellation.** (An earlier note here blamed pbtsdb's autocancel
+      fallback. That was wrong and is corrected: `fetchRecords` returns
+      `queryClient.getQueryData(queryKey) ?? []`, so an autocancelled refetch
+      returns the CACHED rows and only yields `[]` on a cold cache — verified
+      by replaying that code against a real QueryClient.)
+
+      The actual sequence, captured from the network with request-issue and
+      response timestamps:
+
+          REQ GET  t=28728            ← on-demand fetch issued; card has 0 items
+          REQ POST t=28783 …          ← the three checklist items are created
+          RES POST … t=28892          ← all three confirmed
+          RES GET  n=0 t=28954        ← the GET finally answers: ZERO items
+
+      The GET was correct when issued and stale by the time it resolved. TanStack
+      DB's query collection treats a settled result as the authoritative row set
+      for that query key: `applySuccessfulResult` diffs it against the rows the
+      key previously owned and `write({type: 'delete'})`s every row missing from
+      it (`@tanstack/query-db-collection/dist/esm/query.js`). So the late empty
+      response DELETES the three items the client had already inserted — the
+      component sees `items` go `3 → 0` with `isLoading: false`, the rows unmount
+      under the pointer, and the drag dies.
+
+      Load only changes the timing, not the mechanism: alone the GET returns in
+      ~11–18ms, before the first POST is even issued (`GETpos=0`, harmless);
+      under 7 workers it takes 226–443ms and lands last (`GETpos=3`). Ordering
+      predicted the outcome perfectly — 4 runs `GETpos=0` all passed, 3 runs
+      `GETpos=3` all failed.
+
+      This is reachable in production wherever a card is opened and items are
+      added before the initial fetch settles.
+
+      **Mitigated in the package, and the write window is now closed.**
+      `useCardDetail` is ONE query anchored on `cards_cards`, with each child set
+      joining in as a subquery pre-filtered to the card (LEFT joins, so a
+      childless card still returns its own row). Anchoring on the card matters
+      beyond tidiness: the three per-child reads it replaces were three
+      consecutive filtered reads returning ZERO rows on a fresh card, which is
+      exactly what PocketBase throttles — >3 empty filtered responses in 3s trips
+      `randomizedThrottle(500)` upstream (`apis/record_crud.go`), sleeping a
+      random 0-500ms while the SQL measures 0.00ms. That self-inflicted ~300ms
+      stall was what made the window wide enough to hit. A result carrying the
+      card row is never empty, so the gate never fires.
+
+      `useCardDetail` now also returns `isReady`, and CardDetail gates the
+      CHILD-backed affordances on it (checklist, attachments, comment composer).
+      Before the query settles an empty result is indistinguishable from a card
+      that genuinely has no children, so a live composer invited the user to
+      re-add items they already had. Scope it to the children only: title,
+      description and labels live on the card record, which both containers
+      resolve before mounting CardDetail — gating those on the children's query
+      renders the description blank and uneditable for the life of the fetch
+      (caught by `card-description-collab.spec.ts`).
+
+      Measured after the change: the row-loss probe goes 3/7 losing all items →
+      **7/7 correct** under `--workers=7`.
+
+      **Still open, upstream.** One thing this does NOT fix:
+        - It is still 3 REQUESTS, not one. Each subquery references an
+          `on-demand` collection and TanStack issues a subset fetch per
+          collection however the query is composed. Reaching one request means
+          changing how those children sync, not how they are queried.
+
+      **`board-dnd.spec.ts:202` is now green — 28/28 under `--workers=7` —
+      and BOTH of its failure modes were real bugs fixed at source, neither
+      of them in the spec's coordinates.** The two modes, what each actually
+      was, and where the fix landed:
+
+      - **Setup mode (line 229, one item missing).** The stale-absence delete
+        above — and the earlier "the write window is now closed" claim was
+        WRONG. The one-query rework only removed the self-inflicted PB
+        empty-filter throttle; under 7-worker load the checklist GET still
+        takes ~400ms, and an item created inside that window was deleted when
+        the empty result landed. Captured from a failing trace: GET issued
+        t=.638 (0 rows server-side), alpha POSTed .997 and confirmed 1.001,
+        GET resolved .030 → alpha reconcile-deleted; beta/gamma, inserted
+        after it settled, survived. The ownership riddle (a first-ever query
+        key owns nothing, so what did the diff delete against?) resolves in
+        query-db-collection's manual-write path: every pbtsdb write-back runs
+        `updateCacheData`, which pushes the full synced store into EVERY
+        cached query whose key prefix-matches the collection — including the
+        in-flight subset key — so the fresh row became owned, and the late
+        result's diff deleted it.
+        **Fixed at source in pbtsdb** (`fix/stale-absence-reconcile-delete`,
+        `~/code/pbtsdb`): `fetchRecords` snapshots a per-collection
+        authoritative-write sequence when a fetch is ISSUED and merges back
+        any synced row confirmed after that point that the result omits.
+        Fixing the RESULT rather than dropping the delete also preserves the
+        row's query ownership. Two regression tests (the repro, red before
+        the fix, plus a legit-prune control); suite 98/98. This is the fetch
+        generation/sequence guard the note above asked for — the earlier
+        attempt failed because it keyed on `updated` timestamps (server
+        clock); the sequence is client-side bookkeeping, so GC pruning stays
+        distinguishable. **Published as pbtsdb 0.7.2** (PR #10) and the
+        workspace now resolves it everywhere. Note the trap hit getting
+        there: the lockfile held THREE pbtsdb resolutions (0.6.3 for the
+        `>=0.6.3` members, 0.7.1 for cards, 0.7.2 for the shell) and the
+        hoisted root copy was the MAJORITY version, so `pnpm update -r
+        pbtsdb` left 0.6.3 — without the fix — installed at the root.
+        `pnpm dedupe pbtsdb` is what collapses the importers onto the single
+        highest version every range accepts.
+
+      - **Drop mode (final assertion, order untouched).** The previous
+        analysis here — waypoints, slot entry, grab-offset arithmetic — was
+        chasing the wrong layer. Instrumenting the bundled drax showed the
+        slot registration working in every failing run (`moveDraggedItem
+        0→1→2`, `internalDragEnd cancelled=false dispIdx=2`, snap animation
+        completing `finished=true`) and `finalizeDrag` never being CALLED.
+        The break: `useSortableList` rebuilds `_internal` as a fresh literal
+        (`onItemSnapEnd: undefined`) every render and `SortableContainer`
+        patches it in a layout effect AFTER the pass — while `SortableItem`
+        destructured the callback at render time, freezing `undefined` into
+        the registered `onSnapEnd` closure whenever a cell re-rendered in the
+        same pass that rebuilt `_internal`. Cells normally render a pass
+        later (FlatList batching), which is why drops usually worked; a
+        live-query emission re-rendering cells synchronously (routine under
+        parallel workers sharing one org) opened the window, and a drop
+        landing before the cell's next render dispatched `undefined?.()` —
+        snap completes, nothing commits, no cancel either, the list left
+        stuck mid-shift (the failure screenshot shows alpha and beta
+        overlapping). **Fixed in the fork** — `SortableItem` now reads
+        `sortable._internal.onItemSnapEnd` at CALL time — commit `eccc8b6`
+        on `consumer/1.1.0-finalize-fix`, with the repo's first SortableItem
+        regression test (fails against the render-time destructure). The
+        workspace pin in tinycld/package.json + pnpm-workspace.yaml is
+        updated to it.
+
+      The spec changed too, but as hardening, not as the fix: after the
+      sweep it now polls for the PREVIEW SHIFT (beta and gamma rising into
+      the vacated slot) — the one observable that means drax registered the
+      destination — wiggling to force fresh hit-tests until confirmed, and
+      only then releases. A silent no-op drop is thereby impossible to
+      reproduce from the spec's side: either the shift confirms and the
+      (fixed) snap-end commits it, or the poll fails loudly.
+
+      Fork-test infra note, hit while adding the drax regression test: a
+      fresh `npm ci` of the fork cannot run jest at all on Node 25 — the
+      react-native preset's nested `jest-environment-node@29` mismatches
+      hoisted jest 30.4.x (`clearMocksOnScope`), and Node 25's `localStorage`
+      global needs `NODE_OPTIONS='--localstorage-file=…'` exactly as
+      pbtsdb's test script already sets. Locally: pin `jest@30.2.0` and set
+      that env var; neither is committed.
 - [ ] Follow-ups to file, not block on: (public share links are now M6a),
       core extraction of the members-junction + ShareDialog pattern once a
       third package needs sharing, a drive-exported file-picker component if

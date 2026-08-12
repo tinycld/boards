@@ -1,6 +1,22 @@
 import type { Locator, Page } from '@playwright/test'
 import { expect } from '@playwright/test'
 
+/**
+ * A board key that no other spec will pick.
+ *
+ * Board names in these specs already carry a per-test suffix to keep runs
+ * independent; this folds the whole name into ten uppercase alphanumerics so
+ * that uniqueness carries over to the key, which the database enforces
+ * globally.
+ */
+function uniqueBoardKey(name: string): string {
+    let hash = 0
+    for (let i = 0; i < name.length; i++) {
+        hash = (hash * 31 + name.charCodeAt(i)) >>> 0
+    }
+    return `B${hash.toString(36).toUpperCase()}`.slice(0, 10)
+}
+
 /** The card face for a title, anywhere on the board. */
 export function boardCard(page: Page, title: string): Locator {
     return page
@@ -18,10 +34,18 @@ export function columnHeader(page: Page, name: string): Locator {
  * Create a board through the NewBoardDialog and wait for its three default
  * lists to render. Boards are cheap and per-test names keep specs
  * independent of each other's leftovers.
+ *
+ * `key` is passed explicitly rather than left to the dialog's auto-derivation.
+ * Board keys are globally unique, and two specs whose names derive the same
+ * initials — "Board one" and "Bug order" both give BO — would collide on
+ * whichever ran second, failing a test for a reason that has nothing to do with
+ * what it was asserting. Callers that care about the key pass their own;
+ * everyone else gets one derived from the (already per-test) name.
  */
-export async function createBoard(page: Page, name: string) {
+export async function createBoard(page: Page, name: string, key?: string) {
     await page.getByText('+ New board', { exact: true }).click()
     await page.getByPlaceholder('Product launch').fill(name)
+    await page.getByTestId('slug').fill(key ?? uniqueBoardKey(name))
     await page.getByText('Create board', { exact: true }).click()
     await expect(columnHeader(page, 'To do')).toBeVisible()
     await expect(columnHeader(page, 'Doing')).toBeVisible()
@@ -203,7 +227,12 @@ export async function columnOrder(page: Page, names: string[]): Promise<string[]
 }
 
 /** Card titles top-to-bottom within the column whose header is `name`.
- *  Columns are fixed-width; bucket cards by x-overlap with the header. */
+ *  Columns are fixed-width; bucket cards by x-overlap with the header.
+ *
+ *  The card KEY is stripped before the text is read. A face renders it as its
+ *  own node above the title, so a raw textContent returns "OTTER-1anchor" and
+ *  every ordering assertion in these specs would have to know about keys to
+ *  compare titles. */
 export async function cardsInColumn(page: Page, name: string): Promise<string[]> {
     return page.evaluate(columnName => {
         const header = Array.from(document.querySelectorAll('div')).find(
@@ -218,6 +247,13 @@ export async function cardsInColumn(page: Page, name: string): Promise<string[]>
                 return center > headerRect.x - 40 && center < headerRect.x + 250
             })
             .sort((a, b) => a.rect.y - b.rect.y)
-            .map(({ card }) => (card.textContent ?? '').trim())
+            .map(({ card }) => {
+                const key = card.querySelector('[data-testid="cards-card-key"]')
+                const text = card.textContent ?? ''
+                const keyText = key?.textContent ?? ''
+                return (
+                    keyText && text.startsWith(keyText) ? text.slice(keyText.length) : text
+                ).trim()
+            })
     }, name)
 }

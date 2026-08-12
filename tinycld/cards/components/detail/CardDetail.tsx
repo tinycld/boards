@@ -8,7 +8,7 @@ import { useUpdateCard } from '../../hooks/useCardMutations'
 import { useCommentMutations } from '../../hooks/useCommentMutations'
 import { useProjectRole } from '../../hooks/useProjectRole'
 import { type DescriptionMode, descriptionMode } from '../../lib/description-mode'
-import type { BoardCardView, BoardLabel, BoardMember } from '../../types'
+import type { BoardAttachment, BoardCardView, BoardLabel, BoardMember } from '../../types'
 import { useBoardPresenceContext } from '../BoardPresenceProvider'
 import { LabelManagerDialog } from '../LabelManagerDialog'
 import { CommentComposer } from './CommentComposer'
@@ -77,12 +77,25 @@ export function CardDetail({
     titleRef,
 }: CardDetailProps) {
     const [isManagingLabels, setIsManagingLabels] = useState(false)
-    const widthClass = variant === 'page' ? 'w-full max-w-[720px] self-center' : ''
+    const widthClass = variant === 'page' ? 'w-full max-w-[1200px] self-center' : ''
     // Fetched here rather than threaded in as props, so the peek and the page
     // both get it without either container knowing about on-demand collections.
-    const { checklist, comments, attachments } = useCardDetail(card.id)
+    const { checklist, comments, attachments, isReady } = useCardDetail(card.id)
     // Resolved here for the same reason — both containers share the gates.
     const { canEdit, canComment, isOwner } = useProjectRole(projectId)
+    // The card's CHILDREN are not editable until the detail query has SETTLED,
+    // and this is a correctness gate rather than a cosmetic one: before it
+    // settles, an empty result is indistinguishable from a card that genuinely
+    // has no checklist, comments or attachments, so a live composer invites the
+    // user to re-add items they already have and end up with duplicates.
+    //
+    // Scoped to the children DELIBERATELY. The title, description and labels
+    // live on the card record itself, which both containers already resolved
+    // before mounting this component — they have nothing to wait for, and
+    // gating them on the children's query made the description render blank and
+    // uneditable for the life of that fetch.
+    const canEditChildren = canEdit && isReady
+    const canCommentNow = canComment && isReady
     const updateCard = useUpdateCard()
     // Only the drop path needs this here — the strip owns the picker and the
     // rows. Both write through the same store, so the two callers of
@@ -92,11 +105,14 @@ export function CardDetail({
     // read below already tolerates a null user.
     const { user } = useAuth({ throwIfAnon: false })
     const { uploadFiles } = useAttachmentMutations(card.id, projectId, user?.id ?? '')
-    const { createComment, deleteComment } = useCommentMutations(card.id, projectId)
+    const { createComment, updateComment, deleteComment } = useCommentMutations(card.id, projectId)
     // Which comment the composer is replying to. Local because it is transient
     // UI state that dies with the open card, and it lives HERE rather than in
     // the composer because the activity list is what sets it.
     const [replyingTo, setReplyingTo] = useState<{ id: string; authorName: string } | null>(null)
+    // Which comment is open for inline editing — at most one; starting a new
+    // edit closes the previous one.
+    const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
 
     const submitComment = (body: string) => {
         createComment.mutate(
@@ -105,8 +121,17 @@ export function CardDetail({
         )
     }
 
+    const saveComment = (commentId: string, body: string) => {
+        // Close immediately — the pbtsdb update is optimistic, so the new
+        // body renders at once; failures surface through the mutation.
+        updateComment.mutate({ commentId, body })
+        setEditingCommentId(null)
+    }
+
     const description = useDescriptionSection({
         cardId: card.id,
+        projectId,
+        attachments,
         description: card.description,
         onSave: value => updateCard.mutate({ cardId: card.id, description: value }),
         canEdit,
@@ -165,7 +190,7 @@ export function CardDetail({
                             attachments={attachments}
                             cardId={card.id}
                             projectId={projectId}
-                            canEdit={canEdit}
+                            canEdit={canEditChildren}
                             isOwner={isOwner}
                         />
                     </View>
@@ -174,14 +199,22 @@ export function CardDetail({
                             items={checklist}
                             cardId={card.id}
                             projectId={projectId}
-                            canEdit={canEdit}
+                            canEdit={canEditChildren}
                         />
                     </View>
                     <View className={`px-6 pb-6 ${widthClass}`}>
                         <DetailActivity
                             comments={comments}
-                            canComment={canComment}
+                            canComment={canCommentNow}
                             canModerate={isOwner}
+                            cardId={card.id}
+                            projectId={projectId}
+                            attachments={attachments}
+                            editingCommentId={editingCommentId}
+                            isSaving={updateComment.isPending}
+                            onStartEdit={setEditingCommentId}
+                            onCancelEdit={() => setEditingCommentId(null)}
+                            onSaveEdit={saveComment}
                             onReply={comment =>
                                 setReplyingTo({
                                     id: comment.id,
@@ -197,6 +230,9 @@ export function CardDetail({
             {canComment ? (
                 <CommentComposer
                     widthClass={widthClass}
+                    cardId={card.id}
+                    projectId={projectId}
+                    attachments={attachments}
                     onSubmit={submitComment}
                     isPending={createComment.isPending}
                     replyingTo={replyingTo ?? undefined}
@@ -223,11 +259,15 @@ export function CardDetail({
  */
 function useDescriptionSection({
     cardId,
+    projectId,
+    attachments,
     description,
     onSave,
     canEdit,
 }: {
     cardId: string
+    projectId: string
+    attachments: BoardAttachment[]
     description?: string
     onSave: (value: string) => void
     canEdit: boolean
@@ -252,6 +292,8 @@ function useDescriptionSection({
     // because the collaborative branch is the only one that renders it.
     const editorSlots = useDescriptionEditor({
         cardId,
+        projectId,
+        attachments,
         doc: isCollab ? doc : null,
         awareness,
         identity,

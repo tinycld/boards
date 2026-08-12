@@ -16,6 +16,8 @@ function project(overrides: Partial<CardsProjects> = {}): CardsProjects {
     return {
         id: 'p1',
         name: 'Board',
+        slug: 'OTTER',
+        next_number: 1,
         color: '#8b5cf6',
         visibility: 'private',
         created_by: 'u1',
@@ -57,6 +59,9 @@ function card(
         labels: [],
         created_by: 'u1',
         archived: false,
+        // 1 rather than 0: a card that reached the server has a number, and 0
+        // is specifically the not-yet-assigned state the key tests below cover.
+        number: 1,
         checklist_total: 0,
         checklist_done: 0,
         comment_count: 0,
@@ -112,14 +117,15 @@ describe('toBoardCard', () => {
     // so this conversion is the only thing between the record and a visibly
     // broken due pill.
     it('maps an empty due date to undefined', () => {
-        expect(toBoardCard(card('c1', 'list1', 'a0'), labels, users).due).toBeUndefined()
+        expect(toBoardCard(card('c1', 'list1', 'a0'), labels, users, 'OTTER').due).toBeUndefined()
     })
 
     it('maps an ISO due date to a Date', () => {
         const due = toBoardCard(
             card('c1', 'list1', 'a0', { due: '2026-08-05 00:00:00Z' }),
             labels,
-            users
+            users,
+            'OTTER'
         ).due
         expect(due).toBeInstanceOf(Date)
         expect(Number.isNaN(due?.getTime())).toBe(false)
@@ -133,7 +139,8 @@ describe('toBoardCard', () => {
         const due = toBoardCard(
             card('c1', 'list1', 'a0', { due: '2026-08-05 00:00:00Z' }),
             labels,
-            users
+            users,
+            'OTTER'
         ).due
         expect([due?.getFullYear(), (due?.getMonth() ?? 0) + 1, due?.getDate()]).toEqual([
             2026, 8, 5,
@@ -143,12 +150,22 @@ describe('toBoardCard', () => {
     })
 
     it('maps an unparseable due date to undefined rather than an Invalid Date', () => {
-        const due = toBoardCard(card('c1', 'list1', 'a0', { due: 'not a date' }), labels, users).due
+        const due = toBoardCard(
+            card('c1', 'list1', 'a0', { due: 'not a date' }),
+            labels,
+            users,
+            'OTTER'
+        ).due
         expect(due).toBeUndefined()
     })
 
     it('resolves label ids to rows', () => {
-        const result = toBoardCard(card('c1', 'list1', 'a0', { labels: ['l1'] }), labels, users)
+        const result = toBoardCard(
+            card('c1', 'list1', 'a0', { labels: ['l1'] }),
+            labels,
+            users,
+            'OTTER'
+        )
         expect(result.labels).toEqual([{ id: 'l1', name: 'Bug', color: '#ef4444' }])
     })
 
@@ -158,7 +175,8 @@ describe('toBoardCard', () => {
         const result = toBoardCard(
             card('c1', 'list1', 'a0', { labels: ['l1', 'gone'] }),
             labels,
-            users
+            users,
+            'OTTER'
         )
         expect(result.labels).toHaveLength(1)
         expect(result.labels[0]?.id).toBe('l1')
@@ -174,7 +192,8 @@ describe('toBoardCard', () => {
         const result = toBoardCard(
             card('c1', 'list1', 'a0', { assignees: ['gone'] }),
             labels,
-            users
+            users,
+            'OTTER'
         )
         expect(result.assignees).toEqual([{ id: 'gone', firstName: 'Board', lastName: 'member' }])
     })
@@ -184,11 +203,17 @@ describe('toBoardCard', () => {
         // identity; a placeholder that lost the id (or minted a fresh one)
         // would make every re-render look like a change and undo the sharing
         // that keeps drags stable.
-        const first = toBoardCard(card('c1', 'list1', 'a0', { assignees: ['gone'] }), labels, users)
+        const first = toBoardCard(
+            card('c1', 'list1', 'a0', { assignees: ['gone'] }),
+            labels,
+            users,
+            'OTTER'
+        )
         const second = toBoardCard(
             card('c1', 'list1', 'a0', { assignees: ['gone'] }),
             labels,
-            users
+            users,
+            'OTTER'
         )
         expect(first.assignees).toEqual(second.assignees)
     })
@@ -202,12 +227,36 @@ describe('toBoardCard', () => {
                 attachment_count: 4,
             }),
             labels,
-            users
+            users,
+            'OTTER'
         )
         expect(result.checklistTotal).toBe(7)
         expect(result.checklistDone).toBe(3)
         expect(result.commentCount).toBe(2)
         expect(result.attachmentCount).toBe(4)
+    })
+
+    it('formats the card key from the board slug and the card number', () => {
+        const result = toBoardCard(
+            card('c1', 'list1', 'a0', { number: 123 }),
+            labels,
+            users,
+            'OTTER'
+        )
+        expect(result.key).toBe('OTTER-123')
+    })
+
+    // The optimistic-insert gap: the card is in the local store before the
+    // server assigns its number. Rendering "OTTER-0" would be worse than
+    // rendering nothing.
+    it('leaves the key empty until the server assigns a number', () => {
+        const result = toBoardCard(card('c1', 'list1', 'a0', { number: 0 }), labels, users, 'OTTER')
+        expect(result.key).toBe('')
+    })
+
+    it('leaves the key empty for a board with no slug', () => {
+        const result = toBoardCard(card('c1', 'list1', 'a0', { number: 7 }), labels, users, '')
+        expect(result.key).toBe('')
     })
 })
 
@@ -390,6 +439,41 @@ describe('buildBoardProject structural sharing', () => {
         const previous = buildBoardProject(withDue())
         // Each build allocates a fresh Date; equal timestamps must still share.
         expect(buildBoardProject(withDue(), previous)).toBe(previous)
+    })
+
+    // THE REGRESSION GUARD for the `a.key === b.key` line in sameCard.
+    //
+    // A card is inserted optimistically with no number, and the server's echo
+    // supplies one a beat later. If sameCard does not compare the key, the two
+    // nodes look equal, the stale one is reused, and the key NEVER appears on a
+    // freshly created card — a bug that shows up only for the person who made
+    // the card, only for the first few seconds, and never in a test that builds
+    // its cards already numbered.
+    it('replaces a card node when its number arrives from the server', () => {
+        const optimistic = input()
+        optimistic.cards[0] = card('c1', 'list1', 'a0', { number: 0 })
+        const previous = buildBoardProject(optimistic)
+        expect(previous?.lists[0]?.cards[0]?.key).toBe('')
+
+        const echoed = input()
+        echoed.cards[0] = card('c1', 'list1', 'a0', { number: 4 })
+        const result = buildBoardProject(echoed, previous)
+
+        expect(result?.lists[0]?.cards[0]).not.toBe(previous?.lists[0]?.cards[0])
+        expect(result?.lists[0]?.cards[0]?.key).toBe('OTTER-4')
+    })
+
+    // Renaming the board's key re-keys every card on it, so neither the project
+    // node nor the card nodes may be reused.
+    it('replaces the tree when the board slug changes', () => {
+        const previous = buildBoardProject(input())
+        const next = input()
+        next.project = project({ slug: 'FOX' })
+        const result = buildBoardProject(next, previous)
+
+        expect(result).not.toBe(previous)
+        expect(result?.slug).toBe('FOX')
+        expect(result?.lists[0]?.cards[0]?.key).toBe('FOX-1')
     })
 
     it('ignores a stale tree from a different project', () => {

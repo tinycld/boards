@@ -1,10 +1,15 @@
 import { useRichEditor } from '@tinycld/core/lib/editor/rich'
+import type { EditorCommands } from '@tinycld/core/lib/editor/types'
+import { PromptDialog } from '@tinycld/core/ui/PromptDialog'
 import { type ReactNode, useRef, useState } from 'react'
 import { Platform, Text, View, type ViewStyle } from 'react-native'
 import type { Awareness } from 'y-protocols/awareness'
 import type * as Y from 'yjs'
 import type { PresenceUser } from '../../hooks/useBoardPresence'
-import { DescriptionToolbar } from './DescriptionToolbar'
+import { useEditorImageActions } from '../../hooks/useEditorImageActions'
+import type { BoardAttachment } from '../../types'
+import { ImageAttachmentPicker } from './ImageAttachmentPicker'
+import { MarkdownToolbar } from './MarkdownToolbar'
 
 /** Mirrors the max on cards_cards.description; the server clamps at the same. */
 const DESCRIPTION_LIMIT = 5000
@@ -13,6 +18,10 @@ const COUNTER_VISIBLE_FROM = 4500
 
 interface DescriptionEditorProps {
     cardId: string
+    /** For the image-attachment uploads — the create rule resolves through it. */
+    projectId: string
+    /** The card's attachments; the image chooser offers the image ones. */
+    attachments: BoardAttachment[]
     /**
      * The board's shared document, or null before the room is ready. Nullable
      * so the hook can be called UNCONDITIONALLY — the caller decides between
@@ -75,6 +84,8 @@ const STICKY_HEADER = { position: 'sticky', top: 0, zIndex: 10 } as unknown as V
  */
 export function useDescriptionEditor({
     cardId,
+    projectId,
+    attachments,
     doc,
     awareness,
     identity,
@@ -83,6 +94,22 @@ export function useDescriptionEditor({
 }: DescriptionEditorProps): DescriptionEditorSlots {
     const containerRef = useRef<View>(null)
     const [isFocused, setIsFocused] = useState(false)
+    const [isImagePickerOpen, setIsImagePickerOpen] = useState(false)
+    const [isLinkOpen, setIsLinkOpen] = useState(false)
+
+    // The onImageDrop option below must reference `commands`, which useRichEditor
+    // has not returned yet at options-construction time — a direct reference is
+    // a TDZ error. The ref is assigned right after the hook returns, and the
+    // handler only fires on user events, long after that.
+    const commandsRef = useRef<EditorCommands | null>(null)
+
+    const { insertExisting, uploadAndInsert, onImageDrop } = useEditorImageActions({
+        cardId,
+        projectId,
+        commandsRef,
+        closePicker: () => setIsImagePickerOpen(false),
+        context: 'cards.description',
+    })
 
     const { EditorComponent, editor, commands, toolbarState } = useRichEditor({
         contentFormat: 'markdown',
@@ -106,6 +133,7 @@ export function useDescriptionEditor({
             return true
         },
         onSubmitShortcut: blurActiveElement,
+        onImageDrop,
         // Undefined before the room is ready: useRichEditor treats a missing
         // collab option as a plain local editor, which is exactly the
         // non-collaborative fallback, and it starts collaborating the moment a
@@ -124,7 +152,14 @@ export function useDescriptionEditor({
               },
     })
 
-    const showToolbar = canEdit && isFocused
+    commandsRef.current = commands
+
+    // Both dialogs steal focus, which blurs the editor — keeping the toolbar
+    // row alive while either is open is what stops the row from swapping back
+    // to the label mid-flow (and unmounting the button that opened it). The
+    // link dialog originally lived INSIDE the toolbar without this keep-alive
+    // and closed itself the instant its input autofocused.
+    const showToolbar = canEdit && (isFocused || isImagePickerOpen || isLinkOpen)
 
     return {
         header: (
@@ -147,7 +182,13 @@ export function useDescriptionEditor({
                 }
             >
                 {showToolbar ? (
-                    <DescriptionToolbar commands={commands} toolbarState={toolbarState} isVisible />
+                    <MarkdownToolbar
+                        commands={commands}
+                        toolbarState={toolbarState}
+                        isVisible
+                        onOpenImagePicker={() => setIsImagePickerOpen(true)}
+                        onOpenLinkDialog={() => setIsLinkOpen(true)}
+                    />
                 ) : (
                     <Text className="text-[13px] font-semibold text-foreground">Description</Text>
                 )}
@@ -163,10 +204,38 @@ export function useDescriptionEditor({
                     property labels above it, so the whole panel reads as one
                     column. Anything here — even a 1px border — pushes the prose
                     out of that alignment. The toolbar carries its own frame. */}
-                <View className="py-2">
+                {/* The testID scopes e2e locators: '.ProseMirror' alone is
+                    ambiguous now that the comment composer and the inline
+                    comment editor can each mount an instance beside this. */}
+                <View testID="cards-description-editor" className="py-2">
                     <EditorComponent />
                 </View>
                 <DescriptionStatus isConnected={isConnected} />
+                <ImageAttachmentPicker
+                    isOpen={isImagePickerOpen}
+                    onClose={() => setIsImagePickerOpen(false)}
+                    attachments={attachments}
+                    onPick={insertExisting}
+                    onUploadNew={() => void uploadAndInsert()}
+                />
+                <PromptDialog
+                    isOpen={isLinkOpen}
+                    onClose={() => setIsLinkOpen(false)}
+                    onSubmit={url => {
+                        setIsLinkOpen(false)
+                        // chain().focus() restores the selection the editor
+                        // held before the dialog took focus, so the link
+                        // applies to the text the user selected. An empty
+                        // value is how you remove a link — PromptDialog is
+                        // deliberately left un-`required` so it can reach us.
+                        if (url.trim()) commands.setLink(url.trim())
+                        else commands.removeLink()
+                    }}
+                    title="Link"
+                    placeholder="https://example.com"
+                    defaultValue={toolbarState.currentLink ?? ''}
+                    confirmLabel="Apply"
+                />
             </View>
         ),
     }

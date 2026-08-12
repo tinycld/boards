@@ -3,12 +3,27 @@ import { Button, ButtonText } from '@tinycld/core/ui/button'
 import { COLOR_PALETTE, ColorPickerGrid } from '@tinycld/core/ui/color-picker'
 import { FormErrorSummary, TextInput, useForm, z, zodResolver } from '@tinycld/core/ui/form'
 import { Modal, ModalBackdrop, ModalContent } from '@tinycld/core/ui/modal'
+import { useRef } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useCreateProject } from '../hooks/useProjectMutations'
+import { deriveSlug, MAX_SLUG_LENGTH } from '../lib/card-key'
 import { useCardsUIStore } from '../stores/cards-ui-store'
 
 const boardSchema = z.object({
     name: z.string().min(1, 'Name is required').max(200, 'Name must be 200 characters or fewer'),
+    // The field is named `slug` to match the PocketBase column, and that is
+    // load-bearing rather than cosmetic: handleMutationErrorsWithForm routes a
+    // server validation error onto a form field only when the names match, and
+    // bails to a generic toast for the WHOLE error if any key is unrecognized.
+    // A "That key is already taken" from the unique index has to land here.
+    //
+    // Optional — '' means the board gets no key. The regex mirrors the
+    // migration's `pattern` so a value this form accepts cannot be refused by
+    // the database.
+    slug: z
+        .string()
+        .max(MAX_SLUG_LENGTH, `Key must be ${MAX_SLUG_LENGTH} characters or fewer`)
+        .regex(/^[A-Z0-9]*$/, 'Key can only contain capital letters and numbers'),
     color: z.string().min(1, 'Pick a color'),
 })
 
@@ -28,8 +43,18 @@ function NewBoardForm({ onClose }: { onClose: () => void }) {
     } = useForm<BoardFormValues>({
         mode: 'onChange',
         resolver: zodResolver(boardSchema),
-        defaultValues: { name: '', color: DEFAULT_COLOR },
+        defaultValues: { name: '', slug: '', color: DEFAULT_COLOR },
     })
+
+    // The key follows the name until the user takes it over, after which typing
+    // in the name leaves it alone — someone who chose OTTER should not lose it
+    // by fixing a typo in the title.
+    //
+    // A ref rather than state: nothing renders from it, so re-rendering on the
+    // first keystroke in the key field would be a wasted pass. And derivation
+    // happens in the change EVENT, not a useEffect that syncs one field to
+    // another — the primitive TextInput's onValueChange exists for.
+    const isSlugEditedRef = useRef(false)
 
     // Field errors route into the form; the mutation closes the dialog itself
     // on success, so a board created from either entry point lands the same way.
@@ -38,6 +63,7 @@ function NewBoardForm({ onClose }: { onClose: () => void }) {
     })
 
     const color = watch('color')
+    const slug = watch('slug')
     const onSubmit = handleSubmit(values => createProject.mutate(values))
     const canSubmit = isValid && !createProject.isPending
 
@@ -52,6 +78,32 @@ function NewBoardForm({ onClose }: { onClose: () => void }) {
                 placeholder="Product launch"
                 autoFocus
                 onSubmitEditing={onSubmit}
+                onValueChange={value => {
+                    if (isSlugEditedRef.current) return
+                    setValue('slug', deriveSlug(value), { shouldValidate: true })
+                }}
+            />
+
+            <TextInput
+                control={control}
+                name="slug"
+                label="Key"
+                placeholder="PL"
+                autoCapitalize="characters"
+                hint={
+                    slug
+                        ? `Cards on this board will be ${slug}-1, ${slug}-2, …`
+                        : 'An optional short code used to identify cards, like OTTER-123'
+                }
+                onSubmitEditing={onSubmit}
+                // Uppercased as typed rather than on submit: the field rejects
+                // lowercase, and silently "fixing" it at the end would let
+                // someone watch their own input fail validation as they type.
+                onValueChange={value => {
+                    isSlugEditedRef.current = true
+                    const upper = value.toUpperCase()
+                    if (upper !== value) setValue('slug', upper, { shouldValidate: true })
+                }}
             />
 
             <View className="gap-1.5">

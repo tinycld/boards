@@ -10,6 +10,7 @@ import { NoBoards } from '../components/EmptyBoard'
 import { NewBoardDialog } from '../components/NewBoardDialog'
 import { ProjectWash } from '../components/ProjectWash'
 import { useActiveBoard } from '../hooks/useActiveBoard'
+import { usePeekUrl } from '../hooks/usePeekUrl'
 import { useCardsUIStore } from '../stores/cards-ui-store'
 
 export default function CardsIndex() {
@@ -19,6 +20,10 @@ export default function CardsIndex() {
     // open. Read here rather than inside the provider so the provider stays a
     // plain wrapper over the hook.
     const openCardId = useCardsUIStore(s => s.openCardId)
+    // Mirrors the open peek into `?focused=` and back. Called before the early
+    // returns below because hooks cannot be conditional; it no-ops until there
+    // is a board.
+    usePeekUrl(project)
 
     // Three states, guarded once here so everything below takes a non-null
     // board. Loading is checked FIRST: without it, a cold load renders the

@@ -12,6 +12,7 @@ import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardProject } from '../types'
 import { CardActionsMenu } from './detail/CardActionsMenu'
 import { CardDetail } from './detail/CardDetail'
+import { CardKeyBadge } from './detail/CardKeyBadge'
 import type { EditableTextHandle } from './detail/EditableText'
 import { IconButton } from './detail/IconButton'
 import { ListStepper } from './detail/ListStepper'
@@ -45,7 +46,7 @@ function usePeekShortcuts(
     const closeCard = useCardsUIStore(s => s.closeCard)
     // Pushed ABOVE the registration below, and in the same component as it, so
     // every shortcut is stamped with this instance — see core's withScopeId.
-    useShortcutScope('modal')
+    const scopeOwner = useShortcutScope('modal')
 
     const shortcuts = useMemo<Shortcut[]>(() => {
         const step = (delta: number) => {
@@ -92,7 +93,7 @@ function usePeekShortcuts(
             },
         ]
     }, [project, cardId, openCard, closeCard, canEdit, titleRef])
-    useRegisterShortcuts(shortcuts)
+    useRegisterShortcuts(shortcuts, scopeOwner)
 }
 
 /** Base panel width, before any safe-area extension. */
@@ -108,7 +109,12 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
     const titleRef = useRef<EditableTextHandle>(null)
     usePeekShortcuts(project, entry.card.id, canEdit, titleRef)
 
-    const expandCard = () => router.push(orgHref('cards/[cardId]', { cardId: entry.card.id }))
+    // Prefer the KEY in the URL so what lands in someone's address bar — and in
+    // whatever they paste it into — is `OTTER-123` rather than a 15-character
+    // record id. Falls back to the id for a board with no key, or for a card
+    // the server has not numbered yet; useCardRoute resolves both.
+    const expandCard = () =>
+        router.push(orgHref('cards/[cardId]', { cardId: entry.card.key || entry.card.id }))
 
     return (
         <>
@@ -141,6 +147,7 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
                         list={entry.list}
                         isInteractive={canEdit}
                     />
+                    <CardKeyBadge cardKey={entry.card.key} />
                     <View className="flex-1" />
                     <IconButton label="Open full page" onPress={expandCard}>
                         <Maximize2 size={14} color={mutedColor} strokeWidth={2.2} />

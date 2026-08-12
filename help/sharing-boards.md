@@ -13,8 +13,8 @@ what they can do:
 - **Owner** — full control: everything an editor can do, plus renaming or
   archiving the board and managing its members.
 - **Editor** — add, edit, move and delete lists and cards, and comment.
-- **Commentor** — read everything and join the discussion, but not change
-  cards.
+- **Commentor** — read everything and join the discussion (including editing
+  their own comments), but not change cards.
 - **Viewer** — read everything, change nothing.
 
 Controls you don't have simply aren't shown: a viewer sees no card composer or

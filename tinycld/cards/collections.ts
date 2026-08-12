@@ -19,8 +19,13 @@ export function registerCollections(
     newCollection: ReturnType<typeof createCollection<MergedSchema>>,
     coreStores: CoreStores
 ) {
+    // `next_number` is the card-number allocator's state (see
+    // server/card_number.go) — server-owned, never written by a client, and
+    // absent from a new board's insert so it starts at the column default.
+    // `slug` is NOT omitted: it is the one half of a card key a person chooses,
+    // and the New board dialog sends it.
     const cards_projects = newCollection('cards_projects', {
-        omitOnInsert: ['created', 'updated'] as const,
+        omitOnInsert: ['created', 'updated', 'next_number'] as const,
         collectionOptions: indexed,
     })
 
@@ -54,8 +59,14 @@ export function registerCollections(
     // No `expand`: assignees resolve against `users` and labels against
     // cards_labels, both already loaded eagerly, so expanding would ship a
     // duplicate copy of those rows with every card. Consumers look them up by id.
+    // `number` is omitted on insert because the server owns it: the
+    // OnRecordCreate hook in server/card_number.go allocates it from the
+    // board's sequence and overwrites anything the body carried. Same shape as
+    // mail's `webhook_secret`. The optimistically-inserted card therefore has
+    // no number — and so no key — until the server echo lands, which
+    // formatCardKey renders as ''.
     const cards_cards = newCollection('cards_cards', {
-        omitOnInsert: ['created', 'updated'] as const,
+        omitOnInsert: ['created', 'updated', 'number'] as const,
         collectionOptions: indexed,
     })
 

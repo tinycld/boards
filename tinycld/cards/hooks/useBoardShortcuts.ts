@@ -21,7 +21,11 @@ import { useArchiveCard, useMoveCard } from './useCardMutations'
  * this board is built to avoid.
  */
 export function useBoardShortcuts(project: BoardProject, canEdit: boolean) {
-    useShortcutScope('list')
+    // The id is passed to the register call rather than left to the stack: a
+    // blurred-but-mounted screen (web `freezeOnBlur` only hides the subtree)
+    // re-registers on its own live-query schedule, and re-deriving the stamp
+    // then records whoever holds the keyboard instead of the owner.
+    const scopeOwner = useShortcutScope('list')
 
     const openCard = useCardsUIStore(s => s.openCard)
     const focusCard = useCardsUIStore(s => s.focusCard)
@@ -182,5 +186,5 @@ export function useBoardShortcuts(project: BoardProject, canEdit: boolean) {
         toggleColumnCollapsed,
     ])
 
-    useRegisterShortcuts(shortcuts)
+    useRegisterShortcuts(shortcuts, scopeOwner)
 }

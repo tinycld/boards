@@ -35,7 +35,7 @@ async function openBoard(page: Page, name: string) {
 }
 
 function descriptionEditor(page: Page) {
-    return page.locator('.ProseMirror').first()
+    return page.getByTestId('cards-description-editor').locator('.ProseMirror')
 }
 
 async function descriptionText(page: Page): Promise<string> {

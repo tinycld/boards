@@ -4,8 +4,9 @@ import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
 import { addCard, boardCard, createBoard } from './helpers'
 
 // Comment bodies are stored as Markdown and render as Markdown, matching how
-// descriptions already behave. Composing stays plain text: you type the source
-// and read the result.
+// descriptions already behave. The composer is the rich editor: markdown
+// input rules format as you type, and the serializer writes the SOURCE back
+// to the record — so the round-trip these specs pin is unchanged.
 //
 // As in card-description.spec.ts, the assertions avoid react-native-marked's
 // DOM shape — an implementation detail — and check what a reader can actually
@@ -26,19 +27,54 @@ async function openCard(page: Page, title: string) {
 }
 
 function composer(page: Page) {
-    return page.getByPlaceholder('Write a comment…')
+    return page.getByTestId('cards-comment-composer')
+}
+
+function composerEditor(page: Page) {
+    return composer(page).locator('.ProseMirror')
+}
+
+/**
+ * The composer mounts its editor on first use — tap the collapsed row if the
+ * editor is not up yet. Safe to call repeatedly: once opened it stays open
+ * for the life of the card.
+ */
+async function openComposer(page: Page) {
+    const editor = composerEditor(page)
+    if (!(await editor.isVisible())) {
+        await composer(page).getByRole('button', { name: 'Write a comment' }).click()
+    }
+    await expect(editor).toBeVisible()
+    return editor
 }
 
 /**
  * Post a comment. Enter is a newline — a comment is prose — so ⌘/Ctrl+Enter
  * sends, matching the composer's own hint.
+ *
+ * TYPED, never filled: markdown input rules fire per keystroke, and a filled
+ * contenteditable is literal text the serializer would escape (`\*\*`). The
+ * whole thing is retried because ProseMirror drops keystrokes that arrive
+ * while it is still settling focus — the description specs' convention. The
+ * marker word is the body stripped of the syntax characters the input rules
+ * consume, so the editor read-back can gate on what actually remains.
  */
 async function postComment(page: Page, body: string) {
-    const input = composer(page)
-    await expect(input).toBeVisible()
-    await input.fill(body)
+    const editor = await openComposer(page)
+    const marker = body.replace(/[*`_]/g, '')
+    await editor.click()
+    await expect(async () => {
+        if (!((await editor.textContent()) ?? '').includes(marker)) {
+            await page.keyboard.press('ControlOrMeta+A')
+            await page.keyboard.press('Backspace')
+            await page.keyboard.type(body, { delay: 20 })
+        }
+        expect((await editor.textContent()) ?? '').toContain(marker)
+    }).toPass({ timeout: 15_000 })
     await page.keyboard.press('ControlOrMeta+Enter')
-    await expect(input).toHaveValue('')
+    // setMarkdown('') leaves an empty paragraph, not an empty value — assert
+    // on the text, which is what "cleared" means to the person typing.
+    await expect(editor).toHaveText('')
 }
 
 /**

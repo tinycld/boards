@@ -236,6 +236,22 @@ test.describe('Cards — drag and drop', () => {
 
         const start = { x: from.x + from.width / 2, y: from.y + from.height / 2 }
 
+        // Resting tops of the two rows alpha must pass, measured before the
+        // grab. They are the drop-confirmation signal below: SortableList
+        // previews a reorder by shifting the residents up into the vacated
+        // slot, so beta and gamma rising ~a row height is the one observable
+        // that means Drax actually registered the destination slot.
+        const restingTops = await page.evaluate(() => {
+            const tops: Record<string, number> = {}
+            for (const el of Array.from(document.querySelectorAll('[aria-label^="Edit "]'))) {
+                const label = (el.getAttribute('aria-label') ?? '').replace(/^Edit /, '')
+                if ((label === 'beta' || label === 'gamma') && !(label in tops)) {
+                    tops[label] = el.getBoundingClientRect().top
+                }
+            }
+            return tops as { beta: number; gamma: number }
+        })
+
         // Wait for the grab to actually take, rather than assuming a fixed
         // delay covers it. Drax activates on MOVEMENT, and under parallel load
         // the whole press→move burst can be starved; the drop then lands with
@@ -247,11 +263,16 @@ test.describe('Cards — drag and drop', () => {
         // means the drag is real. (Card and column drags poll
         // `cards-drag-active` through activateDrag, but that marker is mounted
         // by BoardCanvas and does not cover this list.)
+        // Restricted to the three checklist labels. The card's own editable
+        // TITLE is also an `Edit <title>` row in the same peek, so an unfiltered
+        // read counts it as a fourth row — and it reported a live drag from a
+        // duplicate that had nothing to do with the checklist, which masked a
+        // drag that had actually died.
         const isDragLive = () =>
             page.evaluate(() => {
-                const labels = Array.from(document.querySelectorAll('[aria-label^="Edit "]')).map(
-                    el => el.getAttribute('aria-label') ?? ''
-                )
+                const labels = Array.from(document.querySelectorAll('[aria-label^="Edit "]'))
+                    .map(el => (el.getAttribute('aria-label') ?? '').replace(/^Edit /, ''))
+                    .filter(label => ['alpha', 'beta', 'gamma'].includes(label))
                 return labels.length !== new Set(labels).size
             })
         await expect(async () => {
@@ -271,26 +292,62 @@ test.describe('Cards — drag and drop', () => {
         // preview the gap, so coordinates measured before the grab no longer
         // describe where anything is — aiming at the stale one lands the drop
         // short of the end and leaves the order untouched.
+        // Measured over the CHECKLIST rows only, and aimed HALF A ROW past the
+        // last one rather than at its edge. The card title is an `Edit <title>`
+        // row too, so the old max() ran over a set that did not describe this
+        // list; and the slot boundary sits at the midpoint between rows, with
+        // Drax computing the drop from the hover copy's CENTRE (which trails the
+        // pointer) — so resting exactly on the last row's bottom still computes
+        // as that row's own slot.
         const endY = await page.evaluate(() => {
-            const rows = Array.from(document.querySelectorAll('[aria-label^="Edit "]'))
-            const bottoms = rows.map(el => el.getBoundingClientRect().bottom)
-            return Math.max(...bottoms)
+            const boxes = Array.from(document.querySelectorAll('[aria-label^="Edit "]'))
+                .filter(el =>
+                    ['alpha', 'beta', 'gamma'].includes(
+                        (el.getAttribute('aria-label') ?? '').replace(/^Edit /, '')
+                    )
+                )
+                .map(el => el.getBoundingClientRect())
+            const last = boxes.reduce((lowest, box) => (box.bottom > lowest.bottom ? box : lowest))
+            return last.bottom + last.height / 2
         })
         for (let i = 1; i <= 14; i++) {
             await page.mouse.move(start.x, start.y + ((endY - start.y) * i) / 14)
         }
 
-        // Nudge either side of the target before releasing. Drax commits to
-        // the slot its LAST hit-test computed, and a hit-test only re-runs on
-        // movement — so arriving in one sweep can leave the computation still
-        // describing the pre-drag slot when the button comes up, and the drop
-        // lands back where it started.
-        await page.mouse.move(start.x, endY - 6)
-        await page.mouse.move(start.x, endY)
-        // Confirm the grab survived the travel: under load the whole gesture
-        // can be starved mid-flight, and releasing a dead drag silently does
-        // nothing.
-        expect(await isDragLive()).toBe(true)
+        // Do NOT release yet. Drax commits the slot its LAST processed
+        // drag-over computed — the release itself confirms nothing
+        // (SortableContainer.finalizeDrag reads draggedDisplayIndexRef, which
+        // only drag-over events advance). Under parallel load the sweep's
+        // events can all land late or coalesce, leaving that ref at the start
+        // slot and the drop a silent no-op. So hold the button and poll for
+        // the preview shift — beta and gamma rising into the vacated slot —
+        // wiggling to force fresh hit-tests (they only re-run on movement)
+        // until the destination slot is confirmed registered. Only then is a
+        // release guaranteed to commit the reorder.
+        const rowShift = () =>
+            page.evaluate(resting => {
+                const tops: Record<string, number> = {}
+                for (const el of Array.from(document.querySelectorAll('[aria-label^="Edit "]'))) {
+                    const label = (el.getAttribute('aria-label') ?? '').replace(/^Edit /, '')
+                    if ((label === 'beta' || label === 'gamma') && !(label in tops)) {
+                        tops[label] = el.getBoundingClientRect().top
+                    }
+                }
+                return {
+                    beta: (tops.beta ?? Number.NaN) - resting.beta,
+                    gamma: (tops.gamma ?? Number.NaN) - resting.gamma,
+                }
+            }, restingTops)
+        await expect(async () => {
+            await page.mouse.move(start.x, endY - 4)
+            await page.mouse.move(start.x, endY)
+            // A dead drag shows no shift and cannot be revived here — assert
+            // it live so a starved gesture fails loudly, not as a no-op drop.
+            expect(await isDragLive()).toBe(true)
+            const shift = await rowShift()
+            expect(shift.beta).toBeLessThan(-20)
+            expect(shift.gamma).toBeLessThan(-20)
+        }).toPass({ timeout: 10_000 })
         await page.mouse.up()
 
         await expect.poll(rows, { timeout: 10_000 }).toEqual(['beta', 'gamma', 'alpha'])

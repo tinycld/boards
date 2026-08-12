@@ -127,6 +127,11 @@ export interface BoardComment {
     author: BoardMember
     /** ISO timestamp from `created`. Format at render, never store a string. */
     created: string
+    /**
+     * ISO timestamp from `updated`; '' on an optimistic row. Differs from
+     * `created` only after an edit — what the "(edited)" marker keys on.
+     */
+    updated: string
     body: string
     /** '' for a top-level comment; otherwise the comment being replied to. */
     parent: string
@@ -136,7 +141,11 @@ export interface BoardAttachment {
     id: string
     /** PocketBase's stored name, `{name}_{random10}.{ext}` — what URLs use. */
     fileName: string
-    /** The stored name with PB's random suffix stripped, for display. */
+    /**
+     * The user-editable `name` column when set (the upload writes the picked
+     * file's original name; rename edits it), else the stored name with PB's
+     * random suffix stripped — the fallback for pre-column rows.
+     */
     displayName: string
     /** Bytes, written by the client on upload (PB stores no size of its own). */
     size: number
@@ -149,6 +158,15 @@ export interface BoardAttachment {
 
 export interface BoardCardView {
     id: string
+    /**
+     * The quotable identifier — `OTTER-123` — or '' when there isn't one yet.
+     *
+     * Precomputed here rather than formatted at each render site because the
+     * slug half lives on the PROJECT, which a card node has no reference to.
+     * '' covers both a board with no slug and a card the server has not
+     * numbered (the optimistic-insert gap); see lib/card-key.ts.
+     */
+    key: string
     listId: string
     /** Fractional rank — see lib/rank.ts. Sort by `position, id`. */
     position: string
@@ -190,6 +208,12 @@ export interface BoardListRank {
 export interface BoardProject {
     id: string
     name: string
+    /**
+     * The board's half of a card key (`OTTER`), or '' for a board created
+     * without one. Uppercase alphanumeric and globally unique — see the
+     * migration in pb-migrations/1980000004.
+     */
+    slug: string
     color: CardsColor
     members: BoardMember[]
     lists: BoardListView[]

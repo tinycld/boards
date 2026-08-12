@@ -82,10 +82,17 @@ so a description written here reads the same anywhere else.
 
 If you would rather click than remember the syntax, a row of formatting buttons
 appears above the description as soon as you start writing: bold, italic and
-underline, three heading sizes, bullet and numbered lists, a quote, code, and a
-link. They act on whatever you have selected. The usual shortcuts work too —
-⌘B for bold, ⌘I for italic. The buttons are there only while you are writing,
-so a description you are only reading stays clean.
+underline, three heading sizes, bullet and numbered lists, a quote, code, a
+link, and an image. They act on whatever you have selected. The usual shortcuts
+work too — ⌘B for bold, ⌘I for italic. The buttons are there only while you are
+writing, so a description you are only reading stays clean.
+
+To put a picture in a description, press the image button and choose one of the
+card's image attachments — or upload a new one from the same dialog. On a
+computer you can also drop an image file straight onto the description, and it
+lands where you dropped it. Either way the picture is stored as a card
+attachment, so it also appears in the Attachments section and follows the same
+rules described in [Attaching files to cards](help://cards:attaching-files).
 
 There is no save button: every change is kept as you type. Esc leaves the
 description without discarding anything, and plain Enter starts a new line,
@@ -110,12 +117,21 @@ formatting buttons never appear for them.
 
 ## Comments
 
-The box at the bottom of an open card posts a comment. Markdown works here too,
-so `**bold**`, `` `code` ``, lists and links all render once the comment is
-posted — type the source and it formats when it appears.
+Click the box at the bottom of an open card to write a comment. It works the
+same way as the description: the text formats as you type — `**bold**`,
+`` `code` ``, `- ` lists, links — and the same row of formatting buttons sits
+above it while you write, including the image button, which stores the picture
+as a card attachment.
 
-Press ⌘↩ to post. Plain Enter starts a new line, so a longer comment does not
-send itself half-written. Reply to a comment to keep a thread together.
+Press ⌘↩ or the Send button to post. Plain Enter starts a new line, so a
+longer comment does not send itself half-written. Reply to a comment to keep a
+thread together.
+
+To fix or expand one of your own comments, click it — it opens for editing
+with the same formatting buttons. Save (⌘↩, or clicking elsewhere) keeps the
+change; Esc closes without keeping it. Comments changed after posting show a
+small *(edited)* mark next to their time, and only you can edit yours — other
+people's comments are read-only, however a project owner may delete them.
 
 ## Who else is here
 
@@ -126,6 +142,36 @@ working on something.
 
 These appear and disappear as people come and go — nothing is recorded, and
 you'll never see yourself.
+
+## Card keys
+
+Every board can have a **key** — a short code like `OTTER` — and every card on
+it is numbered in the order it was created. Together they name the card:
+`OTTER-1`, `OTTER-2`, and so on. A key is what you paste into a chat message, a
+commit message, or a stand-up note when you need to point at a specific card.
+
+To set a board's key, type it in the **Key** box when you create the board. It
+is filled in for you from the board's name — "Product launch" suggests `PL` —
+and you can replace it with anything up to ten letters and numbers. Keys are
+capitals only, and no two boards can share one; if the key you want is taken,
+the box tells you so and you can pick another.
+
+A card's key appears on the card itself and at the top of the card panel, where
+you can select and copy it. The link button beside it copies a web address that
+opens the card on its board.
+
+You can also open a card straight from its key. Put it in the address bar after
+your board's web address — `{{server-host}}/cards/OTTER-1` — and the card
+opens, even if you were last looking at a different board. Opening a card this
+way does not switch the board you have open; use the back button to return to
+where you were.
+
+Numbers are never reused. If you delete `OTTER-7`, the next card you make is
+`OTTER-8` — so a key you wrote down last month never quietly comes to mean a
+different card.
+
+A board without a key still works normally; its cards simply have no key to
+quote.
 
 ## Finding a card
 

@@ -177,4 +177,3 @@ func TestCardsGuestRLS_DisabledUserCannotWrite(t *testing.T) {
 		want: http.StatusBadRequest,
 	}.run(t, env)
 }
-

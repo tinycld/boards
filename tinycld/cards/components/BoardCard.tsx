@@ -11,6 +11,7 @@ import {
 } from 'lucide-react-native'
 import { Pressable, Text, View } from 'react-native'
 import type { RemoteCardsPresence } from '../hooks/useBoardPresence'
+import { useCardFileDrop } from '../hooks/useCardFileDrop'
 import { dueStateFor, formatDueDate } from '../lib/due-state'
 import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardCardView, BoardLabel, BoardMember } from '../types'
@@ -24,6 +25,7 @@ const MAX_WATCHERS = 3
 
 interface BoardCardProps {
     card: BoardCardView
+    projectId: string
     isDone?: boolean
     /** A grab cursor on a card a viewer cannot drag is a lie — drop it. */
     canDrag: boolean
@@ -50,16 +52,21 @@ function useCardPress(cardId: string) {
 /**
  * The open card already wears the solid ring, so focus only shows while the
  * peek is closed — otherwise the card you are reading carries two rings and
- * neither reads as meaningful.
+ * neither reads as meaningful. A hovering OS file drop outranks both: it is
+ * the only transient state, and the ring is what tells the user which card
+ * will receive the files.
  */
-function cardRingClass(isOpen: boolean, isFocused: boolean, idle: string) {
+function cardRingClass(isOpen: boolean, isFocused: boolean, idle: string, isDropTarget = false) {
+    if (isDropTarget) return 'border-ring'
     if (isOpen) return 'border-ring'
     if (isFocused) return 'border-muted-foreground'
     return idle
 }
 
-export function BoardCard({ card, isDone, canDrag }: BoardCardProps) {
+export function BoardCard({ card, projectId, isDone, canDrag }: BoardCardProps) {
     const { isOpen, isFocused, onPress } = useCardPress(card.id)
+    // canDrag doubles as the edit gate: both come from the same role check.
+    const { isDropTarget, dropRef } = useCardFileDrop(card.id, projectId, canDrag)
     // Board-wide, so read here rather than threaded through BoardColumn —
     // ColumnCards is memoized and deliberately state-free, and a prop would
     // re-render it. Every card face re-renders on toggle, which is fine: it
@@ -74,6 +81,8 @@ export function BoardCard({ card, isDone, canDrag }: BoardCardProps) {
                 isFocused={isFocused}
                 onPress={onPress}
                 canDrag={canDrag}
+                isDropTarget={isDropTarget}
+                dropRef={dropRef}
             />
         )
     }
@@ -93,17 +102,20 @@ export function BoardCard({ card, isDone, canDrag }: BoardCardProps) {
 
     return (
         <Pressable
+            ref={dropRef}
             accessibilityRole="button"
             testID={`board-card-${card.id}`}
             onPress={onPress}
             className={`bg-card border rounded-[10px] px-3 py-2.5 gap-1.5 shadow-sm ${canDrag ? 'web:cursor-grab' : ''} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${cardRingClass(
                 isOpen,
                 isFocused,
-                'border-border hover:border-muted/50'
+                'border-border hover:border-muted/50',
+                isDropTarget
             )}`}
         >
+            <DropMarker isDropTarget={isDropTarget} cardId={card.id} />
             <FocusMarker isFocused={isFocused} cardId={card.id} />
-            <CardLabels labels={card.labels ?? []} />
+            <CardTopRow labels={card.labels ?? []} cardKey={card.key} />
             <Text
                 className="text-[13.5px] font-medium leading-[18px] text-foreground"
                 numberOfLines={3}
@@ -113,6 +125,67 @@ export function BoardCard({ card, isDone, canDrag }: BoardCardProps) {
             <CardMeta card={card} />
         </Pressable>
     )
+}
+
+/**
+ * Labels and the card key share one row above the title.
+ *
+ * They are rendered together rather than stacked because the key is a short
+ * identifier, not a line of content: on its own row it read as a heading over
+ * the title and cost a card face ~16px for four characters. Sharing the row
+ * puts it where a label overflow count would sit, and the row survives when
+ * either half is missing.
+ *
+ * The key is pushed RIGHT with a spacer so it lands in a consistent spot down a
+ * column, instead of jittering with each card's label widths.
+ *
+ * Renders nothing at all when there are no labels AND no key — the case for
+ * most cards on a fresh board, which should not carry an empty row.
+ */
+function CardTopRow({ labels, cardKey }: { labels: BoardLabel[]; cardKey: string }) {
+    if (labels.length === 0 && !cardKey) return null
+    return (
+        <View className="flex-row items-center gap-1">
+            <CardLabels labels={labels} />
+            <View className="flex-1" />
+            <CardKey cardKey={cardKey} />
+        </View>
+    )
+}
+
+/**
+ * The card key — `OTTER-123`.
+ *
+ * Renders NOTHING when there is no key, and neither case is an error state: a
+ * board with no slug, and the beat between an optimistic insert and the server
+ * echo that assigns the number (formatCardKey maps both to '' — see
+ * lib/card-key.ts).
+ *
+ * Deliberately not a skeleton for that second case. The gap is one round trip
+ * on a local socket, so a placeholder would flicker, and it would imply the key
+ * can be SLOW when nothing else on this face makes that claim. The title the
+ * user just typed is what they are looking at anyway.
+ */
+function CardKey({ cardKey }: { cardKey: string }) {
+    if (!cardKey) return null
+    return (
+        <Text
+            className="text-[10.5px] font-medium tracking-wide text-muted"
+            testID="cards-card-key"
+        >
+            {cardKey}
+        </Text>
+    )
+}
+
+/**
+ * Zero-size marker for the drop-hover state, same rationale as FocusMarker: a
+ * border class is not queryable from the e2e, and the `cards-` prefix keeps it
+ * out of the `board-card-` face selectors.
+ */
+function DropMarker({ isDropTarget, cardId }: { isDropTarget: boolean; cardId: string }) {
+    if (!isDropTarget) return null
+    return <View testID={`cards-card-dropping-${cardId}`} />
 }
 
 /**
@@ -140,18 +213,29 @@ function FocusMarker({ isFocused, cardId }: { isFocused: boolean; cardId: string
  * The done face is already this dense (a check and one line), so it is shared
  * across both densities rather than given a compact variant of its own.
  */
-function CompactCard({ card, isOpen, isFocused, onPress, canDrag }: CompactCardProps) {
+function CompactCard({
+    card,
+    isOpen,
+    isFocused,
+    onPress,
+    canDrag,
+    isDropTarget,
+    dropRef,
+}: CompactCardProps) {
     return (
         <Pressable
+            ref={dropRef}
             accessibilityRole="button"
             testID={`board-card-${card.id}`}
             onPress={onPress}
             className={`bg-card border rounded-[10px] px-3 py-1.5 flex-row items-center gap-2 shadow-sm ${canDrag ? 'web:cursor-grab' : ''} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${cardRingClass(
                 isOpen,
                 isFocused,
-                'border-border hover:border-muted/50'
+                'border-border hover:border-muted/50',
+                isDropTarget
             )}`}
         >
+            <DropMarker isDropTarget={isDropTarget} cardId={card.id} />
             <FocusMarker isFocused={isFocused} cardId={card.id} />
             <CompactLabelDots labels={card.labels ?? []} />
             <Text
@@ -172,6 +256,8 @@ interface CompactCardProps {
     isFocused: boolean
     onPress: () => void
     canDrag: boolean
+    isDropTarget: boolean
+    dropRef: (node: unknown) => void
 }
 
 /**
