@@ -1,22 +1,39 @@
-import { type RefObject, useState } from 'react'
+import { DropZone } from '@tinycld/core/components/DropZone'
+import { useAuth } from '@tinycld/core/lib/auth'
+import { type RefObject, useRef, useState } from 'react'
 import { ScrollView, Text, View } from 'react-native'
+import { useAttachmentMutations } from '../../hooks/useAttachmentMutations'
 import { useCardDetail } from '../../hooks/useCardDetail'
 import { useUpdateCard } from '../../hooks/useCardMutations'
 import { useCommentMutations } from '../../hooks/useCommentMutations'
 import { useProjectRole } from '../../hooks/useProjectRole'
-import { descriptionMode } from '../../lib/description-mode'
+import { type DescriptionMode, descriptionMode } from '../../lib/description-mode'
 import type { BoardCardView, BoardLabel, BoardMember } from '../../types'
 import { useBoardPresenceContext } from '../BoardPresenceProvider'
 import { LabelManagerDialog } from '../LabelManagerDialog'
 import { CommentComposer } from './CommentComposer'
-import { DescriptionEditor } from './DescriptionEditor'
+import {
+    DESCRIPTION_HEADER_HEIGHT,
+    type DescriptionEditorSlots,
+    useDescriptionEditor,
+} from './DescriptionEditor'
 import { DetailActivity } from './DetailActivity'
+import { DetailAttachments, filesToPicked } from './DetailAttachments'
 import { DetailChecklist } from './DetailChecklist'
 import { DetailProperties } from './DetailProperties'
 import { EditableText, type EditableTextHandle } from './EditableText'
 import { MarkdownText } from './MarkdownText'
 
 type DetailVariant = 'peek' | 'page'
+
+/**
+ * Which ScrollView child the description header is, counting from zero:
+ * title, properties, HEADER (label / toolbar), editor, checklist, activity.
+ *
+ * Keep in step with the JSX below. React Native pins by index, so a section
+ * inserted above it silently pins the wrong thing rather than failing.
+ */
+const TOOLBAR_INDEX = 2
 
 interface CardDetailProps {
     card: BoardCardView
@@ -63,10 +80,18 @@ export function CardDetail({
     const widthClass = variant === 'page' ? 'w-full max-w-[720px] self-center' : ''
     // Fetched here rather than threaded in as props, so the peek and the page
     // both get it without either container knowing about on-demand collections.
-    const { checklist, comments } = useCardDetail(card.id)
+    const { checklist, comments, attachments } = useCardDetail(card.id)
     // Resolved here for the same reason — both containers share the gates.
     const { canEdit, canComment, isOwner } = useProjectRole(projectId)
     const updateCard = useUpdateCard()
+    // Only the drop path needs this here — the strip owns the picker and the
+    // rows. Both write through the same store, so the two callers of
+    // useAttachmentMutations cannot disagree about what is in flight.
+    // Non-throwing: a card opened from the PUBLIC board has no session, and
+    // the default useAuth() turns that screen into an error boundary. Every
+    // read below already tolerates a null user.
+    const { user } = useAuth({ throwIfAnon: false })
+    const { uploadFiles } = useAttachmentMutations(card.id, projectId, user?.id ?? '')
     const { createComment, deleteComment } = useCommentMutations(card.id, projectId)
     // Which comment the composer is replying to. Local because it is transient
     // UI state that dies with the open card, and it lives HERE rather than in
@@ -80,11 +105,30 @@ export function CardDetail({
         )
     }
 
+    const description = useDescriptionSection({
+        cardId: card.id,
+        description: card.description,
+        onSave: value => updateCard.mutate({ cardId: card.id, description: value }),
+        canEdit,
+    })
+
     return (
         <>
-            <ScrollView className="flex-1">
-                <View className={`px-6 pb-6 ${widthClass}`}>
-                    <View className="mt-1 mb-[18px]">
+            {/* Dropping a file anywhere on the card attaches it. Web-only in
+                effect — DropZone renders a plain View on native, where there
+                is no drag source to begin with. */}
+            <DropZone
+                isEnabled={canEdit}
+                onDrop={files => uploadFiles(filesToPicked(files))}
+                label="Drop to attach"
+            >
+                {/* Flat children, not one padded wrapper: `stickyHeaderIndices`
+                only pins a DIRECT child of the ScrollView, so the toolbar has
+                to sit at this level. The section padding therefore lives on
+                each child. TOOLBAR_INDEX below must match the toolbar's
+                position in this list. */}
+                <ScrollView className="flex-1" stickyHeaderIndices={[TOOLBAR_INDEX]}>
+                    <View className={`px-6 mt-1 mb-[18px] ${widthClass}`}>
                         <EditableText
                             ref={titleRef}
                             value={card.title}
@@ -95,39 +139,60 @@ export function CardDetail({
                             isDisabled={!canEdit}
                         />
                     </View>
-                    <DetailProperties
-                        card={card}
-                        projectLabels={projectLabels}
-                        projectMembers={projectMembers}
-                        onManageLabels={() => setIsManagingLabels(true)}
-                        canEdit={canEdit}
-                    />
-                    <DescriptionSection
-                        cardId={card.id}
-                        description={card.description}
-                        onSave={description => updateCard.mutate({ cardId: card.id, description })}
-                        canEdit={canEdit}
-                    />
-                    <DetailChecklist
-                        items={checklist}
-                        cardId={card.id}
-                        projectId={projectId}
-                        canEdit={canEdit}
-                    />
-                    <DetailActivity
-                        comments={comments}
-                        canComment={canComment}
-                        canModerate={isOwner}
-                        onReply={comment =>
-                            setReplyingTo({
-                                id: comment.id,
-                                authorName: comment.author.firstName || 'this comment',
-                            })
-                        }
-                        onDelete={commentId => deleteComment.mutate(commentId)}
-                    />
-                </View>
-            </ScrollView>
+                    <View className={`px-6 ${widthClass}`}>
+                        <DetailProperties
+                            card={card}
+                            projectLabels={projectLabels}
+                            projectMembers={projectMembers}
+                            onManageLabels={() => setIsManagingLabels(true)}
+                            canEdit={canEdit}
+                        />
+                    </View>
+                    {/* Index TOOLBAR_INDEX — the sticky one. Always rendered, at a
+                    FIXED height: the label and the toolbar take turns in this
+                    one row, so focusing the editor swaps what is drawn without
+                    changing what the row occupies. Reserving the space is also
+                    what keeps sticky working — an out-of-flow overlay has no
+                    box for either platform to pin. */}
+                    <View className={`px-6 ${widthClass}`}>
+                        {description.body ? description.header : null}
+                    </View>
+                    <View className={`px-6 mb-6 overflow-visible ${widthClass}`}>
+                        {description.body}
+                    </View>
+                    <View className={`px-6 ${widthClass}`}>
+                        <DetailAttachments
+                            attachments={attachments}
+                            cardId={card.id}
+                            projectId={projectId}
+                            canEdit={canEdit}
+                            isOwner={isOwner}
+                        />
+                    </View>
+                    <View className={`px-6 ${widthClass}`}>
+                        <DetailChecklist
+                            items={checklist}
+                            cardId={card.id}
+                            projectId={projectId}
+                            canEdit={canEdit}
+                        />
+                    </View>
+                    <View className={`px-6 pb-6 ${widthClass}`}>
+                        <DetailActivity
+                            comments={comments}
+                            canComment={canComment}
+                            canModerate={isOwner}
+                            onReply={comment =>
+                                setReplyingTo({
+                                    id: comment.id,
+                                    authorName: comment.author.firstName || 'this comment',
+                                })
+                            }
+                            onDelete={commentId => deleteComment.mutate(commentId)}
+                        />
+                    </View>
+                </ScrollView>
+            </DropZone>
             {/* Commentors keep the composer — that is what the role means. */}
             {canComment ? (
                 <CommentComposer
@@ -156,7 +221,7 @@ export function CardDetail({
  * while idle and swaps back to a raw input the moment an edit starts, so the
  * markdown never has to round-trip through a rich-text model.
  */
-function DescriptionSection({
+function useDescriptionSection({
     cardId,
     description,
     onSave,
@@ -166,48 +231,62 @@ function DescriptionSection({
     description?: string
     onSave: (value: string) => void
     canEdit: boolean
-}) {
+}): DescriptionEditorSlots {
     const { doc, isReady, isConnected, canEditDoc, awareness, identity } = useBoardPresenceContext()
 
-    // Chosen once, when this card's editor mounts, and deliberately not
-    // re-evaluated: a description with two live write paths is how text gets
-    // lost. A drop mid-sentence keeps the collaborative editor and shows a
-    // reconnecting note — the words are in the local document and Yjs replays
-    // them — rather than racing a mutation against the reconnect.
-    const [mode] = useState(() => descriptionMode({ hasDoc: !!doc, isReady }))
+    // Latched, not sampled: once collaborative it stays collaborative for this
+    // mount (two live write paths is how text gets lost — see
+    // descriptionMode), but it can still BECOME collaborative when the room
+    // finishes syncing after this component mounted. That is the ordering on
+    // the full-page card route, where the presence provider mounts with the
+    // screen; sampling once there always lost the race and dropped the card to
+    // the non-collaborative path without any visible sign.
+    const modeRef = useRef<DescriptionMode>('mutation')
+    modeRef.current = descriptionMode({ hasDoc: !!doc, isReady }, modeRef.current)
+    const mode = modeRef.current
+
+    const isCollab = mode === 'collab' && !!doc
+
+    // Called unconditionally — hooks cannot sit behind the branch below. It
+    // builds a plain local editor while `doc` is null, which costs nothing
+    // because the collaborative branch is the only one that renders it.
+    const editorSlots = useDescriptionEditor({
+        cardId,
+        doc: isCollab ? doc : null,
+        awareness,
+        identity,
+        canEdit: canEdit && canEditDoc,
+        isConnected,
+    })
+
+    if (isCollab) return editorSlots
 
     // A disabled editor still renders its placeholder styled as an affordance,
     // so a read-only card with no description drops the section entirely —
     // there is nothing to show and nothing to invite.
-    if (!canEdit && !description && mode === 'mutation') return null
+    const isHidden = !canEdit && !description
 
-    return (
-        <View className="mb-6">
-            <Text className="text-[13px] font-semibold text-foreground mb-2.5">Description</Text>
-            {mode === 'collab' && doc ? (
-                <DescriptionEditor
-                    // Rebinds to the right fragment when the peek switches cards.
-                    key={cardId}
-                    cardId={cardId}
-                    doc={doc}
-                    awareness={awareness}
-                    identity={identity}
-                    canEdit={canEdit && canEditDoc}
-                    isConnected={isConnected}
-                />
-            ) : (
-                <EditableText
-                    value={description ?? ''}
-                    onSave={onSave}
-                    placeholder="Add a description — what does done look like?"
-                    accessibilityLabel="Edit description"
-                    multiline
-                    isDisabled={!canEdit}
-                    renderValue={value => <MarkdownText body={value} />}
-                />
-            )}
-        </View>
-    )
+    return {
+        // The plain-text fallback has no editor commands to drive a toolbar, so
+        // this row only ever shows the label. Same fixed height as the
+        // collaborative path, so the two modes do not lay out differently.
+        header: (
+            <View className="justify-center" style={{ height: DESCRIPTION_HEADER_HEIGHT }}>
+                <Text className="text-[13px] font-semibold text-foreground">Description</Text>
+            </View>
+        ),
+        body: isHidden ? null : (
+            <EditableText
+                value={description ?? ''}
+                onSave={onSave}
+                placeholder="Add a description — what does done look like?"
+                accessibilityLabel="Edit description"
+                multiline
+                isDisabled={!canEdit}
+                renderValue={value => <MarkdownText body={value} />}
+            />
+        ),
+    }
 }
 
 // ChecklistSection used to hide the whole section when empty. It is gone: the

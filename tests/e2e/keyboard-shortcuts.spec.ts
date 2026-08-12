@@ -18,12 +18,92 @@ function focusedCard(page: import('@playwright/test').Page) {
     return page.getByTestId(/^cards-focused-/)
 }
 
+/**
+ * The title of the card holding the focus ring.
+ *
+ * Waits for the marker first. A keypress moves the ring through React state, so
+ * a bare `page.evaluate` can run in the window before it has painted and read
+ * back `null` — which then fails a `toContain` with "received value must not be
+ * null", a message that says nothing about the real cause. The wait is the
+ * difference between this helper being deterministic and being load-sensitive.
+ */
 async function focusedTitle(page: import('@playwright/test').Page): Promise<string | null> {
+    await focusedCard(page).first().waitFor({ state: 'attached' })
     return page.evaluate(() => {
         const marker = document.querySelector('[data-testid^="cards-focused-"]')
         // The marker is a child of the card face, so the face is its parent.
         return (marker?.parentElement?.textContent ?? '').trim() || null
     })
+}
+
+/**
+ * Assert which card wears the ring, RETRYING both the read and the keypress
+ * that was meant to move it.
+ *
+ * Waiting for the marker is not enough on its own: after a keypress the ring is
+ * still on the PREVIOUS card for a frame, so the wait is satisfied immediately
+ * and the title read back is the stale one. A plain `expect(await ...)` has no
+ * second chance and fails then and there.
+ *
+ * Retrying the read alone is also not enough. Under full-suite load the app can
+ * miss a keystroke outright — the TODO records three keyboard specs each
+ * failing once this way — and no amount of re-reading recovers a press the app
+ * never saw. `resend` re-issues it between polls, which is what a user does
+ * when a key does not take.
+ */
+async function expectFocused(
+    page: import('@playwright/test').Page,
+    title: string,
+    resend?: string
+) {
+    await expect(async () => {
+        // NO marker at all means the press never reached the app — the ring is
+        // not mid-transition, it was never established, and waiting for it
+        // just times out. Re-pressing `j` recovers only this case: with
+        // nothing focused it ADOPTS the first card rather than stepping, so it
+        // cannot over-step. Every caller's first press is that same adopting
+        // `j`, and a lost one is the failure seen under full-suite load.
+        if ((await focusedCard(page).count()) === 0) {
+            await page.keyboard.press('j')
+        }
+        const focused = await focusedTitle(page)
+        if (focused?.includes(title)) return
+        if (resend) await page.keyboard.press(resend)
+        expect(await focusedTitle(page)).toContain(title)
+    }).toPass({ timeout: 10_000 })
+}
+
+/**
+ * Press `key` until `settled` holds — re-pressing ONLY when it does not.
+ *
+ * A card move is not idempotent: a second Shift+ArrowRight sends the card one
+ * column further, so this cannot simply spam the key. It checks the outcome
+ * first and re-presses only after finding it unmet, which makes a repeat
+ * possible solely when the previous press had no effect.
+ *
+ * The plain `expect(...).toPass()` this replaces retried the READ while the
+ * press stayed outside the loop, so a keystroke the app never received could
+ * never be recovered — under full-suite load (load average above 12 on 14
+ * cores) that is precisely what happens, and it is the failure the TODO filed
+ * as "single keystrokes are occasionally dropped before the app sees them".
+ */
+async function pressUntil(
+    page: import('@playwright/test').Page,
+    key: string,
+    settled: () => Promise<void>
+) {
+    await page.keyboard.press(key)
+    await expect(async () => {
+        try {
+            await settled()
+            return
+        } catch {
+            // Not there yet: the press was dropped, or its mutation has not
+            // round-tripped. Re-press and let the next poll decide which.
+        }
+        await page.keyboard.press(key)
+        await settled()
+    }).toPass({ timeout: 15_000 })
 }
 
 test.describe('Cards — keyboard control', () => {
@@ -40,12 +120,12 @@ test.describe('Cards — keyboard control', () => {
         // The first press adopts the first card rather than doing nothing.
         await page.keyboard.press('j')
         await expect(focusedCard(page)).toHaveCount(1)
-        expect(await focusedTitle(page)).toContain('alpha')
+        await expectFocused(page, 'alpha')
 
         await page.keyboard.press('j')
-        expect(await focusedTitle(page)).toContain('beta')
+        await expectFocused(page, 'beta')
         await page.keyboard.press('k')
-        expect(await focusedTitle(page)).toContain('alpha')
+        await expectFocused(page, 'alpha')
 
         await page.keyboard.press('Enter')
         // The peek's description placeholder proves the detail mounted.
@@ -58,10 +138,10 @@ test.describe('Cards — keyboard control', () => {
         await addCard(page, 1, 'middle-card')
 
         await page.keyboard.press('j')
-        expect(await focusedTitle(page)).toContain('left-card')
+        await expectFocused(page, 'left-card')
 
         await page.keyboard.press('ArrowRight')
-        expect(await focusedTitle(page)).toContain('middle-card')
+        await expectFocused(page, 'middle-card')
 
         // "Done" is empty: focus moves to the column, so no card wears the ring.
         await page.keyboard.press('ArrowRight')
@@ -69,12 +149,14 @@ test.describe('Cards — keyboard control', () => {
 
         // Stepping back out of the empty column lands on a card again.
         await page.keyboard.press('ArrowLeft')
-        expect(await focusedTitle(page)).toContain('middle-card')
+        await expectFocused(page, 'middle-card')
 
         // Already at the left edge — a further step is a no-op, not a crash.
+        // Safe to RESEND on retry for exactly that reason: an extra ArrowLeft
+        // at the edge cannot over-step, so a dropped keystroke recovers.
         await page.keyboard.press('ArrowLeft')
         await page.keyboard.press('ArrowLeft')
-        expect(await focusedTitle(page)).toContain('left-card')
+        await expectFocused(page, 'left-card', 'ArrowLeft')
     })
 
     test('moves a card across columns and within one', async ({ page }) => {
@@ -84,26 +166,22 @@ test.describe('Cards — keyboard control', () => {
 
         // Focus 'mover' (first in board order) and send it right.
         await page.keyboard.press('j')
-        expect(await focusedTitle(page)).toContain('mover')
-        await page.keyboard.press('Shift+ArrowRight')
-
-        await expect(async () => {
+        await expectFocused(page, 'mover')
+        await pressUntil(page, 'Shift+ArrowRight', async () => {
             expect(await cardsInColumn(page, 'Doing')).toContain('mover')
             expect(await cardsInColumn(page, 'To do')).not.toContain('mover')
-        }).toPass()
+        })
 
         // Back to 'To do', which still holds 'stayer', then add a second card
         // there and reorder: membership and order only — rank math is covered
         // by move.test.ts.
-        await page.keyboard.press('Shift+ArrowLeft')
-        await expect(async () => {
+        await pressUntil(page, 'Shift+ArrowLeft', async () => {
             expect(await cardsInColumn(page, 'To do')).toEqual(['stayer', 'mover'])
-        }).toPass()
+        })
 
-        await page.keyboard.press('Shift+ArrowUp')
-        await expect(async () => {
+        await pressUntil(page, 'Shift+ArrowUp', async () => {
             expect(await cardsInColumn(page, 'To do')).toEqual(['mover', 'stayer'])
-        }).toPass()
+        })
     })
 
     test('archives the focused card with x, and Escape clears the ring', async ({ page }) => {
@@ -112,7 +190,7 @@ test.describe('Cards — keyboard control', () => {
         await addCard(page, 0, 'keeper')
 
         await page.keyboard.press('j')
-        expect(await focusedTitle(page)).toContain('doomed')
+        await expectFocused(page, 'doomed')
 
         // Archive is unconfirmed by design — nothing is destroyed.
         await page.keyboard.press('x')

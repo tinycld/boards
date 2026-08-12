@@ -103,9 +103,12 @@ test.describe('Cards — real-time presence', () => {
             await expect(page.getByTestId(`cards-watchers-${otherCardId}`)).toHaveCount(0)
             await expect(page.getByTestId('cards-live-presence')).toBeVisible()
 
-            // --- Bob leaves cards entirely: the room tears down ---
-            // useRealtimeRoom publishes a clean-leave frame on unmount, so this
-            // must not wait on a heartbeat timeout.
+            // --- Bob leaves cards entirely ---
+            // `freezeOnBlur` keeps the cards screen MOUNTED here, so nothing
+            // unmounts and the room's socket stays open. useRealtimeRoom
+            // publishes the clean-leave frame on blur for exactly this reason.
+            // The assertion must resolve promptly: waiting on y-protocols' 30s
+            // reaper instead would be the bug, not the fix.
             await navigateToPackage(bobPage, 'settings')
             await expect(page.getByTestId('cards-live-presence')).toHaveCount(0)
         } finally {

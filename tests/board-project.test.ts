@@ -125,6 +125,28 @@ describe('toBoardCard', () => {
         expect(Number.isNaN(due?.getTime())).toBe(false)
     })
 
+    // The day is the whole point, and asserting only "is a valid Date" is what
+    // let this ship broken: PocketBase hands back UTC midnight, so `new Date()`
+    // on it resolved to Aug 4 for every user west of Greenwich. Read through
+    // the LOCAL getters — the same ones the chip and dueStateFor use.
+    it('maps a due date to the local calendar day it names, not the UTC instant', () => {
+        const due = toBoardCard(
+            card('c1', 'list1', 'a0', { due: '2026-08-05 00:00:00Z' }),
+            labels,
+            users
+        ).due
+        expect([due?.getFullYear(), (due?.getMonth() ?? 0) + 1, due?.getDate()]).toEqual([
+            2026, 8, 5,
+        ])
+        // Local midnight, so the day survives any later comparison against now.
+        expect([due?.getHours(), due?.getMinutes()]).toEqual([0, 0])
+    })
+
+    it('maps an unparseable due date to undefined rather than an Invalid Date', () => {
+        const due = toBoardCard(card('c1', 'list1', 'a0', { due: 'not a date' }), labels, users).due
+        expect(due).toBeUndefined()
+    })
+
     it('resolves label ids to rows', () => {
         const result = toBoardCard(card('c1', 'list1', 'a0', { labels: ['l1'] }), labels, users)
         expect(result.labels).toEqual([{ id: 'l1', name: 'Bug', color: '#ef4444' }])
@@ -142,13 +164,33 @@ describe('toBoardCard', () => {
         expect(result.labels[0]?.id).toBe('l1')
     })
 
-    it('drops assignee ids that no longer resolve', () => {
+    it('renders an unresolvable assignee anonymously rather than dropping it', () => {
+        // Changed in M6a, deliberately. A share-link visitor reads no `users`
+        // rows at all — core's rule admits only a non-guest member or your own
+        // row — so dropping would make every assigned card on a public board
+        // read as UNASSIGNED, which is worse than saying nothing: it is saying
+        // something false about who owns the work. A faceless placeholder shows
+        // that a card is assigned without naming anyone.
         const result = toBoardCard(
             card('c1', 'list1', 'a0', { assignees: ['gone'] }),
             labels,
             users
         )
-        expect(result.assignees).toEqual([])
+        expect(result.assignees).toEqual([{ id: 'gone', firstName: 'Board', lastName: 'member' }])
+    })
+
+    it('keeps the id on a placeholder so memoization still compares equal', () => {
+        // Structural sharing and BoardCard's memo both key off assignee
+        // identity; a placeholder that lost the id (or minted a fresh one)
+        // would make every re-render look like a change and undo the sharing
+        // that keeps drags stable.
+        const first = toBoardCard(card('c1', 'list1', 'a0', { assignees: ['gone'] }), labels, users)
+        const second = toBoardCard(
+            card('c1', 'list1', 'a0', { assignees: ['gone'] }),
+            labels,
+            users
+        )
+        expect(first.assignees).toEqual(second.assignees)
     })
 
     it('carries the denormalized counters through', () => {

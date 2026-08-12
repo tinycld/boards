@@ -9,6 +9,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ChevronLeft } from 'lucide-react-native'
 import { type RefObject, useMemo, useRef } from 'react'
 import { Pressable, Text, View } from 'react-native'
+import { BoardPresenceProvider } from '../components/BoardPresenceProvider'
 import { CardActionsMenu } from '../components/detail/CardActionsMenu'
 import { CardDetail } from '../components/detail/CardDetail'
 import type { EditableTextHandle } from '../components/detail/EditableText'
@@ -102,7 +103,19 @@ export default function CardDetailScreen() {
     if (isLoading) return <LoadingState />
     if (!project || !entry) return <CardNotFound onBack={navigateBack} />
 
-    return <CardPage project={project} entry={entry} cardId={cardId} navigateBack={navigateBack} />
+    // The board's room has to be open on THIS screen too, not just the board:
+    // without it the context falls back to its default (doc: null), the
+    // description drops to the mutation path, and the card silently loses
+    // co-editing. That is the whole experience on a phone, where this
+    // full-screen route — not the peek — is how a card opens.
+    //
+    // `openCardId` is this card by definition here, which is also what puts
+    // the reader in the board's per-card watcher cluster.
+    return (
+        <BoardPresenceProvider projectId={project.id} openCardId={cardId}>
+            <CardPage project={project} entry={entry} cardId={cardId} navigateBack={navigateBack} />
+        </BoardPresenceProvider>
+    )
 }
 
 interface CardPageProps {
@@ -140,6 +153,9 @@ function CardPage({ project, entry, cardId, navigateBack }: CardPageProps) {
                 ) : null}
             </View>
             <CardDetail
+                // See CardPeek: the description editor is bound to one Yjs
+                // fragment per mount, so the card id is the identity.
+                key={entry.card.id}
                 card={entry.card}
                 variant="page"
                 projectId={project.id}

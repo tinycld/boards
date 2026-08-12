@@ -41,8 +41,13 @@ const BoardPresenceContext = createContext<BoardPresenceValue>({
  * A React context rather than a Zustand store, against the usual house rule for
  * shared UI state: what is being shared is a live socket handle scoped to the
  * mounted board, not state. A store would outlive the board it belongs to and
- * would need explicit teardown; the provider unmounts with the screen and
- * `useRealtimeRoom` already publishes a clean-leave frame on the way out.
+ * would need explicit teardown; `useRealtimeRoom` publishes a clean-leave frame
+ * on the way out.
+ *
+ * Note that "on the way out" is NOT unmount: package screens render with
+ * `freezeOnBlur`, so leaving cards for another package keeps this provider
+ * mounted and its socket open. `useRealtimeRoom` therefore publishes the leave
+ * on blur, not on teardown — see the comment on its useLeaveOnBlur.
  */
 export function BoardPresenceProvider({
     projectId,

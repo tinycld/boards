@@ -40,7 +40,11 @@ export interface RemoteCardsPresence extends CardsPresenceState {
  * an authorize handler and nothing else (cards/server/realtime.go).
  */
 export function useBoardPresence(projectId: string, openCardId: string | null) {
-    const { user } = useAuth()
+    // Non-throwing: BoardColumn calls the mutation hooks unconditionally, so
+    // they are constructed on the PUBLIC board too — where there is no
+    // session and the affordances that would invoke them are already gated
+    // off. Throwing here made merely RENDERING a shared board an error.
+    const { user } = useAuth({ throwIfAnon: false })
 
     // Stable across renders so the publish effect below does not re-run on
     // every parent render.

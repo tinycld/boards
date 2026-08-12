@@ -21,14 +21,26 @@ export interface DescriptionModeInput {
 /**
  * Decide how a description should be edited.
  *
- * Called ONCE, when the editor mounts, and never re-evaluated for the life of
- * that mount. That restriction is the whole point: a description with two live
- * write paths is how text gets lost. If a connection drops mid-sentence, the
- * editor stays in collaborative mode and shows a reconnecting hint — the local
- * document keeps the words, and Yjs replays them when the socket returns.
- * Switching to the mutation path at that moment would instead race the
- * reconnect and let whichever write landed second win.
+ * One-way only: once a card is in `collab` it stays there for the life of the
+ * mount. That restriction is the whole point — a description with two live
+ * write paths is how text gets lost. If a connection drops mid-sentence the
+ * editor stays collaborative and shows a reconnecting hint; the local document
+ * keeps the words and Yjs replays them when the socket returns. Falling back to
+ * the mutation path at that moment would instead race the reconnect and let
+ * whichever write landed second win.
+ *
+ * It is deliberately NOT sampled once and cached. The room can become ready
+ * AFTER the editor mounts — exactly what happens on the full-page card route,
+ * where the presence provider mounts with the screen rather than having been
+ * open since the board loaded. Sampling on first render there always saw
+ * `isReady: false` and locked the card into the non-collaborative path
+ * silently, since that path renders the same markdown. Latching forward keeps
+ * the safety property (never collab → mutation) without the race.
  */
-export function descriptionMode(input: DescriptionModeInput): DescriptionMode {
+export function descriptionMode(
+    input: DescriptionModeInput,
+    current?: DescriptionMode
+): DescriptionMode {
+    if (current === 'collab') return 'collab'
     return input.hasDoc && input.isReady ? 'collab' : 'mutation'
 }

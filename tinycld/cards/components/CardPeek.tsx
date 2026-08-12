@@ -114,6 +114,11 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
         <>
             <PeekBackdrop onPress={closeCard} />
             <View
+                // Scopes assertions to the open card. Several values render
+                // BOTH here and on the board face behind it (the title, the due
+                // chip, the checklist ratio), so an unscoped query matches two
+                // elements and fails strict mode.
+                testID="cards-card-peek"
                 // The workspace pane insets its content on the housing side in
                 // landscape, so a right-anchored panel stops short of the
                 // physical edge with a band of app background beside it. Extend
@@ -152,6 +157,13 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
                     </IconButton>
                 </View>
                 <CardDetail
+                    // Remounts on card switch. The description editor binds to
+                    // ONE Yjs fragment for its lifetime, so switching cards has
+                    // to tear it down and rebind. Keying here rather than on the
+                    // editor is what lets CardDetail own the editor hook, which
+                    // stickyHeaderIndices needs in order to place the toolbar as
+                    // a direct child of the ScrollView.
+                    key={entry.card.id}
                     card={entry.card}
                     variant="peek"
                     projectId={project.id}

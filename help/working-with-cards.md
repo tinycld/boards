@@ -1,7 +1,7 @@
 ---
 title: Working with cards
 summary: Opening a card, editing its details, and moving it between lists
-tags: [cards, board, kanban, detail, shortcuts, "drag and drop"]
+tags: [cards, board, kanban, detail, shortcuts, formatting, "drag and drop"]
 order: 20
 ---
 
@@ -66,9 +66,11 @@ immediately.
 ## Card details
 
 An open card shows its assignees, labels, and due date, followed by the
-description, checklist, and comments. A due date turns amber when it's less
-than two days away and red once it has passed — the same colors the board
-shows on the card itself.
+description, attachments, checklist, and comments. A due date turns amber when
+it's less than two days away and red once it has passed — the same colors the
+board shows on the card itself.
+
+To add a file, see [Attaching files to cards](help://cards:attaching-files).
 
 ## Writing a description
 
@@ -77,6 +79,13 @@ heading, `- ` for a bullet, `- [ ] ` for a checkbox, `**bold**`, `` `code` ``
 or `~~strikethrough~~`, and each turns into the real thing as you finish it.
 Tables and images you paste in are kept too. Everything is stored as Markdown,
 so a description written here reads the same anywhere else.
+
+If you would rather click than remember the syntax, a row of formatting buttons
+appears above the description as soon as you start writing: bold, italic and
+underline, three heading sizes, bullet and numbered lists, a quote, code, and a
+link. They act on whatever you have selected. The usual shortcuts work too —
+⌘B for bold, ⌘I for italic. The buttons are there only while you are writing,
+so a description you are only reading stays clean.
 
 There is no save button: every change is kept as you type. Esc leaves the
 description without discarding anything, and plain Enter starts a new line,
@@ -88,11 +97,16 @@ Several people can write the same description at once. Edits appear as they are
 typed, each person's cursor shows where they are working, and changes merge
 without anyone overwriting anyone else.
 
+This works in the phone and tablet apps as well as the browser, and between
+them: someone typing on their phone and someone typing on a laptop are writing
+in the same description.
+
 If your connection drops mid-sentence, keep typing — your words are held on
 your machine and sent as soon as you are back. A short note under the
 description says when that is happening.
 
-People with **View** access can read a description but not change it.
+People with **View** access can read a description but not change it, so the
+formatting buttons never appear for them.
 
 ## Comments
 
@@ -112,6 +126,17 @@ working on something.
 
 These appear and disappear as people come and go — nothing is recorded, and
 you'll never see yourself.
+
+## Finding a card
+
+Press `/` anywhere to open the search palette and start typing. Opened from a
+board it is already scoped to cards, so you are searching your cards straight
+away; choosing a result opens that card on its board. Press ⌫ with an empty box
+to drop the scope and search every app at once. See
+[Searching across packages](help://core:search) for the full grammar.
+
+Archived cards are left out on purpose — search shows active work. To find one,
+open its board and look through the archive.
 
 ## Keyboard shortcuts
 
@@ -155,6 +180,12 @@ With a card open:
 
 Press **⇧?** anywhere to see every shortcut the app knows, including the ones
 for jumping between apps.
+
+## Working from a terminal
+
+Boards, lists and cards are all reachable from the `tinycld` command line, which
+is the quicker path for bulk edits and for scripting a board from another tool —
+see [Cards from the command line](help://cards:command-line).
 
 ## Missing a button?
 

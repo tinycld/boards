@@ -5,6 +5,7 @@ import { useMemo, useRef } from 'react'
 import { buildBoardProject } from '../lib/board-project'
 import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardProject } from '../types'
+import { useBoardLiveQuery } from './useBoardLiveQuery'
 
 /**
  * The board, live.
@@ -18,20 +19,9 @@ import type { BoardProject } from '../types'
  * user with every card).
  */
 export function useActiveBoard() {
-    const [
-        projectsCollection,
-        membersCollection,
-        listsCollection,
-        cardsCollection,
-        labelsCollection,
-        usersCollection,
-    ] = useStore(
+    const [projectsCollection, membersCollection] = useStore(
         'cards_projects',
-        'cards_project_members',
-        'cards_lists',
-        'cards_cards',
-        'cards_labels',
-        'users'
+        'cards_project_members'
     )
 
     const activeProjectId = useCardsUIStore(s => s.activeProjectId)
@@ -64,40 +54,100 @@ export function useActiveBoard() {
         return projects[0]?.id ?? ''
     }, [activeProjectId, projects])
 
-    const { data: listRows, isLoading: listsLoading } = useOrgLiveQuery(
+    const { project, cardCount, isLoading: contentLoading } = useBoardContent(projectId)
+
+    return {
+        projects,
+        project,
+        cardCount,
+        isLoading: projectsLoading || contentLoading,
+        hasProjects: projects.length > 0,
+    }
+}
+
+/**
+ * One board's content, by id.
+ *
+ * Split out of useActiveBoard so a SHARE-LINK VISITOR renders the same tree
+ * through the same queries. Nothing here scopes by user — every query filters
+ * on the project id, and what authorizes it is decided server-side by the
+ * access rules: a member's membership, or a visitor's `X-Share-Token`. That is
+ * why these use useBoardLiveQuery rather than useOrgLiveQuery, which disables
+ * itself when there is no signed-in user and would leave a public board empty.
+ *
+ * The board UI therefore has ONE implementation, not a parallel read-only copy
+ * that drifts from it.
+ */
+export function useBoardContent(projectId: string) {
+    const [
+        projectsCollection,
+        membersCollection,
+        listsCollection,
+        cardsCollection,
+        labelsCollection,
+        usersCollection,
+    ] = useStore(
+        'cards_projects',
+        'cards_project_members',
+        'cards_lists',
+        'cards_cards',
+        'cards_labels',
+        'users'
+    )
+
+    // A visitor reaches the board by id, so the project row is read directly
+    // rather than through the membership join useActiveBoard uses to LIST
+    // boards. For a member the rules resolve it via membership; for a visitor,
+    // via the token.
+    const { data: projectRows, isLoading: projectLoading } = useBoardLiveQuery(
+        query => {
+            if (!projectId) return null
+            return query
+                .from({ project: projectsCollection })
+                .where(({ project }) => eq(project.id, projectId))
+        },
+        [projectId, projectsCollection]
+    )
+
+    const { data: listRows, isLoading: listsLoading } = useBoardLiveQuery(
         query => {
             if (!projectId) return null
             return query
                 .from({ list: listsCollection })
                 .where(({ list }) => eq(list.project, projectId))
         },
-        [projectId]
+        [projectId, listsCollection]
     )
 
-    const { data: cardRows, isLoading: cardsLoading } = useOrgLiveQuery(
+    const { data: cardRows, isLoading: cardsLoading } = useBoardLiveQuery(
         query => {
             if (!projectId) return null
             return query
                 .from({ card: cardsCollection })
                 .where(({ card }) => eq(card.project, projectId))
         },
-        [projectId]
+        [projectId, cardsCollection]
     )
 
-    const { data: labelRows } = useOrgLiveQuery(
+    const { data: labelRows } = useBoardLiveQuery(
         query => {
             if (!projectId) return null
             return query
                 .from({ label: labelsCollection })
                 .where(({ label }) => eq(label.project, projectId))
         },
-        [projectId]
+        [projectId, labelsCollection]
     )
 
     // The roster, joined to users for names. cards_project_members does expand
     // `user`, but a join reads from the optimistic local store where the expand
     // waits on a realtime round-trip — the same reasoning as the project query.
-    const { data: memberRows } = useOrgLiveQuery(
+    //
+    // A share-link visitor legally reads NOTHING here: the roster rule is
+    // member-AND-non-guest, and 1980000003 deliberately adds no token disjunct
+    // to it. The avatar stack is empty for them, which is the point — a link
+    // must not hand out the org's member names and emails.
+    const { data: memberRows } = useBoardLiveQuery(
         query => {
             if (!projectId) return null
             return query
@@ -107,13 +157,21 @@ export function useActiveBoard() {
                 )
                 .where(({ member }) => eq(member.project, projectId))
         },
-        [projectId]
+        [projectId, membersCollection, usersCollection]
     )
 
     // Every user the client has synced, for resolving assignees. Deliberately
     // NOT the roster: someone removed from the project keeps their id on the
     // cards they were assigned, and must still render.
-    const { data: userRows } = useOrgLiveQuery(query => query.from({ user: usersCollection }))
+    //
+    // Also empty for a visitor — core's users rule admits only a non-guest
+    // member or your own row. buildBoardProject substitutes a placeholder for
+    // an assignee it cannot resolve, so a shared board shows THAT a card is
+    // assigned without naming who.
+    const { data: userRows } = useBoardLiveQuery(
+        query => query.from({ user: usersCollection }),
+        [usersCollection]
+    )
 
     // The queries above re-emit far more often than this board's content
     // changes (users and the membership join react to org-wide writes), so the
@@ -127,7 +185,7 @@ export function useActiveBoard() {
         () =>
             buildBoardProject(
                 {
-                    project: projects.find(p => p.id === projectId),
+                    project: (projectRows ?? [])[0],
                     lists: listRows ?? [],
                     cards: cardRows ?? [],
                     labels: labelRows ?? [],
@@ -136,7 +194,7 @@ export function useActiveBoard() {
                 },
                 previousProjectRef.current
             ),
-        [projects, projectId, listRows, cardRows, labelRows, memberRows, userRows]
+        [projectRows, listRows, cardRows, labelRows, memberRows, userRows]
     )
     previousProjectRef.current = project
 
@@ -146,10 +204,8 @@ export function useActiveBoard() {
     )
 
     return {
-        projects,
         project,
         cardCount,
-        isLoading: projectsLoading || listsLoading || cardsLoading,
-        hasProjects: projects.length > 0,
+        isLoading: projectLoading || listsLoading || cardsLoading,
     }
 }
