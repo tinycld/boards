@@ -17,7 +17,8 @@
         "./lib/*": "./tinycld/cards/lib/*.ts",
         "./stores/*": "./tinycld/cards/stores/*.ts",
         "./components/*": "./tinycld/cards/components/*.tsx",
-        "./search-adapter": "./tinycld/cards/search-adapter.ts"
+        "./search-adapter": "./tinycld/cards/search-adapter.ts",
+        "./calendar-source": "./tinycld/cards/calendar-source.ts"
     },
     "scripts": {
         "typecheck": "tinycld-pkg typecheck",

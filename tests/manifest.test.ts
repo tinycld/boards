@@ -21,6 +21,21 @@ describe('cards manifest', () => {
     // return being non-null. So an absent url is not cosmetic metadata — it
     // removes the affordance outright, silently, which is exactly how cards
     // ended up the only member without one.
+    it('contributes the due-date event source to the calendar', () => {
+        // The module subpath must stay in step with package.json's
+        // "./calendar-source" export — the generated config imports
+        // '@tinycld/cards/calendar-source' from this entry.
+        expect(manifest.eventSources).toEqual([
+            {
+                target: 'calendar',
+                id: 'cards-due',
+                label: 'Card due dates',
+                module: 'calendar-source',
+                color: 'graphite',
+            },
+        ])
+    })
+
     it('declares the repository the Help menu reports issues against', () => {
         expect(manifest.repository?.url).toBe('https://github.com/tinycld/cards')
     })

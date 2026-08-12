@@ -24,6 +24,20 @@ const manifest = {
     // route to name here. `adapter` supplies the client-side selection handler
     // the palette calls when a cards row is chosen.
     search: { adapter: 'search-adapter' },
+    // Due dates appear on the calendar as read-only all-day items. The
+    // calendar package hosts the source (it mounts the hook and renders the
+    // sidebar toggle); when calendar is absent the entry is silently inactive,
+    // so the lean-shell guarantee holds without a hard import in either
+    // direction — the shared contract is core's, not calendar's.
+    eventSources: [
+        {
+            target: 'calendar',
+            id: 'cards-due',
+            label: 'Card due dates',
+            module: 'calendar-source',
+            color: 'graphite',
+        },
+    ],
     migrations: { directory: 'pb-migrations' },
     // Card attachments count against the org's storage ceiling. `size` is
     // written by the client on upload — PocketBase keeps no size of its own

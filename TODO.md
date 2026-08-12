@@ -15,7 +15,7 @@ ordered by dependency; tasks within one are small and mostly independent.
 | M3 | Wire the UI to live data | ✅ shortcuts + markdown + presence shipped |
 | M3b | Role-gated UI and sharing | ✅ shipped |
 | M4 | Mail: create a card from an email | touches `mail/` |
-| M5 | Calendar: due dates on the calendar | touches `calendar/` |
+| M5 | Calendar: due dates on the calendar | ✅ shipped — event-source registry in calendar |
 | M6 | File attachments with previews | ✅ core loop shipped; Drive picker + covers filed |
 | M6a | Public boards: the share-link flow | ✅ shipped — rules, not a snapshot |
 | M7 | Package plumbing, tests, docs | |
@@ -993,6 +993,7 @@ precedent for everything except the Modal shell.
       membership-driven project query drops it and `useActiveBoard`'s
       render-time fallback picks the next one. Help topic:
       `help/sharing-boards.md`.
+- [ ] Add reporter field to track who opened card.  Broaden assignment to support multiple users 
 
 ## M4 — Mail integration: create a card from an email
 
@@ -1019,27 +1020,80 @@ Via the new thread-action contribution point (M0 decision) — this touches the
       behind the manifest so it only loads when mail loads it.
 - [ ] Help topic: creating cards from email (`help/cards-from-email.md`).
 
-## M5 — Calendar integration: due dates on the calendar
+## M5 — Calendar integration: due dates on the calendar ✅
 
-Via a new event-source registry in the calendar package (M0 decision) — this
-touches the `calendar/` repo:
+**Shipped**, via the new event-source registry (M0 decision) — the generic
+contribution kind now lives in the generator + core, calendar is its first
+host, and cards its first contributor. `due-date-calendar.spec.ts` drives the
+whole pipeline through the UI and is green.
 
-- [ ] Calendar repo: define an event-source contribution (manifest-declared,
-      generator-wired like slots): a hook/module returning
-      `{ id, title, start, end, allDay, color, href }[]` for a date range,
-      merged into `useCalendarEvents` output; a sidebar toggle in
-      `sidebar.after-calendars` to show/hide each source. Sources are
-      read-only on the grid (no drag/edit of contributed items).
-- [ ] Cards: contribute a source that live-queries `cards_cards` with
-      `due != ''` across the user's member projects (this is why M1 indexes
-      `due`), mapping due → all-day event, href → card detail route.
-- [ ] Clicking a cards item on the grid opens the card (cross-package href
-      via the org route helper, presence-gated).
-- [ ] Cards must typecheck/run with no calendar installed (lean-shell
-      guarantee): the contributed source component only loads when calendar
-      loads it; any shared types live in a minimal local interface.
-- [ ] Help topic update: due dates on the calendar (cards side; note the
-      source toggle in calendar's sidebar).
+- [x] The contribution kind is GENERIC, not calendar-specific: manifest
+      `eventSources` (target/id/label/module/color/order) + `eventSourceHost`
+      on the host, wired through the same six generator layers as
+      sidebarContributions. **The generated config emits a bare `load` thunk,
+      NOT `React.lazy`** — the module exports a HOOK, exactly the `search`
+      block's precedent (its comment says why lazy can't wrap it). Contract
+      types live in `@tinycld/core/lib/event-sources/` (like search's), so
+      neither package ever imports the other. Validation fails generation on
+      a present-but-non-host target (version drift must not render as an
+      empty grid), a duplicate (target, id), or an id outside `[a-z0-9-]`;
+      an ABSENT target warns and stays inert — that warn IS the lean-shell
+      guarantee, same as sidebar contributions.
+- [x] Calendar host: one renderless `SourceCollector` per loaded, non-hidden
+      source (`EventSourcesHost.tsx`), mirroring SearchPalette's
+      PackageActions split — a module resolves ASYNC and a hook must be
+      called unconditionally, so the hook call lives in a component that only
+      mounts once the module is non-null. Items masquerade as CalendarEvents
+      rows (`src:<sourceId>:<itemId>`, synthetic calendar FK) and pseudo-
+      calendars merge into `useCalendarMap`, so **AllDayBar, MonthCell,
+      MonthView and ScheduleView needed zero changes** — their existing
+      `calendarMap.get(e.calendar)` color lookup just works. Press
+      interception is ONE check in `useCalendarView.openEventDetail` (every
+      view funnels through it): a `src:` id routes to the item's href instead
+      of the detail popover, which would query a row that doesn't exist.
+- [x] Toggle state is a parallel `hiddenSourceIds` in a new
+      `event-sources-store` — NEVER folded into `visibleIds`, which feeds the
+      `calendar_events` server filter and would silently poison the query
+      with a synthetic id. Inverted polarity (hidden, not visible) means
+      empty = all shown, no init handshake. A hidden source's collector
+      UNMOUNTS, so its live query stops running. Host-rendered toggle rows
+      (`EventSourceToggles`), so contributors ship zero toggle UI.
+- [x] Cards source: `tinycld/cards/calendar-source.ts` — ONE query joining
+      `cards_cards`→`cards_projects` (the M1 `due` indexes exist for exactly
+      this), due within the range as LOCAL `'YYYY-MM-DD'` string bounds
+      (orders correctly against both the bare day the picker writes and the
+      `'YYYY-MM-DD 00:00:00Z'` PB normalizes it to; the half-open window
+      excludes `due = ''` for free), archived cards AND cards on archived
+      boards excluded (search's policy). Due → local all-day item via the
+      same UTC-parts rebuild as `toBoardCard`'s (the off-by-one-west-of-
+      Greenwich trap, pinned by a unit test this time). Routes by plain
+      record id — deliberately not the in-flight key-or-id resolver.
+- [x] Lean shell: cards has no calendar import anywhere (grep stays empty);
+      absent-target inertness is pinned by a describe-packages unit test.
+- [x] Help: cards `help/due-dates-on-the-calendar.md` + calendar
+      `help/event-sources.md`, cross-linked; website doc
+      `web/.../anatomy/event-sources.md`. (The working-with-cards cross-link
+      is deferred — that file is dirty in the card-keys branch.)
+- [x] Tests: generator (mapping, all four validations, emission incl. the
+      thunk-not-lazy pin and unsafe-subpath rejection), core registry
+      (derive sort, loader caching, malformed module → null), calendar
+      (id round-trip incl. colons in item ids, store, mapping/hiding/
+      clipping via renderHook), cards (`buildDueItems` day-boundary tests).
+      E2E `due-date-calendar.spec.ts`: due set through the UI → schedule row
+      → click-through to the card → toggle off/on.
+      Three e2e locator traps surfaced, worth keeping:
+    - **Month cells CAP visible rows** — the seed plants due-today cards, so
+      a titled chip can silently land in "+N more". Schedule view has no
+      overflow and is the deterministic assertion surface.
+    - **Playwright counts the frozen cards board behind the calendar as
+      VISIBLE**, and `pkg-active-<slug>` is ONE wrapper whose testID tracks
+      the active package — so neither text nor visibility nor that testID
+      can name the calendar's copy of a card title. Schedule rows now carry
+      `calendar-event-<id>` (for source items: `calendar-event-src:...`),
+      which no other surface renders.
+    - Every view-mode switch PUSHES a new calendar screen instance that
+      stays mounted, so even a correct locator needs the visible filter for
+      the stacked duplicates.
 
 ## M6 — File attachments with previews
 
@@ -2164,6 +2218,42 @@ wants them rather than guessing the shape now.
       core unit **1039**, mail unit 151, drive unit 118, contacts unit 21,
       calendar unit 5. (An older line here recorded cards unit 177 / e2e
       35/35, from before the shortcut-scope and card-detail work.)
+
+      **OPEN — a consistent 5-spec failing cluster, every one a SECOND-
+      browser-context spec** (found running the M5 full gate, 2026-08-11
+      evening; reproduced across three full runs, a serial `--workers=1` run,
+      and single-spec isolation, so this is NOT the parallel-load flake
+      documented below — it is deterministic):
+      - `board-presence.spec.ts:44` (two sessions on one board)
+      - `board-sharing.spec.ts:47` — the sharpest repro: line 122, the
+        VIEWER's Escape leaves the peek open ("No comments yet." still
+        counted after the press; screenshot confirms the panel never closed)
+      - `card-attachments.spec.ts:230` (viewer; 90s timeout)
+      - `card-description-collab.spec.ts:299` (viewer cannot edit)
+      - `card-description-toolbar.spec.ts:316` (viewer gets no toolbar)
+      (`comment-editing.spec.ts:266`, the own-comments affordance, fails in
+      most runs too — same second-user shape.)
+      **Isolated to NOT be the M5 event-source work**: with every M5 change
+      stashed out of `tinycld/` and `calendar/` and the config regenerated,
+      `board-sharing.spec.ts` fails identically. The cluster sits in the
+      surfaces the in-flight comment-editor/card-keys work touches — core's
+      Escape/`isInputKeyEvent` rework (`tinycld` commit `6a8bffb`,
+      2026-08-11 18:11) and the shortcut scope-owner change landed the same
+      evening, and the uncommitted cards WIP touches `CardPeek` — so it was
+      deliberately left to that branch rather than debugged underneath it
+      mid-edit. Repro: `pnpm exec tinycld-pkg test:e2e --
+      tests/e2e/board-sharing.spec.ts`. Whoever picks this up: the question
+      to answer first is why the modal-scope Escape works for the OWNER
+      context (dozens of green specs) but not the invited second context.
+
+      **Also from that gate, both fixed at source in `calendar/`:**
+      `calendar-drag.spec.ts` computed "today" via `toISOString()` — the UTC
+      day — so it failed deterministically every evening west of Greenwich
+      (fixed to the runner's local day); and two playwright runs sharing one
+      machine collide on port 7200 (`reuseExistingServer` piggybacks the
+      second run on the first's server, whose teardown then kills it
+      mid-suite and whose `e2e:serve` DB reset nukes the other run's data) —
+      an e2e verdict is only trustworthy with the port uncontended.
 
       **Two keystroke/pointer-delivery races were fixed at source** while
       adding `card-editing.spec.ts`, both the shape the earlier `focusedTitle`
