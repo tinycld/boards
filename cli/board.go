@@ -54,10 +54,10 @@ func newBoardListCmd(c *client.Client) *cobra.Command {
 				if p.Archived {
 					state = "archived"
 				}
-				rows[i] = []string{p.Name, state, p.Updated, p.ID}
+				rows[i] = []string{p.Name, p.Slug, state, p.Updated, p.ID}
 			}
 			return o.Write(cmd.OutOrStdout(),
-				[]string{"NAME", "STATE", "UPDATED", "ID"}, rows, projects)
+				[]string{"NAME", "KEY", "STATE", "UPDATED", "ID"}, rows, projects)
 		},
 	}
 	cmd.Flags().BoolVarP(&all, "all", "a", false, "include archived boards")
@@ -116,19 +116,22 @@ func newBoardViewCmd(c *client.Client) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// KEY leads the card columns: it is the shortest cell and the one a
+			// reader copies out to name a card in a later command. The board is
+			// already loaded here, so its slug costs nothing.
 			for _, col := range view {
 				for _, cd := range col.Cards {
 					rows = append(rows, []string{
-						col.Name, cd.Title, dueCell(cd), names(cd.Assignees, users),
-						checklistCell(cd), cd.ID,
+						col.Name, formatCardKey(p.Slug, cd.Number), cd.Title, dueCell(cd),
+						names(cd.Assignees, users), checklistCell(cd), cd.ID,
 					})
 				}
 				if len(col.Cards) == 0 {
-					rows = append(rows, []string{col.Name, "-", "", "", "", ""})
+					rows = append(rows, []string{col.Name, "", "-", "", "", "", ""})
 				}
 			}
 			return o.Write(cmd.OutOrStdout(),
-				[]string{"LIST", "CARD", "DUE", "ASSIGNEES", "CHECKLIST", "ID"}, rows, view)
+				[]string{"LIST", "KEY", "CARD", "DUE", "ASSIGNEES", "CHECKLIST", "ID"}, rows, view)
 		},
 	}
 	cmd.Flags().BoolVarP(&all, "all", "a", false, "include archived cards")

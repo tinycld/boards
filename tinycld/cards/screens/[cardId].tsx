@@ -12,10 +12,11 @@ import { Pressable, Text, View } from 'react-native'
 import { BoardPresenceProvider } from '../components/BoardPresenceProvider'
 import { CardActionsMenu } from '../components/detail/CardActionsMenu'
 import { CardDetail } from '../components/detail/CardDetail'
+import { CardKeyBadge } from '../components/detail/CardKeyBadge'
 import type { EditableTextHandle } from '../components/detail/EditableText'
 import { ListStepper } from '../components/detail/ListStepper'
 import { ProjectWash } from '../components/ProjectWash'
-import { useActiveBoard } from '../hooks/useActiveBoard'
+import { useCardRoute } from '../hooks/useCardRoute'
 import { useProjectRole } from '../hooks/useProjectRole'
 import { type CardEntry, findCardEntry, neighborCardId } from '../lib/board-cards'
 import type { BoardProject } from '../types'
@@ -38,7 +39,12 @@ function usePageShortcuts(
     const shortcuts = useMemo<Shortcut[]>(() => {
         const step = (delta: number) => {
             const next = neighborCardId(project, cardId, delta)
-            if (next) router.replace(orgHref('cards/[cardId]', { cardId: next }))
+            if (!next) return
+            // Navigate by key when the neighbour has one, so stepping through a
+            // board with j/k leaves canonical URLs behind rather than switching
+            // the address bar to a record id halfway through.
+            const entry = findCardEntry(project, next)
+            router.replace(orgHref('cards/[cardId]', { cardId: entry?.card.key || next }))
         }
         // Mirrors the peek's binding at this scope, so `e` means the same thing
         // whichever surface the card is open on.
@@ -90,11 +96,14 @@ function usePageShortcuts(
 }
 
 export default function CardDetailScreen() {
-    const { cardId = '' } = useLocalSearchParams<{ cardId: string }>()
+    // The param is a record id OR a key like OTTER-123. It stays named `cardId`
+    // because the route file is [cardId].tsx and renaming it would change the
+    // URL; useCardRoute resolves either spelling to a record id.
+    const { cardId: routeParam = '' } = useLocalSearchParams<{ cardId: string }>()
     const orgHref = useOrgHref()
     const navigateBack = useNavigateBack(() => orgHref('cards'))
-    const { project, isLoading } = useActiveBoard()
-    const entry = project ? findCardEntry(project, cardId) : null
+    const { project, cardId, isLoading } = useCardRoute(routeParam)
+    const entry = project && cardId ? findCardEntry(project, cardId) : null
 
     // Loading is checked BEFORE the not-found branch. findCardEntry returns
     // null while the board query is still in flight, so without this guard
@@ -143,6 +152,7 @@ function CardPage({ project, entry, cardId, navigateBack }: CardPageProps) {
                     list={entry.list}
                     isInteractive={canEdit}
                 />
+                <CardKeyBadge cardKey={entry.card.key} />
                 <View className="flex-1" />
                 {canEdit ? (
                     <CardActionsMenu

@@ -158,6 +158,15 @@ export interface BoardAttachment {
 
 export interface BoardCardView {
     id: string
+    /**
+     * The quotable identifier — `OTTER-123` — or '' when there isn't one yet.
+     *
+     * Precomputed here rather than formatted at each render site because the
+     * slug half lives on the PROJECT, which a card node has no reference to.
+     * '' covers both a board with no slug and a card the server has not
+     * numbered (the optimistic-insert gap); see lib/card-key.ts.
+     */
+    key: string
     listId: string
     /** Fractional rank — see lib/rank.ts. Sort by `position, id`. */
     position: string
@@ -199,6 +208,12 @@ export interface BoardListRank {
 export interface BoardProject {
     id: string
     name: string
+    /**
+     * The board's half of a card key (`OTTER`), or '' for a board created
+     * without one. Uppercase alphanumeric and globally unique — see the
+     * migration in pb-migrations/1980000004.
+     */
+    slug: string
     color: CardsColor
     members: BoardMember[]
     lists: BoardListView[]

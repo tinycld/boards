@@ -32,6 +32,17 @@ var ftsConfig = fts.Config{
 		{Name: "title"},
 		{Name: "project"},
 		{Name: "list"},
+		// The card key's numeric half, so a palette row can show OTTER-123.
+		//
+		// Deliberately an OUTPUT column and NOT an indexed one. FTS5 cannot
+		// ALTER-add a column, so indexing the key would mean dropping,
+		// recreating and backfilling fts_cards — real risk to the only search
+		// index cards has — and it would not even work well: `porter
+		// unicode61` splits OTTER-123 on the hyphen, so the full key would
+		// match every card on the OTTER board plus everything mentioning
+		// "123". Exact-key lookup belongs to the URL resolver
+		// (hooks/useCardRoute.ts), which is the right shape for it.
+		{Name: "number", Type: "number"},
 	},
 	// Someone typing `/` wants active work, not history.
 	ExcludeField: "archived",
@@ -88,6 +99,11 @@ func registerShared(app *pocketbase.PocketBase) {
 	}
 
 	registerBoardCounters(app)
+	// Unrelated to the counters above despite the adjacency, and the opposite
+	// of them in every invariant: this one is a monotonic sequence, it runs
+	// before the row lands, and it FAILS the write when it cannot allocate.
+	// See card_number.go.
+	registerCardNumbers(app)
 	registerMemberLastOwnerGuard(app)
 	registerRealtime(app)
 

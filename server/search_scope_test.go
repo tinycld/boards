@@ -30,6 +30,10 @@ func setupSearchApp(t *testing.T) *tests.TestApp {
 
 	projects := core.NewBaseCollection("cards_projects")
 	projects.Fields.Add(&core.TextField{Name: "name"})
+	// projectSlugs reads this to build each row's key. A board with no slug is
+	// a legitimate shape, so the fixtures leave it empty and the rows simply
+	// carry no key — which is what makes searchCards' behaviour here honest.
+	projects.Fields.Add(&core.TextField{Name: "slug"})
 	projects.Fields.Add(&core.BoolField{Name: "archived"})
 	if err := app.Save(projects); err != nil {
 		t.Fatal(err)
@@ -51,6 +55,10 @@ func setupSearchApp(t *testing.T) *tests.TestApp {
 	cards := core.NewBaseCollection("cards_cards")
 	cards.Fields.Add(&core.TextField{Name: "title"})
 	cards.Fields.Add(&core.TextField{Name: "description"})
+	// ftsConfig selects this as an Output column to build the OTTER-123 key, so
+	// the synthetic collection needs it even though no assertion here reads it —
+	// without the column the search query itself fails to compile.
+	cards.Fields.Add(&core.NumberField{Name: "number"})
 	cards.Fields.Add(&core.RelationField{Name: "project", CollectionId: projects.Id, MaxSelect: 1})
 	cards.Fields.Add(&core.RelationField{Name: "list", CollectionId: lists.Id, MaxSelect: 1})
 	cards.Fields.Add(&core.BoolField{Name: "archived"})
@@ -95,6 +103,7 @@ func seedProjectWithCard(t *testing.T, app *tests.TestApp, title string) (string
 	}
 	project := core.NewRecord(projects)
 	project.Set("name", "Q3 Planning")
+	project.Set("slug", "Q3")
 	if err := app.Save(project); err != nil {
 		t.Fatal(err)
 	}
@@ -117,6 +126,11 @@ func seedProjectWithCard(t *testing.T, app *tests.TestApp, title string) (string
 	card := core.NewRecord(cardsColl)
 	card.Set("title", title)
 	card.Set("project", project.Id)
+	// Numbered explicitly: this app binds no hooks, so the allocator that would
+	// normally assign this is not running. With the slug above it makes the
+	// seeded card Q3-7, which is what the key assertion in
+	// search_source_test.go reads.
+	card.Set("number", 7)
 	if err := app.Save(card); err != nil {
 		t.Fatal(err)
 	}

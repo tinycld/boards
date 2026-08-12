@@ -225,6 +225,11 @@ func cardsCard(t *testing.T, app core.App, project, list *core.Record, title, po
 	r.Set("title", title)
 	r.Set("position", position)
 	r.Set("created_by", by.Id)
+	// `number` is deliberately NOT set. In production the OnRecordCreate hook
+	// in card_number.go assigns it; these suites bind no hooks by design, so a
+	// fixture card lands unnumbered — which the schema permits on purpose (see
+	// the required:false note in pb-migrations/1980000004). Nothing in these
+	// files asserts on keys, so an unnumbered fixture is the honest shape here.
 	if err := app.Save(r); err != nil {
 		t.Fatalf("save card %s: %v", title, err)
 	}

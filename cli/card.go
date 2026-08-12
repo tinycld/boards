@@ -87,6 +87,15 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 			if o.Format == output.JSON {
 				return o.Write(cmd.OutOrStdout(), nil, nil, detail)
 			}
+			// The key's slug half lives on the board, which this command has
+			// not otherwise loaded. One lookup by id, and a failure is
+			// swallowed: a missing board slug costs a row, not the whole view
+			// of a card the caller already fetched.
+			cardKey := ""
+			if board, boardErr := resolveProject(ctx, c, cd.Project); boardErr == nil {
+				cardKey = formatCardKey(board.Slug, cd.Number)
+			}
+
 			rows := [][]string{
 				{"Title", cd.Title},
 				{"List", cd.List},
@@ -98,6 +107,12 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 				{"Attachments", strconv.Itoa(cd.AttachmentCount)},
 				{"Archived", strconv.FormatBool(cd.Archived)},
 				{"ID", cd.ID},
+			}
+			// Above the ID would be nicer, but the row order above is what
+			// existing output tests read; appended so a board without a key
+			// simply omits the row rather than shifting every other one.
+			if cardKey != "" {
+				rows = append(rows, []string{"Key", cardKey})
 			}
 			if cd.Description != "" {
 				rows = append(rows, []string{"Description", firstLine(cd.Description)})

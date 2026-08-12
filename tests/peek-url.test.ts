@@ -1,0 +1,217 @@
+// @vitest-environment happy-dom
+import { renderHook } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { BoardProject } from '../tinycld/cards/types'
+
+const h = vi.hoisted(() => ({
+    focusedParam: '' as string,
+    openCardId: null as string | null,
+}))
+
+const replace = vi.fn()
+vi.mock('expo-router', () => ({
+    useRouter: () => ({ replace }),
+    useLocalSearchParams: () => ({ focused: h.focusedParam }),
+}))
+
+vi.mock('@tinycld/core/lib/org-routes', () => ({
+    useOrgHref: () => (path: string, extra?: Record<string, string>) =>
+        extra ? { pathname: `/${path}`, params: extra } : `/${path}`,
+}))
+
+const openCard = vi.fn()
+vi.mock('~/tinycld/cards/stores/cards-ui-store', () => ({
+    useCardsUIStore: (selector: (s: Record<string, unknown>) => unknown) =>
+        selector({ openCardId: h.openCardId, openCard }),
+}))
+
+import { usePeekUrl } from '@tinycld/cards/hooks/usePeekUrl'
+
+function board(overrides: Partial<BoardProject> = {}): BoardProject {
+    return {
+        id: 'p1',
+        name: 'Home projects',
+        slug: 'HOME',
+        color: '#4A86E8',
+        members: [],
+        labels: [],
+        listOrder: [{ id: 'l1', position: 'a0' }],
+        lists: [
+            {
+                id: 'l1',
+                name: 'To do',
+                position: 'a0',
+                isDone: false,
+                cards: [card('c1', 'HOME-1'), card('c2', 'HOME-2')],
+            },
+        ],
+        ...overrides,
+    }
+}
+
+function card(id: string, key: string) {
+    return {
+        id,
+        key,
+        listId: 'l1',
+        position: 'a0',
+        title: id,
+        description: '',
+        labels: [],
+        assignees: [],
+        checklistTotal: 0,
+        checklistDone: 0,
+        commentCount: 0,
+        attachmentCount: 0,
+    }
+}
+
+describe('usePeekUrl', () => {
+    afterEach(() => {
+        h.focusedParam = ''
+        h.openCardId = null
+        vi.clearAllMocks()
+    })
+
+    // URL -> store: a pasted link or a fresh load opens the peek.
+    it('opens the card named by ?focused=', () => {
+        h.focusedParam = 'HOME-2'
+        renderHook(() => usePeekUrl(board()))
+        expect(openCard).toHaveBeenCalledWith('c2')
+    })
+
+    it('accepts a lowercase key, so a retyped link still opens', () => {
+        h.focusedParam = 'home-2'
+        renderHook(() => usePeekUrl(board()))
+        expect(openCard).toHaveBeenCalledWith('c2')
+    })
+
+    // Links minted before keys existed must keep working.
+    it('accepts a raw record id', () => {
+        h.focusedParam = 'c1'
+        renderHook(() => usePeekUrl(board()))
+        expect(openCard).toHaveBeenCalledWith('c1')
+    })
+
+    // A key from ANOTHER board must not resolve to whichever local card happens
+    // to carry that number — the full-page route is what crosses boards.
+    it('ignores a key belonging to a different board', () => {
+        h.focusedParam = 'FOX-2'
+        renderHook(() => usePeekUrl(board()))
+        expect(openCard).not.toHaveBeenCalled()
+    })
+
+    it('ignores a number that names no card here', () => {
+        h.focusedParam = 'HOME-99'
+        renderHook(() => usePeekUrl(board()))
+        expect(openCard).not.toHaveBeenCalled()
+    })
+
+    // store -> URL: opening a card writes the key.
+    it('writes the key when a card is open and the URL is bare', () => {
+        h.openCardId = 'c2'
+        renderHook(() => usePeekUrl(board()))
+        expect(replace).toHaveBeenCalledWith({
+            pathname: '/cards',
+            params: { focused: 'HOME-2' },
+        })
+    })
+
+    // Closing is a TRANSITION, not a starting state: the peek was open and the
+    // URL agreed, then the card closed. Modelled as a rerender because a first
+    // render with (param set, nothing open) is the cold-LOAD case instead, and
+    // the two want opposite outcomes — see the cold-load test below.
+    it('clears the param when the peek closes', () => {
+        h.focusedParam = 'HOME-2'
+        h.openCardId = 'c2'
+        const { rerender } = renderHook(() => usePeekUrl(board()))
+        expect(replace).not.toHaveBeenCalled()
+
+        h.openCardId = null
+        rerender()
+        expect(replace).toHaveBeenCalledWith('/cards')
+    })
+
+    // THE CLOSE REGRESSION. Closing is not one render: the store clears first
+    // and the URL is cleared by an effect, so for at least one render the peek
+    // is shut while `?focused=` still names the card. The URL->store direction
+    // must not treat that window as an arriving link and reopen the card —
+    // Escape would then be a no-op, the peek visibly never closing.
+    //
+    // The store is REAL here, not a vi.fn(): with a mocked openCard the reopen
+    // is invisible, which is exactly how this shipped past the existing
+    // "clears the param when the peek closes" test above.
+    it('does not reopen the card while the stale param is still in the URL', () => {
+        h.focusedParam = 'HOME-2'
+        h.openCardId = 'c2'
+        const { rerender } = renderHook(() => usePeekUrl(board()))
+
+        // The user presses Escape: the store clears, the URL has not caught up.
+        h.openCardId = null
+        rerender()
+
+        expect(openCard).not.toHaveBeenCalled()
+        expect(replace).toHaveBeenCalledWith('/cards')
+    })
+
+    // The two directions must not fight: when they already agree, neither the
+    // store nor the history is touched.
+    it('does nothing when the URL already matches the open card', () => {
+        h.focusedParam = 'HOME-2'
+        h.openCardId = 'c2'
+        renderHook(() => usePeekUrl(board()))
+        expect(replace).not.toHaveBeenCalled()
+        expect(openCard).not.toHaveBeenCalled()
+    })
+
+    // A board with no slug still gets linkable cards, by record id.
+    it('falls back to the record id for a board with no key', () => {
+        h.openCardId = 'c1'
+        const noSlug = board({
+            slug: '',
+            lists: [
+                {
+                    id: 'l1',
+                    name: 'To do',
+                    position: 'a0',
+                    isDone: false,
+                    cards: [card('c1', '')],
+                },
+            ],
+        })
+        renderHook(() => usePeekUrl(noSlug))
+        expect(replace).toHaveBeenCalledWith({
+            pathname: '/cards',
+            params: { focused: 'c1' },
+        })
+    })
+
+    // THE COLD-LOAD REGRESSION. Pasting a link arrives here with the URL naming
+    // a card and the store still empty — the two disagree for one render. An
+    // earlier version wrote the store->URL direction unconditionally on that
+    // render, so the link stripped its own param and landed on a bare board.
+    // The peek must open and the param must survive.
+    it('opens the card and keeps the param on a cold load', () => {
+        h.focusedParam = 'HOME-2'
+        h.openCardId = null
+        renderHook(() => usePeekUrl(board()))
+        expect(openCard).toHaveBeenCalledWith('c2')
+        expect(replace).not.toHaveBeenCalled()
+    })
+
+    // The mirror image, which the guard above must NOT break: a param that
+    // resolves to nothing is stale and should still be cleared.
+    it('still clears a param that resolves to no card', () => {
+        h.focusedParam = 'HOME-99'
+        h.openCardId = null
+        renderHook(() => usePeekUrl(board()))
+        expect(replace).toHaveBeenCalledWith('/cards')
+    })
+
+    it('does nothing at all before the board has loaded', () => {
+        h.focusedParam = 'HOME-2'
+        renderHook(() => usePeekUrl(null))
+        expect(openCard).not.toHaveBeenCalled()
+        expect(replace).not.toHaveBeenCalled()
+    })
+})

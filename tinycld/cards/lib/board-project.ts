@@ -3,6 +3,7 @@
 // Kept pure and outside the query hook so it can be tested without React, and
 // so every "PocketBase says '' where the UI wants undefined" conversion lives
 // in one place instead of being repeated per component.
+
 import type {
     BoardCardView,
     BoardLabel,
@@ -16,6 +17,7 @@ import type {
     CardsProjects,
     Users,
 } from '../types'
+import { formatCardKey } from './card-key'
 
 /** The subset of a user row the board actually renders. */
 type UserLike = Pick<Users, 'id' | 'name' | 'email'>
@@ -68,10 +70,15 @@ export function toBoardLabel(label: CardsLabels): BoardLabel {
 export function toBoardCard(
     card: CardsCards,
     labelsById: Map<string, BoardLabel>,
-    usersById: Map<string, BoardMember>
+    usersById: Map<string, BoardMember>,
+    projectSlug: string
 ): BoardCardView {
     return {
         id: card.id,
+        // Resolved here because the slug lives on the project and a card node
+        // carries no reference back to it. formatCardKey returns '' for a board
+        // with no slug and for the beat before the server assigns a number.
+        key: formatCardKey(projectSlug, card.number),
         listId: card.list,
         position: card.position,
         title: card.title,
@@ -175,7 +182,7 @@ export function buildBoardProject(
     const cardsByList = new Map<string, BoardCardView[]>()
     for (const card of [...cards].sort(byRank)) {
         if (card.archived) continue
-        const view = toBoardCard(card, labelsById, usersById)
+        const view = toBoardCard(card, labelsById, usersById, project.slug)
         const bucket = cardsByList.get(card.list)
         if (bucket) bucket.push(view)
         else cardsByList.set(card.list, [view])
@@ -185,6 +192,7 @@ export function buildBoardProject(
     const fresh: BoardProject = {
         id: project.id,
         name: project.name,
+        slug: project.slug,
         color: project.color,
         members: members.map(toBoardMember),
         // Sorted by name so the label picker has a stable order that does not
@@ -223,6 +231,10 @@ function sameLabel(a: BoardLabel, b: BoardLabel): boolean {
 function sameCard(a: BoardCardView, b: BoardCardView): boolean {
     return (
         a.id === b.id &&
+        // Without this line the key never appears on an optimistically-inserted
+        // card: the number arrives from the server a beat later, and a node
+        // that compares equal keeps being reused from the previous tree.
+        a.key === b.key &&
         a.listId === b.listId &&
         a.position === b.position &&
         a.title === b.title &&
@@ -309,6 +321,10 @@ function shareTree(previous: BoardProject, fresh: BoardProject): BoardProject {
         members === previous.members &&
         listOrder === previous.listOrder &&
         previous.name === fresh.name &&
+        // An owner editing the board's key re-keys every card on it, and the
+        // card nodes above already reflect that. Without this line the PROJECT
+        // node would still be reused, so the header would keep the old slug.
+        previous.slug === fresh.slug &&
         previous.color === fresh.color
     ) {
         return previous

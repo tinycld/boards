@@ -115,7 +115,7 @@ export function BoardCard({ card, projectId, isDone, canDrag }: BoardCardProps) 
         >
             <DropMarker isDropTarget={isDropTarget} cardId={card.id} />
             <FocusMarker isFocused={isFocused} cardId={card.id} />
-            <CardLabels labels={card.labels ?? []} />
+            <CardTopRow labels={card.labels ?? []} cardKey={card.key} />
             <Text
                 className="text-[13.5px] font-medium leading-[18px] text-foreground"
                 numberOfLines={3}
@@ -124,6 +124,57 @@ export function BoardCard({ card, projectId, isDone, canDrag }: BoardCardProps) 
             </Text>
             <CardMeta card={card} />
         </Pressable>
+    )
+}
+
+/**
+ * Labels and the card key share one row above the title.
+ *
+ * They are rendered together rather than stacked because the key is a short
+ * identifier, not a line of content: on its own row it read as a heading over
+ * the title and cost a card face ~16px for four characters. Sharing the row
+ * puts it where a label overflow count would sit, and the row survives when
+ * either half is missing.
+ *
+ * The key is pushed RIGHT with a spacer so it lands in a consistent spot down a
+ * column, instead of jittering with each card's label widths.
+ *
+ * Renders nothing at all when there are no labels AND no key — the case for
+ * most cards on a fresh board, which should not carry an empty row.
+ */
+function CardTopRow({ labels, cardKey }: { labels: BoardLabel[]; cardKey: string }) {
+    if (labels.length === 0 && !cardKey) return null
+    return (
+        <View className="flex-row items-center gap-1">
+            <CardLabels labels={labels} />
+            <View className="flex-1" />
+            <CardKey cardKey={cardKey} />
+        </View>
+    )
+}
+
+/**
+ * The card key — `OTTER-123`.
+ *
+ * Renders NOTHING when there is no key, and neither case is an error state: a
+ * board with no slug, and the beat between an optimistic insert and the server
+ * echo that assigns the number (formatCardKey maps both to '' — see
+ * lib/card-key.ts).
+ *
+ * Deliberately not a skeleton for that second case. The gap is one round trip
+ * on a local socket, so a placeholder would flicker, and it would imply the key
+ * can be SLOW when nothing else on this face makes that claim. The title the
+ * user just typed is what they are looking at anyway.
+ */
+function CardKey({ cardKey }: { cardKey: string }) {
+    if (!cardKey) return null
+    return (
+        <Text
+            className="text-[10.5px] font-medium tracking-wide text-muted"
+            testID="cards-card-key"
+        >
+            {cardKey}
+        </Text>
     )
 }
 

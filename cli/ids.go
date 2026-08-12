@@ -18,8 +18,11 @@ import (
 // lookup rather than nested objects.
 
 type project struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// The board half of a card key (OTTER). '' for a board created without
+	// one; formatCardKey renders nothing in that case.
+	Slug       string `json:"slug"`
 	Color      string `json:"color"`
 	Archived   bool   `json:"archived"`
 	Visibility string `json:"visibility"`
@@ -43,6 +46,11 @@ type card struct {
 	Position    string   `json:"position"`
 	Title       string   `json:"title"`
 	Description string   `json:"description"`
+	// The card half of a key (the 123 in OTTER-123). Assigned by
+	// server/card_number.go — read-only here, exactly like the counters below.
+	// The CLI must never write one: the hook overwrites whatever a body
+	// carries, so a written value is discarded.
+	Number      int      `json:"number"`
 	Due         string   `json:"due"`
 	Assignees   []string `json:"assignees"`
 	Labels      []string `json:"labels"`
@@ -229,12 +237,54 @@ func resolveList(ctx context.Context, c *client.Client, projectID, ref string) (
 	}
 }
 
-// getCard reads one card BY ID. Cards are addressed by id only: a title is
-// free text, is not unique even within a column, and is the field most likely
-// to be edited — resolving one by name would make `cards card edit` act on a
-// different row after a rename.
-func getCard(ctx context.Context, c *client.Client, id string) (card, error) {
-	return client.GetRecord[card](ctx, c, cardsCollection, id)
+// getCard reads one card by RECORD ID or by KEY (OTTER-12).
+//
+// Still never by TITLE: a title is free text, is not unique even within a
+// column, and is the field most likely to be edited — resolving one by name
+// would make `cards card edit` act on a different row after a rename. A key has
+// none of those problems, which is the whole reason it exists.
+//
+// The key path costs one extra request, because the slug names a board that has
+// to be resolved to a project id before the card can be filtered. Worth it: a
+// key is what a person actually has in hand, having read it off a card face or
+// out of a URL, whereas an id has to be copied from somewhere.
+//
+// A key that names no board — or a number that names no card on it — is a
+// not-found error rather than a fallthrough to an id lookup. "OTTER-12" is
+// unambiguously a key, and retrying it as an id would report the wrong failure.
+func getCard(ctx context.Context, c *client.Client, ref string) (card, error) {
+	slug, number, isKey := parseCardKey(ref)
+	if !isKey {
+		return client.GetRecord[card](ctx, c, cardsCollection, ref)
+	}
+
+	projects, err := visibleProjects(ctx, c)
+	if err != nil {
+		return card{}, err
+	}
+	// No ambiguity handling, unlike resolveProject's by-name path: the unique
+	// index on cards_projects.slug guarantees at most one board per key.
+	var projectID string
+	for _, p := range projects {
+		if p.Slug != "" && strings.EqualFold(p.Slug, slug) {
+			projectID = p.ID
+			break
+		}
+	}
+	if projectID == "" {
+		return card{}, fmt.Errorf("no board with key %q", slug)
+	}
+
+	cards, err := client.ListAll[card](ctx, c, cardsCollection,
+		client.Filter("project = {:p} && number = {:n}",
+			map[string]any{"p": projectID, "n": number}), "")
+	if err != nil {
+		return card{}, err
+	}
+	if len(cards) == 0 {
+		return card{}, fmt.Errorf("no card %s", ref)
+	}
+	return cards[0], nil
 }
 
 // listCards returns a column's cards in board order. Archived cards are

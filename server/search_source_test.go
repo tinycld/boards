@@ -39,6 +39,36 @@ func TestSearchSourceMapsHitsToRows(t *testing.T) {
 	}
 }
 
+// The card key on a search row.
+//
+// Meta is the palette's trailing slot AND what the scorer folds into its
+// secondary-match tier, so this is what makes typing "Q3-7" surface the card
+// even though the key is deliberately not an indexed FTS column. The slug half
+// comes from the BOARD, which an Output column cannot reach — so this also
+// covers projectSlugs' extra lookup.
+func TestSearchSourceCarriesTheCardKey(t *testing.T) {
+	app := setupSearchApp(t)
+	member, _, _ := seedProjectWithCard(t, app, "Ship the budget")
+
+	result, err := searchCards(app, member, search.Query{Include: []string{"budget"}, Limit: 25})
+	if err != nil {
+		t.Fatalf("searchCards: %v", err)
+	}
+	if len(result.Rows) != 1 {
+		t.Fatalf("rows = %+v, want one", result.Rows)
+	}
+	row := result.Rows[0]
+	if row.Meta != "Q3-7" {
+		t.Errorf("meta = %q, want %q", row.Meta, "Q3-7")
+	}
+	if row.Fields["key"] != "Q3-7" {
+		t.Errorf("fields[key] = %v, want %q", row.Fields["key"], "Q3-7")
+	}
+	if row.Fields["number"] != 7 {
+		t.Errorf("fields[number] = %v, want 7", row.Fields["number"])
+	}
+}
+
 func TestSearchSourceRespectsMembershipScope(t *testing.T) {
 	// The aggregator hands the source a user id and trusts it to scope. A
 	// non-member must get nothing — this is the same guarantee the route has,

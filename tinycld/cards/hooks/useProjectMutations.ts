@@ -25,12 +25,26 @@ const DEFAULT_LISTS = [
 export interface CreateProjectInput {
     name: string
     color: string
+    /**
+     * The board half of a card key (`OTTER`). '' is allowed and means the board
+     * gets no key — the column is optional, and the dialog leaves the field
+     * empty when a name yields no usable suggestion.
+     */
+    slug: string
 }
 
 export interface UpdateProjectInput {
     projectId: string
     name?: string
     color?: string
+    /**
+     * Changing this re-keys every card on the board — OTTER-7 becomes FOX-7 —
+     * because a key is formatted from the board's CURRENT slug rather than
+     * stored per card. That is the intended behavior (one board, one key
+     * prefix), but it does invalidate previously shared links, so a caller
+     * offering this should say so.
+     */
+    slug?: string
 }
 
 /** Rename a board or change its color. Owner-only, enforced by the PB rule. */
@@ -43,6 +57,7 @@ export function useUpdateProject() {
             yield projectsCollection.update(input.projectId, draft => {
                 if (input.name !== undefined) draft.name = input.name
                 if (input.color !== undefined) draft.color = input.color
+                if (input.slug !== undefined) draft.slug = input.slug
             })
         }),
     })
@@ -117,6 +132,7 @@ export function useCreateProject(options: { onError?: (error: unknown) => void }
             yield projectsCollection.insert({
                 id: projectId,
                 name: input.name,
+                slug: input.slug,
                 color: input.color,
                 visibility: 'private',
                 created_by: userId,
