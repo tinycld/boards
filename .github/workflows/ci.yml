@@ -3,8 +3,20 @@ name: CI
 on:
   push:
     branches: [main]
+  # Every PR, whatever it targets — NOT `branches: [main]`.
+  #
+  # Work here stacks: a PR often targets the unmerged branch below it rather
+  # than main. A `branches: [main]` filter silently skips those, so a stacked
+  # PR reports "no checks reported" and reads as unverified-but-fine rather
+  # than never-run. PR #24 sat three deep with zero runs; text/ hit the same
+  # wall and worked around it by hardcoding one branch into the `push` trigger,
+  # which needs editing for every new stack.
+  #
+  # A stacked PR is tested as a merge into ITS OWN base, which is what you
+  # want — each PR verifies its own increment, and the branch below it is
+  # verified by its own run. The `push: [main]` trigger above still covers
+  # post-merge trunk.
   pull_request:
-    branches: [main]
 
 env:
   PACKAGE: cards
