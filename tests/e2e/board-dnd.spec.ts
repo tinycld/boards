@@ -204,10 +204,18 @@ test.describe('Cards — drag and drop', () => {
         await addCard(page, 0, 'task card')
         await boardCard(page, 'task card').click()
 
+        // Type into the INPUT, not at the page: the composer is autoFocused a
+        // tick after mount, so a blind `keyboard.type` races that focus and
+        // silently drops the label (the same defect fixed in `addCard`). The
+        // composer stays open after Enter, so the loop reuses one locator.
         await page.getByText('Add item', { exact: true }).click()
+        const itemInput = page.getByPlaceholder('Add an item').first()
+        await expect(itemInput).toBeVisible()
         for (const label of ['alpha', 'beta', 'gamma']) {
-            await page.keyboard.type(label)
-            await page.keyboard.press('Enter')
+            await itemInput.fill(label)
+            await expect(itemInput).toHaveValue(label)
+            await itemInput.press('Enter')
+            await expect(page.getByLabel(`Edit ${label}`).first()).toBeVisible()
         }
         await page.keyboard.press('Escape')
 

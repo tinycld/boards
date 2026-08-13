@@ -1045,6 +1045,63 @@ precedent for everything except the Modal shell.
 - [ ] Add support for @<user> in description and comments.  Doing so should trigger notification 
       to them.  This may branch out into larger issue of how to handle notifications and allowing
       users to customize delivery
+    - [ ] **Native `@` picker is NOT implemented** —
+      `components/detail/MentionPopover.tsx` (the native variant) renders
+      `null`. Web is done: `MentionPopover.web.tsx` portals a real picker to
+      `<body>`. Everything EXCEPT the affordance already works on native — a
+      `[[@id]]` typed by hand, or synced from a description someone wrote on
+      web, still notifies and still renders as the person's name. Only the
+      autocomplete popover is missing, so this is a discoverability gap rather
+      than a broken feature.
+      **Why it is not just a component:** on native the editor is a WebView, so
+      the trigger plugin runs INSIDE the page while the popover must be drawn
+      by the host — different JS contexts, no shared React state. The bridge
+      protocol already exists (`show-popover` / `popover-update` /
+      `popover-result` / `popover-dismissed` in
+      `@tinycld/core/lib/editor/message-bus/types.ts`), and `text/` has a
+      working host implementation to copy
+      (`components/SlashMenuPopover.tsx` + `lib/anchored-overlay/`). The work
+      is wiring core's trigger (`core/lib/editor/rich/triggers.ts`) to post
+      over that bus when it runs inside the WebView, and rendering the host
+      overlay on the cards side. Self-contained; changes nothing on web.
+      NOTE: this makes @-mention authoring web-only for now, which the
+      "both platforms" rule in CLAUDE.md otherwise forbids.
+    - [ ] **No notification settings UI exists anywhere in the app**, so a user
+      cannot mute mentions (or anything else) from the interface. This is a
+      CORE gap, not a cards one, and it predates mentions:
+      `@tinycld/core/lib/use-notification-preferences.ts` has always existed
+      and NOTHING renders it — there is no notifications screen under
+      `core/components/settings/`.
+      The server half works end to end: `NotifyUser` calls
+      `isNotificationMuted`, which reads a flat `{type: boolean}` map from the
+      `user_preferences` row (`app='notifications'`, `key='preferences'`), and
+      that path is now covered by tests on both the comment and description
+      mention routes. So a preference written directly to that record IS
+      honoured — there is just no screen to write it from.
+      Mention types are `comment_mention` (text/calc, shared) and
+      `cards_mention` (cards; covers BOTH its comment and description
+      mentions — `mentionTypeFor` in core's notify hook derives this, and a
+      test pins the two halves together).
+      Whoever builds the screen should own every existing type, not only
+      mentions: calendar_reminder, calendar_invite,
+      calendar_subscription_error, mail_new_message, drive_file_shared,
+      org_invite, system_error.
+    - [x] `tests/e2e/card-mentions.spec.ts` **runs and passes** (both cases:
+      the mention round-trip and the viewer refusal). Running it found three
+      real bugs that every unit test had missed, which is the argument for the
+      spec existing:
+        - **The picker inserted nothing.** `onPressIn` fired on mouse-down,
+          which blurred the editor; the suggestion plugin resolves the
+          trigger's range from the live selection, so the command had nowhere
+          to write. Fixed by `preventDefault` on mouse-down (MentionPopover.web).
+        - **Raw `[[@id]]` tokens rendered on screen.** The rich editor
+          serializes to markdown, where `[` is syntax, so tokens are STORED
+          backslash-escaped (`\[\[@id\]\]`). The culprit was the fast-path
+          guard `body.indexOf('[[@')`, which skips the escaped spelling and
+          returns the body untouched — the regex itself was fine.
+        - **The same escaping broke the Go parser**, so a picker-typed mention
+          in a DESCRIPTION would have notified nobody. Both parsers now accept
+          either spelling, with regression tests on both sides.
       
 
 
@@ -2562,3 +2619,89 @@ wants them rather than guessing the shape now.
       Do **NOT** add reporter to `ftsConfig.Columns`: FTS5 cannot ALTER-add a
       column, so it means dropping, recreating and backfilling `fts_cards`. The
       `number` field settled this same tradeoff the same way.
+
+## Bug — `(edited)` marker never appears on an edited comment ✅ RESOLVED (stale report)
+
+**The marker test passes and the diagnosis below was wrong.** Re-measured
+2026-08-13: `comment-editing.spec.ts › an edited comment gains the (edited)
+marker` passes on every run, as does the whole suite (86/86, twice
+consecutively). No cards or pbtsdb change was needed to make it pass, so
+whatever caused the original red check was fixed incidentally by later work.
+
+**The pbtsdb hypothesis is DISPROVEN — do not act on it.** Read
+`node_modules/pbtsdb/dist/chunk-*.js`: `onUpdate` applies the PATCH response
+through `writeServerRecords(updated)` → `writeUpsert`, and `syncMode` is not
+consulted anywhere on that path. `on-demand` appears exactly once in the whole
+bundle, in `upsertExpandedRelation` — it gates *expand hydration*, nothing else.
+So the echo is not dropped for on-demand collections, and the "every
+server-owned field on those three tables is stale after a client write" worry
+does not follow. (`writeServerRecords` does have two real guards worth knowing —
+it skips when the collection is not `isReady()`, and `isStaleServerRecord`
+discards an echo whose `updated` is older than the stored row — but neither
+fired here.)
+
+**What WAS red, and is now fixed: two e2e races, both in test helpers.** The
+full suite failed a *different* test on each run — the signature of flakiness,
+not of the marker bug:
+- `addCard` (`tests/e2e/helpers.ts`) typed at the page immediately after
+  clicking "Add card", racing the composer's `autoFocus`. Lost keystrokes left
+  the controlled input empty, so Enter submitted nothing and the card never
+  appeared — the failure snapshot showed the composer open and empty next to an
+  already-placed first card. Now types into the input and asserts the value
+  landed before submitting. The checklist loop in `board-dnd.spec.ts` had the
+  same defect and the same fix.
+- `columnHeader` was `getByText(name).first()` — a page-wide text match, but a
+  list name also appears in the ListStepper, the move-to-list menu and the
+  column-actions menu. `.first()` could resolve to a chrome node that passes
+  `waitFor({ state: 'visible' })` yet measures zero-area, surfacing as
+  "locator has no bounding box (not visible?)" from `centerOf`. Now anchored on
+  the header Pressable's accessibility label, which only the real header stamps.
+
+The original report follows, kept because its server-side measurement is sound
+and its closing warning still stands.
+
+### Original report (server measurement still valid)
+
+**Symptom.** Edit a comment and save. The body updates (optimistic, instant)
+but `(edited)` never renders — not after the PATCH lands, not after 3s, not
+after a reload. Measured directly from the browser: `HAS-BETTER: true`,
+`HAS-EDITED-TEXT: false`.
+
+**What the marker keys on.** `EditedMarker` (`components/detail/DetailActivity.tsx`)
+renders only when `comment.updated !== comment.created`. So the client's copy
+of the row still has the two equal after an edit.
+
+**The server is NOT the problem — this was measured, not assumed.** A Go probe
+against the real schema (`app.Save` on `cards_comments`, twice) showed:
+
+    at create   created=…19:43:25.617Z updated=…19:43:25.617Z  equal
+    after 1.2s  created=…19:43:46.002Z updated=…19:43:47.202Z  DIFFER
+    delay 0ms   differ=false
+    delay 1ms   differ=true
+
+So `updated` is a working autodate with `onUpdate: true` (migration
+1980000000), and it advances past `created` for any edit ≥1ms later. A real
+human edit is always far outside that window. The migration is correct and
+needs no change.
+
+**Where it actually breaks: the client never receives the new `updated`.**
+`cards_comments` is `syncMode: 'on-demand'` (`tinycld/cards/collections.ts`).
+The suspicion — NOT yet proven, this is where the next person picks up — is
+that pbtsdb's on-demand mode does not apply the PATCH response's autodate
+fields back onto the optimistically-updated local row: the mutation writes
+`draft.body` locally, the server echoes a row whose `updated` has moved, and
+the local copy keeps its original timestamps.
+
+**Why this is bigger than one marker.** THREE collections are on-demand —
+`cards_comments`, `cards_checklist_items`, `cards_attachments`. If the echo is
+genuinely being dropped, every server-owned field on those tables is stale
+after a client write, and `(edited)` is just the one place it is visible. Worth
+checking whether `cards_cards.number` (server-allocated, eager collection)
+behaves differently for the same reason.
+
+~~**Next step.** Prove or disprove the sync hypothesis before changing
+anything.~~ **Done — disproven by reading pbtsdb's update path directly; see the
+resolution above.** The echo is applied regardless of `syncMode`.
+
+Do NOT "fix" this by relaxing the test, widening its timeout, or having
+`EditedMarker` guess from something other than the timestamps.

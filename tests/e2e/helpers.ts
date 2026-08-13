@@ -25,9 +25,21 @@ export function boardCard(page: Page, title: string): Locator {
         .first()
 }
 
-/** Column root, located by walking up from the header title text. */
+/**
+ * A column's draggable header title.
+ *
+ * Anchored on the header Pressable's accessibility label (`BoardColumn.tsx`),
+ * NOT on a bare page-wide `getByText(name)`. The text match was wrong in a way
+ * that only showed up under parallel load: a list name is not unique on the
+ * page — it also appears in the card peek's ListStepper, the move-to-list menu
+ * and the column-actions menu — so `.first()` could resolve to a chrome node
+ * that satisfies `waitFor({ state: 'visible' })` while measuring zero-area,
+ * which is what surfaced as "locator has no bounding box (not visible?)" out of
+ * `centerOf`. The label is stamped only by the real header, so there is exactly
+ * one match and it is the element the drag helpers mean to grab.
+ */
 export function columnHeader(page: Page, name: string): Locator {
-    return page.getByText(name, { exact: true }).first()
+    return page.getByLabel(`${name} list — double tap to collapse`)
 }
 
 /**
@@ -52,12 +64,29 @@ export async function createBoard(page: Page, name: string, key?: string) {
     await expect(columnHeader(page, 'Done')).toBeVisible()
 }
 
-/** Add a card via a column's composer. Enter keeps the composer open, so
- *  Escape closes it after. `columnIndex` picks which "Add card" button. */
+/**
+ * Add a card via a column's composer. Enter keeps the composer open, so
+ * Escape closes it after. `columnIndex` picks which "Add card" button.
+ *
+ * The composer's input is CONTROLLED and focused by `autoFocus`
+ * (`CardComposer.tsx`), which lands a tick after mount — so typing into the
+ * page straight after the click races that focus and the keystrokes go
+ * nowhere. The failure is silent and looks like a lost card: `title` stays '',
+ * Enter submits nothing, and the assertion below times out against a composer
+ * sitting open and empty (exactly what the failing run's snapshot showed).
+ *
+ * So type into the INPUT rather than at the page, and assert the value landed
+ * before submitting — the same discipline `comment-editing.spec.ts`'s
+ * `typeInto` already applies to its ProseMirror surfaces. `fill` is
+ * atomic against a controlled input where `keyboard.type` is not.
+ */
 export async function addCard(page: Page, columnIndex: number, title: string) {
     await page.getByText('Add card', { exact: true }).nth(columnIndex).click()
-    await page.keyboard.type(title)
-    await page.keyboard.press('Enter')
+    const input = page.getByPlaceholder('What needs doing?').first()
+    await expect(input).toBeVisible()
+    await input.fill(title)
+    await expect(input).toHaveValue(title)
+    await input.press('Enter')
     await expect(boardCard(page, title)).toBeVisible()
     await page.keyboard.press('Escape')
 }
