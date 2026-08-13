@@ -113,8 +113,10 @@ test.describe('Cards — description formatting toolbar', () => {
         // same document can be on screen more than once.
         await expect(descriptionEditor(page).locator('strong').first()).toHaveText('review')
 
-        // A reload proves the markdown SOURCE was written, not just the DOM.
-        await page.reload()
+        // Leaving and coming back proves the markdown SOURCE was written, not
+        // just the DOM. In-app rather than a reload — see the note on the
+        // all-buttons test below.
+        await navigateToPackage(page, 'mail')
         await navigateToPackage(page, 'cards')
         await openBoard(page, board)
         await openCard(page, CARD_TITLE)
@@ -209,10 +211,20 @@ test.describe('Cards — description formatting toolbar', () => {
         await block('quoteline', 'Quote')
         await expect(editor.locator('blockquote', { hasText: 'quoteline' })).toBeVisible()
 
-        // Every node type at once, after a reload: proves each command's
-        // output was persisted and re-parsed, not just painted. (Underline is
-        // the one markdown has no native syntax for — it rides ++text++.)
-        await page.reload()
+        // Every node type at once, after leaving and coming back: proves each
+        // command's output was persisted and re-parsed, not just painted.
+        // (Underline is the one markdown has no native syntax for — it rides
+        // ++text++.)
+        //
+        // Navigated in-app rather than with page.reload(). A reload tears down
+        // the SPA — the same objection CLAUDE.md raises against goto() for
+        // in-app navigation — and here it also drops the board's realtime
+        // socket. The description editor mounts only once the Yjs room is
+        // ready, so a cold reload re-races the reconnect against the card
+        // opening, and this assertion would be timing the socket rather than
+        // testing persistence. Leaving the package unmounts the card detail,
+        // which is all the re-parse needs.
+        await navigateToPackage(page, 'mail')
         await navigateToPackage(page, 'cards')
         await openBoard(page, board)
         await openCard(page, CARD_TITLE)

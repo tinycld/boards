@@ -139,9 +139,11 @@ test.describe('Cards — collaborative descriptions', () => {
             await expectDescriptionToContain(page, 'Confirmed.')
 
             // The server flushes the shared document back to the stored field,
-            // so a reload with a fresh document proves it was persisted rather
-            // than merely relayed between two open editors.
-            await page.reload()
+            // so re-entering with a fresh document proves it was persisted
+            // rather than merely relayed between two open editors. Navigated
+            // in-app: a reload would drop this page's own room connection and
+            // race the reconnect against the assertion below.
+            await navigateToPackage(page, 'mail')
             await navigateToPackage(page, 'cards')
             await openBoard(page, boardName)
             await openCard(page, CARD_TITLE)

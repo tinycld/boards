@@ -173,8 +173,10 @@ test.describe('card attachments', () => {
         await expect(page.getByText('release-notes.txt', { exact: true })).toBeVisible()
         await expect(page.getByText('discarded.txt', { exact: true })).toBeHidden()
 
-        // The name is a column, not client state — it must survive a reload.
-        await page.reload()
+        // The name is a column, not client state — it must survive leaving the
+        // card. Navigated in-app: a reload re-races the realtime reconnect, so
+        // the assertion below would be timing the socket rather than the write.
+        await navigateToPackage(page, 'mail')
         await navigateToPackage(page, 'cards')
         await openBoard(page, boardName)
         await openCard(page, CARD_TITLE)

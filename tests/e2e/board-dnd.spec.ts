@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { appShell, login, navigateToPackage } from '@tinycld/core/e2e-helpers'
+import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
 import {
     activateDrag,
     addCard,
@@ -43,9 +43,11 @@ test.describe('Cards — drag and drop', () => {
             .poll(async () => cardsInColumn(page, 'To do'))
             .toEqual(['second', 'third', 'first'])
 
-        // Reload proves the rank actually wrote — not just optimistic state.
-        await page.reload()
-        await appShell(page).waitFor({ state: 'visible' })
+        // Leaving and coming back proves the rank actually wrote — not just
+        // optimistic state. In-app rather than a reload, which would tear down
+        // the SPA and re-race the board's realtime reconnect.
+        await navigateToPackage(page, 'mail')
+        await navigateToPackage(page, 'cards')
         await expect(boardCard(page, 'first')).toBeVisible()
         await expect
             .poll(async () => cardsInColumn(page, 'To do'))

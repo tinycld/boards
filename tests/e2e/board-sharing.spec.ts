@@ -78,9 +78,18 @@ test.describe('Cards — board sharing and role gates', () => {
             await page.getByRole('button', { name: 'Add', exact: true }).click()
             await expect(page.getByPlaceholder('Search by name or email')).not.toBeVisible()
 
-            // Reload proves the membership persisted — not an optimistic insert.
-            await page.reload()
-            await appShell(page).waitFor({ state: 'visible' })
+            // Leaving and coming back proves the membership persisted — not an
+            // optimistic insert. In-app rather than a reload: a reload drops the
+            // realtime socket and re-races the reconnect, which this assertion
+            // would then be timing instead of testing.
+            //
+            // The dialog has to be closed FIRST. A reload used to destroy it
+            // for free; navigating does not, and its modal overlay swallows the
+            // click on the nav rail — the navigation then hangs until the test
+            // times out rather than failing on anything legible.
+            await closeShareDialog(page)
+            await navigateToPackage(page, 'mail')
+            await navigateToPackage(page, 'cards')
             await openBoard(page, boardName)
             await openShareDialog(page, boardName)
             await expect(memberRow(page, bob.email).getByText('Viewer')).toBeVisible()

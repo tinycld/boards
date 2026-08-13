@@ -110,7 +110,10 @@ test.describe('Cards — markdown descriptions', () => {
         await openCard(page, CARD_TITLE)
         await typeDescription(page, 'Persisted prose.')
 
-        await page.reload()
+        // In-app rather than a reload: the description editor mounts only once
+        // the Yjs room is ready, so a cold reload races the reconnect against
+        // the card opening and this would be timing the socket.
+        await navigateToPackage(page, 'mail')
         await navigateToPackage(page, 'cards')
         await openBoard(page, boardName)
         await openCard(page, CARD_TITLE)

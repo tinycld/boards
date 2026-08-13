@@ -141,7 +141,8 @@ test.describe('Cards — markdown comments', () => {
         await openCard(page, CARD_TITLE)
         await postComment(page, 'A *lasting* remark.')
 
-        await page.reload()
+        // In-app rather than a reload — see card-description.spec.ts.
+        await navigateToPackage(page, 'mail')
         await navigateToPackage(page, 'cards')
         await openCard(page, CARD_TITLE)
 

@@ -304,7 +304,10 @@ test.describe('Cards — editing a card', () => {
         await expect(reporterChip).toContainText(creatorName)
 
         // The write reached the server, not just the optimistic cache.
-        await page.reload()
+        // Navigated in-app rather than reloading — a reload tears down the SPA
+        // and re-races the realtime reconnect.
+        await navigateToPackage(page, 'mail')
+        await navigateToPackage(page, 'cards')
         await openCard(page, CARD_TITLE)
         await expect(peek(page).getByRole('button', { name: 'Change reporter' })).toContainText(
             creatorName

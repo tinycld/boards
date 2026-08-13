@@ -99,8 +99,10 @@ test.describe('Cards — editing comments', () => {
         await expect(page.getByText('Second take, considered.')).toBeVisible()
         await expect(page.getByText('First take.', { exact: true })).toHaveCount(0)
 
-        // A reload proves the SOURCE was written, not just optimistic state.
-        await page.reload()
+        // Leaving and coming back proves the SOURCE was written, not just
+        // optimistic state. In-app rather than a reload, which would re-race
+        // the realtime reconnect.
+        await navigateToPackage(page, 'mail')
         await navigateToPackage(page, 'cards')
         await openCard(page, CARD_TITLE)
         await expect(page.getByText('Second take, considered.')).toBeVisible()
