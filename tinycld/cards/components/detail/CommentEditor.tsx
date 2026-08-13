@@ -7,9 +7,11 @@ import { PromptDialog } from '@tinycld/core/ui/PromptDialog'
 import { useRef, useState } from 'react'
 import { Platform, Pressable, Text, View } from 'react-native'
 import { useEditorImageActions } from '../../hooks/useEditorImageActions'
+import { useMentionTrigger } from '../../hooks/useMentionTrigger'
 import type { BoardAttachment } from '../../types'
 import { ImageAttachmentPicker } from './ImageAttachmentPicker'
 import { MarkdownToolbar } from './MarkdownToolbar'
+import { MentionPopover } from './MentionPopover'
 
 /** Mirrors the max on cards_comments.body; the server clamps at the same. */
 const COMMENT_LIMIT = 10000
@@ -116,8 +118,12 @@ function useCommentEditorCore({
         onCancel?.()
     }
 
+    // `@` autocomplete, same trigger the description uses.
+    const mention = useMentionTrigger(projectId)
+
     const { EditorComponent, editor, commands, toolbarState } = useRichEditor({
         contentFormat: 'markdown',
+        triggers: mention.triggers,
         initialContent,
         placeholder,
         autofocus,
@@ -155,6 +161,7 @@ function useCommentEditorCore({
         isLinkOpen,
         setIsLinkOpen,
         imageActions,
+        mentionState: mention.state,
     }
 }
 
@@ -334,6 +341,11 @@ function CommentEditorDialogs({
 }) {
     return (
         <>
+            {/* Rendered here because BOTH editor variants (composer and inline
+                edit) mount this, so the picker cannot be attached to just one.
+                Portalled to <body> on web, so its position in the tree does
+                not affect layout. */}
+            <MentionPopover state={core.mentionState} />
             <ImageAttachmentPicker
                 isOpen={core.isImagePickerOpen}
                 onClose={() => core.setIsImagePickerOpen(false)}

@@ -105,10 +105,22 @@ func saveDescription(app core.App, state *boardDocState, projectID, cardID, text
 			"projectID", projectID, "cardID", cardID, "limit", descriptionRuneLimit)
 	}
 
+	// Read the PREVIOUS description before overwriting it: the difference
+	// between it and `stored` is what decides which @mentions are new, and so
+	// which are worth notifying. See description_mentions.go — this is the only
+	// place both texts exist at once.
+	previous := record.GetString("description")
+
 	record.Set("description", stored)
 	if err := app.Save(record); err != nil {
 		return fmt.Errorf("cards: save description for card %s: %w", cardID, err)
 	}
+
+	// After the row is durable, so a mention is never announced for an edit
+	// that failed to persist. Off the flush's error path by design: a failed
+	// notification must not re-mark the room dirty (a retry loop would
+	// re-notify on every pass and stall the board's persistence).
+	notifyDescriptionMentions(app, projectID, cardID, previous, stored)
 	// Advance only after the row is durable, so a retry re-attempts exactly the
 	// cards that did not make it.
 	state.setBaseline(projectID, cardID, stored)

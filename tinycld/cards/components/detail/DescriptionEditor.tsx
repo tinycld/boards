@@ -7,9 +7,11 @@ import type { Awareness } from 'y-protocols/awareness'
 import type * as Y from 'yjs'
 import type { PresenceUser } from '../../hooks/useBoardPresence'
 import { useEditorImageActions } from '../../hooks/useEditorImageActions'
+import { useMentionTrigger } from '../../hooks/useMentionTrigger'
 import type { BoardAttachment } from '../../types'
 import { ImageAttachmentPicker } from './ImageAttachmentPicker'
 import { MarkdownToolbar } from './MarkdownToolbar'
+import { MentionPopover } from './MentionPopover'
 
 /** Mirrors the max on cards_cards.description; the server clamps at the same. */
 const DESCRIPTION_LIMIT = 5000
@@ -111,9 +113,14 @@ export function useDescriptionEditor({
         context: 'cards.description',
     })
 
+    // `@` autocomplete. The trigger is scoped to board members and gated on
+    // commenting standing — see useMentionTrigger.
+    const mention = useMentionTrigger(projectId)
+
     const { EditorComponent, editor, commands, toolbarState } = useRichEditor({
         contentFormat: 'markdown',
         placeholder: 'Add a description — what does done look like?',
+        triggers: mention.triggers,
         editable: canEdit,
         characterLimit: DESCRIPTION_LIMIT,
         // Held CONSTANT on purpose. The web hook memoizes EditorComponent on
@@ -210,6 +217,10 @@ export function useDescriptionEditor({
                 <View testID="cards-description-editor" className="py-2">
                     <EditorComponent />
                 </View>
+                {/* Portalled to <body> on web, so its position in this tree
+                    does not affect layout; renders null on native until the
+                    WebView bridge lands. */}
+                <MentionPopover state={mention.state} />
                 <DescriptionStatus isConnected={isConnected} />
                 <ImageAttachmentPicker
                     isOpen={isImagePickerOpen}

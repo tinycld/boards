@@ -325,7 +325,7 @@ function useDescriptionSection({
                 accessibilityLabel="Edit description"
                 multiline
                 isDisabled={!canEdit}
-                renderValue={value => <MarkdownText body={value} />}
+                renderValue={value => <MarkdownText body={value} projectId={projectId} />}
             />
         ),
     }
