@@ -49,6 +49,12 @@ function resolvePosition(anchor: NonNullable<TriggerState['anchor']>) {
 
 interface MentionPopoverProps {
     state: TriggerState
+    /**
+     * Accepted and ignored. Native uses it to find the editor's WebView ref;
+     * a DOM popover positions itself from `state.anchor`. Present so the call
+     * sites stay platform-blind — see MentionPopover.tsx.
+     */
+    overlayKey?: string
 }
 
 export function MentionPopover({ state }: MentionPopoverProps) {

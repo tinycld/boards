@@ -121,6 +121,7 @@ export function useDescriptionEditor({
         contentFormat: 'markdown',
         placeholder: 'Add a description — what does done look like?',
         triggers: mention.triggers,
+        overlayKey: mention.overlayKey,
         editable: canEdit,
         characterLimit: DESCRIPTION_LIMIT,
         // Held CONSTANT on purpose. The web hook memoizes EditorComponent on
@@ -217,10 +218,10 @@ export function useDescriptionEditor({
                 <View testID="cards-description-editor" className="py-2">
                     <EditorComponent />
                 </View>
-                {/* Portalled to <body> on web, so its position in this tree
-                    does not affect layout; renders null on native until the
-                    WebView bridge lands. */}
-                <MentionPopover state={mention.state} />
+                {/* Portalled to <body> on web and drawn as a native Modal on
+                    device, so its position in this tree does not affect layout
+                    on either platform. */}
+                <MentionPopover state={mention.state} overlayKey={mention.overlayKey} />
                 <DescriptionStatus isConnected={isConnected} />
                 <ImageAttachmentPicker
                     isOpen={isImagePickerOpen}

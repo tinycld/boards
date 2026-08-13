@@ -124,6 +124,7 @@ function useCommentEditorCore({
     const { EditorComponent, editor, commands, toolbarState } = useRichEditor({
         contentFormat: 'markdown',
         triggers: mention.triggers,
+        overlayKey: mention.overlayKey,
         initialContent,
         placeholder,
         autofocus,
@@ -162,6 +163,7 @@ function useCommentEditorCore({
         setIsLinkOpen,
         imageActions,
         mentionState: mention.state,
+        mentionOverlayKey: mention.overlayKey,
     }
 }
 
@@ -345,7 +347,7 @@ function CommentEditorDialogs({
                 edit) mount this, so the picker cannot be attached to just one.
                 Portalled to <body> on web, so its position in the tree does
                 not affect layout. */}
-            <MentionPopover state={core.mentionState} />
+            <MentionPopover state={core.mentionState} overlayKey={core.mentionOverlayKey} />
             <ImageAttachmentPicker
                 isOpen={core.isImagePickerOpen}
                 onClose={() => core.setIsImagePickerOpen(false)}

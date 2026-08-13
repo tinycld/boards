@@ -1,6 +1,6 @@
 import type { TriggerConfig, TriggerItem, TriggerState } from '@tinycld/core/lib/editor/rich'
 import { CLOSED_TRIGGER_STATE } from '@tinycld/core/lib/editor/rich'
-import { useCallback, useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { useProjectMembers } from './useProjectMembers'
 import { useProjectRole } from './useProjectRole'
 
@@ -29,21 +29,35 @@ const MAX_SUGGESTIONS = 6
 export interface MentionTrigger {
     /** Pass to `useRichEditor({ triggers })`. */
     triggers: TriggerConfig[]
-    /** What the popover should render right now. */
+    /** What the popover should render right now. Web only — see MentionPopover. */
     state: TriggerState
+    /**
+     * Pass to BOTH `useRichEditor({ overlayKey })` and `<MentionPopover>`.
+     *
+     * Native draws the popover from the host, which needs the editor's WebView
+     * ref to anchor to; this is the key it looks the editor up by. Unique per
+     * hook instance, because a card detail mounts several editors against one
+     * board and a board-derived key would anchor the comment composer's popover
+     * to the description's WebView. Web ignores it.
+     */
+    overlayKey: string
 }
 
 /**
  * Build the `@` trigger for one board.
  *
  * Returns a stable-length array so the editor's extension list is rebuilt only
- * when mentions turn on or off, never on a roster change — the candidate lookup
- * reads through a closure, so new members appear without remounting the editor.
+ * when mentions turn on or off. A roster change does produce a new config, but
+ * both platforms read the candidates indirectly — web through the stabilizing
+ * wrapper in `useRichEditor.web`, native through a pushed snapshot — so new
+ * members appear without remounting the editor.
  */
 export function useMentionTrigger(projectId: string): MentionTrigger {
     const { canComment } = useProjectRole(projectId)
     const { members } = useProjectMembers(projectId)
     const [state, setState] = useState<TriggerState>(CLOSED_TRIGGER_STATE)
+    // Per hook INSTANCE, not per board — see MentionTrigger.overlayKey.
+    const overlayKey = `cards-mention:${useId()}`
 
     // Self is excluded: mentioning yourself is noise, and the comment path
     // drops it server-side anyway. Leaving the entry in invites the mistake.
@@ -59,35 +73,21 @@ export function useMentionTrigger(projectId: string): MentionTrigger {
         [members]
     )
 
-    const items = useCallback(
-        (query: string) => {
-            const q = query.trim().toLowerCase()
-            const matches = q
-                ? candidates.filter(
-                      c =>
-                          c.label.toLowerCase().includes(q) ||
-                          (c.secondary?.toLowerCase().includes(q) ?? false)
-                  )
-                : candidates
-            return matches.slice(0, MAX_SUGGESTIONS)
-        },
-        [candidates]
-    )
-
     const triggers = useMemo<TriggerConfig[]>(() => {
         if (!canComment) return []
         return [
             {
                 id: 'cards-mention',
                 char: '@',
-                items,
+                allItems: candidates,
+                limit: MAX_SUGGESTIONS,
                 // The trailing space is what lets someone keep typing after
                 // picking, rather than landing inside the token.
-                toInsertText: item => `[[@${item.id}]] `,
+                insertTemplate: '[[@{id}]] ',
                 onStateChange: setState,
             },
         ]
-    }, [canComment, items])
+    }, [canComment, candidates])
 
-    return { triggers, state }
+    return { triggers, state, overlayKey }
 }
