@@ -21,6 +21,7 @@ ordered by dependency; tasks within one are small and mostly independent.
 | M7 | Package plumbing, tests, docs | |
 | M8 | CLI | ✅ shipped — needed a core scope-table fix |
 | M9 | Collaborative markdown editing | web + native shipped, carets + rich comment editing included |
+| M10 | `@`-mentions in descriptions and comments | ✅ web + native shipped — native needed a trigger bridge in core; not yet run on a device |
 
 The lettered milestones (M2a, M3b, M6a) were split out once the data model
 landed and the real dependency order became clear: the rules are enforceable
@@ -1042,30 +1043,73 @@ precedent for everything except the Modal shell.
       shape and what drive and `AddMemberDialog` chose. `ReporterPicker` is its
       single-select sibling; `MemberChip` was extracted so both rows render one
       chip rather than two copies of it.
-- [ ] Add support for @<user> in description and comments.  Doing so should trigger notification 
-      to them.  This may branch out into larger issue of how to handle notifications and allowing
-      users to customize delivery
-    - [ ] **Native `@` picker is NOT implemented** —
-      `components/detail/MentionPopover.tsx` (the native variant) renders
-      `null`. Web is done: `MentionPopover.web.tsx` portals a real picker to
-      `<body>`. Everything EXCEPT the affordance already works on native — a
-      `[[@id]]` typed by hand, or synced from a description someone wrote on
-      web, still notifies and still renders as the person's name. Only the
-      autocomplete popover is missing, so this is a discoverability gap rather
-      than a broken feature.
-      **Why it is not just a component:** on native the editor is a WebView, so
-      the trigger plugin runs INSIDE the page while the popover must be drawn
-      by the host — different JS contexts, no shared React state. The bridge
-      protocol already exists (`show-popover` / `popover-update` /
-      `popover-result` / `popover-dismissed` in
-      `@tinycld/core/lib/editor/message-bus/types.ts`), and `text/` has a
-      working host implementation to copy
-      (`components/SlashMenuPopover.tsx` + `lib/anchored-overlay/`). The work
-      is wiring core's trigger (`core/lib/editor/rich/triggers.ts`) to post
-      over that bus when it runs inside the WebView, and rendering the host
-      overlay on the cards side. Self-contained; changes nothing on web.
-      NOTE: this makes @-mention authoring web-only for now, which the
-      "both platforms" rule in CLAUDE.md otherwise forbids.
+- [x] Add support for @<user> in description and comments, notifying them.
+      **Shipped on web and native.** Picking someone writes `[[@<userId>]]`,
+      which both parsers read — the client when it writes `comment_mentions`
+      rows, and the Go flush hook when it derives description mentions. Display
+      names are not the wire format: they are not unique and they change.
+      **The candidate pool is project members, not the org roster** — boards
+      are shared by link with people holding no org standing, so a roster-wide
+      pool would let a share-link visitor enumerate everyone's name and email
+      by typing `@`. It also keeps the picker honest, since the server drops a
+      mention naming a non-member.
+      **Descriptions cannot use the client-insert path comments use.** A
+      description is a Yjs fragment with no commit, so there is no create event
+      to hang a mention insert on; they are derived server-side at flush,
+      notifying only the mentions that flush ADDED (re-saves, reformats and
+      restarts notify nobody). The author is unknowable there —
+      `realtime.FlushFn` carries no auth by construction — which is why a
+      self-mention cannot be filtered server-side and the picker's
+      self-exclusion is the only guard.
+      The delivery-preferences question it might have branched into is still
+      open, and still a CORE gap rather than a cards one (below).
+    - [x] **Native `@` picker — SHIPPED.** `MentionPopover.tsx` renders core's
+      anchored overlay, driven by the page's suggestion plugin over the message
+      bus. **Not verified on a device yet** — cards' e2e is web-only, so
+      nothing automated covers that path.
+      **The entry that used to sit here called this "self-contained" and said
+      the work was wiring core's trigger onto an existing bridge. That was
+      wrong, and badly so** — worth recording, because the same mistake is
+      available to anyone reading the message-bus doc-comments and assuming
+      they describe working code. `triggers` never reached the native editor at
+      all: `use-rich-editor.native.tsx` did not destructure the option,
+      `RichEditorInitPayload` had no field for it, and `webview/source/`
+      contained zero references to trigger/Suggestion/popover. The protocol
+      existed only as prose. The `return null` stub was the SMALLER half of the
+      gap; the plugin did not exist inside the page.
+      What it actually took (all in `tinycld/core`, see tinycld#187):
+        - **`TriggerConfig` became declarative** — `allItems` + `insertTemplate`
+          instead of two closures — because the page is a prebuilt bundle a
+          closure cannot cross. Both platforms now run the same
+          `filterTriggerItems`/`renderInsertTemplate`, so they cannot rank or
+          insert differently; that divergence would have been invisible until
+          someone compared their phone against their laptop.
+        - **The host PUSHES the roster and the page filters locally.** A
+          round-trip per keystroke crosses the bridge on a thread already
+          carrying the Yjs relay, and would need sequence numbers to stop a late
+          `@na` response rendering under a typed `@nath`. Accepted cost: a
+          member added while the popover is open appears on the next push
+          rather than the next keystroke.
+        - **text's anchored-overlay was PROMOTED to `core/lib/editor/overlay`**,
+          not copied — cards was its second consumer and siblings cannot import
+          each other. text still owns its copy; migrating it is filed below.
+        - **The bus gained per-editor scoping**, a deviation from text rather
+          than a port. A card detail mounts a description editor, a comment
+          composer and sometimes an inline comment editor at once; text never
+          has two, so its module-global bus had every controller answer every
+          `show-popover` — one `@` opening three overlays, two of them measured
+          against the wrong WebView.
+        - **`overlayKey`** is how the popover finds the editor's WebView ref:
+          it renders as a SIBLING of the editor (for comments, in another
+          subtree), so no context can reach it. Unique per hook instance.
+          `state` is accepted and ignored on native — that state lives in the
+          page and arrives serialized as the overlay's payload — which is what
+          keeps the call sites platform-blind.
+      Before touching the page again: **the bundle must be rebuilt**
+      (`pnpm exec tsx tinycld/core/lib/editor/rich/build.ts`) and
+      `editorHtml.ts` committed. A page edit without a rebuild gives the most
+      confusing failure there is — correct-looking source, stale device
+      behaviour.
     - [ ] **No notification settings UI exists anywhere in the app**, so a user
       cannot mute mentions (or anything else) from the interface. This is a
       CORE gap, not a cards one, and it predates mentions:
@@ -1086,6 +1130,50 @@ precedent for everything except the Modal shell.
       mentions: calendar_reminder, calendar_invite,
       calendar_subscription_error, mail_new_message, drive_file_shared,
       org_invite, system_error.
+    - [ ] **Follow-up in `text/`: migrate it onto core's promoted overlay** and
+      delete `text/tinycld/text/lib/anchored-overlay/`. The trio now exists
+      TWICE — core's copy (used by cards) and text's original — which is the
+      exact duplication promoting it was meant to prevent, so this should not
+      sit. It is a mechanical import swap plus a re-run of text's three test
+      files; it was kept out of tinycld#187 only because that PR's risk was
+      already concentrated in a prebuilt bundle.
+      Two fixes to carry over while doing it: core's version posts the REAL
+      query on arrow keys (text's posts `''`, a latent bug invisible only
+      because its body does not render the query), and core's bus filters by
+      `editorInstanceId`.
+    - [ ] **Verify the native picker on a device.** Nothing automated covers
+      it — cards' e2e is web-only. Worth checking specifically: that exactly
+      ONE popover appears with both the description and comment editors mounted
+      (the multi-editor case text never had); that filtering does not lag as
+      you type, which is the whole argument for pushing the roster instead of
+      round-tripping; that a tap inserts the token WITH its trailing space and
+      leaves the keyboard up; that a scroll dismisses; and that a viewer
+      (no `canComment`) gets nothing at all.
+    - [x] **`page.reload()` in an e2e spec is a trap — ten of them were fixed
+      while landing this.** Specs proved a write had persisted by reloading and
+      then asserting immediately. A reload tears down the SPA (the objection
+      CLAUDE.md already raises against `goto()` for in-app navigation) and it
+      also drops the board's REALTIME SOCKET. The description editor mounts
+      only once the Yjs room reports ready, so those specs were racing the
+      reconnect against the card opening: win it and `.ProseMirror` exists,
+      lose it and the description is still read-only and every assertion after
+      the reload fails.
+      It surfaced as **four different specs failing across four runs, each
+      passing in isolation** — one race, whichever spec happened to lose it.
+      Diagnosing it from re-runs is hopeless; the Playwright TRACE said it in
+      one read (content present and correctly formatted, but rendered by
+      `MarkdownText` next to an "Edit description" button, so `.ProseMirror`
+      matched nothing). **Reach for the trace early on an e2e failure.**
+      Replaced with in-app navigation (leave the package, come back), which
+      unmounts the card detail — all a re-parse needs — and keeps the socket.
+      Three reloads REMAIN deliberately: `board-view-modes` (×2) persists view
+      preferences to AsyncStorage, and `card-description-images` proves a fresh
+      render re-signs an image with a live file token. Both need a cold client;
+      flattening them would weaken the test.
+      **A reload destroyed an open modal for free and navigation does not.**
+      `board-sharing` had to close its Share dialog first — the overlay
+      swallows the click on the nav rail, and the navigation then HANGS until
+      the test times out rather than failing on anything legible.
     - [x] `tests/e2e/card-mentions.spec.ts` **runs and passes** (both cases:
       the mention round-trip and the viewer refusal). Running it found three
       real bugs that every unit test had missed, which is the argument for the
