@@ -1,7 +1,7 @@
 import { type LazyEditorSlots, useLazyEditor } from '@tinycld/core/components/editor/LazyEditor'
 import type { EditorCommands } from '@tinycld/core/lib/editor/types'
 import { PromptDialog } from '@tinycld/core/ui/PromptDialog'
-import { type ReactNode, type RefObject, useEffect, useRef, useState } from 'react'
+import { type ReactNode, type RefObject, useRef, useState } from 'react'
 import { Platform, Text, View, type ViewStyle } from 'react-native'
 import type { Awareness } from 'y-protocols/awareness'
 import type * as Y from 'yjs'
@@ -146,6 +146,12 @@ export function useDescriptionEditor({
         // live. Leaving the editor is the whole of finishing, which LazyEditor
         // does on blur for a surface with no blur-commit.
         onCommit: () => {},
+        // Passed rather than pushed back up through setDialogOpen: this
+        // component already owns both dialogs' open state, and echoing it into
+        // the hook from an effect is the useState+useEffect pairing the style
+        // guide calls out. Keeps a blur under either dialog from ending the
+        // session — the editor must survive until the picked image lands in it.
+        isDialogOpen,
         editorOptions: {
             placeholder: 'Add a description — what does done look like?',
             triggers: mention.triggers,
@@ -162,6 +168,23 @@ export function useDescriptionEditor({
             // matching only the native default by coincidence is not something a
             // later change to that default should be free to break.
             minHeight: 72,
+            // Blur rather than close: the first Escape should leave the editor,
+            // and only a second one should reach the panel behind it. Returning
+            // true stops this one bubbling.
+            //
+            // Without it Escape closes the card panel on the FIRST press, mid
+            // sentence — the description is a collaborative surface with no
+            // revert, so the text survives, but the reader is thrown out of the
+            // card they were writing in.
+            //
+            // Blurring is the whole of leaving: LazyEditor's blur handler ends
+            // the session for a surface with no blur-commit, so this does not
+            // need to reach into the editor handle (which the options object
+            // cannot see anyway — it is built before the lease resolves).
+            onEscape: () => {
+                blurActiveElement()
+                return true
+            },
             onSubmitShortcut: blurActiveElement,
             onImageDrop,
             // Undefined before the room is ready: useRichEditor treats a missing
@@ -205,7 +228,6 @@ export function useDescriptionEditor({
                 containerRef={containerRef}
                 slots={editorSlots}
                 commandsRef={commandsRef}
-                isDialogOpen={isDialogOpen}
                 mention={mention}
                 isConnected={isConnected}
                 attachments={attachments}
@@ -278,7 +300,6 @@ function DescriptionBody({
     containerRef,
     slots,
     commandsRef,
-    isDialogOpen,
     mention,
     isConnected,
     attachments,
@@ -292,7 +313,6 @@ function DescriptionBody({
     containerRef: RefObject<View | null>
     slots: LazyEditorSlots
     commandsRef: RefObject<EditorCommands | null>
-    isDialogOpen: boolean
     mention: ReturnType<typeof useMentionTrigger>
     isConnected: boolean
     attachments: BoardAttachment[]
@@ -303,16 +323,10 @@ function DescriptionBody({
     isLinkOpen: boolean
     setIsLinkOpen: (open: boolean) => void
 }) {
-    const { EditorComponent, commands, toolbarState, setDialogOpen } = slots
+    const { EditorComponent, commands, toolbarState } = slots
 
     commandsRef.current = commands
 
-    // Keeps a blur under either dialog from ending the session — the editor must
-    // survive until the picked image lands in it. In an effect because it sets
-    // state on the owning hook, which a render may not do.
-    useEffect(() => {
-        setDialogOpen(isDialogOpen)
-    }, [setDialogOpen, isDialogOpen])
     return (
         // overflow-visible: RN-Web Views clip by default, and a clipping
         // ancestor between the sticky toolbar and the scroll container
