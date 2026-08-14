@@ -39,6 +39,23 @@ function descriptionEditor(page: Page) {
     return page.getByTestId('cards-description-editor').locator('.ProseMirror')
 }
 
+/**
+ * Enter edit mode, if the card is not in it already.
+ *
+ * A description renders as MARKDOWN until someone edits it — mounting a
+ * collaborative editor just to DISPLAY a card was the most expensive thing
+ * about opening one. So a spec that types has to open the editor first, the
+ * same way a user does. Idempotent, so calling it twice does not move a caret
+ * that is already placed.
+ */
+async function openDescription(page: Page) {
+    const editor = descriptionEditor(page)
+    if (await editor.isVisible().catch(() => false)) return editor
+    await page.getByRole('button', { name: 'Edit description' }).click()
+    await expect(editor).toBeVisible()
+    return editor
+}
+
 function boldButton(page: Page) {
     return page.getByRole('button', { name: 'Bold' })
 }
@@ -63,7 +80,7 @@ async function shareBoard(page: Page, boardName: string, email: string, role: 'E
  * ProseMirror drops keystrokes that arrive while it is still settling focus.
  */
 async function typeDescription(page: Page, text: string) {
-    const editor = descriptionEditor(page)
+    const editor = await openDescription(page)
     await expect(editor).toBeVisible()
     await editor.click()
     await expect(async () => {
@@ -86,11 +103,16 @@ test.describe('Cards — description formatting toolbar', () => {
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
 
-        // Idle: the editor is mounted and readable, but carries no chrome.
-        await expect(descriptionEditor(page)).toBeVisible()
+        // Idle: the description is READ-ONLY MARKDOWN with no editor at all —
+        // a card is opened far more often than it is edited, and an editor per
+        // card-open is the most expensive thing on the screen. So there is no
+        // toolbar because there is nothing to format yet.
+        await expect(page.getByTestId('cards-description-read')).toBeVisible()
+        await expect(descriptionEditor(page)).toHaveCount(0)
         await expect(boldButton(page)).toHaveCount(0)
 
-        await descriptionEditor(page).click()
+        // Editing swaps the real editor in, and the chrome comes with it.
+        await openDescription(page)
         await expect(boldButton(page)).toBeVisible()
     })
 
@@ -120,6 +142,12 @@ test.describe('Cards — description formatting toolbar', () => {
         await navigateToPackage(page, 'cards')
         await openBoard(page, board)
         await openCard(page, CARD_TITLE)
+        // Reopened for the assertion: coming back to a card shows MARKDOWN,
+        // and the renderer emits React Native <Text> with a fontWeight rather
+        // than a <strong>, so the node-type check only means anything inside
+        // the editor. Opening it also proves the round trip end to end — the
+        // bold was written to the markdown source and parsed back out of it.
+        await openDescription(page)
         await expect(descriptionEditor(page).locator('strong').first()).toHaveText('review')
     })
 
@@ -131,7 +159,7 @@ test.describe('Cards — description formatting toolbar', () => {
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
 
-        const editor = descriptionEditor(page)
+        const editor = await openDescription(page)
         await expect(editor).toBeVisible()
         await editor.click()
         await expect(boldButton(page)).toBeVisible()
@@ -228,6 +256,11 @@ test.describe('Cards — description formatting toolbar', () => {
         await navigateToPackage(page, 'cards')
         await openBoard(page, board)
         await openCard(page, CARD_TITLE)
+        // Reopened: a card shows markdown until edited, and these assertions
+        // are about NODE TYPES, which only exist inside the editor. Opening it
+        // is also what makes this a real round trip — every command's output
+        // had to survive into the markdown source and parse back out.
+        await openDescription(page)
         await expect(editor.locator('strong', { hasText: 'boldword' })).toBeVisible()
         await expect(editor.locator('em', { hasText: 'italword' })).toBeVisible()
         await expect(editor.locator('u', { hasText: 'underword' })).toBeVisible()
@@ -277,7 +310,7 @@ test.describe('Cards — description formatting toolbar', () => {
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
 
-        const editor = descriptionEditor(page)
+        const editor = await openDescription(page)
         const before = await editor.boundingBox()
 
         await editor.click()
@@ -297,7 +330,7 @@ test.describe('Cards — description formatting toolbar', () => {
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
 
-        const editor = descriptionEditor(page)
+        const editor = await openDescription(page)
         await editor.click()
         for (let i = 0; i < 40; i++) {
             await page.keyboard.type(`line ${i} of filler\n`, { delay: 2 })
@@ -352,11 +385,18 @@ test.describe('Cards — description formatting toolbar', () => {
             await openCard(bobPage, CARD_TITLE)
 
             // The words are readable...
-            await expect(descriptionEditor(bobPage)).toContainText('Owner wrote this.')
-            // ...in a surface that refuses input, and offers no way to format.
-            await expect(descriptionEditor(bobPage)).toHaveAttribute('contenteditable', 'false')
-            await descriptionEditor(bobPage).click()
+            await expect(bobPage.getByTestId('cards-description-read')).toContainText(
+                'Owner wrote this.'
+            )
+            // ...and there is nothing to format them with. A viewer gets no
+            // editor at all now, which is a stronger guarantee than the
+            // read-only one this used to assert: no editor, no way to open one,
+            // and so no toolbar. Clicking the prose must not conjure any.
+            await expect(descriptionEditor(bobPage)).toHaveCount(0)
+            await expect(bobPage.getByRole('button', { name: 'Edit description' })).toHaveCount(0)
+            await bobPage.getByTestId('cards-description-read').click()
             await expect(boldButton(bobPage)).toHaveCount(0)
+            await expect(descriptionEditor(bobPage)).toHaveCount(0)
         } finally {
             await close()
         }

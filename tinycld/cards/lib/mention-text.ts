@@ -23,7 +23,7 @@
 // stored as `\[\[@id\]\]` rather than `[[@id]]`. Both spellings mean the same
 // mention and both must parse — matching only the bare form left raw tokens
 // visible in every posted comment (caught by card-mentions.spec.ts).
-const TOKEN = /\\?\[\\?\[@([A-Za-z0-9_-]+)\\?\]\\?\]/g
+const TOKEN = /\\?\[\\?\[@([A-Za-z0-9_-]+)(?:\|([^\]|]*))?\\?\]\\?\]/g
 
 /** Minimal shape needed to render a mention. */
 export interface MentionName {
@@ -32,12 +32,13 @@ export interface MentionName {
 }
 
 /**
- * Replace every `[[@id]]` with `@Name`.
+ * Replace every `[[@id]]` / `[[@id|Name]]` with `@Name`.
  *
- * An id with no matching member renders as `@someone` rather than the raw
- * token or a blank: the person may have left the board, and a token that leaks
- * a record id into readable prose is worse than an honest placeholder. Same
- * reasoning as the `anonymousMember` fallback on the reporter row.
+ * The roster wins when it knows the id — it is live, so a rename shows up
+ * without rewriting stored text. The name carried by the token is the fallback,
+ * which is what keeps a mention readable after someone leaves the board:
+ * leaving does not un-say the sentence that named them. `@someone` remains only
+ * for a legacy token that carries no name and names nobody on the roster.
  */
 export function renderMentionTokens(body: string, names: MentionName[]): string {
     // Guard on `[@` rather than `[[@`: the escaped spelling puts a backslash
@@ -46,10 +47,23 @@ export function renderMentionTokens(body: string, names: MentionName[]): string 
     // tokens reached the screen before card-mentions.spec.ts caught it.
     if (!body || body.indexOf('[@') === -1) return body
     const byId = new Map(names.map(n => [n.userId, n.label]))
-    return body.replace(TOKEN, (_match, userId: string) => {
-        const label = byId.get(userId)
+    return body.replace(TOKEN, (_match, userId: string, storedName?: string) => {
+        const label = byId.get(userId) || decodeMentionName(storedName)
         return label ? `@${label}` : '@someone'
     })
+}
+
+/**
+ * Decode the name half of a token.
+ *
+ * `]` and `|` are percent-encoded by the writer (they would end the token
+ * early); `%25` is decoded last so a literal `%5D` someone typed into their own
+ * name cannot turn into a bracket. Mirrors unescapeMentionName in core's
+ * mention-node.ts.
+ */
+function decodeMentionName(raw: string | undefined): string {
+    if (!raw) return ''
+    return raw.replace(/%5D/gi, ']').replace(/%7C/gi, '|').replace(/%25/gi, '%')
 }
 
 /** A `comment_mentions` row, as cards writes it. */

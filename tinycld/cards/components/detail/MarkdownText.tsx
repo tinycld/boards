@@ -1,4 +1,5 @@
 import { MarkdownRenderer } from '@tinycld/core/components/help/MarkdownRenderer'
+import { markdownScale } from '@tinycld/core/components/help/markdown-purpose'
 import { useFileToken } from '@tinycld/core/file-viewer/use-authed-file-url'
 import { resolveProtectedFileSrc } from '@tinycld/core/lib/editor/rich/authed-image'
 import { pb } from '@tinycld/core/lib/pocketbase'
@@ -48,6 +49,9 @@ interface MarkdownTextProps {
  * applied outside to keep the display and edit states from jumping.
  */
 export function MarkdownText({ body, variant = 'description', projectId }: MarkdownTextProps) {
+    // A comment is a message in a thread; a description is the read state of
+    // the editor that replaces it on tap, so it matches that editor exactly.
+    const purpose = variant === 'comment' ? 'compact' : 'description'
     // Mentions are stored as `[[@userId]]` — the wire format both the client
     // and the Go flush hook parse. Substituted into `@Name` before parsing so
     // this stays a pure string transform shared by web and native; see
@@ -76,12 +80,22 @@ export function MarkdownText({ body, variant = 'description', projectId }: Markd
     )
 
     return (
-        <View className={variant === 'comment' ? '-my-2' : '-my-1.5'}>
+        // Cancels the renderer's own first/last paragraph margin so the section
+        // controls its own rhythm. DERIVED from the scale rather than a fixed
+        // class: the two are the same number by definition, and hard-coding it
+        // meant retuning a comment's typography silently shifted every comment
+        // below it (caught by comment-editing.spec's ±2px anchor).
+        <View style={{ marginVertical: -markdownScale(purpose).paragraphSpacing }}>
             <MarkdownRenderer
                 body={text}
                 translateModifierKeys={false}
                 shortcutTableHeuristic={false}
                 transformImageUri={transformImageUri}
+                // A comment is a message in a thread; a description is the
+                // read state of the editor that replaces it on tap, so it
+                // matches that editor's proportions exactly. Neither is a help
+                // topic, which is what the renderer's defaults were tuned for.
+                purpose={purpose}
                 // A comment sits in a tight activity row; a full-width
                 // screenshot would dominate the thread, so images letterbox
                 // into a strip there. Descriptions keep the library sizing.

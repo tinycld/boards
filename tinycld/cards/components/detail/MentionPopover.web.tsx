@@ -35,16 +35,32 @@ const PREVENT_BLUR = {
     onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(),
 } as unknown as { onMouseDown: (e: unknown) => void }
 
-function resolvePosition(anchor: NonNullable<TriggerState['anchor']>) {
+/**
+ * Where the popover sits, in viewport coordinates.
+ *
+ * Exactly one of `top` / `bottom` comes back. Below the caret the popover hangs
+ * from its TOP edge; flipped above it, the BOTTOM edge is pinned to the caret
+ * instead — so the popover touches the caret whatever height it turns out to be.
+ *
+ * Deriving a `top` from HEIGHT_ESTIMATE_PX is what the flipped branch used to
+ * do, and it placed the popover where the ESTIMATE said rather than against the
+ * caret: the estimate is a generous 220px, a one-row picker is nearer 70, and
+ * the difference is exactly how far above the text it drew. The estimate must
+ * only decide WHICH WAY to open. (Same bug, same fix, as the native controller's
+ * resolvePopoverPosition — the two are independent implementations.)
+ */
+export function resolvePosition(anchor: NonNullable<TriggerState['anchor']>): {
+    top?: number
+    bottom?: number
+    left: number
+} {
     if (typeof window === 'undefined') {
         return { top: anchor.bottom + GAP_PX, left: anchor.left }
     }
-    const wouldOverflowBottom = anchor.bottom + GAP_PX + HEIGHT_ESTIMATE_PX > window.innerHeight
-    const top = wouldOverflowBottom
-        ? Math.max(8, anchor.top - GAP_PX - HEIGHT_ESTIMATE_PX)
-        : anchor.bottom + GAP_PX
     const left = Math.min(Math.max(8, anchor.left), Math.max(8, window.innerWidth - WIDTH_PX - 8))
-    return { top, left }
+    const wouldOverflowBottom = anchor.bottom + GAP_PX + HEIGHT_ESTIMATE_PX > window.innerHeight
+    if (!wouldOverflowBottom) return { top: anchor.bottom + GAP_PX, left }
+    return { bottom: Math.max(8, window.innerHeight - (anchor.top - GAP_PX)), left }
 }
 
 interface MentionPopoverProps {
@@ -69,13 +85,19 @@ export function MentionPopover({ state }: MentionPopoverProps) {
 function MentionList({ state }: MentionPopoverProps) {
     const anchor = state.anchor
     if (!anchor) return null
-    const { top, left } = resolvePosition(anchor)
+    const { top, bottom, left } = resolvePosition(anchor)
 
     return (
         <View
             testID="cards-mention-popover"
             className="rounded-[10px] border border-border bg-card py-1 shadow-lg"
-            style={[FIXED, { top, left, width: WIDTH_PX, zIndex: 1000 }]}
+            style={[
+                FIXED,
+                // Only the anchored edge is set — see resolvePosition. Passing
+                // both would stretch the popover between them.
+                top === undefined ? { bottom } : { top },
+                { left, width: WIDTH_PX, zIndex: 1000 },
+            ]}
         >
             {state.items.map((item, index) => (
                 <MentionRow

@@ -36,6 +36,16 @@ interface DescriptionEditorProps {
     canEdit: boolean
     /** Shown while the socket is down; the local document keeps accepting text. */
     isConnected: boolean
+    /**
+     * The editing session ended — the caller should swap back to the read view
+     * and unmount this editor.
+     *
+     * Fired on blur, because there is nothing to commit: every keystroke was
+     * already shared and flushed, so leaving the editor is the whole of
+     * "finishing". Not fired while a dialog holds focus (the image picker, the
+     * link prompt) — that is a detour inside the session, not the end of it.
+     */
+    onDone?: () => void
 }
 
 export interface DescriptionEditorSlots {
@@ -93,9 +103,12 @@ export function useDescriptionEditor({
     identity,
     canEdit,
     isConnected,
+    onDone,
 }: DescriptionEditorProps): DescriptionEditorSlots {
     const containerRef = useRef<View>(null)
     const [isFocused, setIsFocused] = useState(false)
+    // Has this editing session ever held focus? See onBlur below.
+    const hasFocusedRef = useRef(false)
     const [isImagePickerOpen, setIsImagePickerOpen] = useState(false)
     const [isLinkOpen, setIsLinkOpen] = useState(false)
 
@@ -130,8 +143,32 @@ export function useDescriptionEditor({
         // instant it focused — a flicker loop. The focus styling lives on our
         // own wrapper below instead.
         containerClassName: 'min-h-[72px]',
-        onFocus: () => setIsFocused(true),
-        onBlur: () => setIsFocused(false),
+        // Stated rather than inherited: the class above is web-only, and this
+        // matching only the native default by coincidence is not something a
+        // later change to that default should be free to break.
+        minHeight: 72,
+        // This editor is now mounted BY a tap rather than with the card, so it
+        // has to take the caret itself — otherwise tapping the description
+        // swaps in an editor the user then has to tap a second time.
+        autofocus: true,
+        onFocus: () => {
+            hasFocusedRef.current = true
+            setIsFocused(true)
+        },
+        onBlur: () => {
+            setIsFocused(false)
+            // A dialog taking focus is a detour inside the session, not its
+            // end — closing the editor under the image picker would unmount
+            // the surface the picked image is about to be inserted into.
+            if (isImagePickerOpen || isLinkOpen) return
+            // Never before the session has actually held focus. The editor
+            // mounts with autofocus while the WebView is still booting, and a
+            // blur from that race would close the editor the instant it opened
+            // — the same mount race that made an inline comment edit commit
+            // itself before anyone had touched it.
+            if (!hasFocusedRef.current) return
+            onDone?.()
+        },
         // Blur rather than close: the first Escape should leave the editor, and
         // only a second one should reach the panel behind it. Returning true
         // stops this one from bubbling.

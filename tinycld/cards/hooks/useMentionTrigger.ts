@@ -81,9 +81,13 @@ export function useMentionTrigger(projectId: string): MentionTrigger {
                 char: '@',
                 allItems: candidates,
                 limit: MAX_SUGGESTIONS,
-                // The trailing space is what lets someone keep typing after
-                // picking, rather than landing inside the token.
+                // Still the STORED form — the Go flush hook parses it out of
+                // the description, and being id-based is what makes a mention
+                // survive a rename. `insertsMentionNode` only changes what the
+                // writer SEES: a node showing the person's name, serialized
+                // back to exactly this token.
                 insertTemplate: '[[@{id}]] ',
+                insertsMentionNode: true,
                 onStateChange: setState,
             },
         ]

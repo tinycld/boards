@@ -38,6 +38,23 @@ function descriptionEditor(page: Page) {
     return page.getByTestId('cards-description-editor').locator('.ProseMirror')
 }
 
+/**
+ * Enter edit mode, if the card is not in it already.
+ *
+ * A description renders as MARKDOWN until someone edits it — mounting a
+ * collaborative editor just to DISPLAY a card was the most expensive thing
+ * about opening one. So a spec that types has to open the editor first, the
+ * same way a user does. Idempotent, so calling it twice does not move a caret
+ * that is already placed.
+ */
+async function openDescription(page: Page) {
+    const editor = descriptionEditor(page)
+    if (await editor.isVisible().catch(() => false)) return editor
+    await page.getByRole('button', { name: 'Edit description' }).click()
+    await expect(editor).toBeVisible()
+    return editor
+}
+
 async function descriptionText(page: Page): Promise<string> {
     return (await descriptionEditor(page).textContent()) ?? ''
 }
@@ -50,7 +67,7 @@ async function descriptionText(page: Page): Promise<string> {
  * that have nothing to do with descriptions.
  */
 async function typeDescription(page: Page, text: string) {
-    const editor = descriptionEditor(page)
+    const editor = await openDescription(page)
     await expect(editor).toBeVisible()
     await editor.click()
     await expect(async () => {
@@ -118,6 +135,11 @@ test.describe('Cards — markdown descriptions', () => {
         await openBoard(page, boardName)
         await openCard(page, CARD_TITLE)
 
+        // Reopened: a card shows MARKDOWN until someone edits it, so the
+        // editor this assertion reads only exists once edit mode starts.
+        // Opening it is also what makes this a real round trip — the text had
+        // to survive into the markdown source and parse back out of it.
+        await openDescription(page)
         await expect(async () => {
             expect(await descriptionText(page)).toContain('Persisted prose.')
         }).toPass({ timeout: 20_000 })

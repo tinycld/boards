@@ -16,9 +16,10 @@ import { addCard, boardCard, createBoard } from './helpers'
 // from createInvitedUser (the real invite flow) in its own browser context, so
 // the two never share auth state.
 //
-// The mention PICKER is web-only for now (the native popover is unimplemented —
-// see cards/TODO.md), and this suite runs on web, so it exercises the shipped
-// path rather than papering over the gap.
+// This suite runs on web. The native picker exists too, but its popover is
+// drawn by the host over a WebView, which Playwright cannot reach — so the
+// platform-shared halves (the token, the serializer, the roster) are what these
+// tests pin, and the native-only wiring is verified on device.
 
 const CARD_TITLE = 'Ship the release notes'
 
@@ -38,6 +39,31 @@ function composer(page: Page) {
 
 function popover(page: Page) {
     return page.getByTestId('cards-mention-popover')
+}
+
+function descriptionEditor(page: Page) {
+    return page.getByTestId('cards-description-editor').locator('.ProseMirror')
+}
+
+/**
+ * Enter edit mode, if the card is not in it already.
+ *
+ * A description renders as MARKDOWN until someone edits it — mounting a
+ * collaborative editor just to DISPLAY a card was the most expensive thing
+ * about opening one. So a spec that types has to open the editor first, the
+ * same way a user does. Idempotent, so calling it twice does not move a caret
+ * that is already placed.
+ */
+async function openDescription(page: Page) {
+    const editor = descriptionEditor(page)
+    if (await editor.isVisible().catch(() => false)) return editor
+    await page.getByRole('button', { name: 'Edit description' }).click()
+    await expect(editor).toBeVisible()
+    return editor
+}
+
+async function descriptionText(page: Page): Promise<string> {
+    return (await descriptionEditor(page).textContent()) ?? ''
 }
 
 /** The bell's aria-label carries the unread count, so it doubles as the
@@ -139,6 +165,74 @@ test.describe('card mentions', () => {
                     /Notifications \(\d+ unread\)/
                 )
             }).toPass({ timeout: 20_000 })
+        } finally {
+            await close()
+        }
+    })
+
+    // A mention in a DESCRIPTION has to survive the round trip through stored
+    // markdown, and that is a genuinely separate path from the comment above: a
+    // description is a collaborative Yjs document the server serializes back to
+    // `cards_cards.description`, so the mention only persists if the editor
+    // node serializes to the wire token. It did not — the node rendered the
+    // name, contributed NOTHING to the markdown, and the mention silently
+    // vanished on the next load while every other edit to the same description
+    // was saved. Nothing in the unit suites could see that: they assert the
+    // token's own parsing, not what the editor writes.
+    test('a mention in a description survives a reload', async ({ page }) => {
+        await login(page)
+        await navigateToPackage(page, 'cards')
+
+        const boardName = `mentionpersist-${Date.now()}`
+        await createBoard(page, boardName)
+        await addCard(page, 0, CARD_TITLE)
+
+        const { user: bob, close } = await createInvitedUser(page, 'cardmentpersist')
+        try {
+            await login(page)
+            await navigateToPackage(page, 'cards')
+            await openBoard(page, boardName)
+            await addMemberToBoard(page, boardName, bob.email, 'Editor')
+
+            await openBoard(page, boardName)
+            await openCard(page, CARD_TITLE)
+
+            const editor = await openDescription(page)
+            await expect(editor).toBeVisible()
+            await editor.click()
+            await page.keyboard.type('owner is ', { delay: 20 })
+            await page.keyboard.type('@', { delay: 20 })
+
+            await expect(popover(page)).toBeVisible()
+            await popover(page).getByText(bob.email).click()
+            await expect(popover(page)).toHaveCount(0)
+
+            // The name is what the writer sees — never the wire token.
+            await expect(async () => {
+                expect(await descriptionText(page)).toMatch(/owner is @\S/)
+            }).toPass({ timeout: 10_000 })
+            expect(await descriptionText(page)).not.toContain('[[@')
+
+            // In-app rather than page.reload(): the description editor mounts
+            // only once the Yjs room is ready, so a cold reload would race the
+            // reconnect against the card opening — see card-description.spec.
+            await navigateToPackage(page, 'mail')
+            await navigateToPackage(page, 'cards')
+            await openBoard(page, boardName)
+            await openCard(page, CARD_TITLE)
+            // Reopened: a card shows markdown until edited, and this asserts on
+            // the editor's own rendering of the mention node.
+            await openDescription(page)
+
+            // The mention is STILL THERE after the round trip through stored
+            // markdown, and still as a name rather than the token it is stored
+            // as. Both halves matter: the first is the persistence this test
+            // exists for, the second catches a serializer that saved the token
+            // but stopped parsing it back into a node.
+            await expect(async () => {
+                expect(await descriptionText(page)).toMatch(/owner is @\S/)
+            }).toPass({ timeout: 20_000 })
+            expect(await descriptionText(page)).not.toContain('[[@')
         } finally {
             await close()
         }

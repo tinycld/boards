@@ -46,6 +46,9 @@ export function MentionPopover({ overlayKey }: MentionPopoverProps) {
     return (
         <AnchoredOverlayController
             webViewRef={overlay.webViewRef as React.RefObject<unknown>}
+            // Positioning measures the host view, not the WebView — the latter
+            // has no measurement methods under the New Architecture.
+            measureRef={overlay.measureRef as React.RefObject<unknown>}
             editorInstanceId={overlay.editorInstanceId}
             registry={REGISTRY}
         />
@@ -68,7 +71,14 @@ function MentionPopoverBody({ payload, respond }: AnchoredOverlayProps) {
     const selectedIndex = contents?.selectedIndex ?? 0
 
     return (
-        <View testID="cards-mention-popover" className="overflow-hidden rounded-md">
+        // Carries its own surface — background, border, shadow — exactly as the
+        // web variant does. It cannot inherit one: the controller renders this
+        // into a bare overlay layer above the app, so anything not drawn here is
+        // transparent and the list reads as text floating on the editor.
+        <View
+            testID="cards-mention-popover"
+            className="overflow-hidden rounded-[10px] border border-border bg-card shadow-lg"
+        >
             <NoMatches isVisible={items.length === 0} color={mutedColor} />
             <ScrollView
                 // Without this the first tap only dismisses the keyboard, so

@@ -1,3 +1,4 @@
+import { markdownScale } from '@tinycld/core/components/help/markdown-purpose'
 import type { ToolbarItem } from '@tinycld/core/components/ResponsiveToolbar'
 import { useRichEditor } from '@tinycld/core/lib/editor/rich'
 import type { EditorCommands } from '@tinycld/core/lib/editor/types'
@@ -43,6 +44,8 @@ interface CommentEditorCoreOptions {
     clearOnSubmit?: boolean
     /** The wrapping class for the editing surface (web). */
     containerClassName: string
+    /** The same floor as `containerClassName`, for native — see the option. */
+    minHeight: number
 }
 
 /**
@@ -63,6 +66,7 @@ function useCommentEditorCore({
     commitOnBlur,
     clearOnSubmit,
     containerClassName,
+    minHeight,
 }: CommentEditorCoreOptions) {
     const [isImagePickerOpen, setIsImagePickerOpen] = useState(false)
     const [isLinkOpen, setIsLinkOpen] = useState(false)
@@ -81,6 +85,16 @@ function useCommentEditorCore({
     // blur-commit and the Save press racing each other must not both write,
     // and a trailing blur after Escape must not resurrect the edit.
     const settledRef = useRef(false)
+    // Has this session ever actually held focus?
+    //
+    // A blur COMMITS an inline edit, so a blur that arrives before the user has
+    // even reached the editor must not write. That is not hypothetical: the
+    // editor mounts with autofocus at a placeholder height, and until the page
+    // reports its real content height the caret can land outside the visible
+    // box and blur immediately — saving a comment nobody edited, out of a
+    // document that may still be loading. Height fixes make that race rarer;
+    // this makes the write impossible, which is the guarantee worth having.
+    const hasFocusedRef = useRef(false)
 
     const imageActions = useEditorImageActions({
         cardId,
@@ -130,6 +144,7 @@ function useCommentEditorCore({
         autofocus,
         characterLimit: COMMENT_LIMIT,
         containerClassName,
+        minHeight,
         onSubmitShortcut: () => void submit(),
         // Handled: the first Escape ends the writing session; only a second
         // one should reach the peek panel behind it.
@@ -139,10 +154,21 @@ function useCommentEditorCore({
             return true
         },
         onImageDrop: imageActions.onImageDrop,
+        onFocus: () => {
+            hasFocusedRef.current = true
+        },
         onBlur: () => {
             // Not when a dialog took the focus — that is a detour inside the
-            // session, not the end of it.
-            if (commitOnBlur && !isImagePickerOpen && !isLinkOpen && !settledRef.current) {
+            // session, not the end of it. And never before the session has
+            // held focus at all: that blur is the mount racing itself, not a
+            // person finishing an edit — see hasFocusedRef.
+            if (
+                commitOnBlur &&
+                hasFocusedRef.current &&
+                !isImagePickerOpen &&
+                !isLinkOpen &&
+                !settledRef.current
+            ) {
                 void submit()
             }
         },
@@ -211,6 +237,10 @@ export function CommentEditor({
         onSubmit,
         clearOnSubmit: true,
         containerClassName: 'min-h-[60px]',
+        // The same floor as the class above, for native: a WebView takes no
+        // height from a className, so without this the composer opens as an
+        // unusable one-line sliver until the page reports its own height.
+        minHeight: 60,
     })
 
     return (
@@ -278,6 +308,16 @@ export function InlineCommentEditor({
         onCancel,
         commitOnBlur: true,
         containerClassName: 'min-h-[24px]',
+        // A FLOOR the caret fits inside, not the 24px the class asks for.
+        //
+        // 24px is under one line, and the editor mounts at this height with
+        // autofocus while the page is still measuring its real content. The
+        // caret landed outside the visible box, the editor blurred on the spot,
+        // and — because a blur COMMITS an inline edit — the comment saved
+        // itself before the user had touched it. The measured height replaces
+        // this within a frame or two, so a larger floor costs nothing visually
+        // and is what keeps the session alive long enough to be one.
+        minHeight: 48,
     })
 
     const rightItems: ToolbarItem[] = [
@@ -316,12 +356,21 @@ export function InlineCommentEditor({
             {/* No border and no horizontal padding — the description's rule:
                 anything here pushes the prose off the x the rendered comment
                 sits on, and the whole point of this variant is that entering
-                an edit moves nothing. The bottom padding is the rendered
-                comment's own trailing rhythm (12px of paragraph margins + the
-                renderer's 8px list padding), measured in the running app — it
-                is what keeps the comments BELOW from sliding up when a
-                one-line comment opens for editing. */}
-            <View className="pb-[20px]">
+                an edit moves nothing.
+
+                The bottom padding reproduces the RENDERED comment's trailing
+                rhythm, so the comments below do not slide up when a one-line
+                comment opens for editing.
+
+                The paragraph-spacing term is DERIVED, because that is the part
+                a typography change moves: retuning the compact scale used to
+                silently break the ±2px anchor comment-editing.spec asserts.
+                The constant beside it is the renderer's own leftover trailing
+                space, which has no exported source — it was MEASURED against
+                that spec, exactly as the previous hard-coded 20px was. If the
+                spec starts failing by a few px after a renderer change, this
+                is the number to re-measure. */}
+            <View style={{ paddingBottom: markdownScale('compact').paragraphSpacing * 2 + 13 }}>
                 <core.EditorComponent />
             </View>
             <CommentEditorDialogs core={core} attachments={attachments} />

@@ -1,7 +1,7 @@
 import { DropZone } from '@tinycld/core/components/DropZone'
 import { useAuth } from '@tinycld/core/lib/auth'
 import { type RefObject, useRef, useState } from 'react'
-import { ScrollView, Text, View } from 'react-native'
+import { Pressable, ScrollView, Text, View } from 'react-native'
 import { useAttachmentMutations } from '../../hooks/useAttachmentMutations'
 import { useCardDetail } from '../../hooks/useCardDetail'
 import { useUpdateCard } from '../../hooks/useCardMutations'
@@ -287,21 +287,83 @@ function useDescriptionSection({
 
     const isCollab = mode === 'collab' && !!doc
 
+    // The collaborative editor is a WebView, and a WebView is the single most
+    // expensive thing on a card. Mounting one to DISPLAY a description made
+    // merely opening a card pay for an editor most opens never use, so it is
+    // deferred until someone actually starts editing.
+    //
+    // What this costs, stated plainly: the read state is a snapshot rather than
+    // a live document. It still updates — `description` comes from the card
+    // record through useLiveQuery, so another person's edits appear when the
+    // server flushes them — but it does not stream keystroke by keystroke, and
+    // remote carets exist only while the editor is mounted. Presence is
+    // unaffected: who has the card open is published by useBoardPresence at the
+    // BOARD level and never depended on this editor.
+    const [isEditingDescription, setIsEditingDescription] = useState(false)
+
     // Called unconditionally — hooks cannot sit behind the branch below. It
     // builds a plain local editor while `doc` is null, which costs nothing
     // because the collaborative branch is the only one that renders it.
+    const isEditingCollab = isCollab && isEditingDescription
     const editorSlots = useDescriptionEditor({
         cardId,
         projectId,
         attachments,
-        doc: isCollab ? doc : null,
+        doc: isEditingCollab ? doc : null,
         awareness,
         identity,
         canEdit: canEdit && canEditDoc,
         isConnected,
+        // Leaving the editor is leaving edit mode. There is no commit to make —
+        // every keystroke was already shared and flushed — so a blur simply
+        // hands the surface back to the read view.
+        onDone: () => setIsEditingDescription(false),
     })
 
-    if (isCollab) return editorSlots
+    if (isEditingCollab) return editorSlots
+
+    // Collaborative, but nobody is editing: render the markdown and mount no
+    // editor at all. Tapping swaps the real thing in.
+    if (isCollab) {
+        return {
+            header: (
+                <View className="justify-center" style={{ height: DESCRIPTION_HEADER_HEIGHT }}>
+                    <Text className="text-[13px] font-semibold text-foreground">Description</Text>
+                </View>
+            ),
+            // Hidden ONLY when there is nothing to show and no way to add
+            // anything — a read-only card with an empty description. That is
+            // the same rule the plain-text path below uses, and it has to be
+            // decided HERE rather than inside the read view: the caller renders
+            // the header as `body ? header : null`, so a view that returns null
+            // takes the whole section's label with it. A Commentor opening a
+            // card with no description lost the Description row entirely.
+            //
+            // The gate is `canEdit`, the card permission — not `canEditDoc`,
+            // which comes from the room's serverHello and is briefly false
+            // while the socket is still answering.
+            // ALWAYS rendered, never conditionally null.
+            //
+            // The caller draws the section's header as `body ? header : null`,
+            // so a null here deletes the whole Description row. The
+            // collaborative path never hid it — even a Commentor got a
+            // read-only editor and so still saw the label — and hiding it for
+            // an empty description silently removed the row for anyone without
+            // edit rights. (The plain-text fallback below DOES hide an empty
+            // read-only description; that rule belongs to it, because its
+            // affordance would otherwise be a dead input.)
+            body: (
+                <DescriptionReadView
+                    description={description}
+                    projectId={projectId}
+                    // Tapping needs a writable doc, which merely reading does
+                    // not: someone can read while the room settles.
+                    canEdit={canEdit && canEditDoc}
+                    onStartEdit={() => setIsEditingDescription(true)}
+                />
+            ),
+        }
+    }
 
     // A disabled editor still renders its placeholder styled as an affordance,
     // so a read-only card with no description drops the section entirely —
@@ -329,6 +391,69 @@ function useDescriptionSection({
             />
         ),
     }
+}
+
+/**
+ * A collaborative description while nobody is editing it.
+ *
+ * Deliberately cheap: markdown text and a press target, no WebView. That is the
+ * whole point of the swap — a card is read far more often than it is edited,
+ * and an editor per card-open is the most expensive thing on the screen.
+ *
+ * The prose is rendered at the editor's own scale (`purpose="description"`,
+ * pinned by markdown-purpose.test.ts), so tapping into an edit does not reflow
+ * the text under the reader's finger.
+ */
+function DescriptionReadView({
+    description,
+    projectId,
+    canEdit,
+    onStartEdit,
+}: {
+    description?: string
+    projectId: string
+    canEdit: boolean
+    onStartEdit: () => void
+}) {
+    // No press target: either the card is read-only, or the room has not yet
+    // confirmed the document is writable.
+    //
+    // NEVER returns null. The caller renders the section's header as
+    // `body ? header : null`, so a null here silently deletes the whole
+    // Description row — which is what happened to a Commentor opening a card
+    // that had no description yet. Whether the section appears at all is the
+    // caller's decision; this only decides what fills it.
+    if (!canEdit) {
+        return (
+            <View testID="cards-description-read" className="py-2">
+                {description ? <MarkdownText body={description} projectId={projectId} /> : null}
+            </View>
+        )
+    }
+    return (
+        <Pressable
+            testID="cards-description-read"
+            onPress={onStartEdit}
+            accessibilityRole="button"
+            accessibilityLabel="Edit description"
+            // The empty state is an affordance rather than prose: without a
+            // filled box there is nothing to tell someone the blank space is
+            // where a description goes.
+            className={
+                description
+                    ? 'py-2 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring rounded-lg'
+                    : 'bg-foreground/5 rounded-lg px-3.5 py-3'
+            }
+        >
+            {description ? (
+                <MarkdownText body={description} projectId={projectId} />
+            ) : (
+                <Text className="text-[13.5px] text-muted">
+                    Add a description — what does done look like?
+                </Text>
+            )}
+        </Pressable>
+    )
 }
 
 // ChecklistSection used to hide the whole section when empty. It is gone: the

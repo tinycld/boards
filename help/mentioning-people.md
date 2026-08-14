@@ -47,13 +47,17 @@ card.
 
 ## What a mention looks like
 
-A mention renders as the person's name. If someone later leaves the board, their
-mention stays readable rather than turning into a code — the text still makes
-sense months later.
+A mention shows the person's name on a tinted background, so it reads as a
+reference to a person rather than as words someone typed.
+
+The name follows the person. If they change their display name, every mention
+of them updates to match — you do not have to go back and edit anything.
+
+If someone later leaves the board, their mention stays readable rather than
+turning into a code. The text still makes sense months later.
 
 ## On a phone or tablet
 
-The `@` picker is not available in the mobile app yet. Mentions written on the
-web still notify people and still show as names everywhere, including on mobile
-— it is only the picker for writing a new one that is missing. To mention
-someone from a phone, use the web app in a browser.
+The `@` picker works the same way in the mobile app: type `@`, keep typing to
+narrow the list, and tap a name. The keyboard stays up while you type, so you
+can filter without losing your place.

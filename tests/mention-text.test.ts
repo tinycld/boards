@@ -22,12 +22,36 @@ describe('renderMentionTokens', () => {
     })
 
     // A record id leaking into readable prose is worse than an honest
-    // placeholder — the person may simply have left the board.
+    // placeholder. Only reachable for a LEGACY token that carries no name —
+    // one written before the format included it.
     it('renders an unknown id as a neutral placeholder, never the raw id', () => {
         const out = renderMentionTokens('who is [[@ghost]]', NAMES)
         expect(out).toBe('who is @someone')
         expect(out).not.toContain('ghost')
         expect(out).not.toContain('[[@')
+    })
+
+    // The reason the token carries a name at all: someone leaving the board
+    // must not erase their name from the sentence that mentions them.
+    it('falls back to the name in the token when the roster cannot resolve the id', () => {
+        const out = renderMentionTokens('who is [[@gone|Grace Hopper]]', NAMES)
+        expect(out).toBe('who is @Grace Hopper')
+        expect(out).not.toContain('@someone')
+    })
+
+    // The roster is live, so a rename is reflected without rewriting stored text.
+    it('prefers the roster name over the one stored in the token', () => {
+        expect(renderMentionTokens('ping [[@u1|Stale Name]]', NAMES)).toBe('ping @Ada Lovelace')
+    })
+
+    // `]` and `|` are percent-encoded by the writer — they would otherwise end
+    // the token early and spill the rest of the name into the comment.
+    it('decodes delimiters a user could type into their own name', () => {
+        expect(renderMentionTokens('hi [[@gone|a%5Db%7Cc]]', NAMES)).toBe('hi @a]b|c')
+    })
+
+    it('still notifies the id when the token carries a name', () => {
+        expect(mentionedUserIds('hi [[@u1|Ada Lovelace]]')).toEqual(['u1'])
     })
 
     it('leaves text with no tokens untouched', () => {
