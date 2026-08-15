@@ -9,6 +9,7 @@
         "./manifest": "./manifest.ts",
         "./types": "./tinycld/cards/types.ts",
         "./collections": "./tinycld/cards/collections.ts",
+        "./automation": "./tinycld/cards/automation.ts",
         "./seed": "./tinycld/cards/seed.ts",
         "./screens/*": "./tinycld/cards/screens/*.tsx",
         "./public-screens/*": "./tinycld/cards/public-screens/*.tsx",

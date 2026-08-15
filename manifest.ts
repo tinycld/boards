@@ -68,6 +68,10 @@ const manifest = {
         scopes: ['cards:read', 'cards:write'],
     },
     collections: { register: 'collections', types: 'types' },
+    // Trigger + action catalog for workflow rules. The Go side
+    // (server/automation.go) resolves owners through board membership and
+    // gates card-completed to a list marked done.
+    automation: { definitions: 'automation' },
     seed: { script: 'seed' },
     // Without this, `useReportIssue` returns null and the Help menu's "Report
     // an issue" item is gated off entirely — cards was the only member missing

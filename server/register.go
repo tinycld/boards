@@ -98,6 +98,11 @@ func registerShared(app *pocketbase.PocketBase) {
 		offboard.RegisterReassignable(ref)
 	}
 
+	// Personal automation rules on cards resolve their owner through board
+	// membership; created_by would scope them to whoever made the card, so a
+	// colleague moving your card would never fire your rule.
+	registerAutomation()
+
 	registerBoardCounters(app)
 	// Unrelated to the counters above despite the adjacency, and the opposite
 	// of them in every invariant: this one is a monotonic sequence, it runs
