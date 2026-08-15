@@ -1,6 +1,6 @@
 import type { Browser, Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { createInvitedUser, login, navigateToPackage } from '@tinycld/core/e2e-helpers'
+import { login, navigateToPackage, signInAsCollaborator } from '@tinycld/core/e2e-helpers'
 import { addCard, boardCard, createBoard } from './helpers'
 
 // A board opened by share link, end to end through the UI.
@@ -22,6 +22,14 @@ const CARD_TITLE = 'Ship the newsletter'
 async function openShareDialog(page: Page, boardName: string) {
     await page.getByRole('button', { name: 'Share board' }).click()
     await expect(page.getByText(`Share “${boardName}”`)).toBeVisible()
+}
+
+/** Dismiss the share dialog and wait for it to be gone. Its backdrop swallows
+ *  clicks on the shell behind it, so anything that reaches for the rail
+ *  afterwards has to know the dialog actually closed. */
+async function closeShareDialog(page: Page) {
+    await page.getByRole('button', { name: 'Done', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Done', exact: true })).toHaveCount(0)
 }
 
 /**
@@ -69,16 +77,17 @@ test.describe('Cards — a board opened by share link', () => {
     }) => {
         await login(page)
         await navigateToPackage(page, 'cards')
-        await createBoard(page, 'Launch plan')
+        const board = `Launch plan ${Date.now()}`
+        await createBoard(page, board)
         await addCard(page, 0, CARD_TITLE)
 
-        const url = await mintShareLink(page, 'Launch plan', 'Viewer')
+        const url = await mintShareLink(page, board, 'Viewer')
 
         const visitor = await visitAnonymously(browser, url)
 
         // The positive anchor first: the board really rendered for someone with
         // no account. Every absence assertion below depends on this.
-        await expect(visitor.getByText('Launch plan').first()).toBeVisible()
+        await expect(visitor.getByText(board).first()).toBeVisible()
         await expect(boardCard(visitor, CARD_TITLE)).toBeVisible()
         await expect(visitor.getByText('To do').first()).toBeVisible()
 
@@ -101,10 +110,11 @@ test.describe('Cards — a board opened by share link', () => {
     test('the roster stays hidden from a link visitor', async ({ page, browser }) => {
         await login(page)
         await navigateToPackage(page, 'cards')
-        await createBoard(page, 'Private roster')
+        const board = `Private roster ${Date.now()}`
+        await createBoard(page, board)
         await addCard(page, 0, CARD_TITLE)
 
-        const url = await mintShareLink(page, 'Private roster', 'Viewer')
+        const url = await mintShareLink(page, board, 'Viewer')
         const visitor = await visitAnonymously(browser, url)
 
         await expect(boardCard(visitor, CARD_TITLE)).toBeVisible()
@@ -122,10 +132,11 @@ test.describe('Cards — a board opened by share link', () => {
     test('an editor link offers a sign-in, a viewer link does not', async ({ page, browser }) => {
         await login(page)
         await navigateToPackage(page, 'cards')
-        await createBoard(page, 'Contributors welcome')
+        const board = `Contributors welcome ${Date.now()}`
+        await createBoard(page, board)
         await addCard(page, 0, CARD_TITLE)
 
-        const url = await mintShareLink(page, 'Contributors welcome', 'Editor')
+        const url = await mintShareLink(page, board, 'Editor')
         const visitor = await visitAnonymously(browser, url)
 
         await expect(boardCard(visitor, CARD_TITLE)).toBeVisible()
@@ -163,55 +174,66 @@ test.describe('Cards — a board opened by share link', () => {
         // silently showing you your own work.
         await login(page)
         await navigateToPackage(page, 'cards')
-        await createBoard(page, 'Owner board')
+        // Per-run names: the stranger is a SHARED account that keeps whatever
+        // boards earlier runs left it, so a fixed "Stranger own board" would
+        // collide and the "not my own board" assertion below would be reading
+        // a leftover rather than this run's.
+        const ownerBoard = `Owner board ${Date.now()}`
+        const strangerBoard = `Stranger own board ${Date.now()}`
+        await createBoard(page, ownerBoard)
         await addCard(page, 0, CARD_TITLE)
 
-        const url = await mintShareLink(page, 'Owner board', 'Viewer')
+        const url = await mintShareLink(page, ownerBoard, 'Viewer')
+        // mintShareLink leaves the dialog open, and its backdrop swallows every
+        // click on the shell behind it — including the rail link this test
+        // later uses to get back to the board.
+        await closeShareDialog(page)
 
         // A real second account, signed in, holding a board of its own and no
         // membership on the shared one.
-        const invited = await createInvitedUser(page, 'linkstranger')
-        await navigateToPackage(invited.inviteePage, 'cards')
-        await createBoard(invited.inviteePage, 'Stranger own board')
+        const stranger = await signInAsCollaborator(page)
+        await navigateToPackage(stranger.page, 'cards')
+        await createBoard(stranger.page, strangerBoard)
 
         // While it is still live, the link resolves to the SHARED board — not
         // the stranger's own, which they can equally well read.
-        await invited.inviteePage.goto(url)
-        await expect(invited.inviteePage.getByText('Owner board').first()).toBeVisible()
-        await expect(boardCard(invited.inviteePage, CARD_TITLE)).toBeVisible()
-        await expect(invited.inviteePage.getByText('Stranger own board')).toHaveCount(0)
+        await stranger.page.goto(url)
+        await expect(stranger.page.getByText(ownerBoard).first()).toBeVisible()
+        await expect(boardCard(stranger.page, CARD_TITLE)).toBeVisible()
+        await expect(stranger.page.getByText(strangerBoard)).toHaveCount(0)
 
-        // Now kill it. createInvitedUser walked the owner's page through
-        // Settings to send the invite, so the share dialog is long closed —
-        // reopen it rather than assuming it survived.
+        // Now kill it. The owner's page is still on its board, but the share
+        // dialog was closed when the link was minted — reopen it.
         await navigateToPackage(page, 'cards')
-        await openShareDialog(page, 'Owner board')
+        await openShareDialog(page, ownerBoard)
         await page.getByRole('button', { name: 'Revoke share link' }).click()
         await expect(page.getByText('Restricted', { exact: false })).toBeVisible()
 
-        await invited.inviteePage.reload()
+        // Re-open the dead link. This is a PUBLIC route outside the app shell,
+        // so a goto is how a visitor actually arrives at it — the same entry
+        // the live-link assertion above used.
+        await stranger.page.goto(url)
 
         // Refused, in the visitor's own words. Nothing to fall back to: the
         // token is the only thing that ever named a board, and it is dead.
-        await expect(
-            invited.inviteePage.getByText('This link is no longer available')
-        ).toBeVisible()
+        await expect(stranger.page.getByText('This link is no longer available')).toBeVisible()
         // The failure this pins — a readable board of their own standing in
         // for the one the dead link pointed at.
-        await expect(invited.inviteePage.getByText('Stranger own board')).toHaveCount(0)
-        await expect(invited.inviteePage.getByText('Read only')).toHaveCount(0)
-        await expect(boardCard(invited.inviteePage, CARD_TITLE)).toHaveCount(0)
+        await expect(stranger.page.getByText(strangerBoard)).toHaveCount(0)
+        await expect(stranger.page.getByText('Read only')).toHaveCount(0)
+        await expect(boardCard(stranger.page, CARD_TITLE)).toHaveCount(0)
 
-        await invited.close()
+        await stranger.close()
     })
 
     test('revoking a link closes it immediately', async ({ page, browser }) => {
         await login(page)
         await navigateToPackage(page, 'cards')
-        await createBoard(page, 'Short lived')
+        const board = `Short lived ${Date.now()}`
+        await createBoard(page, board)
         await addCard(page, 0, CARD_TITLE)
 
-        const url = await mintShareLink(page, 'Short lived', 'Viewer')
+        const url = await mintShareLink(page, board, 'Viewer')
 
         const before = await visitAnonymously(browser, url)
         await expect(boardCard(before, CARD_TITLE)).toBeVisible()

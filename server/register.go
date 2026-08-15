@@ -109,6 +109,10 @@ func registerShared(app *pocketbase.PocketBase) {
 	// before the row lands, and it FAILS the write when it cannot allocate.
 	// See card_number.go.
 	registerCardNumbers(app)
+	// edited_at on comments is server-owned the same way `number` is: the
+	// hook stamps it when the body actually changes and discards any
+	// client-supplied value when it does not. See comment_edited.go.
+	registerCommentEditedAt(app)
 	registerMemberLastOwnerGuard(app)
 	registerRealtime(app)
 

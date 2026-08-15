@@ -1,11 +1,11 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { createInvitedUser, login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard } from './helpers'
+import { login, navigateToPackage, signInAsCollaborator } from '@tinycld/core/e2e-helpers'
+import { addCard, boardCard, createBoard, openBoard, shareBoard } from './helpers'
 
 // Real-time presence, which needs what no other cards spec does: TWO live
-// sessions at once. `createInvitedUser` supplies the second in its own browser
-// context, so the two never share auth state — the same arrangement
+// sessions at once. `signInAsCollaborator` supplies the second in its own
+// browser context, so the two never share auth state — the same arrangement
 // board-sharing.spec.ts uses.
 //
 // The assertions are deliberately about what one session sees of the OTHER.
@@ -19,33 +19,8 @@ import { addCard, boardCard, createBoard } from './helpers'
 const CARD_TITLE = 'Ship the release'
 const OTHER_CARD = 'Write the changelog'
 
-/** Open a board from the cards sidebar and wait for its content. `.first()`
- *  because the name also renders in the board header once active. */
-async function openBoard(page: Page, name: string) {
-    await page.getByText(name, { exact: true }).first().click()
-    await expect(boardCard(page, CARD_TITLE)).toBeVisible()
-}
-
-/** Share `boardName` with `email` as an editor, through the real dialog. */
-async function shareAsEditor(page: Page, boardName: string, email: string) {
-    await page.getByRole('button', { name: 'Share board' }).click()
-    await expect(page.getByText(`Share “${boardName}”`)).toBeVisible()
-    await page.getByRole('button', { name: 'Add people' }).click()
-    await page.getByRole('button', { name: /^Editor — / }).click()
-    await page.getByPlaceholder('Search by name or email').fill(email)
-    await expect(page.getByText(email)).toBeVisible()
-    await page.getByRole('button', { name: 'Add', exact: true }).click()
-    await expect(page.getByPlaceholder('Search by name or email')).not.toBeVisible()
-    await page.getByRole('button', { name: 'Done', exact: true }).click()
-    await expect(page.getByRole('button', { name: 'Done', exact: true })).toHaveCount(0)
-}
-
 test.describe('Cards — real-time presence', () => {
     test('shows who else is on the board, and which card they have open', async ({ page }) => {
-        // One invited user drives the whole arc — the invite flow is the
-        // expensive step, not the assertions.
-        test.slow()
-
         await login(page)
         await navigateToPackage(page, 'cards')
         const boardName = `presence-${Date.now()}`
@@ -53,27 +28,22 @@ test.describe('Cards — real-time presence', () => {
         await addCard(page, 0, CARD_TITLE)
         await addCard(page, 0, OTHER_CARD)
 
-        const {
-            user: bob,
-            inviteePage: bobPage,
-            close,
-        } = await createInvitedUser(page, 'cardpresence')
+        const { user: bob, page: bobPage, close } = await signInAsCollaborator(page)
         try {
-            // The invite flow left `page` on settings; return to the board.
-            await login(page)
-            await navigateToPackage(page, 'cards')
-            await openBoard(page, boardName)
+            // No re-login: signing the collaborator in happens in its own
+            // context and never navigates this page away from the board.
+            await openBoard(page, boardName, CARD_TITLE)
 
             // Alone on the board: no presence row at all. The positive control
             // for every assertion below — without it, a presence stack that
             // never renders would pass the "own avatar absent" checks.
             await expect(page.getByTestId('cards-live-presence')).toHaveCount(0)
 
-            await shareAsEditor(page, boardName, bob.email)
+            await shareBoard(page, boardName, bob.email, 'Editor')
 
             // --- Bob joins the board ---
             await navigateToPackage(bobPage, 'cards')
-            await openBoard(bobPage, boardName)
+            await openBoard(bobPage, boardName, CARD_TITLE)
 
             // Each session sees the OTHER, and neither sees itself.
             await expect(page.getByTestId('cards-live-presence')).toBeVisible()

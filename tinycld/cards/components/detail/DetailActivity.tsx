@@ -213,14 +213,14 @@ function CommentRow({
 }
 
 /**
- * "(edited)" keys on the record's own timestamps: PocketBase writes identical
- * `created`/`updated` strings at create and touches only `updated` on an
- * edit. Optimistic rows carry '' for both, which reads as not-edited — right,
- * since the marker exists for OTHER people's silent revisions.
+ * "(edited)" keys on the explicit `edited_at` stamp the server writes when a
+ * body actually changes (comment_edited.go). It used to be inferred from
+ * `updated !== created`, which silently never rendered for a create+edit that
+ * landed inside one autodate millisecond — the stamp exists so the marker
+ * reports intent rather than clock resolution. '' means never edited.
  */
 function EditedMarker({ comment }: { comment: BoardComment }) {
-    const isEdited = !!comment.updated && !!comment.created && comment.updated !== comment.created
-    if (!isEdited) return null
+    if (!comment.editedAt) return null
     return <Text className="shrink-0 text-[11px] italic text-muted">(edited)</Text>
 }
 

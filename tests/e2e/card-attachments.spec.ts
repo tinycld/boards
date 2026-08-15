@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { createInvitedUser, login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard } from './helpers'
+import { login, navigateToPackage, signInAsCollaborator } from '@tinycld/core/e2e-helpers'
+import { addCard, boardCard, createBoard, openBoard, openCard, shareBoard } from './helpers'
 
 // Attaching a file to a card, end to end through the UI: pick → upload →
 // the strip lists it → the board face grows a paperclip → preview → delete.
@@ -18,18 +18,6 @@ async function freshBoard(page: Page, label: string): Promise<string> {
     const name = `attach-${label}-${Date.now()}-${run++}`
     await createBoard(page, name)
     return name
-}
-
-async function openCard(page: Page, title: string) {
-    await boardCard(page, title).click()
-    await expect(page.getByText('Description', { exact: true })).toBeVisible()
-}
-
-/** Open a board from the sidebar. `.first()` because the name also renders in
- *  the board header once active. */
-async function openBoard(page: Page, name: string) {
-    await page.getByText(name, { exact: true }).first().click()
-    await expect(boardCard(page, CARD_TITLE)).toBeVisible()
 }
 
 /**
@@ -174,9 +162,14 @@ test.describe('card attachments', () => {
         await expect(page.getByText('discarded.txt', { exact: true })).toBeHidden()
 
         // The name is a column, not client state — it must survive a reload.
-        await page.reload()
+        // Leaving cards and coming back proves this was WRITTEN, not just held in
+        // optimistic client state: the board screen unmounts and everything below
+        // is re-read from the server on the way back in. page.reload() would prove
+        // the same by tearing down the whole SPA — the hard navigation this suite
+        // forbids (it cancels in-flight chunk loads and is a CI flake source).
+        await navigateToPackage(page, 'settings')
         await navigateToPackage(page, 'cards')
-        await openBoard(page, boardName)
+        await openBoard(page, boardName, CARD_TITLE)
         await openCard(page, CARD_TITLE)
         await expect(page.getByText('release-notes.txt', { exact: true })).toBeVisible({
             timeout: 15_000,
@@ -228,8 +221,6 @@ test.describe('card attachments', () => {
     })
 
     test('a viewer can read an attachment but not add or remove one', async ({ page }) => {
-        test.slow()
-
         const boardName = await freshBoard(page, 'viewer')
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
@@ -237,26 +228,11 @@ test.describe('card attachments', () => {
         await expect(page.getByText('shared.txt', { exact: true })).toBeVisible({ timeout: 15_000 })
         await page.keyboard.press('Escape')
 
-        const {
-            user: bob,
-            inviteePage: bobPage,
-            close,
-        } = await createInvitedUser(page, 'cardattach')
+        const { user: bob, page: bobPage, close } = await signInAsCollaborator(page)
         try {
-            // The invite flow leaves `page` on settings; return to the board.
-            await login(page)
-            await navigateToPackage(page, 'cards')
-            await openBoard(page, boardName)
-
-            await page.getByRole('button', { name: 'Share board' }).click()
-            await expect(page.getByText(`Share “${boardName}”`)).toBeVisible()
-            await page.getByRole('button', { name: 'Add people' }).click()
-            await page.getByRole('button', { name: /^Viewer — / }).click()
-            await page.getByPlaceholder('Search by name or email').fill(bob.email)
-            await expect(page.getByText(bob.email)).toBeVisible()
-            await page.getByRole('button', { name: 'Add', exact: true }).click()
-            await expect(page.getByPlaceholder('Search by name or email')).not.toBeVisible()
-            await page.getByRole('button', { name: 'Done', exact: true }).click()
+            // The collaborator signs in in its own context, so this page is
+            // still on the board — no re-login, no re-navigation.
+            await shareBoard(page, boardName, bob.email, 'Viewer')
 
             // Positive control: the owner, who attached it, has both affordances.
             await openCard(page, CARD_TITLE)
@@ -265,7 +241,7 @@ test.describe('card attachments', () => {
             await expect(page.getByRole('button', { name: 'Rename shared.txt' })).toBeVisible()
 
             await navigateToPackage(bobPage, 'cards')
-            await openBoard(bobPage, boardName)
+            await openBoard(bobPage, boardName, CARD_TITLE)
             await boardCard(bobPage, CARD_TITLE).click()
 
             // The file itself is readable — viewRule gates the blob and a
