@@ -1,4 +1,5 @@
 import {
+    type LazyEditorHandle,
     type LazyEditorHeaderState,
     type LazyEditorSlots,
     useLazyEditor,
@@ -10,7 +11,7 @@ import { useDraftStore } from '@tinycld/core/lib/editor/warm'
 import type { SurfaceId } from '@tinycld/core/lib/editor/warm/warm-editor-store'
 import { Button, ButtonText } from '@tinycld/core/ui/button'
 import { PromptDialog } from '@tinycld/core/ui/PromptDialog'
-import { type ReactNode, useRef, useState } from 'react'
+import { type ReactNode, type RefObject, useRef, useState } from 'react'
 import { Platform, Pressable, Text, View } from 'react-native'
 import { useEditorImageActions } from '../../hooks/useEditorImageActions'
 import { useMentionTrigger } from '../../hooks/useMentionTrigger'
@@ -75,8 +76,6 @@ interface CommentEditorCoreOptions {
     canEdit: boolean
     /** Both variants are mounted only once editing has begun — see LazyEditor. */
     startOpen?: boolean
-    /** Changing this reclaims the shared editor — see LazyEditor's prop. */
-    acquireToken?: string | number
     /** The composer sends and stays open; an inline edit ends at its commit. */
     stayOpenOnCommit?: boolean
     testID?: string
@@ -114,7 +113,6 @@ function useCommentEditorCore({
     renderHeader,
     canEdit,
     startOpen,
-    acquireToken,
     stayOpenOnCommit,
     testID,
     accessibilityLabel,
@@ -169,7 +167,6 @@ function useCommentEditorCore({
         commitOnBlur,
         isDialogOpen,
         startOpen,
-        acquireToken,
         stayOpenOnCommit,
         onCommit: body => {
             // An empty comment is not a write. LazyEditor has no opinion on
@@ -210,6 +207,7 @@ function useCommentEditorCore({
     return {
         header: slots.header,
         body: slots.body,
+        handle: slots.handle,
         currentLink: currentLinkRef.current,
         isImagePickerOpen,
         setIsImagePickerOpen,
@@ -232,8 +230,11 @@ interface CommentComposerEditorProps {
     attachments: BoardAttachment[]
     placeholder: string
     autofocus?: boolean
-    /** Changing this brings the shared editor back to the composer. */
-    acquireToken?: string | number
+    /**
+     * Receives the composer's handle, so the parent can put the caret here on
+     * an explicit user action — pressing Reply targets this composer.
+     */
+    handleRef?: RefObject<LazyEditorHandle | null>
     isPending: boolean
     onSubmit: (body: string) => void
     testID: string
@@ -254,7 +255,7 @@ export function CommentEditor({
     projectId,
     attachments,
     placeholder,
-    acquireToken,
+    handleRef,
     isPending,
     onSubmit,
     testID,
@@ -295,7 +296,6 @@ export function CommentEditor({
         // a disappearance. Tapping re-acquires.
         readView: <ComposerReadView draft={draft} placeholder={placeholder} testID={testID} />,
         startOpen: true,
-        acquireToken,
         // Send and stay: the next comment goes in the same box.
         stayOpenOnCommit: true,
         containerClassName: 'min-h-[60px]',
@@ -328,6 +328,12 @@ export function CommentEditor({
             </View>
         ),
     })
+
+    // Published during render rather than through an effect: the handle is one
+    // stable object for the life of the surface, so there is nothing to
+    // synchronise — and a parent effect that fires on the same commit (pressing
+    // Reply) must find it already there.
+    if (handleRef) handleRef.current = core.handle
 
     return (
         <>
