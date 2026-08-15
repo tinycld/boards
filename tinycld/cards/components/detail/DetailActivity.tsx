@@ -141,6 +141,31 @@ function CommentRow({
     // An optimistic comment has created '' until PocketBase answers.
     const timestamp = comment.created ? formatRelativeDate(comment.created) : 'Just now'
 
+    // Shared by both branches: the inline editor shows it in its header slot
+    // while idle, and the read branch below renders it directly. One definition,
+    // so the two can never drift apart and break the height-neutral swap.
+    // A FRAGMENT, not a wrapping View: CommentActions positions itself with
+    // `ml-auto` against the row and reveals itself on `group-hover`, so an extra
+    // box between them takes the push away and hides the actions for good.
+    const authorLine = (
+        <>
+            <Text numberOfLines={1} className="shrink text-[13px] font-semibold text-foreground">
+                {comment.author.firstName} {comment.author.lastName}
+            </Text>
+            <Text className="shrink-0 text-[11.5px] text-muted">{timestamp}</Text>
+            <EditedMarker comment={comment} />
+            <CommentActions
+                color={mutedColor}
+                canReply={canComment}
+                canEdit={canEditOwn}
+                canDelete={isAuthor || canModerate}
+                onReply={() => onReply(comment)}
+                onEdit={() => onStartEdit(comment.id)}
+                onDelete={() => onDelete(comment.id)}
+            />
+        </>
+    )
+
     return (
         <View className="flex-row gap-2.5 group">
             <NameAvatar
@@ -152,13 +177,27 @@ function CommentRow({
             <View className="flex-1 min-w-0">
                 {isEditing ? (
                     <InlineCommentEditor
+                        commentId={comment.id}
                         cardId={cardId}
                         projectId={projectId}
                         attachments={attachments}
                         initialContent={comment.body}
                         isPending={isSaving}
+                        canEdit={canEditOwn}
                         onSubmit={body => onSaveEdit(comment.id, body)}
                         onCancel={onCancelEdit}
+                        // Only mounted while this comment is the one being
+                        // edited, so the swap-back is the parent's to make —
+                        // these are what LazyEditor shows if it ends the session
+                        // itself (a blur-commit).
+                        readView={
+                            <MarkdownText
+                                body={comment.body}
+                                variant="comment"
+                                projectId={projectId}
+                            />
+                        }
+                        authorLine={authorLine}
                         testID="cards-comment-editor"
                     />
                 ) : (
@@ -182,23 +221,7 @@ function CommentRow({
                             className="flex-row items-center gap-2 mb-[2px]"
                             style={{ height: COMMENT_HEADER_HEIGHT }}
                         >
-                            <Text
-                                numberOfLines={1}
-                                className="shrink text-[13px] font-semibold text-foreground"
-                            >
-                                {comment.author.firstName} {comment.author.lastName}
-                            </Text>
-                            <Text className="shrink-0 text-[11.5px] text-muted">{timestamp}</Text>
-                            <EditedMarker comment={comment} />
-                            <CommentActions
-                                color={mutedColor}
-                                canReply={canComment}
-                                canEdit={canEditOwn}
-                                canDelete={isAuthor || canModerate}
-                                onReply={() => onReply(comment)}
-                                onEdit={() => onStartEdit(comment.id)}
-                                onDelete={() => onDelete(comment.id)}
-                            />
+                            {authorLine}
                         </View>
                         <CommentBody
                             comment={comment}
