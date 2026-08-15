@@ -89,13 +89,22 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: ws/.go-version
-          # go.mod, not go.sum: cards deliberately commits no go.sum (see the
-          # comment in server/go.mod — every dep resolves through go.work
-          # replaces to local dirs, so there are no module hashes to record).
-          # The hand-maintained require block still changes whenever a
-          # dependency does, so it is the right key here.
+          # cards' own key is go.mod, not go.sum: cards deliberately commits no
+          # go.sum (see the comment in server/go.mod — every dep resolves
+          # through go.work replaces to local dirs, so there are no module
+          # hashes to record). The hand-maintained require block still changes
+          # whenever a dependency does, so it is the right key for this repo.
+          #
+          # The tinycld go.sum files join the key the way core's own CI keys on
+          # them: the modules the postinstall's schema generation (and the e2e
+          # server build) actually downloads are CORE's graph, resolved through
+          # go.work — so a key blind to those files caches almost none of what
+          # the job spends its time fetching. The assemble step above has
+          # already cloned ws/tinycld by the time this hashes.
           cache-dependency-path: |
             ws/cards/server/go.mod
+            ws/tinycld/server/go.sum
+            ws/tinycld/core/server/go.sum
       # corepack enables the pnpm version pinned in the workspace root's
       # "packageManager" field. pnpm discovers members from pnpm-workspace.yaml;
       # node-linker=hoisted (set there) gives a flat node_modules so member
@@ -197,9 +206,11 @@ jobs:
         if: steps.specs.outputs.found == 'true'
         with:
           go-version-file: ws/.go-version
-          # go.mod, not go.sum — see the note on the job above.
+          # Same key as the check job — see the note there.
           cache-dependency-path: |
             ws/cards/server/go.mod
+            ws/tinycld/server/go.sum
+            ws/tinycld/core/server/go.sum
       - name: Cache pnpm store
         if: steps.specs.outputs.found == 'true'
         uses: actions/cache@v6
