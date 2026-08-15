@@ -1,22 +1,20 @@
-import { WarmEditorHost } from '@tinycld/core/lib/editor/warm'
+import { useEditorNeeded } from '@tinycld/core/lib/editor/warm'
 import { Stack } from 'expo-router'
 
 /**
- * Boots one editor WebView on entering Cards and keeps it warm for the section.
+ * Declares that this section may edit, so the app's one editor boots.
  *
- * Creating an editor is a browser cold start plus a 0.86 MB bundle parse — 1135
- * of the 1186 ms an edit used to take, all of it before any configuration is
- * applied. Warming it here means the first description or comment edit pays only
- * the reconfiguration.
+ * A DECLARATION, not a mount. Cards used to mount the editor host here, which
+ * meant leaving the section and coming back destroyed and re-booted it — the
+ * full ~1135 ms cold start (a browser boot plus a 0.86 MB bundle parse), paid
+ * again on every re-entry. The instance now lives above the route tree and
+ * outlives this layout, so re-entry costs nothing.
  *
- * Here rather than in the manifest's `provider`: that chain wraps the whole app
- * and is built at module load, so it would boot a WebView at launch for anyone
- * who has cards installed and never opens it.
+ * Still declared here rather than in the manifest's `provider`: that chain
+ * wraps the whole app and is built at module load, so it would boot an editor
+ * at launch for anyone who has cards installed and never opens it.
  */
 export default function CardsLayout() {
-    return (
-        <WarmEditorHost options={{ contentFormat: 'markdown', minHeight: 72 }}>
-            <Stack screenOptions={{ headerShown: false }} />
-        </WarmEditorHost>
-    )
+    useEditorNeeded()
+    return <Stack screenOptions={{ headerShown: false }} />
 }

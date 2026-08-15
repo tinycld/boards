@@ -33,6 +33,20 @@ const COMMENT_LIMIT = 10000
 export const COMMENT_HEADER_HEIGHT = 32
 const INLINE_TOOLBAR_HEIGHT = COMMENT_HEADER_HEIGHT - 2
 
+/**
+ * The composer's three stacked parts, named so its read view can reserve the
+ * SAME height as its editing chrome.
+ *
+ * The swap between them happens on blur — while a press on something else is in
+ * flight — so any height difference reflows the comment list out from under
+ * that press and the click is cancelled. See ComposerReadView.
+ */
+/** MarkdownToolbar's default row height — the composer does not override it. */
+const COMPOSER_TOOLBAR_HEIGHT = 38
+const COMPOSER_MIN_HEIGHT = 60
+/** The Send row: a `size="sm"` Button, measured against the editing chrome. */
+const COMPOSER_BUTTON_ROW_HEIGHT = 44
+
 interface CommentEditorCoreOptions {
     cardId: string
     projectId: string
@@ -61,6 +75,8 @@ interface CommentEditorCoreOptions {
     canEdit: boolean
     /** Both variants are mounted only once editing has begun — see LazyEditor. */
     startOpen?: boolean
+    /** Changing this reclaims the shared editor — see LazyEditor's prop. */
+    acquireToken?: string | number
     /** The composer sends and stays open; an inline edit ends at its commit. */
     stayOpenOnCommit?: boolean
     testID?: string
@@ -98,6 +114,7 @@ function useCommentEditorCore({
     renderHeader,
     canEdit,
     startOpen,
+    acquireToken,
     stayOpenOnCommit,
     testID,
     accessibilityLabel,
@@ -152,6 +169,7 @@ function useCommentEditorCore({
         commitOnBlur,
         isDialogOpen,
         startOpen,
+        acquireToken,
         stayOpenOnCommit,
         onCommit: body => {
             // An empty comment is not a write. LazyEditor has no opinion on
@@ -214,6 +232,8 @@ interface CommentComposerEditorProps {
     attachments: BoardAttachment[]
     placeholder: string
     autofocus?: boolean
+    /** Changing this brings the shared editor back to the composer. */
+    acquireToken?: string | number
     isPending: boolean
     onSubmit: (body: string) => void
     testID: string
@@ -234,17 +254,17 @@ export function CommentEditor({
     projectId,
     attachments,
     placeholder,
+    acquireToken,
     isPending,
     onSubmit,
     testID,
 }: CommentEditorProps) {
     const surfaceId = `composer:${cardId}`
-    // With one shared editor a half-typed comment no longer survives in a
+    // With one editor app-wide a half-typed comment no longer survives in a
     // mounted composer — the instance moves to whatever the user tapped. The
-    // draft store is where that text lives instead. Null on web and wherever no
-    // warm host is mounted, where the composer keeps its own editor and its
-    // draft survives exactly as before.
+    // draft store is where that text lives instead, on both platforms.
     const drafts = useDraftStore()
+    const draft = drafts?.take(surfaceId) ?? ''
 
     const core = useCommentEditorCore({
         cardId,
@@ -254,7 +274,7 @@ export function CommentEditor({
         isPending,
         // Seeded from the stash, so re-opening the composer after an inline edit
         // finds the draft rather than an empty box.
-        initialContent: drafts?.take(surfaceId) ?? '',
+        initialContent: draft,
         onSubmit: body => {
             drafts?.clear(surfaceId)
             onSubmit(body)
@@ -265,17 +285,25 @@ export function CommentEditor({
         onRelease: body => drafts?.stash(surfaceId, body),
         // No commitOnBlur: leaving the composer must never post a comment.
         canEdit: true,
-        // The composer is already open by the time this renders — CommentComposer
-        // owns the collapsed affordance — so there is no read view to swap from.
-        readView: null,
+        // What the composer shows whenever it does not hold the one editor:
+        // displaced by an inline edit, or still waiting on the boot. It used to
+        // pass null, which rendered an invisible box the user could not get
+        // back into — the composer looked like it had vanished.
+        //
+        // The draft as static text in the same frame, so losing the instance
+        // reads as "your text is still here, tap to keep typing" rather than as
+        // a disappearance. Tapping re-acquires.
+        readView: <ComposerReadView draft={draft} placeholder={placeholder} testID={testID} />,
         startOpen: true,
+        acquireToken,
         // Send and stay: the next comment goes in the same box.
         stayOpenOnCommit: true,
         containerClassName: 'min-h-[60px]',
         // The same floor as the class above, for native: a WebView takes no
         // height from a className, so without this the composer opens as an
         // unusable one-line sliver until the page reports its own height.
-        minHeight: 60,
+        // Shared with the read view, which must reserve an identical box.
+        minHeight: COMPOSER_MIN_HEIGHT,
         renderEditor: (slots, dialogs) => (
             <View testID={testID} className="gap-1.5">
                 <MarkdownToolbar
@@ -310,6 +338,49 @@ export function CommentEditor({
 }
 
 type CommentEditorProps = CommentComposerEditorProps
+
+/**
+ * The composer while it does not hold the editor.
+ *
+ * **Height-neutral with the editing chrome, and that is load-bearing.** This
+ * swaps in on BLUR — the moment the user presses something else — so if it were
+ * shorter than the editor it replaces, the whole comment list above would
+ * reflow downward between that press's mousedown and its mouseup. The pointer
+ * would no longer be over what the user aimed at, the browser would cancel the
+ * click, and every first click on a comment would be silently swallowed. (It
+ * was: the list jumped 94px and clicking a comment did nothing until the second
+ * try.)
+ *
+ * So the frame reproduces the editing surface's three stacked parts at their
+ * real heights — toolbar row, framed input, button row — rather than just the
+ * input. The parts are inert here; only their geometry matters.
+ */
+function ComposerReadView({
+    draft,
+    placeholder,
+    testID,
+}: {
+    draft: string
+    placeholder: string
+    testID: string
+}) {
+    return (
+        <View testID={`${testID}-read`} className="gap-1.5">
+            {/* Stands in for the toolbar row. */}
+            <View style={{ height: COMPOSER_TOOLBAR_HEIGHT }} />
+            <View
+                className="justify-center rounded-[10px] border border-border bg-background px-3 py-1"
+                style={{ minHeight: COMPOSER_MIN_HEIGHT }}
+            >
+                <Text className={draft ? 'text-foreground' : 'text-muted'}>
+                    {draft || placeholder}
+                </Text>
+            </View>
+            {/* Stands in for the Send row. */}
+            <View style={{ height: COMPOSER_BUTTON_ROW_HEIGHT }} />
+        </View>
+    )
+}
 
 interface InlineCommentEditorProps {
     /** Names the surface to the warm editor, so a handover can tell them apart. */

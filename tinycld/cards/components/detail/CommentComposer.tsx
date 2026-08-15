@@ -60,6 +60,11 @@ export function CommentComposer({
                         attachments={attachments}
                         placeholder="Write a comment…"
                         autofocus
+                        // Pressing Reply targets THIS composer, so the shared
+                        // editor comes back to it — the press blurs whatever
+                        // held the editor, and without this the composer would
+                        // sit open with no editor in it.
+                        acquireToken={replyingTo?.id ?? ''}
                         isPending={isPending}
                         onSubmit={onSubmit}
                         testID="cards-comment-composer-editor"
