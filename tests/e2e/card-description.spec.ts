@@ -58,13 +58,13 @@ async function typeDescription(page: Page, text: string) {
     const editor = await openDescription(page)
     await expect(editor).toBeVisible()
     await editor.click()
-    await expect(async () => {
-        if (!(await descriptionText(page)).includes(text.replace(/^#+ /, ''))) {
-            await page.keyboard.press('ControlOrMeta+End')
-            await page.keyboard.type(text, { delay: 20 })
-        }
-        expect(await descriptionText(page)).toContain(text.replace(/^#+ /, ''))
-    }).toPass({ timeout: 15_000 })
+    // Focus is the precondition the retry was approximating — assert it, then
+    // type once. The per-key delay paces ProseMirror's input rules (`## ` →
+    // heading), which run per keystroke; it is not a settle.
+    await expect(editor).toBeFocused()
+    await page.keyboard.press('ControlOrMeta+End')
+    await editor.pressSequentially(text, { delay: 20 })
+    await expect(editor).toContainText(text.replace(/^#+ /, ''))
 }
 
 test.describe('Cards — markdown descriptions', () => {

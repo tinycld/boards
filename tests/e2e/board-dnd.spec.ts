@@ -172,34 +172,37 @@ test.describe('Cards — drag and drop', () => {
         if (!box) throw new Error('card not visible')
         const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
 
-        const active = page.getByTestId('cards-drag-active')
-        await expect(async () => {
-            if ((await active.count()) === 0) {
-                await page.mouse.up().catch(() => {})
-                await page.mouse.move(start.x, start.y)
-                await page.mouse.down()
-                await page.waitForTimeout(60)
-                for (let px = 4; px <= 32; px += 4) {
-                    await page.mouse.move(start.x + px, start.y + px)
-                }
-            }
-            await expect(active).toHaveCount(1)
-        }).toPass()
+        // The shared helper, which already owns the press→slop→retry dance this
+        // test used to inline.
+        await activateDrag(page, start)
 
         // Cross into Doing so a transfer starts (the reinject-at-origin
         // cancel path is the cross-container one; a purely same-column drag
         // commits its last hovered slot instead, by design)…
         const doing = await columnHeader(page, 'Doing').boundingBox()
         if (!doing) throw new Error('Doing header not visible')
-        for (let i = 1; i <= 8; i++) {
-            await page.mouse.move(start.x + ((doing.x + 100 - start.x) * i) / 8, start.y)
-        }
-        await page.waitForTimeout(200)
+        // Only the column under the pointer mounts this, and a foreign card is
+        // what makes it "receiving" — so while the drag is over Doing, this is
+        // Doing's marker.
+        const doingReceiving = page.getByTestId('cards-column-receiving')
+        // Gated on Doing REGISTERING the hover rather than on 200ms elapsing:
+        // that marker is the transfer this test needs to have started, and
+        // waiting for it directly is both faster and immune to a slow frame.
+        await expect(async () => {
+            for (let i = 1; i <= 8; i++) {
+                await page.mouse.move(start.x + ((doing.x + 100 - start.x) * i) / 8, start.y)
+            }
+            await expect(doingReceiving).toHaveCount(1)
+        }).toPass({ timeout: 4_000 })
+
         // …then drag well below every column, over empty canvas, and release.
-        for (let i = 1; i <= 10; i++) {
-            await page.mouse.move(doing.x + 100, start.y + i * 45)
-        }
-        await page.waitForTimeout(200)
+        // Leaving every column is observable too: the receiving marker clears.
+        await expect(async () => {
+            for (let i = 1; i <= 10; i++) {
+                await page.mouse.move(doing.x + 100, start.y + i * 45)
+            }
+            await expect(doingReceiving).toHaveCount(0)
+        }).toPass({ timeout: 4_000 })
         await page.mouse.up()
 
         await expect.poll(async () => cardsInColumn(page, 'To do')).toEqual(['stay-put', 'anchor'])

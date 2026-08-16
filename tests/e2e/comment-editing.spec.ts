@@ -36,19 +36,26 @@ function commentEditor(page: Page) {
     return page.getByTestId('cards-comment-editor').locator('.ProseMirror')
 }
 
-/** Type into a ProseMirror surface, retried — it drops keystrokes while
- *  settling focus (the description specs' convention). */
+/**
+ * Type into a ProseMirror surface.
+ *
+ * Gated on FOCUS rather than retried: keystrokes are dropped while the editor
+ * is still settling focus, and `toBeFocused` is that condition stated
+ * directly. Typing once into a focused editor is what a retype loop was
+ * approximating — and the assertion below auto-retries, so nothing here needs
+ * a time budget.
+ */
 async function typeInto(page: Page, editor: ReturnType<Page['locator']>, body: string) {
     const marker = body.replace(/[*`_]/g, '')
     await editor.click()
-    await expect(async () => {
-        if (!((await editor.textContent()) ?? '').includes(marker)) {
-            await page.keyboard.press('ControlOrMeta+A')
-            await page.keyboard.press('Backspace')
-            await page.keyboard.type(body, { delay: 20 })
-        }
-        expect((await editor.textContent()) ?? '').toContain(marker)
-    }).toPass({ timeout: 15_000 })
+    await expect(editor).toBeFocused()
+    await page.keyboard.press('ControlOrMeta+A')
+    await page.keyboard.press('Backspace')
+    // The delay is NOT a settle — focus is already proven above. ProseMirror's
+    // input rules (`**x**` → bold) run per keystroke, and a burst with no gap
+    // can outpace them, which shows up as markdown left as literal asterisks.
+    await editor.pressSequentially(body, { delay: 20 })
+    await expect(editor).toContainText(marker)
 }
 
 async function postComment(page: Page, body: string) {

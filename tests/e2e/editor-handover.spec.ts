@@ -55,19 +55,22 @@ async function expectSingleEditor(page: Page) {
     await expect(page.locator('.ProseMirror')).toHaveCount(1)
 }
 
-/** Type into a ProseMirror surface, retried — it drops keystrokes while
- *  settling focus (the description specs' convention). */
+/**
+ * Type into a ProseMirror surface.
+ *
+ * Gated on FOCUS rather than retried: keystrokes are dropped while the editor
+ * is still settling focus, and `toBeFocused` is that condition stated
+ * directly. The per-key delay is not a settle — it paces ProseMirror's input
+ * rules, which run per keystroke.
+ */
 async function typeInto(page: Page, editor: ReturnType<Page['locator']>, body: string) {
     const marker = body.replace(/[*`_]/g, '')
     await editor.click()
-    await expect(async () => {
-        if (!((await editor.textContent()) ?? '').includes(marker)) {
-            await page.keyboard.press('ControlOrMeta+A')
-            await page.keyboard.press('Backspace')
-            await page.keyboard.type(body, { delay: 20 })
-        }
-        expect((await editor.textContent()) ?? '').toContain(marker)
-    }).toPass({ timeout: 15_000 })
+    await expect(editor).toBeFocused()
+    await page.keyboard.press('ControlOrMeta+A')
+    await page.keyboard.press('Backspace')
+    await editor.pressSequentially(body, { delay: 20 })
+    await expect(editor).toContainText(marker)
 }
 
 async function openComposer(page: Page) {

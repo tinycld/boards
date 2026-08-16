@@ -63,13 +63,13 @@ async function typeDescription(page: Page, text: string) {
     const editor = await openDescription(page)
     await expect(editor).toBeVisible()
     await editor.click()
-    await expect(async () => {
-        if (!((await editor.textContent()) ?? '').includes(text)) {
-            await page.keyboard.press('ControlOrMeta+End')
-            await page.keyboard.type(text, { delay: 20 })
-        }
-        expect((await editor.textContent()) ?? '').toContain(text)
-    }).toPass({ timeout: 15_000 })
+    // Focus is the precondition the retry was approximating — assert it, then
+    // type once. The per-key delay paces ProseMirror's input rules, which run
+    // per keystroke; it is not a settle.
+    await expect(editor).toBeFocused()
+    await page.keyboard.press('ControlOrMeta+End')
+    await editor.pressSequentially(text, { delay: 20 })
+    await expect(editor).toContainText(text)
 }
 
 test.describe('Cards — description formatting toolbar', () => {
@@ -192,7 +192,12 @@ test.describe('Cards — description formatting toolbar', () => {
         await page.getByRole('button', { name: 'Link', exact: true }).click()
         const linkInput = page.getByPlaceholder('https://example.com')
         await expect(linkInput).toBeVisible()
-        await page.waitForTimeout(500)
+        // The soak, expressed as an interaction rather than a sleep: focusing
+        // and typing into the field only succeeds against a dialog that is
+        // still mounted, and it outlives the single frame the old bug survived.
+        // A plain second toBeVisible() would pass instantly and prove nothing.
+        await linkInput.click()
+        await expect(linkInput).toBeFocused()
         await expect(linkInput).toBeVisible()
         await linkInput.fill('https://example.com/docs')
         await page.getByRole('button', { name: 'Apply' }).click()
@@ -307,8 +312,24 @@ test.describe('Cards — description formatting toolbar', () => {
 
         const editor = await openDescription(page)
         await editor.click()
-        for (let i = 0; i < 40; i++) {
-            await page.keyboard.type(`line ${i} of filler\n`, { delay: 2 })
+        // The filler exists ONLY to make the panel scroll, so it is HEIGHT,
+        // not prose: a couple of characters so the document is non-empty,
+        // then bare Enters — one keystroke per line of height. Every
+        // keystroke is a full ProseMirror+Yjs transaction and a contended CI
+        // runner processes ~25 of them a second, so the original 40×"line N
+        // of filler" (~680 keystrokes) burned the entire 30s test budget
+        // inside this loop, timing out at line 37 with the assertions never
+        // reached. Typing less of the same prose was the wrong lesson — the
+        // right one is that no prose was ever needed.
+        //
+        // The LINE COUNT is load-bearing where the text was not: the -400px
+        // wheel below must leave the panel still scrolled, or the toolbar
+        // legitimately un-sticks and the held-station assertion fails (a
+        // 32-line variant gave ~270px of scroll range and did exactly that).
+        // 64 empty paragraphs keep ~600px of range beyond the wheel.
+        await page.keyboard.type('xx', { delay: 2 })
+        for (let i = 0; i < 64; i++) {
+            await page.keyboard.press('Enter')
         }
 
         await expect(boldButton(page)).toBeVisible()
