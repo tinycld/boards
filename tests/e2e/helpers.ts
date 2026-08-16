@@ -132,10 +132,26 @@ export async function createBoard(page: Page, name: string, key?: string) {
 }
 
 /** Add a card via a column's composer. Enter keeps the composer open, so
- *  Escape closes it after. `columnIndex` picks which "Add card" button. */
+ *  Escape closes it after. `columnIndex` picks which "Add card" button.
+ *
+ *  Typed against the INPUT, verified before Enter. Blind keyboard.type after
+ *  the click races the composer's autoFocus — keystrokes landing before focus
+ *  settles go to the board's global shortcuts instead ('n' re-opens a
+ *  composer, the rest vanish) and the card is never created. The retry
+ *  re-opens the composer if a lost click (or a swallowed first keystroke)
+ *  left it closed. */
 export async function addCard(page: Page, columnIndex: number, title: string) {
-    await page.getByText('Add card', { exact: true }).nth(columnIndex).click()
-    await page.keyboard.type(title)
+    const input = page.getByPlaceholder('What needs doing?')
+    await expect(async () => {
+        if (!(await input.isVisible())) {
+            await page.getByText('Add card', { exact: true }).nth(columnIndex).click()
+            await expect(input).toBeVisible({ timeout: 2000 })
+        }
+        if ((await input.inputValue()) !== title) {
+            await input.fill(title)
+        }
+        expect(await input.inputValue()).toBe(title)
+    }).toPass()
     await page.keyboard.press('Enter')
     await expect(boardCard(page, title)).toBeVisible()
     await page.keyboard.press('Escape')
