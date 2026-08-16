@@ -308,14 +308,19 @@ test.describe('Cards — description formatting toolbar', () => {
         const editor = await openDescription(page)
         await editor.click()
         // The filler exists ONLY to make the panel scroll — its content is
-        // irrelevant, so it is as short as it can be. Every character is a
-        // full ProseMirror+Yjs transaction, and a contended CI runner types
-        // ~25 of them a second: the previous 40×"line N of filler" (~680
-        // characters) burned the entire 30s test budget mid-loop, timing out
-        // at line 37 with the assertions never reached. 32 two-character
-        // lines (~96 keystrokes) still overfills the panel by a comfortable
-        // margin.
-        for (let i = 0; i < 32; i++) {
+        // irrelevant, so the lines are as short as they can be. Every
+        // character is a full ProseMirror+Yjs transaction, and a contended CI
+        // runner types ~25 of them a second: the original 40×"line N of
+        // filler" (~680 characters) burned the entire 30s test budget
+        // mid-loop, timing out at line 37 with the assertions never reached.
+        //
+        // The COUNT is load-bearing where the prose was not: the -400px wheel
+        // below must leave the panel still scrolled, or the toolbar
+        // legitimately un-sticks and the held-station assertion fails (32
+        // lines gave ~270px of scroll range and did exactly that). 64
+        // two-line-height rows keep ~600px of range beyond the wheel at a
+        // fifth of the original keystrokes.
+        for (let i = 0; i < 64; i++) {
             await page.keyboard.type('x\n', { delay: 2 })
         }
 
