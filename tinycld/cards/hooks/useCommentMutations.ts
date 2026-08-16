@@ -57,6 +57,8 @@ export function useCommentMutations(cardId: string, projectId: string) {
                 author: user?.id ?? '',
                 body: input.body,
                 parent: input.parent ?? '',
+                // Never edited. Server-owned thereafter — see comment_edited.go.
+                edited_at: '',
             })
 
             // One comment_mentions row per distinct `[[@id]]` in the body. The
@@ -104,6 +106,11 @@ export function useCommentMutations(cardId: string, projectId: string) {
         mutationFn: mutation(function* ({ commentId, body }) {
             yield commentsCollection.update(commentId, draft => {
                 draft.body = body
+                // Optimistic only: the server hook (comment_edited.go) owns
+                // this column and re-stamps it authoritatively when the body
+                // actually changed — setting it here just lets the "(edited)"
+                // marker render without waiting on the round trip.
+                draft.edited_at = new Date().toISOString()
             })
         }),
     })

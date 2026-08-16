@@ -51,12 +51,14 @@ jobs:
           # back to its default branch when there is none (the ordinary
           # single-repo PR, where every sibling should be at its release state).
           #
-          # Only `tinycld` is listed: cards declares no sibling dependencies.
-          # M6's "attach from Drive" is presence-gated, so drive joins this loop
-          # (and the --with below) when that lands — not before, since cloning it
-          # now would slow every run for a package cards never imports.
+          # `drive` joined the loop with @mentions: the shared comment_mentions
+          # table is drive's (1781000000), so the RLS suite that proves cards'
+          # branch of its createRule — and the mentions e2e, whose UI is gated
+          # on the collection existing — can only run against a workspace that
+          # has it. Mentions stay presence-gated in the product; CI simply
+          # exercises the assembled half rather than skipping it silently.
           BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
-          for repo in tinycld; do
+          for repo in tinycld drive; do
             if [ -n "$BRANCH" ] && \
                git ls-remote --exit-code --heads "https://github.com/tinycld/$repo" "$BRANCH" >/dev/null 2>&1; then
               echo "${repo}_ref=@$BRANCH" >> "$GITHUB_OUTPUT"
@@ -71,12 +73,13 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
-      - name: Assemble workspace (app + core)
+      - name: Assemble workspace (app + core + drive)
         working-directory: ws
         run: |
           TINYCLD_REPO_BASE=https://github.com/tinycld \
             npx @tinycld/bootstrap@latest --assemble-only \
-            --with "tinycld${{ steps.sibling.outputs.tinycld_ref }}"
+            --with "tinycld${{ steps.sibling.outputs.tinycld_ref }}" \
+            --with "drive${{ steps.sibling.outputs.drive_ref }}"
       # Switch to the version the assembled workspace pins (ws/.node-version is
       # written by the assemble step above).
       - uses: actions/setup-node@v5
@@ -166,9 +169,9 @@ jobs:
         if: steps.specs.outputs.found == 'true'
         id: sibling
         run: |
-          # See the check job for why this exists.
+          # See the check job for why this exists (incl. why drive is listed).
           BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
-          for repo in tinycld; do
+          for repo in tinycld drive; do
             if [ -n "$BRANCH" ] && \
                git ls-remote --exit-code --heads "https://github.com/tinycld/$repo" "$BRANCH" >/dev/null 2>&1; then
               echo "${repo}_ref=@$BRANCH" >> "$GITHUB_OUTPUT"
@@ -182,13 +185,14 @@ jobs:
         if: steps.specs.outputs.found == 'true'
         with:
           node-version: '24'
-      - name: Assemble workspace (app + core)
+      - name: Assemble workspace (app + core + drive)
         if: steps.specs.outputs.found == 'true'
         working-directory: ws
         run: |
           TINYCLD_REPO_BASE=https://github.com/tinycld \
             npx @tinycld/bootstrap@latest --assemble-only \
-            --with "tinycld${{ steps.sibling.outputs.tinycld_ref }}"
+            --with "tinycld${{ steps.sibling.outputs.tinycld_ref }}" \
+            --with "drive${{ steps.sibling.outputs.drive_ref }}"
       - uses: actions/setup-node@v5
         if: steps.specs.outputs.found == 'true'
         with:

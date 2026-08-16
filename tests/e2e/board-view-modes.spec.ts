@@ -119,7 +119,12 @@ test.describe('Cards — collapsed columns and card density', () => {
         // still open — compact hides detail, it does not hide work.
         await expect(boardCard(page, 'dense me')).toBeVisible()
 
-        await page.reload()
+        // Leaving cards and coming back re-reads the preference from where it is
+        // stored instead of from the live screen. page.reload() would prove the
+        // same by tearing down the whole SPA — the hard navigation this suite
+        // forbids.
+        await navigateToPackage(page, 'settings')
+        await navigateToPackage(page, 'cards')
         await expect(page.getByTestId('cards-density-toggle')).toHaveAttribute(
             'aria-label',
             'Show card details'
@@ -139,7 +144,10 @@ test.describe('Cards — collapsed columns and card density', () => {
         await addCard(page, 0, 'still hidden')
 
         await collapseList(page, 'To do')
-        await page.reload()
+        // Same round trip as above: the collapsed state has to come back from
+        // storage, not from the screen that set it.
+        await navigateToPackage(page, 'settings')
+        await navigateToPackage(page, 'cards')
 
         await expect(page.getByLabel('Expand To do list')).toBeVisible()
         await expect(boardCard(page, 'still hidden')).not.toBeAttached()

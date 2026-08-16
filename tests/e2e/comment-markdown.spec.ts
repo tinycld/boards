@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard } from './helpers'
+import { addCard, createBoard, openCard } from './helpers'
 
 // Comment bodies are stored as Markdown and render as Markdown, matching how
 // descriptions already behave. The composer is the rich editor: markdown
@@ -19,11 +19,6 @@ async function freshBoard(page: Page, label: string): Promise<string> {
     const name = `comment-${label}-${Date.now()}-${run++}`
     await createBoard(page, name)
     return name
-}
-
-async function openCard(page: Page, title: string) {
-    await boardCard(page, title).click()
-    await expect(page.getByText('Description', { exact: true })).toBeVisible()
 }
 
 function composer(page: Page) {
@@ -141,8 +136,12 @@ test.describe('Cards — markdown comments', () => {
         await openCard(page, CARD_TITLE)
         await postComment(page, 'A *lasting* remark.')
 
-        // In-app rather than a reload — see card-description.spec.ts.
-        await navigateToPackage(page, 'mail')
+        // Leaving cards and coming back proves this was WRITTEN, not just held in
+        // optimistic client state: the board screen unmounts and everything below
+        // is re-read from the server on the way back in. page.reload() would prove
+        // the same by tearing down the whole SPA — the hard navigation this suite
+        // forbids (it cancels in-flight chunk loads and is a CI flake source).
+        await navigateToPackage(page, 'settings')
         await navigateToPackage(page, 'cards')
         await openCard(page, CARD_TITLE)
 
