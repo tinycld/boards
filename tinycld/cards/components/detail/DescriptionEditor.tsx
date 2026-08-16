@@ -1,7 +1,7 @@
-import { useRichEditor } from '@tinycld/core/lib/editor/rich'
+import { type LazyEditorSlots, useLazyEditor } from '@tinycld/core/components/editor/LazyEditor'
 import type { EditorCommands } from '@tinycld/core/lib/editor/types'
 import { PromptDialog } from '@tinycld/core/ui/PromptDialog'
-import { type ReactNode, useRef, useState } from 'react'
+import { type ReactNode, type RefObject, useRef, useState } from 'react'
 import { Platform, Text, View, type ViewStyle } from 'react-native'
 import type { Awareness } from 'y-protocols/awareness'
 import type * as Y from 'yjs'
@@ -37,15 +37,15 @@ interface DescriptionEditorProps {
     /** Shown while the socket is down; the local document keeps accepting text. */
     isConnected: boolean
     /**
-     * The editing session ended — the caller should swap back to the read view
-     * and unmount this editor.
+     * The current description, rendered while nobody is editing.
      *
-     * Fired on blur, because there is nothing to commit: every keystroke was
-     * already shared and flushed, so leaving the editor is the whole of
-     * "finishing". Not fired while a dialog holds focus (the image picker, the
-     * link prompt) — that is a detour inside the session, not the end of it.
+     * The read view is markdown text and a press target — no WebView — because a
+     * card is read far more often than edited. LazyEditor owns that swap now, so
+     * this is what it shows until someone taps.
      */
-    onDone?: () => void
+    description?: string
+    /** The read view itself. Cards' own component: core never renders content. */
+    readView: ReactNode
 }
 
 export interface DescriptionEditorSlots {
@@ -103,12 +103,10 @@ export function useDescriptionEditor({
     identity,
     canEdit,
     isConnected,
-    onDone,
+    description,
+    readView,
 }: DescriptionEditorProps): DescriptionEditorSlots {
     const containerRef = useRef<View>(null)
-    const [isFocused, setIsFocused] = useState(false)
-    // Has this editing session ever held focus? See onBlur below.
-    const hasFocusedRef = useRef(false)
     const [isImagePickerOpen, setIsImagePickerOpen] = useState(false)
     const [isLinkOpen, setIsLinkOpen] = useState(false)
 
@@ -130,164 +128,253 @@ export function useDescriptionEditor({
     // commenting standing — see useMentionTrigger.
     const mention = useMentionTrigger(projectId)
 
-    const { EditorComponent, editor, commands, toolbarState } = useRichEditor({
-        contentFormat: 'markdown',
-        placeholder: 'Add a description — what does done look like?',
-        triggers: mention.triggers,
-        overlayKey: mention.overlayKey,
-        editable: canEdit,
-        characterLimit: DESCRIPTION_LIMIT,
-        // Held CONSTANT on purpose. The web hook memoizes EditorComponent on
-        // this string, so varying it with focus would hand React a new
-        // component identity, remount ProseMirror, and blur the editor the
-        // instant it focused — a flicker loop. The focus styling lives on our
-        // own wrapper below instead.
-        containerClassName: 'min-h-[72px]',
-        // Stated rather than inherited: the class above is web-only, and this
-        // matching only the native default by coincidence is not something a
-        // later change to that default should be free to break.
-        minHeight: 72,
-        // This editor is now mounted BY a tap rather than with the card, so it
-        // has to take the caret itself — otherwise tapping the description
-        // swaps in an editor the user then has to tap a second time.
-        autofocus: true,
-        onFocus: () => {
-            hasFocusedRef.current = true
-            setIsFocused(true)
-        },
-        onBlur: () => {
-            setIsFocused(false)
-            // A dialog taking focus is a detour inside the session, not its
-            // end — closing the editor under the image picker would unmount
-            // the surface the picked image is about to be inserted into.
-            if (isImagePickerOpen || isLinkOpen) return
-            // Never before the session has actually held focus. The editor
-            // mounts with autofocus while the WebView is still booting, and a
-            // blur from that race would close the editor the instant it opened
-            // — the same mount race that made an inline comment edit commit
-            // itself before anyone had touched it.
-            if (!hasFocusedRef.current) return
-            onDone?.()
-        },
-        // Blur rather than close: the first Escape should leave the editor, and
-        // only a second one should reach the panel behind it. Returning true
-        // stops this one from bubbling.
-        onEscape: () => {
-            editor.focus('end')
-            blurActiveElement()
-            return true
-        },
-        onSubmitShortcut: blurActiveElement,
-        onImageDrop,
-        // Undefined before the room is ready: useRichEditor treats a missing
-        // collab option as a plain local editor, which is exactly the
-        // non-collaborative fallback, and it starts collaborating the moment a
-        // doc arrives (the extension list rebuilds on the document identity).
-        collab: !doc
-            ? undefined
-            : {
-                  document: doc,
-                  // Must match cardFragment() in cards/server/bootstrap.go.
-                  field: `card:${cardId}`,
-                  awareness: awareness ?? undefined,
-                  // CollaborationCaret overwrites awareness.user on mount, so
-                  // this has to be the exact shape presence publishes —
-                  // otherwise the local user drops out of every avatar row.
-                  user: identity ?? undefined,
-              },
-    })
-
-    commandsRef.current = commands
-
     // Both dialogs steal focus, which blurs the editor — keeping the toolbar
     // row alive while either is open is what stops the row from swapping back
     // to the label mid-flow (and unmounting the button that opened it). The
     // link dialog originally lived INSIDE the toolbar without this keep-alive
     // and closed itself the instant its input autofocused.
-    const showToolbar = canEdit && (isFocused || isImagePickerOpen || isLinkOpen)
+    const isDialogOpen = isImagePickerOpen || isLinkOpen
 
-    return {
-        header: (
-            // Fixed height, so the swap below costs no vertical space and the
-            // editor never shifts under the caret. justify-center keeps the
-            // 16px label optically centered in the 40px the toolbar needs.
+    const slots = useLazyEditor({
+        surfaceId: `description:${cardId}`,
+        readView,
+        value: description ?? '',
+        contentFormat: 'markdown',
+        canEdit,
+        // No commit and no cancel: every keystroke is already shared through Yjs
+        // and flushed by the server, so "save" and "revert" have nowhere to
+        // live. Leaving the editor is the whole of finishing, which LazyEditor
+        // does on blur for a surface with no blur-commit.
+        onCommit: () => {},
+        // Passed rather than pushed back up through setDialogOpen: this
+        // component already owns both dialogs' open state, and echoing it into
+        // the hook from an effect is the useState+useEffect pairing the style
+        // guide calls out. Keeps a blur under either dialog from ending the
+        // session — the editor must survive until the picked image lands in it.
+        isDialogOpen,
+        editorOptions: {
+            placeholder: 'Add a description — what does done look like?',
+            triggers: mention.triggers,
+            overlayKey: mention.overlayKey,
+            editable: canEdit,
+            characterLimit: DESCRIPTION_LIMIT,
+            // Held CONSTANT on purpose. The web hook memoizes EditorComponent on
+            // this string, so varying it with focus would hand React a new
+            // component identity, remount ProseMirror, and blur the editor the
+            // instant it focused — a flicker loop. The focus styling lives on our
+            // own wrapper below instead.
+            containerClassName: 'min-h-[72px]',
+            // Stated rather than inherited: the class above is web-only, and this
+            // matching only the native default by coincidence is not something a
+            // later change to that default should be free to break.
+            minHeight: 72,
+            // Blur rather than close: the first Escape should leave the editor,
+            // and only a second one should reach the panel behind it. Returning
+            // true stops this one bubbling.
             //
-            // Sticky lives HERE rather than on the toolbar: this row is always
-            // present, so there is always a box to pin. `position: sticky` is
-            // web-only (RN has no such value), hence the Platform guard —
-            // native pins the same row through CardDetail's
-            // stickyHeaderIndices. Every ancestor must also stay
-            // overflow-visible or RN-Web's default clipping silently kills it.
-            <View
-                className="justify-center bg-card"
-                style={
-                    Platform.OS === 'web'
-                        ? { height: DESCRIPTION_HEADER_HEIGHT, ...STICKY_HEADER }
-                        : { height: DESCRIPTION_HEADER_HEIGHT }
-                }
-            >
-                {showToolbar ? (
-                    <MarkdownToolbar
-                        commands={commands}
-                        toolbarState={toolbarState}
-                        isVisible
-                        onOpenImagePicker={() => setIsImagePickerOpen(true)}
-                        onOpenLinkDialog={() => setIsLinkOpen(true)}
-                    />
-                ) : (
-                    <Text className="text-[13px] font-semibold text-foreground">Description</Text>
-                )}
-            </View>
+            // Without it Escape closes the card panel on the FIRST press, mid
+            // sentence — the description is a collaborative surface with no
+            // revert, so the text survives, but the reader is thrown out of the
+            // card they were writing in.
+            //
+            // Blurring is the whole of leaving: LazyEditor's blur handler ends
+            // the session for a surface with no blur-commit, so this does not
+            // need to reach into the editor handle (which the options object
+            // cannot see anyway — it is built before the lease resolves).
+            onEscape: () => {
+                blurActiveElement()
+                return true
+            },
+            onSubmitShortcut: blurActiveElement,
+            onImageDrop,
+            // Undefined before the room is ready: useRichEditor treats a missing
+            // collab option as a plain local editor, which is exactly the
+            // non-collaborative fallback, and it starts collaborating the moment a
+            // doc arrives (the extension list rebuilds on the document identity).
+            collab: !doc
+                ? undefined
+                : {
+                      document: doc,
+                      // Must match cardFragment() in cards/server/bootstrap.go.
+                      field: `card:${cardId}`,
+                      awareness: awareness ?? undefined,
+                      // CollaborationCaret overwrites awareness.user on mount, so
+                      // this has to be the exact shape presence publishes —
+                      // otherwise the local user drops out of every avatar row.
+                      user: identity ?? undefined,
+                  },
+        },
+        // Rendered as ELEMENTS, not called as functions. PromptDialog below has
+        // hooks of its own, and invoking it inline would run them inside
+        // useLazyEditor's render — where they appear only in the editing branch,
+        // so tapping to edit changes the hook count and React throws #301.
+        // The toolbar follows the EDITOR, not the caret. It used to gate on
+        // focus because the editor was always mounted, so focus was the only
+        // signal that anyone was writing; now the editor exists only during a
+        // session, which is the same thing said directly. Gating on focus as
+        // well would blank the toolbar whenever the caret briefly left — most
+        // visibly on an empty description, where the first focus event can
+        // arrive after the swap.
+        renderHeader: ({ isEditing, slots: editorSlots }) => (
+            <DescriptionHeader
+                showToolbar={canEdit && isEditing}
+                slots={editorSlots}
+                onOpenImagePicker={() => setIsImagePickerOpen(true)}
+                onOpenLinkDialog={() => setIsLinkOpen(true)}
+            />
         ),
-        body: (
-            // overflow-visible: RN-Web Views clip by default, and a clipping
-            // ancestor between the sticky toolbar and the scroll container
-            // turns sticky back into static, silently.
-            <View ref={containerRef} className="overflow-visible">
-                {/* No border and no horizontal padding: the description text
+        renderEditor: editorSlots => (
+            <DescriptionBody
+                containerRef={containerRef}
+                slots={editorSlots}
+                commandsRef={commandsRef}
+                mention={mention}
+                isConnected={isConnected}
+                attachments={attachments}
+                isImagePickerOpen={isImagePickerOpen}
+                setIsImagePickerOpen={setIsImagePickerOpen}
+                insertExisting={insertExisting}
+                uploadAndInsert={uploadAndInsert}
+                isLinkOpen={isLinkOpen}
+                setIsLinkOpen={setIsLinkOpen}
+            />
+        ),
+        testID: 'cards-description-read',
+        accessibilityLabel: 'Edit description',
+    })
+
+    return { header: slots.header, body: slots.body }
+}
+
+/**
+ * The row above the editor: the "Description" label while idle, the formatting
+ * toolbar while writing.
+ */
+function DescriptionHeader({
+    showToolbar,
+    slots,
+    onOpenImagePicker,
+    onOpenLinkDialog,
+}: {
+    showToolbar: boolean
+    slots: LazyEditorSlots | null
+    onOpenImagePicker: () => void
+    onOpenLinkDialog: () => void
+}) {
+    return (
+        // Fixed height, so the swap below costs no vertical space and the
+        // editor never shifts under the caret. justify-center keeps the
+        // 16px label optically centered in the 40px the toolbar needs.
+        //
+        // Sticky lives HERE rather than on the toolbar: this row is always
+        // present, so there is always a box to pin. `position: sticky` is
+        // web-only (RN has no such value), hence the Platform guard —
+        // native pins the same row through CardDetail's
+        // stickyHeaderIndices. Every ancestor must also stay
+        // overflow-visible or RN-Web's default clipping silently kills it.
+        <View
+            className="justify-center bg-card"
+            style={
+                Platform.OS === 'web'
+                    ? { height: DESCRIPTION_HEADER_HEIGHT, ...STICKY_HEADER }
+                    : { height: DESCRIPTION_HEADER_HEIGHT }
+            }
+        >
+            {showToolbar && slots ? (
+                <MarkdownToolbar
+                    commands={slots.commands}
+                    toolbarState={slots.toolbarState}
+                    isVisible
+                    onOpenImagePicker={onOpenImagePicker}
+                    onOpenLinkDialog={onOpenLinkDialog}
+                />
+            ) : (
+                <Text className="text-[13px] font-semibold text-foreground">Description</Text>
+            )}
+        </View>
+    )
+}
+
+/** The editing surface, its popovers, and the two dialogs that drive it. */
+function DescriptionBody({
+    containerRef,
+    slots,
+    commandsRef,
+    mention,
+    isConnected,
+    attachments,
+    isImagePickerOpen,
+    setIsImagePickerOpen,
+    insertExisting,
+    uploadAndInsert,
+    isLinkOpen,
+    setIsLinkOpen,
+}: {
+    containerRef: RefObject<View | null>
+    slots: LazyEditorSlots
+    commandsRef: RefObject<EditorCommands | null>
+    mention: ReturnType<typeof useMentionTrigger>
+    isConnected: boolean
+    attachments: BoardAttachment[]
+    isImagePickerOpen: boolean
+    setIsImagePickerOpen: (open: boolean) => void
+    insertExisting: (attachment: BoardAttachment) => void
+    uploadAndInsert: () => Promise<void>
+    isLinkOpen: boolean
+    setIsLinkOpen: (open: boolean) => void
+}) {
+    const { EditorComponent, commands, toolbarState } = slots
+
+    commandsRef.current = commands
+
+    return (
+        // overflow-visible: RN-Web Views clip by default, and a clipping
+        // ancestor between the sticky toolbar and the scroll container
+        // turns sticky back into static, silently.
+        <View ref={containerRef} className="overflow-visible">
+            {/* No border and no horizontal padding: the description text
                     starts on the same x as the "Description" label and the
                     property labels above it, so the whole panel reads as one
                     column. Anything here — even a 1px border — pushes the prose
                     out of that alignment. The toolbar carries its own frame. */}
-                {/* The testID scopes e2e locators: '.ProseMirror' alone is
+            {/* The testID scopes e2e locators: '.ProseMirror' alone is
                     ambiguous now that the comment composer and the inline
                     comment editor can each mount an instance beside this. */}
-                <View testID="cards-description-editor" className="py-2">
-                    <EditorComponent />
-                </View>
-                {/* Portalled to <body> on web and drawn as a native Modal on
+            <View testID="cards-description-editor" className="py-2">
+                <EditorComponent />
+            </View>
+            {/* Portalled to <body> on web and drawn as a native Modal on
                     device, so its position in this tree does not affect layout
                     on either platform. */}
-                <MentionPopover state={mention.state} overlayKey={mention.overlayKey} />
-                <DescriptionStatus isConnected={isConnected} />
-                <ImageAttachmentPicker
-                    isOpen={isImagePickerOpen}
-                    onClose={() => setIsImagePickerOpen(false)}
-                    attachments={attachments}
-                    onPick={insertExisting}
-                    onUploadNew={() => void uploadAndInsert()}
-                />
-                <PromptDialog
-                    isOpen={isLinkOpen}
-                    onClose={() => setIsLinkOpen(false)}
-                    onSubmit={url => {
-                        setIsLinkOpen(false)
-                        // chain().focus() restores the selection the editor
-                        // held before the dialog took focus, so the link
-                        // applies to the text the user selected. An empty
-                        // value is how you remove a link — PromptDialog is
-                        // deliberately left un-`required` so it can reach us.
-                        if (url.trim()) commands.setLink(url.trim())
-                        else commands.removeLink()
-                    }}
-                    title="Link"
-                    placeholder="https://example.com"
-                    defaultValue={toolbarState.currentLink ?? ''}
-                    confirmLabel="Apply"
-                />
-            </View>
-        ),
-    }
+            <MentionPopover state={mention.state} overlayKey={mention.overlayKey} />
+            <DescriptionStatus isConnected={isConnected} />
+            <ImageAttachmentPicker
+                isOpen={isImagePickerOpen}
+                onClose={() => setIsImagePickerOpen(false)}
+                attachments={attachments}
+                onPick={insertExisting}
+                onUploadNew={() => void uploadAndInsert()}
+            />
+            <PromptDialog
+                isOpen={isLinkOpen}
+                onClose={() => setIsLinkOpen(false)}
+                onSubmit={url => {
+                    setIsLinkOpen(false)
+                    // chain().focus() restores the selection the editor
+                    // held before the dialog took focus, so the link
+                    // applies to the text the user selected. An empty
+                    // value is how you remove a link — PromptDialog is
+                    // deliberately left un-`required` so it can reach us.
+                    if (url.trim()) commands.setLink(url.trim())
+                    else commands.removeLink()
+                }}
+                title="Link"
+                placeholder="https://example.com"
+                defaultValue={toolbarState.currentLink ?? ''}
+                confirmLabel="Apply"
+            />
+        </View>
+    )
 }
 
 /**

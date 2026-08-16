@@ -1,6 +1,7 @@
+import type { LazyEditorHandle } from '@tinycld/core/components/editor/LazyEditor'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { X } from 'lucide-react-native'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Platform, Pressable, Text, View } from 'react-native'
 import type { BoardAttachment } from '../../types'
 import { CommentEditor } from './CommentEditor'
@@ -46,6 +47,23 @@ export function CommentComposer({
     // composer without anyone tapping it first.
     const isOpen = wasOpened || !!replyingTo
 
+    // Pressing Reply means "the caret belongs in the composer now".
+    //
+    // That press blurs whatever held the one shared editor, which releases it —
+    // and since a parent-owned session stays OPEN through a steal, the composer
+    // would otherwise sit there with no editor in it and no way in but a tap.
+    // Claiming it back is the composer's call to make because the composer is
+    // what the reply will be written in.
+    //
+    // Keyed on the reply target's id, and skipped when there is none: the
+    // composer's own startOpen already claims the instance on mount, and firing
+    // here as well would just re-acquire what it already holds.
+    const editorHandle = useRef<LazyEditorHandle | null>(null)
+    const replyTargetId = replyingTo?.id
+    useEffect(() => {
+        if (replyTargetId) editorHandle.current?.edit()
+    }, [replyTargetId])
+
     return (
         <View
             testID="cards-comment-composer"
@@ -60,6 +78,7 @@ export function CommentComposer({
                         attachments={attachments}
                         placeholder="Write a comment…"
                         autofocus
+                        handleRef={editorHandle}
                         isPending={isPending}
                         onSubmit={onSubmit}
                         testID="cards-comment-composer-editor"

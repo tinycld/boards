@@ -1,11 +1,17 @@
+import {
+    type LazyEditorHandle,
+    type LazyEditorHeaderState,
+    type LazyEditorSlots,
+    useLazyEditor,
+} from '@tinycld/core/components/editor/LazyEditor'
 import { markdownScale } from '@tinycld/core/components/help/markdown-purpose'
 import type { ToolbarItem } from '@tinycld/core/components/ResponsiveToolbar'
-import { useRichEditor } from '@tinycld/core/lib/editor/rich'
-import type { EditorCommands } from '@tinycld/core/lib/editor/types'
-import { captureException } from '@tinycld/core/lib/errors'
+import type { EditorCommands, EditorToolbarState } from '@tinycld/core/lib/editor/types'
+import { useDraftStore } from '@tinycld/core/lib/editor/warm'
+import type { SurfaceId } from '@tinycld/core/lib/editor/warm/warm-editor-store'
 import { Button, ButtonText } from '@tinycld/core/ui/button'
 import { PromptDialog } from '@tinycld/core/ui/PromptDialog'
-import { useRef, useState } from 'react'
+import { type ReactNode, type RefObject, useRef, useState } from 'react'
 import { Platform, Pressable, Text, View } from 'react-native'
 import { useEditorImageActions } from '../../hooks/useEditorImageActions'
 import { useMentionTrigger } from '../../hooks/useMentionTrigger'
@@ -28,24 +34,59 @@ const COMMENT_LIMIT = 10000
 export const COMMENT_HEADER_HEIGHT = 32
 const INLINE_TOOLBAR_HEIGHT = COMMENT_HEADER_HEIGHT - 2
 
+/**
+ * The composer's three stacked parts, named so its read view can reserve the
+ * SAME height as its editing chrome.
+ *
+ * The swap between them happens on blur — while a press on something else is in
+ * flight — so any height difference reflows the comment list out from under
+ * that press and the click is cancelled. See ComposerReadView.
+ */
+/** MarkdownToolbar's default row height — the composer does not override it. */
+const COMPOSER_TOOLBAR_HEIGHT = 38
+const COMPOSER_MIN_HEIGHT = 60
+/** The Send row: a `size="sm"` Button, measured against the editing chrome. */
+const COMPOSER_BUTTON_ROW_HEIGHT = 44
+
 interface CommentEditorCoreOptions {
     cardId: string
     projectId: string
+    /** Names this surface to the warm editor: `comment:<id>` or `composer:<cardId>`. */
+    surfaceId: SurfaceId
     initialContent?: string
     placeholder: string
-    autofocus?: boolean
     isPending: boolean
     onSubmit: (body: string) => void
     /** Present on the inline editor only — enables Escape-cancel semantics. */
     onCancel?: () => void
+    /** Uncommitted text as the session ends — the composer stashes it. */
+    onRelease?: (content: string) => void
     /** Commit on focus loss (the EditableText convention for an EDIT). */
     commitOnBlur?: boolean
-    /** Reset to empty after a submit (the composer). */
-    clearOnSubmit?: boolean
     /** The wrapping class for the editing surface (web). */
     containerClassName: string
     /** The same floor as `containerClassName`, for native — see the option. */
     minHeight: number
+    /** Shown while idle; LazyEditor swaps the editor in on press. */
+    readView: ReactNode
+    /** Draws the chrome around the editing surface. */
+    renderEditor: (slots: LazyEditorSlots, dialogs: CommentEditorDialogState) => ReactNode
+    /** The row above the surface — author line while idle, toolbar while editing. */
+    renderHeader?: (state: LazyEditorHeaderState, dialogs: CommentEditorDialogState) => ReactNode
+    canEdit: boolean
+    /** Both variants are mounted only once editing has begun — see LazyEditor. */
+    startOpen?: boolean
+    /** The composer sends and stays open; an inline edit ends at its commit. */
+    stayOpenOnCommit?: boolean
+    testID?: string
+    accessibilityLabel?: string
+}
+
+/** The two dialogs both variants own, and the mention popover they share. */
+export interface CommentEditorDialogState {
+    openImagePicker: () => void
+    openLinkDialog: () => void
+    canSubmit: (toolbarState: EditorToolbarState) => boolean
 }
 
 /**
@@ -57,16 +98,24 @@ interface CommentEditorCoreOptions {
 function useCommentEditorCore({
     cardId,
     projectId,
+    surfaceId,
     initialContent,
     placeholder,
-    autofocus,
     isPending,
     onSubmit,
     onCancel,
+    onRelease,
     commitOnBlur,
-    clearOnSubmit,
     containerClassName,
     minHeight,
+    readView,
+    renderEditor,
+    renderHeader,
+    canEdit,
+    startOpen,
+    stayOpenOnCommit,
+    testID,
+    accessibilityLabel,
 }: CommentEditorCoreOptions) {
     const [isImagePickerOpen, setIsImagePickerOpen] = useState(false)
     const [isLinkOpen, setIsLinkOpen] = useState(false)
@@ -76,26 +125,6 @@ function useCommentEditorCore({
     // paths must always reach the LIVE editor.
     const commandsRef = useRef<EditorCommands | null>(null)
 
-    // The revert/no-op baseline for an edit session, snapshotted at mount so a
-    // realtime update to the comment mid-edit cannot become the comparison
-    // target (EditableText's rule).
-    const baselineRef = useRef(initialContent ?? '')
-    // True once this session has committed or cancelled. An edit session ends
-    // at its first commit — the parent unmounts this component — so the
-    // blur-commit and the Save press racing each other must not both write,
-    // and a trailing blur after Escape must not resurrect the edit.
-    const settledRef = useRef(false)
-    // Has this session ever actually held focus?
-    //
-    // A blur COMMITS an inline edit, so a blur that arrives before the user has
-    // even reached the editor must not write. That is not hypothetical: the
-    // editor mounts with autofocus at a placeholder height, and until the page
-    // reports its real content height the caret can land outside the visible
-    // box and blur immediately — saving a comment nobody edited, out of a
-    // document that may still be loading. Height fixes make that race rarer;
-    // this makes the write impossible, which is the guarantee worth having.
-    const hasFocusedRef = useRef(false)
-
     const imageActions = useEditorImageActions({
         cardId,
         projectId,
@@ -104,90 +133,88 @@ function useCommentEditorCore({
         context: 'cards.comment',
     })
 
-    const submit = async () => {
-        if (isPending) return
-        if (commitOnBlur && settledRef.current) return
-        let body: string
-        try {
-            body = ((await editor.getMarkdown?.()) ?? '').trim()
-        } catch (err) {
-            captureException('cards.comment.readBody', err, { card: cardId })
-            return
-        }
-        if (!body) return
-        if (onCancel && body === baselineRef.current.trim()) {
-            // An unchanged edit is a cancel, not a write (EditableText's
-            // unchanged-value guard).
-            settledRef.current = true
-            onCancel()
-            return
-        }
-        if (commitOnBlur) settledRef.current = true
-        onSubmit(body)
-        if (clearOnSubmit) editor.setMarkdown?.('')
-    }
-
-    const cancel = () => {
-        settledRef.current = true
-        onCancel?.()
-    }
-
     // `@` autocomplete, same trigger the description uses.
     const mention = useMentionTrigger(projectId)
 
-    const { EditorComponent, editor, commands, toolbarState } = useRichEditor({
+    // A dialog holding the focus is a detour inside the session, not the end of
+    // it — closing the editor under the image picker would unmount the surface
+    // the picked image is about to land in.
+    const isDialogOpen = isImagePickerOpen || isLinkOpen
+
+    // Escape must cancel the session, but `cancel` comes back from the hook
+    // below — read through a ref so the option can reach it without a TDZ.
+    const cancelRef = useRef<() => void>(() => {})
+    // What the link dialog pre-fills with. A ref for the same reason as
+    // commandsRef: the dialog outlives any single render of the editor.
+    const currentLinkRef = useRef<string | null>(null)
+
+    const dialogState: CommentEditorDialogState = {
+        openImagePicker: () => setIsImagePickerOpen(true),
+        openLinkDialog: () => setIsLinkOpen(true),
+        canSubmit: toolbarState => !(toolbarState.isEmpty ?? true) && !isPending,
+    }
+
+    // The commit rules — a blur before the session held focus must not write, a
+    // settled session must not write twice, an unchanged value is a cancel —
+    // now live in core's commit-policy. They used to be hand-rolled here, which
+    // is exactly the duplication LazyEditor exists to end.
+    const slots = useLazyEditor({
+        surfaceId,
+        readView,
+        value: initialContent ?? '',
         contentFormat: 'markdown',
-        triggers: mention.triggers,
-        overlayKey: mention.overlayKey,
-        initialContent,
-        placeholder,
-        autofocus,
-        characterLimit: COMMENT_LIMIT,
-        containerClassName,
-        minHeight,
-        onSubmitShortcut: () => void submit(),
-        // Handled: the first Escape ends the writing session; only a second
-        // one should reach the peek panel behind it.
-        onEscape: () => {
-            if (onCancel) cancel()
-            else blurActiveElement()
-            return true
+        canEdit,
+        commitOnBlur,
+        isDialogOpen,
+        startOpen,
+        stayOpenOnCommit,
+        onCommit: body => {
+            // An empty comment is not a write. LazyEditor has no opinion on
+            // this — a description may legitimately be emptied — but a comment
+            // with no body is nothing at all.
+            if (!body) return
+            onSubmit(body)
         },
-        onImageDrop: imageActions.onImageDrop,
-        onFocus: () => {
-            hasFocusedRef.current = true
+        onCancel,
+        onRelease,
+        editorOptions: {
+            triggers: mention.triggers,
+            overlayKey: mention.overlayKey,
+            placeholder,
+            characterLimit: COMMENT_LIMIT,
+            containerClassName,
+            minHeight,
+            onImageDrop: imageActions.onImageDrop,
+            // Handled: the first Escape ends the writing session; only a second
+            // one should reach the peek panel behind it.
+            onEscape: () => {
+                if (onCancel) cancelRef.current()
+                else blurActiveElement()
+                return true
+            },
         },
-        onBlur: () => {
-            // Not when a dialog took the focus — that is a detour inside the
-            // session, not the end of it. And never before the session has
-            // held focus at all: that blur is the mount racing itself, not a
-            // person finishing an edit — see hasFocusedRef.
-            if (
-                commitOnBlur &&
-                hasFocusedRef.current &&
-                !isImagePickerOpen &&
-                !isLinkOpen &&
-                !settledRef.current
-            ) {
-                void submit()
-            }
+        renderHeader: renderHeader ? state => renderHeader(state, dialogState) : undefined,
+        renderEditor: editorSlots => {
+            commandsRef.current = editorSlots.commands
+            cancelRef.current = editorSlots.cancel
+            currentLinkRef.current = editorSlots.toolbarState.currentLink ?? null
+            return renderEditor(editorSlots, dialogState)
         },
+        testID,
+        accessibilityLabel,
     })
 
-    commandsRef.current = commands
-
     return {
-        EditorComponent,
-        commands,
-        toolbarState,
-        submit,
-        cancel,
-        canSubmit: !(toolbarState.isEmpty ?? true) && !isPending,
+        header: slots.header,
+        body: slots.body,
+        handle: slots.handle,
+        currentLink: currentLinkRef.current,
         isImagePickerOpen,
         setIsImagePickerOpen,
         isLinkOpen,
         setIsLinkOpen,
         imageActions,
+        commandsRef,
         mentionState: mention.state,
         mentionOverlayKey: mention.overlayKey,
     }
@@ -203,6 +230,11 @@ interface CommentComposerEditorProps {
     attachments: BoardAttachment[]
     placeholder: string
     autofocus?: boolean
+    /**
+     * Receives the composer's handle, so the parent can put the caret here on
+     * an explicit user action — pressing Reply targets this composer.
+     */
+    handleRef?: RefObject<LazyEditorHandle | null>
     isPending: boolean
     onSubmit: (body: string) => void
     testID: string
@@ -223,59 +255,171 @@ export function CommentEditor({
     projectId,
     attachments,
     placeholder,
-    autofocus,
+    handleRef,
     isPending,
     onSubmit,
     testID,
 }: CommentEditorProps) {
+    const surfaceId = `composer:${cardId}`
+    // With one editor app-wide a half-typed comment no longer survives in a
+    // mounted composer — the instance moves to whatever the user tapped. The
+    // draft store is where that text lives instead, on both platforms.
+    const drafts = useDraftStore()
+    const draft = drafts?.take(surfaceId) ?? ''
+
     const core = useCommentEditorCore({
         cardId,
         projectId,
+        surfaceId,
         placeholder,
-        autofocus,
         isPending,
-        onSubmit,
-        clearOnSubmit: true,
+        // Seeded from the stash, so re-opening the composer after an inline edit
+        // finds the draft rather than an empty box.
+        initialContent: draft,
+        onSubmit: body => {
+            drafts?.clear(surfaceId)
+            onSubmit(body)
+        },
+        // Handing the editor to another surface is the case this exists for:
+        // without it, tapping a comment's Edit would silently drop whatever was
+        // half-typed here.
+        onRelease: body => drafts?.stash(surfaceId, body),
+        // No commitOnBlur: leaving the composer must never post a comment.
+        canEdit: true,
+        // What the composer shows whenever it does not hold the one editor:
+        // displaced by an inline edit, or still waiting on the boot. It used to
+        // pass null, which rendered an invisible box the user could not get
+        // back into — the composer looked like it had vanished.
+        //
+        // The draft as static text in the same frame, so losing the instance
+        // reads as "your text is still here, tap to keep typing" rather than as
+        // a disappearance. Tapping re-acquires.
+        readView: <ComposerReadView draft={draft} placeholder={placeholder} testID={testID} />,
+        startOpen: true,
+        // Send and stay: the next comment goes in the same box.
+        stayOpenOnCommit: true,
         containerClassName: 'min-h-[60px]',
         // The same floor as the class above, for native: a WebView takes no
         // height from a className, so without this the composer opens as an
         // unusable one-line sliver until the page reports its own height.
-        minHeight: 60,
+        // Shared with the read view, which must reserve an identical box.
+        minHeight: COMPOSER_MIN_HEIGHT,
+        renderEditor: (slots, dialogs) => (
+            <View testID={testID} className="gap-1.5">
+                <MarkdownToolbar
+                    commands={slots.commands}
+                    toolbarState={slots.toolbarState}
+                    isVisible
+                    onOpenImagePicker={dialogs.openImagePicker}
+                    onOpenLinkDialog={dialogs.openLinkDialog}
+                />
+                <View className="border border-border rounded-[10px] bg-background px-3 py-1">
+                    <slots.EditorComponent />
+                </View>
+                <View className="flex-row justify-end gap-2">
+                    <Button
+                        onPress={slots.submit}
+                        isDisabled={!dialogs.canSubmit(slots.toolbarState)}
+                        size="sm"
+                        // The same load-bearing guard as MarkdownToolbar's
+                        // FormatButton and SessionButton: on web the press
+                        // would first move DOM focus off ProseMirror, and the
+                        // composer's blur RELEASES the shared editor (no
+                        // commit-on-blur here — leaving the composer must
+                        // never post). By the time the click fired, submit
+                        // addressed a released session and silently did
+                        // nothing, leaving the read view holding the stashed
+                        // draft — ⌘↩ worked, the button did not.
+                        {...(Platform.OS === 'web'
+                            ? {
+                                  onMouseDown: (e: { preventDefault: () => void }) =>
+                                      e.preventDefault(),
+                              }
+                            : {})}
+                    >
+                        <ButtonText>{isPending ? 'Sending…' : 'Send'}</ButtonText>
+                    </Button>
+                </View>
+            </View>
+        ),
     })
 
+    // Published during render rather than through an effect: the handle is one
+    // stable object for the life of the surface, so there is nothing to
+    // synchronise — and a parent effect that fires on the same commit (pressing
+    // Reply) must find it already there.
+    if (handleRef) handleRef.current = core.handle
+
     return (
-        <View testID={testID} className="gap-1.5">
-            <MarkdownToolbar
-                commands={core.commands}
-                toolbarState={core.toolbarState}
-                isVisible
-                onOpenImagePicker={() => core.setIsImagePickerOpen(true)}
-                onOpenLinkDialog={() => core.setIsLinkOpen(true)}
-            />
-            <View className="border border-border rounded-[10px] bg-background px-3 py-1">
-                <core.EditorComponent />
-            </View>
-            <View className="flex-row justify-end gap-2">
-                <Button onPress={() => void core.submit()} isDisabled={!core.canSubmit} size="sm">
-                    <ButtonText>{isPending ? 'Sending…' : 'Send'}</ButtonText>
-                </Button>
-            </View>
+        <>
+            {core.body}
             <CommentEditorDialogs core={core} attachments={attachments} />
-        </View>
+        </>
     )
 }
 
 type CommentEditorProps = CommentComposerEditorProps
 
+/**
+ * The composer while it does not hold the editor.
+ *
+ * **Height-neutral with the editing chrome, and that is load-bearing.** This
+ * swaps in on BLUR — the moment the user presses something else — so if it were
+ * shorter than the editor it replaces, the whole comment list above would
+ * reflow downward between that press's mousedown and its mouseup. The pointer
+ * would no longer be over what the user aimed at, the browser would cancel the
+ * click, and every first click on a comment would be silently swallowed. (It
+ * was: the list jumped 94px and clicking a comment did nothing until the second
+ * try.)
+ *
+ * So the frame reproduces the editing surface's three stacked parts at their
+ * real heights — toolbar row, framed input, button row — rather than just the
+ * input. The parts are inert here; only their geometry matters.
+ */
+function ComposerReadView({
+    draft,
+    placeholder,
+    testID,
+}: {
+    draft: string
+    placeholder: string
+    testID: string
+}) {
+    return (
+        <View testID={`${testID}-read`} className="gap-1.5">
+            {/* Stands in for the toolbar row. */}
+            <View style={{ height: COMPOSER_TOOLBAR_HEIGHT }} />
+            <View
+                className="justify-center rounded-[10px] border border-border bg-background px-3 py-1"
+                style={{ minHeight: COMPOSER_MIN_HEIGHT }}
+            >
+                <Text className={draft ? 'text-foreground' : 'text-muted'}>
+                    {draft || placeholder}
+                </Text>
+            </View>
+            {/* Stands in for the Send row. */}
+            <View style={{ height: COMPOSER_BUTTON_ROW_HEIGHT }} />
+        </View>
+    )
+}
+
 interface InlineCommentEditorProps {
+    /** Names the surface to the warm editor, so a handover can tell them apart. */
+    commentId: string
     cardId: string
     projectId: string
     attachments: BoardAttachment[]
     /** The comment body being revised. */
     initialContent: string
     isPending: boolean
+    /** Author-and-still-a-commenter; false renders the read view with no press target. */
+    canEdit: boolean
     onSubmit: (body: string) => void
     onCancel: () => void
+    /** The rendered comment, shown until someone starts editing. */
+    readView: ReactNode
+    /** The author/timestamp row, shown in the header slot while idle. */
+    authorLine: ReactNode
     testID: string
 }
 
@@ -288,25 +432,37 @@ interface InlineCommentEditorProps {
  * it would grow the block the moment the session opened.
  */
 export function InlineCommentEditor({
+    commentId,
     cardId,
     projectId,
     attachments,
     initialContent,
     isPending,
+    canEdit,
     onSubmit,
     onCancel,
+    readView,
+    authorLine,
     testID,
 }: InlineCommentEditorProps) {
     const core = useCommentEditorCore({
         cardId,
         projectId,
+        surfaceId: `comment:${commentId}`,
         initialContent,
         placeholder: 'Edit comment…',
-        autofocus: true,
         isPending,
         onSubmit,
         onCancel,
+        // Today's behavior, and the reason the commit rules matter: leaving an
+        // inline edit WRITES it, so switching to another surface commits rather
+        // than discarding.
         commitOnBlur: true,
+        canEdit,
+        readView,
+        // The parent decides which single comment is open (editingCommentId), so
+        // this is mounted already editing.
+        startOpen: true,
         containerClassName: 'min-h-[24px]',
         // A FLOOR the caret fits inside, not the 24px the class asks for.
         //
@@ -318,13 +474,88 @@ export function InlineCommentEditor({
         // this within a frame or two, so a larger floor costs nothing visually
         // and is what keeps the session alive long enough to be one.
         minHeight: 48,
+        // The author line and the toolbar take turns in ONE fixed-height row,
+        // which is what keeps entering an edit height-neutral.
+        renderHeader: ({ isEditing, slots }, dialogs) => (
+            <View
+                // The toolbar fills the row; the author line is a FRAGMENT whose
+                // children need the row layout supplied here — CommentActions
+                // pushes itself right with `ml-auto` against this box.
+                className={
+                    isEditing && slots
+                        ? 'mb-[2px] justify-center'
+                        : 'mb-[2px] flex-row items-center gap-2'
+                }
+                style={{ height: COMMENT_HEADER_HEIGHT }}
+            >
+                {isEditing && slots ? (
+                    <MarkdownToolbar
+                        commands={slots.commands}
+                        toolbarState={slots.toolbarState}
+                        isVisible
+                        onOpenImagePicker={dialogs.openImagePicker}
+                        onOpenLinkDialog={dialogs.openLinkDialog}
+                        height={INLINE_TOOLBAR_HEIGHT}
+                        rightItems={sessionButtons(slots, dialogs, isPending)}
+                    />
+                ) : (
+                    authorLine
+                )}
+            </View>
+        ),
+        renderEditor: slots => (
+            <>
+                {/* No border and no horizontal padding — the description's rule:
+                    anything here pushes the prose off the x the rendered comment
+                    sits on, and the whole point of this variant is that entering
+                    an edit moves nothing.
+
+                    The bottom padding reproduces the RENDERED comment's trailing
+                    rhythm, so the comments below do not slide up when a one-line
+                    comment opens for editing.
+
+                    The paragraph-spacing term is DERIVED, because that is the part
+                    a typography change moves: retuning the compact scale used to
+                    silently break the ±2px anchor comment-editing.spec asserts.
+                    The constant beside it is the renderer's own leftover trailing
+                    space, which has no exported source — it was MEASURED against
+                    that spec, exactly as the previous hard-coded 20px was. If the
+                    spec starts failing by a few px after a renderer change, this
+                    is the number to re-measure. */}
+                <View style={{ paddingBottom: markdownScale('compact').paragraphSpacing * 2 + 13 }}>
+                    <slots.EditorComponent />
+                </View>
+            </>
+        ),
     })
 
-    const rightItems: ToolbarItem[] = [
+    return (
+        <>
+            {/* The testID spans BOTH slots, because "the comment editor" is the
+                whole session: its toolbar now lives in the header row (it took
+                the author line's place) while the surface is the body, and a
+                testID on either half alone would leave the other unreachable
+                from a test scoped to this comment. */}
+            <View testID={testID}>
+                {core.header}
+                {core.body}
+            </View>
+            <CommentEditorDialogs core={core} attachments={attachments} />
+        </>
+    )
+}
+
+/** Save/Cancel, pinned at the inline toolbar's right edge. */
+function sessionButtons(
+    slots: LazyEditorSlots,
+    dialogs: CommentEditorDialogState,
+    isPending: boolean
+): ToolbarItem[] {
+    return [
         {
             type: 'custom',
             key: 'cancel',
-            element: <SessionButton label="Cancel" onPress={core.cancel} />,
+            element: <SessionButton label="Cancel" onPress={slots.cancel} />,
         },
         {
             type: 'custom',
@@ -332,50 +563,13 @@ export function InlineCommentEditor({
             element: (
                 <SessionButton
                     label={isPending ? 'Saving…' : 'Save'}
-                    onPress={() => void core.submit()}
-                    isDisabled={!core.canSubmit}
+                    onPress={slots.submit}
+                    isDisabled={!dialogs.canSubmit(slots.toolbarState)}
                     isPrimary
                 />
             ),
         },
     ]
-
-    return (
-        <View testID={testID}>
-            <View className="mb-[2px] justify-center" style={{ height: COMMENT_HEADER_HEIGHT }}>
-                <MarkdownToolbar
-                    commands={core.commands}
-                    toolbarState={core.toolbarState}
-                    isVisible
-                    onOpenImagePicker={() => core.setIsImagePickerOpen(true)}
-                    onOpenLinkDialog={() => core.setIsLinkOpen(true)}
-                    height={INLINE_TOOLBAR_HEIGHT}
-                    rightItems={rightItems}
-                />
-            </View>
-            {/* No border and no horizontal padding — the description's rule:
-                anything here pushes the prose off the x the rendered comment
-                sits on, and the whole point of this variant is that entering
-                an edit moves nothing.
-
-                The bottom padding reproduces the RENDERED comment's trailing
-                rhythm, so the comments below do not slide up when a one-line
-                comment opens for editing.
-
-                The paragraph-spacing term is DERIVED, because that is the part
-                a typography change moves: retuning the compact scale used to
-                silently break the ±2px anchor comment-editing.spec asserts.
-                The constant beside it is the renderer's own leftover trailing
-                space, which has no exported source — it was MEASURED against
-                that spec, exactly as the previous hard-coded 20px was. If the
-                spec starts failing by a few px after a renderer change, this
-                is the number to re-measure. */}
-            <View style={{ paddingBottom: markdownScale('compact').paragraphSpacing * 2 + 13 }}>
-                <core.EditorComponent />
-            </View>
-            <CommentEditorDialogs core={core} attachments={attachments} />
-        </View>
-    )
 }
 
 /**
@@ -409,14 +603,19 @@ function CommentEditorDialogs({
                 onClose={() => core.setIsLinkOpen(false)}
                 onSubmit={url => {
                     core.setIsLinkOpen(false)
+                    // Through the ref, so the press always reaches the LIVE
+                    // editor — on native that instance is shared, and a
+                    // handover replaces it under a dialog that is still open.
+                    const commands = core.commandsRef.current
+                    if (!commands) return
                     // An empty value removes the link — PromptDialog is left
                     // un-`required` so it can reach us.
-                    if (url.trim()) core.commands.setLink(url.trim())
-                    else core.commands.removeLink()
+                    if (url.trim()) commands.setLink(url.trim())
+                    else commands.removeLink()
                 }}
                 title="Link"
                 placeholder="https://example.com"
-                defaultValue={core.toolbarState.currentLink ?? ''}
+                defaultValue={core.currentLink ?? ''}
                 confirmLabel="Apply"
             />
         </>
