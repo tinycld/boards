@@ -305,8 +305,11 @@ test.describe('Cards — editing a card', () => {
 
         // The write reached the server, not just the optimistic cache.
         // Navigated in-app rather than reloading — a reload tears down the SPA
-        // and re-races the realtime reconnect.
-        await navigateToPackage(page, 'mail')
+        // and re-races the realtime reconnect. Via settings, not another
+        // package: CI assembles cards alone, so a mail rail link never exists
+        // there and the wait times out against a full suite that is otherwise
+        // green.
+        await navigateToPackage(page, 'settings')
         await navigateToPackage(page, 'cards')
         await openCard(page, CARD_TITLE)
         await expect(peek(page).getByRole('button', { name: 'Change reporter' })).toContainText(

@@ -216,7 +216,9 @@ test.describe('card mentions', () => {
             // In-app rather than page.reload(): the description editor mounts
             // only once the Yjs room is ready, so a cold reload would race the
             // reconnect against the card opening — see card-description.spec.
-            await navigateToPackage(page, 'mail')
+            // Via settings, not another package: CI assembles cards alone, so
+            // a mail rail link never exists there.
+            await navigateToPackage(page, 'settings')
             await navigateToPackage(page, 'cards')
             await openBoard(page, boardName)
             await openCard(page, CARD_TITLE)
