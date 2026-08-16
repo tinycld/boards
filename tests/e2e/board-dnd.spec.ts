@@ -5,7 +5,6 @@ import {
     addCard,
     boardCard,
     cardsInColumn,
-    centerOf,
     columnHeader,
     columnOrder,
     createBoard,
@@ -112,7 +111,15 @@ test.describe('Cards — drag and drop', () => {
             // preview flip with event timing; the bottom edge keeps ≥16px of
             // margin from both boundaries under that bias.
             const park = { x: restingA.x + restingA.width / 2, y: restingA.y + restingA.height }
-            const start = await centerOf(boardCard(page, 'mover'))
+            // stableBoxOf, not centerOf: a press at mid-animation coordinates
+            // lands on canvas the card no longer (or does not yet) occupies,
+            // and activateDrag's re-press loop re-aims at the same stale point
+            // — the drag can then never activate, however long it retries.
+            const moverBox = await stableBoxOf(boardCard(page, 'mover'))
+            const start = {
+                x: moverBox.x + moverBox.width / 2,
+                y: moverBox.y + moverBox.height / 2,
+            }
             await activateDrag(page, start)
             await travelTo(page, start, park)
 

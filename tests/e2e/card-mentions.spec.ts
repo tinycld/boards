@@ -218,7 +218,21 @@ test.describe('card mentions', () => {
             const editor = await openDescription(page)
             await expect(editor).toBeVisible()
             await editor.click()
-            await page.keyboard.type('owner is ', { delay: 20 })
+            // Retried until the prose actually holds: the description editor
+            // accepts input while the Yjs room is still latching, and content
+            // typed pre-latch dies when the bound editor swaps in (the
+            // card-description-images spec documents the same race). Typing
+            // the '@' before the prefix survived would hang the popover flow
+            // on an empty editor.
+            await expect(async () => {
+                if (!(await descriptionText(page)).includes('owner is ')) {
+                    await page.keyboard.press('ControlOrMeta+A')
+                    await page.keyboard.press('Backspace')
+                    await page.keyboard.type('owner is ', { delay: 20 })
+                }
+                expect(await descriptionText(page)).toContain('owner is')
+            }).toPass({ timeout: 15_000 })
+            await page.keyboard.press('ControlOrMeta+End')
             await page.keyboard.type('@', { delay: 20 })
 
             await expect(popover(page)).toBeVisible()
