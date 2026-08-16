@@ -128,10 +128,12 @@ export interface BoardComment {
     /** ISO timestamp from `created`. Format at render, never store a string. */
     created: string
     /**
-     * ISO timestamp from `updated`; '' on an optimistic row. Differs from
-     * `created` only after an edit — what the "(edited)" marker keys on.
+     * ISO timestamp of the last body edit, '' when never edited — what the
+     * "(edited)" marker keys on. Server-owned (comment_edited.go stamps it
+     * when the body actually changes); the update mutation also sets it
+     * optimistically so the marker renders before the round trip completes.
      */
-    updated: string
+    editedAt: string
     body: string
     /** '' for a top-level comment; otherwise the comment being replied to. */
     parent: string

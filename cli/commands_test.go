@@ -706,6 +706,43 @@ func TestListNamesAreScopedToTheirBoard(t *testing.T) {
 	}
 }
 
+// A board must be reachable by the KEY its own tables print. `board list`
+// renders slug under a KEY column and every card key leads with it, so a key
+// is the string a reader copies out — but resolveProject matched only ids and
+// names, so pasting it back gave "not found". Missed by every prior test
+// because the fixture left slug empty on every board.
+func TestResolveBoardByKey(t *testing.T) {
+	f := board(t)
+	f.projects["prjA"].Slug = "PL"
+	_, c := f.serve()
+
+	out, _, err := runCmd(t, c, "cards", "board", "view", "PL")
+	if err != nil {
+		t.Fatalf("a board must resolve by the key its own output prints: %v", err)
+	}
+	if !strings.Contains(out, "Write copy") {
+		t.Errorf("resolved the wrong board; got %q", out)
+	}
+}
+
+// A key beats a name, so a board whose NAME collides with another's KEY cannot
+// hijack that key. Otherwise the identifier the UI puts in front of the reader
+// is the one that stops working.
+func TestBoardKeyBeatsName(t *testing.T) {
+	f := board(t)
+	f.projects["prjA"].Slug = "PL"
+	f.projects["prjB"].Name = "PL"
+	_, c := f.serve()
+
+	out, _, err := runCmd(t, c, "cards", "board", "view", "PL")
+	if err != nil {
+		t.Fatalf("key lookup must win over a name collision: %v", err)
+	}
+	if !strings.Contains(out, "Write copy") {
+		t.Errorf("the name-colliding board won; got %q", out)
+	}
+}
+
 // Two columns sharing a name on ONE board is genuinely ambiguous and must be
 // refused rather than guessed.
 func TestAmbiguousListNameOnOneBoardIsRefused(t *testing.T) {

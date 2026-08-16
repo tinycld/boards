@@ -45,9 +45,43 @@ describe('renderMentionTokens', () => {
     })
 
     // `]` and `|` are percent-encoded by the writer — they would otherwise end
-    // the token early and spill the rest of the name into the comment.
+    // the token early and spill the rest of the name into the comment. They
+    // come back as literal characters, then get markdown-escaped on the way
+    // into the body (see the injection cases below).
     it('decodes delimiters a user could type into their own name', () => {
-        expect(renderMentionTokens('hi [[@gone|a%5Db%7Cc]]', NAMES)).toBe('hi @a]b|c')
+        expect(renderMentionTokens('hi [[@gone|a%5Db%7Cc]]', NAMES)).toBe(String.raw`hi @a\]b\|c`)
+    })
+
+    // A display name is user-controlled (users.updateRule lets anyone set their
+    // own), and the rendered name lands in markdown SOURCE. Unescaped, the name
+    // is markup in someone else's card.
+    describe('markdown injection through a display name', () => {
+        it('does not let a name become a link', () => {
+            const out = renderMentionTokens('hi [[@u1]]', [
+                { userId: 'u1', label: '[click](javascript:alert(1))' },
+            ])
+            expect(out).not.toContain('](')
+        })
+
+        it('does not let a name become an image', () => {
+            // Worse than a link: no tap needed. The reader's client fetches it
+            // on render, so this would be a tracking pixel in every card that
+            // mentions its owner.
+            const out = renderMentionTokens('hi [[@u1]]', [
+                { userId: 'u1', label: '![x](https://evil.test/track.png)' },
+            ])
+            expect(out).not.toContain('![')
+            expect(out).not.toContain('](')
+        })
+
+        it('does not let a name emphasise the surrounding sentence', () => {
+            const out = renderMentionTokens('hi [[@u1]] there', [{ userId: 'u1', label: '*Ada*' }])
+            expect(out).toBe(String.raw`hi @\*Ada\* there`)
+        })
+
+        it('leaves an ordinary name readable', () => {
+            expect(renderMentionTokens('ping [[@u1]]', NAMES)).toBe('ping @Ada Lovelace')
+        })
     })
 
     it('still notifies the id when the token carries a name', () => {

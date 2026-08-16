@@ -1,7 +1,12 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { appShell, createInvitedUser, login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard } from './helpers'
+import {
+    login,
+    navigateToPackage,
+    signInAsCollaborator,
+    TEST_COLLABORATOR_EMAIL,
+} from '@tinycld/core/e2e-helpers'
+import { addCard, boardCard, createBoard, openBoard } from './helpers'
 
 // The rendered half of M3b's role gating: share a board through the UI, then
 // verify what each role actually SEES. The rules themselves are proven by the
@@ -16,21 +21,16 @@ import { addCard, boardCard, createBoard } from './helpers'
 // anchor has rendered — useProjectRole defaults to deny while loading, so an
 // absence check on a cold load would pass spuriously.
 //
-// All data setup drives the UI — no raw PB writes. The second user comes from
-// createInvitedUser (the real invite flow) and lives in its own browser
-// context, so the two sessions never share auth state.
+// All data setup drives the UI — no raw PB writes. The second user is the
+// seeded collaborator, signed in by signInAsCollaborator into its own browser
+// context, so the two sessions never share auth state. That account is shared
+// across the run and keeps its memberships, so this spec opens its board BY
+// NAME rather than trusting whichever one the cards screen restores.
 
 const CARD_TITLE = 'Press release draft'
 
 function memberRow(page: Page, text: string) {
     return page.getByTestId(/^cards-member-row-/).filter({ hasText: text })
-}
-
-/** Open a board from the cards sidebar and wait for its content. `.first()`
- *  because the name also renders in the board header once active. */
-async function openBoard(page: Page, name: string) {
-    await page.getByText(name, { exact: true }).first().click()
-    await expect(boardCard(page, CARD_TITLE)).toBeVisible()
 }
 
 async function openShareDialog(page: Page, boardName: string) {
@@ -45,58 +45,49 @@ async function closeShareDialog(page: Page) {
 
 test.describe('Cards — board sharing and role gates', () => {
     test('viewer and commentor gates, and the last-owner lock', async ({ page }) => {
-        // Not a flakiness bump: one invited user (the expensive step — the
-        // full invite flow) deliberately drives the whole viewer → commentor →
-        // last-owner arc across two browser contexts and two reloads.
-        test.slow()
-
         await login(page)
         await navigateToPackage(page, 'cards')
         const boardName = `share-${Date.now()}`
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
 
-        const {
-            user: bob,
-            inviteePage: bobPage,
-            close,
-        } = await createInvitedUser(page, 'cardshare')
+        // --- Owner shares the board with bob as viewer ---
+        await openShareDialog(page, boardName)
+        await page.getByRole('button', { name: 'Add people' }).click()
+        await page.getByRole('button', { name: /^Viewer — / }).click()
+        // Search by email: display names are not unique across the run's
+        // accumulated invitees, emails are.
+        await page.getByPlaceholder('Search by name or email').fill(TEST_COLLABORATOR_EMAIL)
+        await expect(page.getByText(TEST_COLLABORATOR_EMAIL)).toBeVisible()
+        await page.getByRole('button', { name: 'Add', exact: true }).click()
+        await expect(page.getByPlaceholder('Search by name or email')).not.toBeVisible()
+
+        // Leaving cards and coming back proves the membership PERSISTED
+        // rather than being optimistic local state: the board screen
+        // unmounts, so the roster below is re-read from the server. A
+        // page.reload() would prove the same thing by tearing the whole SPA
+        // down — the hard navigation this suite forbids.
+        await closeShareDialog(page)
+        await navigateToPackage(page, 'settings')
+        await navigateToPackage(page, 'cards')
+        await openBoard(page, boardName, CARD_TITLE)
+        await openShareDialog(page, boardName)
+        await expect(memberRow(page, TEST_COLLABORATOR_EMAIL).getByText('Viewer')).toBeVisible()
+        await closeShareDialog(page)
+
+        // Share BEFORE signing the collaborator in — see shareBoard's doc: a
+        // session whose cards screen synced before the grant is never told the
+        // board exists.
+        const { page: bobPage, close } = await signInAsCollaborator(page)
         try {
-            // The invite flow left `page` on settings; return to the board.
-            await login(page)
-            await navigateToPackage(page, 'cards')
-            await openBoard(page, boardName)
-
-            // --- Owner shares the board with bob as viewer ---
-            await openShareDialog(page, boardName)
-            await page.getByRole('button', { name: 'Add people' }).click()
-            await page.getByRole('button', { name: /^Viewer — / }).click()
-            // Search by email: display names are not unique across the run's
-            // accumulated invitees, emails are.
-            await page.getByPlaceholder('Search by name or email').fill(bob.email)
-            await expect(page.getByText(bob.email)).toBeVisible()
-            await page.getByRole('button', { name: 'Add', exact: true }).click()
-            await expect(page.getByPlaceholder('Search by name or email')).not.toBeVisible()
-
-            // Leaving and coming back proves the membership persisted — not an
-            // optimistic insert. In-app rather than a reload: a reload drops the
-            // realtime socket and re-races the reconnect, which this assertion
-            // would then be timing instead of testing.
-            //
-            // The dialog has to be closed FIRST. A reload used to destroy it
-            // for free; navigating does not, and its modal overlay swallows the
-            // click on the nav rail — the navigation then hangs until the test
-            // times out rather than failing on anything legible.
-            await closeShareDialog(page)
-            await navigateToPackage(page, 'mail')
-            await navigateToPackage(page, 'cards')
-            await openBoard(page, boardName)
-            await openShareDialog(page, boardName)
-            await expect(memberRow(page, bob.email).getByText('Viewer')).toBeVisible()
-            await closeShareDialog(page)
-
             // --- Viewer: sees the board, none of the editing affordances ---
+            // Open the board BY NAME. The collaborator is a shared fixture and
+            // accumulates memberships across the suite, so whichever board the
+            // cards screen restores on entry is not necessarily this one —
+            // landing on another spec's board would assert these gates against
+            // the wrong roster.
             await navigateToPackage(bobPage, 'cards')
+            await openBoard(bobPage, boardName, CARD_TITLE)
             await expect(boardCard(bobPage, CARD_TITLE)).toBeVisible()
             await expect(bobPage.getByText('Add card', { exact: true })).toHaveCount(0)
             await expect(bobPage.getByText('Add list', { exact: true })).toHaveCount(0)
@@ -132,23 +123,27 @@ test.describe('Cards — board sharing and role gates', () => {
 
             // The roster is readable for a non-guest member, but not manageable.
             await openShareDialog(bobPage, boardName)
-            await expect(memberRow(bobPage, bob.email)).toBeVisible()
+            await expect(memberRow(bobPage, TEST_COLLABORATOR_EMAIL)).toBeVisible()
             await expect(bobPage.getByRole('button', { name: 'Add people' })).toHaveCount(0)
             await expect(bobPage.getByRole('button', { name: /^Change role for/ })).toHaveCount(0)
             await closeShareDialog(bobPage)
 
             // --- Owner promotes bob to commentor through the role menu ---
             await openShareDialog(page, boardName)
-            await memberRow(page, bob.email)
+            await memberRow(page, TEST_COLLABORATOR_EMAIL)
                 .getByRole('button', { name: /^Change role for/ })
                 .click()
             await page.getByRole('menuitem', { name: 'Commentor' }).click()
-            await expect(memberRow(page, bob.email).getByText('Commentor')).toBeVisible()
+            await expect(
+                memberRow(page, TEST_COLLABORATOR_EMAIL).getByText('Commentor')
+            ).toBeVisible()
 
             // --- Commentor: keeps the comment box, still cannot edit ---
-            // Reload rather than leaning on realtime delivery timing.
-            await bobPage.reload()
-            await appShell(bobPage).waitFor({ state: 'visible' })
+            // Remount the board screen instead of leaning on realtime delivery
+            // timing — same guarantee as a reload, without tearing down the SPA.
+            await navigateToPackage(bobPage, 'settings')
+            await navigateToPackage(bobPage, 'cards')
+            await openBoard(bobPage, boardName, CARD_TITLE)
             await expect(boardCard(bobPage, CARD_TITLE)).toBeVisible()
             await expect(bobPage.getByTestId('cards-role-chip')).toHaveText('Commentor')
             await expect(bobPage.getByText('Add card', { exact: true })).toHaveCount(0)
@@ -177,7 +172,7 @@ test.describe('Cards — board sharing and role gates', () => {
             await expect(bobPage.getByRole('button', { name: 'Move to Doing' })).toHaveCount(0)
 
             // --- Last-owner lock, with bob's row as the positive control ---
-            const bobRow = memberRow(page, bob.email)
+            const bobRow = memberRow(page, TEST_COLLABORATOR_EMAIL)
             await expect(bobRow.getByRole('button', { name: /^Change role for/ })).toBeVisible()
             await expect(bobRow.getByRole('button', { name: /^Remove/ })).toBeVisible()
             const ownRow = memberRow(page, '(you)')

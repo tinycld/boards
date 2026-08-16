@@ -161,15 +161,21 @@ func visibleProjects(ctx context.Context, c *client.Client) ([]project, error) {
 
 // resolveProject turns a board reference into a project row.
 //
-// An id wins outright; otherwise the reference is matched against board NAMES,
-// case-insensitively. Boards are the one entity a person knows by name — the
-// sidebar shows names, never ids — so requiring an id here would mean opening
-// the app to use the CLI. Lists and cards stay id-only: their names are not
-// unique even within one board, so a name match there would silently pick one.
+// An id wins outright, then the board KEY (the slug shown in `board list`'s KEY
+// column and leading every card key), then board NAMES, case-insensitively.
+// Boards are the one entity a person knows by name — the sidebar shows names,
+// never ids — so requiring an id here would mean opening the app to use the
+// CLI. Lists and cards stay id-only: their names are not unique even within one
+// board, so a name match there would silently pick one.
+//
+// The key is matched BEFORE names, and exactly: it is the identifier every
+// table puts in front of the reader, so a board whose NAME happens to equal
+// another's key must not win over the board that key actually designates.
 //
 // An ambiguous name is an ERROR listing the candidates, never a pick. Two
 // boards called "Roadmap" is ordinary, and quietly acting on whichever sorted
-// first is how a CLI edits the wrong thing.
+// first is how a CLI edits the wrong thing. Keys are unique, so they need no
+// such guard.
 func resolveProject(ctx context.Context, c *client.Client, ref string) (project, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
@@ -181,6 +187,11 @@ func resolveProject(ctx context.Context, c *client.Client, ref string) (project,
 	}
 	for _, p := range projects {
 		if p.ID == ref {
+			return p, nil
+		}
+	}
+	for _, p := range projects {
+		if p.Slug != "" && strings.EqualFold(p.Slug, ref) {
 			return p, nil
 		}
 	}
