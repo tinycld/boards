@@ -14,6 +14,7 @@
         "./screens/*": "./tinycld/cards/screens/*.tsx",
         "./public-screens/*": "./tinycld/cards/public-screens/*.tsx",
         "./sidebar": "./tinycld/cards/sidebar.tsx",
+        "./provider": "./tinycld/cards/provider.tsx",
         "./hooks/*": "./tinycld/cards/hooks/*.ts",
         "./lib/*": "./tinycld/cards/lib/*.ts",
         "./stores/*": "./tinycld/cards/stores/*.ts",
