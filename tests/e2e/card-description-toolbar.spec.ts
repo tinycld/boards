@@ -307,21 +307,24 @@ test.describe('Cards — description formatting toolbar', () => {
 
         const editor = await openDescription(page)
         await editor.click()
-        // The filler exists ONLY to make the panel scroll — its content is
-        // irrelevant, so the lines are as short as they can be. Every
-        // character is a full ProseMirror+Yjs transaction, and a contended CI
-        // runner types ~25 of them a second: the original 40×"line N of
-        // filler" (~680 characters) burned the entire 30s test budget
-        // mid-loop, timing out at line 37 with the assertions never reached.
+        // The filler exists ONLY to make the panel scroll, so it is HEIGHT,
+        // not prose: a couple of characters so the document is non-empty,
+        // then bare Enters — one keystroke per line of height. Every
+        // keystroke is a full ProseMirror+Yjs transaction and a contended CI
+        // runner processes ~25 of them a second, so the original 40×"line N
+        // of filler" (~680 keystrokes) burned the entire 30s test budget
+        // inside this loop, timing out at line 37 with the assertions never
+        // reached. Typing less of the same prose was the wrong lesson — the
+        // right one is that no prose was ever needed.
         //
-        // The COUNT is load-bearing where the prose was not: the -400px wheel
-        // below must leave the panel still scrolled, or the toolbar
-        // legitimately un-sticks and the held-station assertion fails (32
-        // lines gave ~270px of scroll range and did exactly that). 64
-        // two-line-height rows keep ~600px of range beyond the wheel at a
-        // fifth of the original keystrokes.
+        // The LINE COUNT is load-bearing where the text was not: the -400px
+        // wheel below must leave the panel still scrolled, or the toolbar
+        // legitimately un-sticks and the held-station assertion fails (a
+        // 32-line variant gave ~270px of scroll range and did exactly that).
+        // 64 empty paragraphs keep ~600px of range beyond the wheel.
+        await page.keyboard.type('xx', { delay: 2 })
         for (let i = 0; i < 64; i++) {
-            await page.keyboard.type('x\n', { delay: 2 })
+            await page.keyboard.press('Enter')
         }
 
         await expect(boldButton(page)).toBeVisible()
