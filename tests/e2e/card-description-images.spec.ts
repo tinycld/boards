@@ -1,7 +1,7 @@
 import type { Locator, Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard } from './helpers'
+import { addCard, boardCard, createBoard, openBoard, openCard } from './helpers'
 
 // Images in card descriptions, end to end: the toolbar's chooser inserting an
 // existing image attachment, the chooser's upload path, and dropping an image
@@ -22,18 +22,6 @@ async function freshBoard(page: Page, label: string): Promise<string> {
     const name = `descimg-${label}-${Date.now()}-${run++}`
     await createBoard(page, name)
     return name
-}
-
-async function openCard(page: Page, title: string) {
-    await boardCard(page, title).click()
-    await expect(page.getByText('Description', { exact: true })).toBeVisible()
-}
-
-/** Open a board from the sidebar. `.first()` because the name also renders in
- *  the board header once active. */
-async function openBoard(page: Page, name: string) {
-    await page.getByText(name, { exact: true }).first().click()
-    await expect(boardCard(page, CARD_TITLE)).toBeVisible()
 }
 
 function descriptionEditor(page: Page) {
@@ -112,7 +100,6 @@ test.describe('Cards — images in descriptions', () => {
     test('inserts an existing image attachment at the caret, and it survives a reload', async ({
         page,
     }) => {
-        test.slow()
         const board = await freshBoard(page, 'insert')
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
@@ -132,7 +119,7 @@ test.describe('Cards — images in descriptions', () => {
         const peer = await page.context().newPage()
         await login(peer)
         await navigateToPackage(peer, 'cards')
-        await openBoard(peer, board)
+        await openBoard(peer, board, CARD_TITLE)
         await openCard(peer, CARD_TITLE)
 
         // Prove the collaborative pipe is LIVE before the insert (the collab
@@ -170,9 +157,14 @@ test.describe('Cards — images in descriptions', () => {
         // its tokenless relative src) was persisted, and a fresh render
         // re-signs it with a live token — a baked-in expired token would 404
         // here and the <img> would never become visible.
-        await page.reload()
+        // Leaving cards and coming back proves this was WRITTEN, not just held in
+        // optimistic client state: the board screen unmounts and everything below
+        // is re-read from the server on the way back in. page.reload() would prove
+        // the same by tearing down the whole SPA — the hard navigation this suite
+        // forbids (it cancels in-flight chunk loads and is a CI flake source).
+        await navigateToPackage(page, 'settings')
         await navigateToPackage(page, 'cards')
-        await openBoard(page, board)
+        await openBoard(page, board, CARD_TITLE)
         await openCard(page, CARD_TITLE)
         await expect(descriptionImage(page)).toBeVisible({ timeout: 15_000 })
     })

@@ -146,7 +146,7 @@ export function useCardDetail(cardId: string) {
                     // if the miss is normalized here rather than reaching
                     // localeCompare as undefined (the reply-save crash).
                     created: joined.comment.created ?? '',
-                    updated: joined.comment.updated ?? '',
+                    editedAt: joined.comment.edited_at ?? '',
                     body: joined.comment.body,
                     parent: joined.comment.parent,
                 })
