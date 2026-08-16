@@ -70,8 +70,21 @@ async function openDescription(page: Page) {
     return editor
 }
 
+/**
+ * The description editor's text, or '' when the editor is not mounted.
+ *
+ * NON-BLOCKING by construction: `.textContent()` auto-waits for its element,
+ * and under the app-wide singleton the description's ProseMirror can be
+ * ABSENT (the instance stolen by another surface, the read view showing) —
+ * a bare read then hangs for the caller's whole timeout, which is exactly
+ * how the re-acquiring retry loops below starved: their re-acquire branch
+ * sat behind a read that never returned. The trace showed one textContent
+ * consuming the full 15s budget.
+ */
 async function descriptionText(page: Page): Promise<string> {
-    return (await descriptionEditor(page).textContent()) ?? ''
+    const editor = descriptionEditor(page)
+    if (!(await editor.isVisible().catch(() => false))) return ''
+    return (await editor.textContent().catch(() => '')) ?? ''
 }
 
 /** The bell's aria-label carries the unread count, so it doubles as the
@@ -215,27 +228,36 @@ test.describe('card mentions', () => {
             await openBoard(page, boardName)
             await openCard(page, CARD_TITLE)
 
-            const editor = await openDescription(page)
-            await expect(editor).toBeVisible()
-            await editor.click()
-            // Retried until the prose actually holds: the description editor
-            // accepts input while the Yjs room is still latching, and content
-            // typed pre-latch dies when the bound editor swaps in (the
-            // card-description-images spec documents the same race). Typing
-            // the '@' before the prefix survived would hang the popover flow
-            // on an empty editor.
+            // Retried until the prose actually holds, RE-ACQUIRING the editor
+            // each attempt (openDescription is idempotent for exactly this).
+            // Two ways the blind version lost keystrokes: content typed while
+            // the Yjs room is still latching dies when the bound editor swaps
+            // in (card-description-images documents that race), and under the
+            // app-wide singleton the composer's own startOpen claim can steal
+            // the one instance mid-session — after which typing without
+            // re-acquiring goes nowhere, however often it retries.
             await expect(async () => {
                 if (!(await descriptionText(page)).includes('owner is ')) {
+                    const editor = await openDescription(page)
+                    await editor.click()
                     await page.keyboard.press('ControlOrMeta+A')
                     await page.keyboard.press('Backspace')
                     await page.keyboard.type('owner is ', { delay: 20 })
                 }
                 expect(await descriptionText(page)).toContain('owner is')
             }).toPass({ timeout: 15_000 })
-            await page.keyboard.press('ControlOrMeta+End')
-            await page.keyboard.type('@', { delay: 20 })
 
-            await expect(popover(page)).toBeVisible()
+            // The trigger, same re-acquiring shape: a '@' typed into a stolen
+            // editor vanishes and the popover never comes.
+            await expect(async () => {
+                if (!(await popover(page).isVisible())) {
+                    const editor = await openDescription(page)
+                    await editor.click()
+                    await page.keyboard.press('ControlOrMeta+End')
+                    await page.keyboard.type('@', { delay: 20 })
+                }
+                await expect(popover(page)).toBeVisible({ timeout: 2000 })
+            }).toPass({ timeout: 15_000 })
             await popover(page).getByText(bob.email).click()
             await expect(popover(page)).toHaveCount(0)
 
