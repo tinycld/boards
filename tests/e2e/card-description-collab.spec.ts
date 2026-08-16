@@ -1,7 +1,13 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { createInvitedUser, login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard } from './helpers'
+import {
+    login,
+    navigateToPackage,
+    signInAsCollaborator,
+    TEST_COLLABORATOR_EMAIL,
+    TEST_COLLABORATOR_NAME,
+} from '@tinycld/core/e2e-helpers'
+import { addCard, closeCardPeek, createBoard, openBoard, openCard, shareBoard } from './helpers'
 
 // Collaborative description editing, which needs TWO live sessions: one types
 // and the OTHER must see it without reloading. A single-session spec could not
@@ -11,32 +17,6 @@ import { addCard, boardCard, createBoard } from './helpers'
 // that retries — the frame arrives when it arrives.
 
 const CARD_TITLE = 'Ship the release'
-
-/** Open a board from the sidebar. `.first()` because the name also renders in
- *  the board header once active. */
-async function openBoard(page: Page, name: string) {
-    await page.getByText(name, { exact: true }).first().click()
-    await expect(boardCard(page, CARD_TITLE)).toBeVisible()
-}
-
-async function openCard(page: Page, title: string) {
-    await boardCard(page, title).click()
-    await expect(page.getByText('Description', { exact: true })).toBeVisible()
-}
-
-/** Share `boardName` with `email` at the given role, through the real dialog. */
-async function shareBoard(page: Page, boardName: string, email: string, role: 'Editor' | 'Viewer') {
-    await page.getByRole('button', { name: 'Share board' }).click()
-    await expect(page.getByText(`Share “${boardName}”`)).toBeVisible()
-    await page.getByRole('button', { name: 'Add people' }).click()
-    await page.getByRole('button', { name: new RegExp(`^${role} — `) }).click()
-    await page.getByPlaceholder('Search by name or email').fill(email)
-    await expect(page.getByText(email)).toBeVisible()
-    await page.getByRole('button', { name: 'Add', exact: true }).click()
-    await expect(page.getByPlaceholder('Search by name or email')).not.toBeVisible()
-    await page.getByRole('button', { name: 'Done', exact: true }).click()
-    await expect(page.getByRole('button', { name: 'Done', exact: true })).toHaveCount(0)
-}
 
 /** The description editor's typing surface. */
 function descriptionEditor(page: Page) {
@@ -104,29 +84,22 @@ async function typeDescription(page: Page, text: string) {
 
 test.describe('Cards — collaborative descriptions', () => {
     test('one person types and the other sees it, then it persists', async ({ page }) => {
-        // The invite flow is the expensive step, not the assertions.
-        test.slow()
-
         const boardName = `collab-${Date.now()}`
         await login(page)
         await navigateToPackage(page, 'cards')
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
 
-        const {
-            user: bob,
-            inviteePage: bobPage,
-            close,
-        } = await createInvitedUser(page, 'cardcollab')
-        try {
-            // The invite flow left `page` on settings; return to the board.
-            await login(page)
-            await navigateToPackage(page, 'cards')
-            await openBoard(page, boardName)
-            await shareBoard(page, boardName, bob.email, 'Editor')
+        await openBoard(page, boardName, CARD_TITLE)
+        await shareBoard(page, boardName, TEST_COLLABORATOR_EMAIL, 'Editor')
 
+        // Share BEFORE signing the collaborator in — see shareBoard's doc: a
+        // session whose cards screen synced before the grant is never told the
+        // board exists.
+        const { page: bobPage, close } = await signInAsCollaborator(page)
+        try {
             await navigateToPackage(bobPage, 'cards')
-            await openBoard(bobPage, boardName)
+            await openBoard(bobPage, boardName, CARD_TITLE)
             await openCard(bobPage, CARD_TITLE)
             await openCard(page, CARD_TITLE)
 
@@ -138,12 +111,20 @@ test.describe('Cards — collaborative descriptions', () => {
             await typeDescription(bobPage, ' Confirmed.')
             await expectDescriptionToContain(page, 'Confirmed.')
 
-            // The server flushes the shared document back to the stored field,
-            // so a reload with a fresh document proves it was persisted rather
-            // than merely relayed between two open editors.
-            await page.reload()
+            // The server flushes the shared document back to the stored field.
+            // Proving it PERSISTED (rather than being relayed between two live
+            // editors) needs every editor closed first — while a peer still
+            // holds the doc open, a re-read could be served by the room rather
+            // than by the stored field, which is the assertion this makes.
+            // Leaving cards and returning remounts the screen against a fresh
+            // document; page.reload() would do the same by tearing down the
+            // whole SPA, which this suite forbids.
+            await bobPage.keyboard.press('Escape')
+            await navigateToPackage(bobPage, 'settings')
+            await page.keyboard.press('Escape')
+            await navigateToPackage(page, 'settings')
             await navigateToPackage(page, 'cards')
-            await openBoard(page, boardName)
+            await openBoard(page, boardName, CARD_TITLE)
             await openCard(page, CARD_TITLE)
             await expectDescriptionToContain(page, 'Shipping on Friday.', 20_000)
         } finally {
@@ -160,27 +141,20 @@ test.describe('Cards — collaborative descriptions', () => {
         //
         // Hence the geometry assertion. Presence in the DOM is not the property
         // that matters here.
-        test.slow()
-
         const boardName = `carets-${Date.now()}`
         await login(page)
         await navigateToPackage(page, 'cards')
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
 
-        const {
-            user: bob,
-            inviteePage: bobPage,
-            close,
-        } = await createInvitedUser(page, 'cardcaret')
-        try {
-            await login(page)
-            await navigateToPackage(page, 'cards')
-            await openBoard(page, boardName)
-            await shareBoard(page, boardName, bob.email, 'Editor')
+        await openBoard(page, boardName, CARD_TITLE)
+        await shareBoard(page, boardName, TEST_COLLABORATOR_EMAIL, 'Editor')
 
+        // Share BEFORE signing the collaborator in — see shareBoard's doc.
+        const { page: bobPage, close } = await signInAsCollaborator(page)
+        try {
             await navigateToPackage(bobPage, 'cards')
-            await openBoard(bobPage, boardName)
+            await openBoard(bobPage, boardName, CARD_TITLE)
             await openCard(bobPage, CARD_TITLE)
             await openCard(page, CARD_TITLE)
 
@@ -215,11 +189,11 @@ test.describe('Cards — collaborative descriptions', () => {
             // The label is what makes a caret legible rather than a bare tick.
             // Read its text directly for the same reason as above — it lives
             // inside that zero-width span, so locator visibility does not apply.
-            // `createInvitedUser` fills this display name during the invite; the
-            // InvitedUser record itself carries only username/email/password.
+            // The name is the seeded collaborator's, set by the seed and
+            // re-exported by the helper so this assertion cannot drift from it.
             const label = page.locator('.collaboration-carets__label').first()
             await expect(label).toHaveCount(1)
-            expect(await label.textContent()).toContain('Invited Tester')
+            expect(await label.textContent()).toContain(TEST_COLLABORATOR_NAME)
         } finally {
             await close()
         }
@@ -236,30 +210,23 @@ test.describe('Cards — collaborative descriptions', () => {
         // This is the DEFAULT way a card opens on a phone, where there is no
         // peek, so the regression took the whole feature out on mobile while
         // every existing spec (all peek-based) stayed green.
-        test.slow()
-
         const boardName = `collab-page-${Date.now()}`
         await login(page)
         await navigateToPackage(page, 'cards')
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
 
-        const {
-            user: bob,
-            inviteePage: bobPage,
-            close,
-        } = await createInvitedUser(page, 'cardcollabpage')
-        try {
-            await login(page)
-            await navigateToPackage(page, 'cards')
-            await openBoard(page, boardName)
-            await shareBoard(page, boardName, bob.email, 'Editor')
+        await openBoard(page, boardName, CARD_TITLE)
+        await shareBoard(page, boardName, TEST_COLLABORATOR_EMAIL, 'Editor')
 
+        // Share BEFORE signing the collaborator in — see shareBoard's doc.
+        const { page: bobPage, close } = await signInAsCollaborator(page)
+        try {
             // Bob stays on the peek; the owner expands to the full page. One
             // of each proves the two surfaces share a document rather than
             // merely each working alone.
             await navigateToPackage(bobPage, 'cards')
-            await openBoard(bobPage, boardName)
+            await openBoard(bobPage, boardName, CARD_TITLE)
             await openCard(bobPage, CARD_TITLE)
 
             await openCard(page, CARD_TITLE)
@@ -300,8 +267,6 @@ test.describe('Cards — collaborative descriptions', () => {
         // The client gate mirrors the server's: WritePredicate drops a
         // read-only member's document frames regardless of what their UI does,
         // and this checks the UI does not invite the attempt in the first place.
-        test.slow()
-
         const boardName = `collab-ro-${Date.now()}`
         await login(page)
         await navigateToPackage(page, 'cards')
@@ -310,15 +275,29 @@ test.describe('Cards — collaborative descriptions', () => {
         await openCard(page, CARD_TITLE)
         await typeDescription(page, 'Owner wrote this.')
 
-        const { user: bob, inviteePage: bobPage, close } = await createInvitedUser(page, 'cardro')
-        try {
-            await login(page)
-            await navigateToPackage(page, 'cards')
-            await openBoard(page, boardName)
-            await shareBoard(page, boardName, bob.email, 'Viewer')
+        // The owner re-opens the card after sharing, and holds it open
+        // while the viewer joins.
+        //
+        // The description is not a plain field here: it is a fragment of
+        // the board's shared document, which the server seeds from storage
+        // when the ROOM IS CREATED and never re-reads while that room stays
+        // alive. This board's room was created before the description
+        // existed, so a viewer joining an otherwise-idle room is handed a
+        // fragment that never learned the prose — an empty editor, even
+        // though cards_cards.description holds the right text (verified
+        // directly against the API). Keeping a writer in the document is
+        // what makes the populated state deterministic, and a populated
+        // description is the precondition this read-only gate needs.
+        await closeCardPeek(page)
+        await openBoard(page, boardName, CARD_TITLE)
+        await shareBoard(page, boardName, TEST_COLLABORATOR_EMAIL, 'Viewer')
+        await openCard(page, CARD_TITLE)
 
+        // Share BEFORE signing the collaborator in — see shareBoard's doc.
+        const { page: bobPage, close } = await signInAsCollaborator(page)
+        try {
             await navigateToPackage(bobPage, 'cards')
-            await openBoard(bobPage, boardName)
+            await openBoard(bobPage, boardName, CARD_TITLE)
             await openCard(bobPage, CARD_TITLE)
 
             // The viewer sees the text...

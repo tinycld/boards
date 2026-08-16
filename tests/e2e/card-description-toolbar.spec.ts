@@ -1,7 +1,12 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { createInvitedUser, login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard } from './helpers'
+import {
+    login,
+    navigateToPackage,
+    signInAsCollaborator,
+    TEST_COLLABORATOR_EMAIL,
+} from '@tinycld/core/e2e-helpers'
+import { addCard, closeCardPeek, createBoard, openBoard, openCard, shareBoard } from './helpers'
 
 // The formatting toolbar over a card description. It exists so the markdown
 // commands are discoverable by clicking rather than only by knowing the syntax.
@@ -23,37 +28,12 @@ async function freshBoard(page: Page, label: string): Promise<string> {
     return name
 }
 
-async function openCard(page: Page, title: string) {
-    await boardCard(page, title).click()
-    await expect(page.getByText('Description', { exact: true })).toBeVisible()
-}
-
-/** Open a board from the sidebar. `.first()` because the name also renders in
- *  the board header once active. */
-async function openBoard(page: Page, name: string) {
-    await page.getByText(name, { exact: true }).first().click()
-    await expect(boardCard(page, CARD_TITLE)).toBeVisible()
-}
-
 function descriptionEditor(page: Page) {
     return page.getByTestId('cards-description-editor').locator('.ProseMirror')
 }
 
 function boldButton(page: Page) {
     return page.getByRole('button', { name: 'Bold' })
-}
-
-async function shareBoard(page: Page, boardName: string, email: string, role: 'Editor' | 'Viewer') {
-    await page.getByRole('button', { name: 'Share board' }).click()
-    await expect(page.getByText(`Share “${boardName}”`)).toBeVisible()
-    await page.getByRole('button', { name: 'Add people' }).click()
-    await page.getByRole('button', { name: new RegExp(`^${role} — `) }).click()
-    await page.getByPlaceholder('Search by name or email').fill(email)
-    await expect(page.getByText(email)).toBeVisible()
-    await page.getByRole('button', { name: 'Add', exact: true }).click()
-    await expect(page.getByPlaceholder('Search by name or email')).not.toBeVisible()
-    await page.getByRole('button', { name: 'Done', exact: true }).click()
-    await expect(page.getByRole('button', { name: 'Done', exact: true })).toHaveCount(0)
 }
 
 /**
@@ -113,10 +93,15 @@ test.describe('Cards — description formatting toolbar', () => {
         // same document can be on screen more than once.
         await expect(descriptionEditor(page).locator('strong').first()).toHaveText('review')
 
-        // A reload proves the markdown SOURCE was written, not just the DOM.
-        await page.reload()
+        // Leaving cards entirely and coming back proves the markdown SOURCE
+        // was written, not just the DOM: the board screen unmounts, the shared
+        // document is dropped, and the description is re-seeded from storage on
+        // the way back in. page.reload() would prove the same by tearing down
+        // the whole SPA — the hard navigation this suite forbids.
+        await closeCardPeek(page)
+        await navigateToPackage(page, 'settings')
         await navigateToPackage(page, 'cards')
-        await openBoard(page, board)
+        await openBoard(page, board, CARD_TITLE)
         await openCard(page, CARD_TITLE)
         await expect(descriptionEditor(page).locator('strong').first()).toHaveText('review')
     })
@@ -124,7 +109,6 @@ test.describe('Cards — description formatting toolbar', () => {
     test('every toolbar button applies its formatting, and it all survives a reload', async ({
         page,
     }) => {
-        test.slow()
         const board = await freshBoard(page, 'allbtns')
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
@@ -209,12 +193,15 @@ test.describe('Cards — description formatting toolbar', () => {
         await block('quoteline', 'Quote')
         await expect(editor.locator('blockquote', { hasText: 'quoteline' })).toBeVisible()
 
-        // Every node type at once, after a reload: proves each command's
-        // output was persisted and re-parsed, not just painted. (Underline is
-        // the one markdown has no native syntax for — it rides ++text++.)
-        await page.reload()
+        // Every node type at once, after leaving cards and returning: proves
+        // each command's output was persisted and re-parsed, not just painted.
+        // (Underline is the one markdown has no native syntax for — it rides
+        // ++text++.) Leaving drops the shared document, so the text below comes
+        // back from storage rather than from a live room.
+        await closeCardPeek(page)
+        await navigateToPackage(page, 'settings')
         await navigateToPackage(page, 'cards')
-        await openBoard(page, board)
+        await openBoard(page, board, CARD_TITLE)
         await openCard(page, CARD_TITLE)
         await expect(editor.locator('strong', { hasText: 'boldword' })).toBeVisible()
         await expect(editor.locator('em', { hasText: 'italword' })).toBeVisible()
@@ -314,29 +301,29 @@ test.describe('Cards — description formatting toolbar', () => {
     })
 
     test('a viewer gets no toolbar', async ({ page }) => {
-        test.slow()
         const board = await freshBoard(page, 'viewer')
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
         await typeDescription(page, 'Owner wrote this.')
-        await page.keyboard.press('Escape')
 
-        const {
-            user: bob,
-            inviteePage: bobPage,
-            close,
-        } = await createInvitedUser(page, 'cardtoolbar')
+        // The owner holds the card open while the viewer joins. The
+        // description is a fragment of the board's shared document, seeded
+        // from storage only when the room is created; a viewer joining an
+        // idle room can be handed a fragment that never learned this prose,
+        // and would read an empty editor. A populated description is the
+        // precondition for asserting the viewer gets no toolbar over it.
+        await closeCardPeek(page)
+        await openBoard(page, board, CARD_TITLE)
+        await shareBoard(page, board, TEST_COLLABORATOR_EMAIL, 'Viewer')
+        await openCard(page, CARD_TITLE)
+
+        // Share BEFORE signing the collaborator in — see shareBoard's doc: a
+        // session whose cards screen synced before the grant is never told the
+        // board exists.
+        const { page: bobPage, close } = await signInAsCollaborator(page)
         try {
-            // createInvitedUser drives the owner's page through the admin
-            // screens, so it has to be brought back to the board before the
-            // Share button exists to click.
-            await login(page)
-            await navigateToPackage(page, 'cards')
-            await openBoard(page, board)
-            await shareBoard(page, board, bob.email, 'Viewer')
-
             await navigateToPackage(bobPage, 'cards')
-            await openBoard(bobPage, board)
+            await openBoard(bobPage, board, CARD_TITLE)
             await openCard(bobPage, CARD_TITLE)
 
             // The words are readable...
