@@ -321,6 +321,18 @@ export function CommentEditor({
                         onPress={slots.submit}
                         isDisabled={!dialogs.canSubmit(slots.toolbarState)}
                         size="sm"
+                        // The same load-bearing guard as MarkdownToolbar's
+                        // FormatButton and SessionButton: on web the press
+                        // would first move DOM focus off ProseMirror, and the
+                        // composer's blur RELEASES the shared editor (no
+                        // commit-on-blur here — leaving the composer must
+                        // never post). By the time the click fired, submit
+                        // addressed a released session and silently did
+                        // nothing, leaving the read view holding the stashed
+                        // draft — ⌘↩ worked, the button did not.
+                        {...(Platform.OS === 'web'
+                            ? { onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault() }
+                            : {})}
                     >
                         <ButtonText>{isPending ? 'Sending…' : 'Send'}</ButtonText>
                     </Button>
