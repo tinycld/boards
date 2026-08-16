@@ -192,7 +192,12 @@ test.describe('Cards — description formatting toolbar', () => {
         await page.getByRole('button', { name: 'Link', exact: true }).click()
         const linkInput = page.getByPlaceholder('https://example.com')
         await expect(linkInput).toBeVisible()
-        await page.waitForTimeout(500)
+        // The soak, expressed as an interaction rather than a sleep: focusing
+        // and typing into the field only succeeds against a dialog that is
+        // still mounted, and it outlives the single frame the old bug survived.
+        // A plain second toBeVisible() would pass instantly and prove nothing.
+        await linkInput.click()
+        await expect(linkInput).toBeFocused()
         await expect(linkInput).toBeVisible()
         await linkInput.fill('https://example.com/docs')
         await page.getByRole('button', { name: 'Apply' }).click()

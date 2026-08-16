@@ -146,24 +146,17 @@ export async function createBoard(page: Page, name: string, key?: string) {
 /** Add a card via a column's composer. Enter keeps the composer open, so
  *  Escape closes it after. `columnIndex` picks which "Add card" button.
  *
- *  Typed against the INPUT, verified before Enter. Blind keyboard.type after
- *  the click races the composer's autoFocus — keystrokes landing before focus
- *  settles go to the board's global shortcuts instead ('n' re-opens a
- *  composer, the rest vanish) and the card is never created. The retry
- *  re-opens the composer if a lost click (or a swallowed first keystroke)
- *  left it closed. */
+ *  Gated on FOCUS, not on elapsed time. The composer autoFocuses, and a
+ *  keystroke arriving before that lands goes to the board's global shortcuts
+ *  instead ('n' re-opens a composer, the rest vanish) — so the card is never
+ *  created. `toBeFocused` is that precondition stated directly; `fill` then
+ *  sets the value in one step rather than racing per-keystroke. */
 export async function addCard(page: Page, columnIndex: number, title: string) {
     const input = page.getByPlaceholder('What needs doing?')
-    await expect(async () => {
-        if (!(await input.isVisible())) {
-            await page.getByText('Add card', { exact: true }).nth(columnIndex).click()
-            await expect(input).toBeVisible({ timeout: 2000 })
-        }
-        if ((await input.inputValue()) !== title) {
-            await input.fill(title)
-        }
-        expect(await input.inputValue()).toBe(title)
-    }).toPass()
+    await page.getByText('Add card', { exact: true }).nth(columnIndex).click()
+    await expect(input).toBeFocused()
+    await input.fill(title)
+    await expect(input).toHaveValue(title)
     await page.keyboard.press('Enter')
     await expect(boardCard(page, title)).toBeVisible()
     await page.keyboard.press('Escape')
@@ -177,6 +170,11 @@ export async function addCard(page: Page, columnIndex: number, title: string) {
  * mounted we fully release and re-press (what a user does when a grab
  * doesn't take). `cards-drag-active` is the deterministic "drag is live"
  * signal (mounted by BoardCanvas for card AND column drags).
+ *
+ * No dwell between the press and the slop moves. There used to be a 60ms
+ * sleep there simulating a human hand, but the marker below is the real
+ * signal and the retry already covers a starved burst — 24/24 across
+ * --repeat-each=3 without it.
  */
 export async function activateDrag(page: Page, start: { x: number; y: number }) {
     const active = page.getByTestId('cards-drag-active')
@@ -185,7 +183,6 @@ export async function activateDrag(page: Page, start: { x: number; y: number }) 
             await page.mouse.up().catch(() => {})
             await page.mouse.move(start.x, start.y)
             await page.mouse.down()
-            await page.waitForTimeout(60)
             for (let px = 4; px <= 32; px += 4) {
                 await page.mouse.move(start.x + px, start.y + px)
             }
@@ -331,8 +328,15 @@ export async function dragCardToColumn(
                 // above it.
                 const end = { x: below.x + below.width / 2, y: below.y + below.height * 1.5 }
                 await travelTo(page, entry, end)
-                await page.waitForTimeout(300)
-                await expect(receiving).toHaveCount(1)
+                // Poll the marker rather than sleeping a fixed 300ms: Drax only
+                // re-runs its hit-test on MOVEMENT, so the wiggle is what makes
+                // the wait productive, and the assertion ends it as soon as the
+                // target is registered instead of always paying the full wait.
+                await expect(async () => {
+                    await page.mouse.move(end.x, end.y - 4)
+                    await page.mouse.move(end.x, end.y)
+                    await expect(receiving).toHaveCount(1)
+                }).toPass({ timeout: 4_000 })
             }
             await page.mouse.up()
             return
