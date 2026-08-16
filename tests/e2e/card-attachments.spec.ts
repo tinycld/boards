@@ -1,6 +1,11 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { login, navigateToPackage, signInAsCollaborator } from '@tinycld/core/e2e-helpers'
+import {
+    login,
+    navigateToPackage,
+    signInAsCollaborator,
+    TEST_COLLABORATOR_EMAIL,
+} from '@tinycld/core/e2e-helpers'
 import { addCard, boardCard, createBoard, openBoard, openCard, shareBoard } from './helpers'
 
 // Attaching a file to a card, end to end through the UI: pick → upload →
@@ -228,18 +233,19 @@ test.describe('card attachments', () => {
         await expect(page.getByText('shared.txt', { exact: true })).toBeVisible({ timeout: 15_000 })
         await page.keyboard.press('Escape')
 
-        const { user: bob, page: bobPage, close } = await signInAsCollaborator(page)
+        await shareBoard(page, boardName, TEST_COLLABORATOR_EMAIL, 'Viewer')
+
+        // Positive control: the owner, who attached it, has both affordances.
+        await openCard(page, CARD_TITLE)
+        await expect(page.getByTestId('cards-attach-file')).toBeVisible()
+        await expect(page.getByRole('button', { name: 'Delete shared.txt' })).toBeVisible()
+        await expect(page.getByRole('button', { name: 'Rename shared.txt' })).toBeVisible()
+
+        // Share BEFORE signing the collaborator in — see shareBoard's doc: a
+        // session whose cards screen synced before the grant is never told the
+        // board exists.
+        const { page: bobPage, close } = await signInAsCollaborator(page)
         try {
-            // The collaborator signs in in its own context, so this page is
-            // still on the board — no re-login, no re-navigation.
-            await shareBoard(page, boardName, bob.email, 'Viewer')
-
-            // Positive control: the owner, who attached it, has both affordances.
-            await openCard(page, CARD_TITLE)
-            await expect(page.getByTestId('cards-attach-file')).toBeVisible()
-            await expect(page.getByRole('button', { name: 'Delete shared.txt' })).toBeVisible()
-            await expect(page.getByRole('button', { name: 'Rename shared.txt' })).toBeVisible()
-
             await navigateToPackage(bobPage, 'cards')
             await openBoard(bobPage, boardName, CARD_TITLE)
             await boardCard(bobPage, CARD_TITLE).click()

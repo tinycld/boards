@@ -1,6 +1,11 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { login, navigateToPackage, signInAsCollaborator } from '@tinycld/core/e2e-helpers'
+import {
+    login,
+    navigateToPackage,
+    signInAsCollaborator,
+    TEST_COLLABORATOR_EMAIL,
+} from '@tinycld/core/e2e-helpers'
 import { addCard, boardCard, createBoard, openBoard, shareBoard } from './helpers'
 
 // Real-time presence, which needs what no other cards spec does: TWO live
@@ -28,19 +33,20 @@ test.describe('Cards — real-time presence', () => {
         await addCard(page, 0, CARD_TITLE)
         await addCard(page, 0, OTHER_CARD)
 
-        const { user: bob, page: bobPage, close } = await signInAsCollaborator(page)
+        await openBoard(page, boardName, CARD_TITLE)
+
+        // Alone on the board: no presence row at all. The positive control
+        // for every assertion below — without it, a presence stack that
+        // never renders would pass the "own avatar absent" checks.
+        await expect(page.getByTestId('cards-live-presence')).toHaveCount(0)
+
+        await shareBoard(page, boardName, TEST_COLLABORATOR_EMAIL, 'Editor')
+
+        // Sign the collaborator in AFTER the share — see shareBoard's doc: a
+        // session whose cards screen synced before the grant is never told the
+        // board exists.
+        const { page: bobPage, close } = await signInAsCollaborator(page)
         try {
-            // No re-login: signing the collaborator in happens in its own
-            // context and never navigates this page away from the board.
-            await openBoard(page, boardName, CARD_TITLE)
-
-            // Alone on the board: no presence row at all. The positive control
-            // for every assertion below — without it, a presence stack that
-            // never renders would pass the "own avatar absent" checks.
-            await expect(page.getByTestId('cards-live-presence')).toHaveCount(0)
-
-            await shareBoard(page, boardName, bob.email, 'Editor')
-
             // --- Bob joins the board ---
             await navigateToPackage(bobPage, 'cards')
             await openBoard(bobPage, boardName, CARD_TITLE)

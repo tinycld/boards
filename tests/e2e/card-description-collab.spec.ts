@@ -4,6 +4,7 @@ import {
     login,
     navigateToPackage,
     signInAsCollaborator,
+    TEST_COLLABORATOR_EMAIL,
     TEST_COLLABORATOR_NAME,
 } from '@tinycld/core/e2e-helpers'
 import { addCard, closeCardPeek, createBoard, openBoard, openCard, shareBoard } from './helpers'
@@ -89,11 +90,14 @@ test.describe('Cards — collaborative descriptions', () => {
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
 
-        const { user: bob, page: bobPage, close } = await signInAsCollaborator(page)
-        try {
-            await openBoard(page, boardName, CARD_TITLE)
-            await shareBoard(page, boardName, bob.email, 'Editor')
+        await openBoard(page, boardName, CARD_TITLE)
+        await shareBoard(page, boardName, TEST_COLLABORATOR_EMAIL, 'Editor')
 
+        // Share BEFORE signing the collaborator in — see shareBoard's doc: a
+        // session whose cards screen synced before the grant is never told the
+        // board exists.
+        const { page: bobPage, close } = await signInAsCollaborator(page)
+        try {
             await navigateToPackage(bobPage, 'cards')
             await openBoard(bobPage, boardName, CARD_TITLE)
             await openCard(bobPage, CARD_TITLE)
@@ -143,11 +147,12 @@ test.describe('Cards — collaborative descriptions', () => {
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
 
-        const { user: bob, page: bobPage, close } = await signInAsCollaborator(page)
-        try {
-            await openBoard(page, boardName, CARD_TITLE)
-            await shareBoard(page, boardName, bob.email, 'Editor')
+        await openBoard(page, boardName, CARD_TITLE)
+        await shareBoard(page, boardName, TEST_COLLABORATOR_EMAIL, 'Editor')
 
+        // Share BEFORE signing the collaborator in — see shareBoard's doc.
+        const { page: bobPage, close } = await signInAsCollaborator(page)
+        try {
             await navigateToPackage(bobPage, 'cards')
             await openBoard(bobPage, boardName, CARD_TITLE)
             await openCard(bobPage, CARD_TITLE)
@@ -211,11 +216,12 @@ test.describe('Cards — collaborative descriptions', () => {
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
 
-        const { user: bob, page: bobPage, close } = await signInAsCollaborator(page)
-        try {
-            await openBoard(page, boardName, CARD_TITLE)
-            await shareBoard(page, boardName, bob.email, 'Editor')
+        await openBoard(page, boardName, CARD_TITLE)
+        await shareBoard(page, boardName, TEST_COLLABORATOR_EMAIL, 'Editor')
 
+        // Share BEFORE signing the collaborator in — see shareBoard's doc.
+        const { page: bobPage, close } = await signInAsCollaborator(page)
+        try {
             // Bob stays on the peek; the owner expands to the full page. One
             // of each proves the two surfaces share a document rather than
             // merely each working alone.
@@ -269,26 +275,27 @@ test.describe('Cards — collaborative descriptions', () => {
         await openCard(page, CARD_TITLE)
         await typeDescription(page, 'Owner wrote this.')
 
-        const { user: bob, page: bobPage, close } = await signInAsCollaborator(page)
-        try {
-            // The owner re-opens the card after sharing, and holds it open
-            // while the viewer joins.
-            //
-            // The description is not a plain field here: it is a fragment of
-            // the board's shared document, which the server seeds from storage
-            // when the ROOM IS CREATED and never re-reads while that room stays
-            // alive. This board's room was created before the description
-            // existed, so a viewer joining an otherwise-idle room is handed a
-            // fragment that never learned the prose — an empty editor, even
-            // though cards_cards.description holds the right text (verified
-            // directly against the API). Keeping a writer in the document is
-            // what makes the populated state deterministic, and a populated
-            // description is the precondition this read-only gate needs.
-            await closeCardPeek(page)
-            await openBoard(page, boardName, CARD_TITLE)
-            await shareBoard(page, boardName, bob.email, 'Viewer')
-            await openCard(page, CARD_TITLE)
+        // The owner re-opens the card after sharing, and holds it open
+        // while the viewer joins.
+        //
+        // The description is not a plain field here: it is a fragment of
+        // the board's shared document, which the server seeds from storage
+        // when the ROOM IS CREATED and never re-reads while that room stays
+        // alive. This board's room was created before the description
+        // existed, so a viewer joining an otherwise-idle room is handed a
+        // fragment that never learned the prose — an empty editor, even
+        // though cards_cards.description holds the right text (verified
+        // directly against the API). Keeping a writer in the document is
+        // what makes the populated state deterministic, and a populated
+        // description is the precondition this read-only gate needs.
+        await closeCardPeek(page)
+        await openBoard(page, boardName, CARD_TITLE)
+        await shareBoard(page, boardName, TEST_COLLABORATOR_EMAIL, 'Viewer')
+        await openCard(page, CARD_TITLE)
 
+        // Share BEFORE signing the collaborator in — see shareBoard's doc.
+        const { page: bobPage, close } = await signInAsCollaborator(page)
+        try {
             await navigateToPackage(bobPage, 'cards')
             await openBoard(bobPage, boardName, CARD_TITLE)
             await openCard(bobPage, CARD_TITLE)

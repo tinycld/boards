@@ -1,6 +1,11 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { login, navigateToPackage, signInAsCollaborator } from '@tinycld/core/e2e-helpers'
+import {
+    login,
+    navigateToPackage,
+    signInAsCollaborator,
+    TEST_COLLABORATOR_EMAIL,
+} from '@tinycld/core/e2e-helpers'
 import { addCard, closeCardPeek, createBoard, openBoard, openCard, shareBoard } from './helpers'
 
 // Editing your own comments in place: clicking the body (or the hover Edit
@@ -274,12 +279,13 @@ test.describe('Cards — editing comments', () => {
         await postComment(page, 'Owner remark.')
         await closeCardPeek(page)
 
-        const { user: bob, page: bobPage, close } = await signInAsCollaborator(page)
-        try {
-            // The collaborator signs in in its own context, so this page never
-            // left the board — no re-login, no re-navigation.
-            await shareBoard(page, board, bob.email, 'Commentor')
+        await shareBoard(page, board, TEST_COLLABORATOR_EMAIL, 'Commentor')
 
+        // Share BEFORE signing the collaborator in — see shareBoard's doc: a
+        // session whose cards screen synced before the grant is never told the
+        // board exists.
+        const { page: bobPage, close } = await signInAsCollaborator(page)
+        try {
             await navigateToPackage(bobPage, 'cards')
             await openBoard(bobPage, board, CARD_TITLE)
             await openCard(bobPage, CARD_TITLE)

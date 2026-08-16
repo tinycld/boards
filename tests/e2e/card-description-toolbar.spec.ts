@@ -1,6 +1,11 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { login, navigateToPackage, signInAsCollaborator } from '@tinycld/core/e2e-helpers'
+import {
+    login,
+    navigateToPackage,
+    signInAsCollaborator,
+    TEST_COLLABORATOR_EMAIL,
+} from '@tinycld/core/e2e-helpers'
 import { addCard, closeCardPeek, createBoard, openBoard, openCard, shareBoard } from './helpers'
 
 // The formatting toolbar over a card description. It exists so the markdown
@@ -301,19 +306,22 @@ test.describe('Cards — description formatting toolbar', () => {
         await openCard(page, CARD_TITLE)
         await typeDescription(page, 'Owner wrote this.')
 
-        const { user: bob, page: bobPage, close } = await signInAsCollaborator(page)
-        try {
-            // The owner holds the card open while the viewer joins. The
-            // description is a fragment of the board's shared document, seeded
-            // from storage only when the room is created; a viewer joining an
-            // idle room can be handed a fragment that never learned this prose,
-            // and would read an empty editor. A populated description is the
-            // precondition for asserting the viewer gets no toolbar over it.
-            await closeCardPeek(page)
-            await openBoard(page, board, CARD_TITLE)
-            await shareBoard(page, board, bob.email, 'Viewer')
-            await openCard(page, CARD_TITLE)
+        // The owner holds the card open while the viewer joins. The
+        // description is a fragment of the board's shared document, seeded
+        // from storage only when the room is created; a viewer joining an
+        // idle room can be handed a fragment that never learned this prose,
+        // and would read an empty editor. A populated description is the
+        // precondition for asserting the viewer gets no toolbar over it.
+        await closeCardPeek(page)
+        await openBoard(page, board, CARD_TITLE)
+        await shareBoard(page, board, TEST_COLLABORATOR_EMAIL, 'Viewer')
+        await openCard(page, CARD_TITLE)
 
+        // Share BEFORE signing the collaborator in — see shareBoard's doc: a
+        // session whose cards screen synced before the grant is never told the
+        // board exists.
+        const { page: bobPage, close } = await signInAsCollaborator(page)
+        try {
             await navigateToPackage(bobPage, 'cards')
             await openBoard(bobPage, board, CARD_TITLE)
             await openCard(bobPage, CARD_TITLE)

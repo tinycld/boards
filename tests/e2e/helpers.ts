@@ -72,6 +72,19 @@ export async function closeCardPeek(page: Page) {
  * inline on purpose. Each step is gated on the UI state it produces, ending
  * with the dialog fully dismissed — its backdrop swallows clicks on the shell
  * behind it, so returning with it half-open wedges the caller's next click.
+ *
+ * ORDER MATTERS: share FIRST, sign the collaborator in AFTER. Granting a
+ * membership makes an EXISTING cards_projects row newly visible, and
+ * PocketBase realtime only emits events for records that change — the project
+ * row didn't — so a session whose cards screen synced before the grant is
+ * never told the board exists. Locally that session's cards screen usually
+ * mounts after the share (the post-login redirect lands on whichever package
+ * sorts first in a full workspace); on CI's single-package assembly cards IS
+ * the landing package, the sync always predates the grant, and every
+ * board-by-name open times out — which is how CI proved the ordering. Signing
+ * in after the share is also the flow being modelled: an invited person
+ * opening the app, not a live grant appearing mid-session (a real product gap,
+ * tracked separately).
  */
 export async function shareBoard(
     page: Page,
