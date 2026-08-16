@@ -21,6 +21,7 @@ ordered by dependency; tasks within one are small and mostly independent.
 | M7 | Package plumbing, tests, docs | |
 | M8 | CLI | ✅ shipped — needed a core scope-table fix |
 | M9 | Collaborative markdown editing | web + native shipped, carets + rich comment editing included |
+| M10 | `@`-mentions in descriptions and comments | ✅ web + native shipped — native needed a trigger bridge in core; not yet run on a device |
 
 The lettered milestones (M2a, M3b, M6a) were split out once the data model
 landed and the real dependency order became clear: the rules are enforceable
@@ -993,7 +994,204 @@ precedent for everything except the Modal shell.
       membership-driven project query drops it and `useActiveBoard`'s
       render-time fallback picks the next one. Help topic:
       `help/sharing-boards.md`.
-- [ ] Add reporter field to track who opened card.  Broaden assignment to support multiple users 
+- [x] Add reporter field to track who opened card. **Shipped** —
+      `cards_cards.reporter` (relation → users, maxSelect 1), a Reporter row
+      above Assignees on the card detail with a `ReporterPicker` over project
+      members, `--reporter`/`--clear-reporter` on the CLI, and a seed that
+      demonstrates it. Distinct from `created_by`, which stays immutable
+      provenance and was never read by anything. Four decisions worth not
+      re-litigating:
+    - **The default is `created_by`, applied in TWO places, and there is NO Go
+      hook.** The obvious design — an `OnRecordCreate` hook filling the field
+      with the authenticated caller — CANNOT BE WRITTEN: `core.RecordEvent`
+      carries no request auth (verified against the pinned PocketBase v0.39.8
+      source; no method in `pocketbase/core` takes a `*RecordEvent` receiver and
+      exposes an identity). Only `OnRecordCreateRequest`/`*core.RecordRequestEvent`
+      reaches `e.Auth`, and request hooks do not fire for server-side
+      `app.Save()`. It would also be redundant — every insert path already
+      writes `created_by` with exactly the id such a hook would recover. So:
+      the migration BACKFILLS `reporter = created_by` for existing rows, and
+      `toBoardCard` falls back to `created_by` at render time for anything that
+      still arrives empty. The CLI's `reporterID()` duplicates that fallback
+      deliberately, so the terminal and the app can never disagree about who a
+      card reports to.
+    - **No create-rule pin**, unlike `cards_comments`' `isAuthor`. A pin would
+      forbid the file-on-behalf case that justifies the field existing. The
+      write is already gated by `viaWriter` and the value can only be a users
+      id. Stated in the migration header so it does not read as an oversight.
+    - **`''` is the empty state, not `undefined`.** The schema generator
+      (`core/server/coreserver/schema_gen.go:149-156`) does not consult
+      `required` for a `maxSelect:1` relation, so this emits as
+      `reporter: string` regardless. Every fallback is `||`, never `??`. The
+      optionality lives on the hand-written `BoardCardView`. There are THREE
+      states, and the third is easy to miss: resolvable → the member;
+      unresolvable → `anonymousMember` (the share-link case); neither reporter
+      nor creator → `undefined`. That last one is real — `created_by` is `''`
+      by convention on bootstrap-written rows — and a placeholder there would
+      claim someone owns a card when nobody does.
+    - **`tests/` IS NOT TYPECHECKED.** `tsconfig.json` includes only
+      `tinycld/**`, so adding a field to a generated record type does NOT break
+      the fixture factories — `tinycld-pkg typecheck` passed with `card()` still
+      missing `reporter`. Nothing will catch a fixture that drifts from the
+      schema; the behavioural tests are the only guard. The `sameCard`
+      comparison line was verified by REMOVING it and watching
+      `replaces a card node when only its reporter changed` go red — the
+      companion `keeps the card node when the reporter is unchanged` stayed
+      green, so the test detects the real bug rather than any change.
+    - The assignee UI was deliberately NOT touched: `AssigneePicker` is already
+      a checkable multi-select over `BoardMember[]`, which is the Linear/Jira
+      shape and what drive and `AddMemberDialog` chose. `ReporterPicker` is its
+      single-select sibling; `MemberChip` was extracted so both rows render one
+      chip rather than two copies of it.
+- [x] Add support for @<user> in description and comments, notifying them.
+      **Shipped on web and native.** Picking someone writes `[[@<userId>]]`,
+      which both parsers read — the client when it writes `comment_mentions`
+      rows, and the Go flush hook when it derives description mentions. Display
+      names are not the wire format: they are not unique and they change.
+      **The candidate pool is project members, not the org roster** — boards
+      are shared by link with people holding no org standing, so a roster-wide
+      pool would let a share-link visitor enumerate everyone's name and email
+      by typing `@`. It also keeps the picker honest, since the server drops a
+      mention naming a non-member.
+      **Descriptions cannot use the client-insert path comments use.** A
+      description is a Yjs fragment with no commit, so there is no create event
+      to hang a mention insert on; they are derived server-side at flush,
+      notifying only the mentions that flush ADDED (re-saves, reformats and
+      restarts notify nobody). The author is unknowable there —
+      `realtime.FlushFn` carries no auth by construction — which is why a
+      self-mention cannot be filtered server-side and the picker's
+      self-exclusion is the only guard.
+      The delivery-preferences question it might have branched into is still
+      open, and still a CORE gap rather than a cards one (below).
+    - [x] **Native `@` picker — SHIPPED.** `MentionPopover.tsx` renders core's
+      anchored overlay, driven by the page's suggestion plugin over the message
+      bus. **Not verified on a device yet** — cards' e2e is web-only, so
+      nothing automated covers that path.
+      **The entry that used to sit here called this "self-contained" and said
+      the work was wiring core's trigger onto an existing bridge. That was
+      wrong, and badly so** — worth recording, because the same mistake is
+      available to anyone reading the message-bus doc-comments and assuming
+      they describe working code. `triggers` never reached the native editor at
+      all: `use-rich-editor.native.tsx` did not destructure the option,
+      `RichEditorInitPayload` had no field for it, and `webview/source/`
+      contained zero references to trigger/Suggestion/popover. The protocol
+      existed only as prose. The `return null` stub was the SMALLER half of the
+      gap; the plugin did not exist inside the page.
+      What it actually took (all in `tinycld/core`, see tinycld#187):
+        - **`TriggerConfig` became declarative** — `allItems` + `insertTemplate`
+          instead of two closures — because the page is a prebuilt bundle a
+          closure cannot cross. Both platforms now run the same
+          `filterTriggerItems`/`renderInsertTemplate`, so they cannot rank or
+          insert differently; that divergence would have been invisible until
+          someone compared their phone against their laptop.
+        - **The host PUSHES the roster and the page filters locally.** A
+          round-trip per keystroke crosses the bridge on a thread already
+          carrying the Yjs relay, and would need sequence numbers to stop a late
+          `@na` response rendering under a typed `@nath`. Accepted cost: a
+          member added while the popover is open appears on the next push
+          rather than the next keystroke.
+        - **text's anchored-overlay was PROMOTED to `core/lib/editor/overlay`**,
+          not copied — cards was its second consumer and siblings cannot import
+          each other. text still owns its copy; migrating it is filed below.
+        - **The bus gained per-editor scoping**, a deviation from text rather
+          than a port. A card detail mounts a description editor, a comment
+          composer and sometimes an inline comment editor at once; text never
+          has two, so its module-global bus had every controller answer every
+          `show-popover` — one `@` opening three overlays, two of them measured
+          against the wrong WebView.
+        - **`overlayKey`** is how the popover finds the editor's WebView ref:
+          it renders as a SIBLING of the editor (for comments, in another
+          subtree), so no context can reach it. Unique per hook instance.
+          `state` is accepted and ignored on native — that state lives in the
+          page and arrives serialized as the overlay's payload — which is what
+          keeps the call sites platform-blind.
+      Before touching the page again: **the bundle must be rebuilt**
+      (`pnpm exec tsx tinycld/core/lib/editor/rich/build.ts`) and
+      `editorHtml.ts` committed. A page edit without a rebuild gives the most
+      confusing failure there is — correct-looking source, stale device
+      behaviour.
+    - [ ] **No notification settings UI exists anywhere in the app**, so a user
+      cannot mute mentions (or anything else) from the interface. This is a
+      CORE gap, not a cards one, and it predates mentions:
+      `@tinycld/core/lib/use-notification-preferences.ts` has always existed
+      and NOTHING renders it — there is no notifications screen under
+      `core/components/settings/`.
+      The server half works end to end: `NotifyUser` calls
+      `isNotificationMuted`, which reads a flat `{type: boolean}` map from the
+      `user_preferences` row (`app='notifications'`, `key='preferences'`), and
+      that path is now covered by tests on both the comment and description
+      mention routes. So a preference written directly to that record IS
+      honoured — there is just no screen to write it from.
+      Mention types are `comment_mention` (text/calc, shared) and
+      `cards_mention` (cards; covers BOTH its comment and description
+      mentions — `mentionTypeFor` in core's notify hook derives this, and a
+      test pins the two halves together).
+      Whoever builds the screen should own every existing type, not only
+      mentions: calendar_reminder, calendar_invite,
+      calendar_subscription_error, mail_new_message, drive_file_shared,
+      org_invite, system_error.
+    - [ ] **Follow-up in `text/`: migrate it onto core's promoted overlay** and
+      delete `text/tinycld/text/lib/anchored-overlay/`. The trio now exists
+      TWICE — core's copy (used by cards) and text's original — which is the
+      exact duplication promoting it was meant to prevent, so this should not
+      sit. It is a mechanical import swap plus a re-run of text's three test
+      files; it was kept out of tinycld#187 only because that PR's risk was
+      already concentrated in a prebuilt bundle.
+      Two fixes to carry over while doing it: core's version posts the REAL
+      query on arrow keys (text's posts `''`, a latent bug invisible only
+      because its body does not render the query), and core's bus filters by
+      `editorInstanceId`.
+    - [ ] **Verify the native picker on a device.** Nothing automated covers
+      it — cards' e2e is web-only. Worth checking specifically: that exactly
+      ONE popover appears with both the description and comment editors mounted
+      (the multi-editor case text never had); that filtering does not lag as
+      you type, which is the whole argument for pushing the roster instead of
+      round-tripping; that a tap inserts the token WITH its trailing space and
+      leaves the keyboard up; that a scroll dismisses; and that a viewer
+      (no `canComment`) gets nothing at all.
+    - [x] **`page.reload()` in an e2e spec is a trap — ten of them were fixed
+      while landing this.** Specs proved a write had persisted by reloading and
+      then asserting immediately. A reload tears down the SPA (the objection
+      CLAUDE.md already raises against `goto()` for in-app navigation) and it
+      also drops the board's REALTIME SOCKET. The description editor mounts
+      only once the Yjs room reports ready, so those specs were racing the
+      reconnect against the card opening: win it and `.ProseMirror` exists,
+      lose it and the description is still read-only and every assertion after
+      the reload fails.
+      It surfaced as **four different specs failing across four runs, each
+      passing in isolation** — one race, whichever spec happened to lose it.
+      Diagnosing it from re-runs is hopeless; the Playwright TRACE said it in
+      one read (content present and correctly formatted, but rendered by
+      `MarkdownText` next to an "Edit description" button, so `.ProseMirror`
+      matched nothing). **Reach for the trace early on an e2e failure.**
+      Replaced with in-app navigation (leave the package, come back), which
+      unmounts the card detail — all a re-parse needs — and keeps the socket.
+      Three reloads REMAIN deliberately: `board-view-modes` (×2) persists view
+      preferences to AsyncStorage, and `card-description-images` proves a fresh
+      render re-signs an image with a live file token. Both need a cold client;
+      flattening them would weaken the test.
+      **A reload destroyed an open modal for free and navigation does not.**
+      `board-sharing` had to close its Share dialog first — the overlay
+      swallows the click on the nav rail, and the navigation then HANGS until
+      the test times out rather than failing on anything legible.
+    - [x] `tests/e2e/card-mentions.spec.ts` **runs and passes** (both cases:
+      the mention round-trip and the viewer refusal). Running it found three
+      real bugs that every unit test had missed, which is the argument for the
+      spec existing:
+        - **The picker inserted nothing.** `onPressIn` fired on mouse-down,
+          which blurred the editor; the suggestion plugin resolves the
+          trigger's range from the live selection, so the command had nowhere
+          to write. Fixed by `preventDefault` on mouse-down (MentionPopover.web).
+        - **Raw `[[@id]]` tokens rendered on screen.** The rich editor
+          serializes to markdown, where `[` is syntax, so tokens are STORED
+          backslash-escaped (`\[\[@id\]\]`). The culprit was the fast-path
+          guard `body.indexOf('[[@')`, which skips the escaped spelling and
+          returns the body untouched — the regex itself was fine.
+        - **The same escaping broke the Go parser**, so a picker-typed mention
+          in a DESCRIPTION would have notified nobody. Both parsers now accept
+          either spelling, with regression tests on both sides.
+      
+
 
 ## M4 — Mail integration: create a card from an email
 
@@ -2479,3 +2677,119 @@ wants them rather than guessing the shape now.
       third package needs sharing, a drive-exported file-picker component if
       the M6 attach-from-drive picker outgrows its minimal version, image
       card covers if skipped in M6, board filtering/search, CSV export.
+- [ ] **Board filtering** (by label / assignee / due state / reporter). Filed
+      out of the reporter work, which deliberately shipped the field without
+      it: there is no board filter UI at all to add a control to — the original
+      Filter button was removed as dead chrome (it was a plain `View`, not even
+      pressable), and `DensityToggle` (`BoardHeader.tsx`) is the template for
+      what replaces it.
+      **Apply the predicate in `buildBoardProject`**, beside the existing
+      `if (card.archived) continue`, so `list.cards` and the rendered list stay
+      in ONE index space. The hazard if you instead pass a filtered array to
+      `useSortableList`: `BoardColumn.tsx` calls `rankForReorder(list.cards, …)`
+      and `useBoardDnd.ts` calls `rankForInsert(target.cards, …)` against the
+      UNFILTERED array, while `event.toIndex` comes from the RENDERED one — so
+      ranks get computed in the wrong index space and a drop lands in the wrong
+      place, silently and only while a filter is on.
+      Keep the filter slice OUT of the store's `partialize`. A persisted filter
+      is not "inert when stale" (the store's own rule): a user reloads into a
+      near-empty board with no explanation of why their cards are missing.
+- [ ] **Field-scoped search** (`reporter:me`, `assignee:me`). Also filed out of
+      the reporter work, and it is a CORE-WIDE change, not a cards one: the
+      grammar in `core/lib/search/parse-query.ts` supports only `pkg:` chips and
+      `-term` exclusion, so `reporter:me` currently parses as one garbage
+      include term. Doing it properly means `ParsedQuery` + `parse-query.ts` +
+      core's Go `search.Query` + every package's source.
+      Cheap middle ground if only DECORATION is wanted: add `{Name: "reporter"}`
+      to `ftsConfig.Output` (`server/register.go`) plus a batched user lookup in
+      `searchCards` mirroring `projectSlugs` — that shows the reporter on a
+      result row without making it queryable.
+      Do **NOT** add reporter to `ftsConfig.Columns`: FTS5 cannot ALTER-add a
+      column, so it means dropping, recreating and backfilling `fts_cards`. The
+      `number` field settled this same tradeoff the same way.
+
+## Bug — `(edited)` marker never appears on an edited comment ✅ RESOLVED (stale report)
+
+**The marker test passes and the diagnosis below was wrong.** Re-measured
+2026-08-13: `comment-editing.spec.ts › an edited comment gains the (edited)
+marker` passes on every run, as does the whole suite (86/86, twice
+consecutively). No cards or pbtsdb change was needed to make it pass, so
+whatever caused the original red check was fixed incidentally by later work.
+
+**The pbtsdb hypothesis is DISPROVEN — do not act on it.** Read
+`node_modules/pbtsdb/dist/chunk-*.js`: `onUpdate` applies the PATCH response
+through `writeServerRecords(updated)` → `writeUpsert`, and `syncMode` is not
+consulted anywhere on that path. `on-demand` appears exactly once in the whole
+bundle, in `upsertExpandedRelation` — it gates *expand hydration*, nothing else.
+So the echo is not dropped for on-demand collections, and the "every
+server-owned field on those three tables is stale after a client write" worry
+does not follow. (`writeServerRecords` does have two real guards worth knowing —
+it skips when the collection is not `isReady()`, and `isStaleServerRecord`
+discards an echo whose `updated` is older than the stored row — but neither
+fired here.)
+
+**What WAS red, and is now fixed: two e2e races, both in test helpers.** The
+full suite failed a *different* test on each run — the signature of flakiness,
+not of the marker bug:
+- `addCard` (`tests/e2e/helpers.ts`) typed at the page immediately after
+  clicking "Add card", racing the composer's `autoFocus`. Lost keystrokes left
+  the controlled input empty, so Enter submitted nothing and the card never
+  appeared — the failure snapshot showed the composer open and empty next to an
+  already-placed first card. Now types into the input and asserts the value
+  landed before submitting. The checklist loop in `board-dnd.spec.ts` had the
+  same defect and the same fix.
+- `columnHeader` was `getByText(name).first()` — a page-wide text match, but a
+  list name also appears in the ListStepper, the move-to-list menu and the
+  column-actions menu. `.first()` could resolve to a chrome node that passes
+  `waitFor({ state: 'visible' })` yet measures zero-area, surfacing as
+  "locator has no bounding box (not visible?)" from `centerOf`. Now anchored on
+  the header Pressable's accessibility label, which only the real header stamps.
+
+The original report follows, kept because its server-side measurement is sound
+and its closing warning still stands.
+
+### Original report (server measurement still valid)
+
+**Symptom.** Edit a comment and save. The body updates (optimistic, instant)
+but `(edited)` never renders — not after the PATCH lands, not after 3s, not
+after a reload. Measured directly from the browser: `HAS-BETTER: true`,
+`HAS-EDITED-TEXT: false`.
+
+**What the marker keys on.** `EditedMarker` (`components/detail/DetailActivity.tsx`)
+renders only when `comment.updated !== comment.created`. So the client's copy
+of the row still has the two equal after an edit.
+
+**The server is NOT the problem — this was measured, not assumed.** A Go probe
+against the real schema (`app.Save` on `cards_comments`, twice) showed:
+
+    at create   created=…19:43:25.617Z updated=…19:43:25.617Z  equal
+    after 1.2s  created=…19:43:46.002Z updated=…19:43:47.202Z  DIFFER
+    delay 0ms   differ=false
+    delay 1ms   differ=true
+
+So `updated` is a working autodate with `onUpdate: true` (migration
+1980000000), and it advances past `created` for any edit ≥1ms later. A real
+human edit is always far outside that window. The migration is correct and
+needs no change.
+
+**Where it actually breaks: the client never receives the new `updated`.**
+`cards_comments` is `syncMode: 'on-demand'` (`tinycld/cards/collections.ts`).
+The suspicion — NOT yet proven, this is where the next person picks up — is
+that pbtsdb's on-demand mode does not apply the PATCH response's autodate
+fields back onto the optimistically-updated local row: the mutation writes
+`draft.body` locally, the server echoes a row whose `updated` has moved, and
+the local copy keeps its original timestamps.
+
+**Why this is bigger than one marker.** THREE collections are on-demand —
+`cards_comments`, `cards_checklist_items`, `cards_attachments`. If the echo is
+genuinely being dropped, every server-owned field on those tables is stale
+after a client write, and `(edited)` is just the one place it is visible. Worth
+checking whether `cards_cards.number` (server-allocated, eager collection)
+behaves differently for the same reason.
+
+~~**Next step.** Prove or disprove the sync hypothesis before changing
+anything.~~ **Done — disproven by reading pbtsdb's update path directly; see the
+resolution above.** The echo is applied regardless of `syncMode`.
+
+Do NOT "fix" this by relaxing the test, widening its timeout, or having
+`EditedMarker` guess from something other than the timestamps.

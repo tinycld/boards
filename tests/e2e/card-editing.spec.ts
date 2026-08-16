@@ -273,6 +273,50 @@ test.describe('Cards — editing a card', () => {
         await expect(peek(page).getByRole('button', { name: 'Assign' })).toBeVisible()
     })
 
+    // The reporter differs from every other property row in one way that
+    // matters here: it is never empty on a freshly created card. useCreateCard
+    // writes it, and toBoardCard falls back to created_by regardless, so this
+    // spec starts from a POPULATED row — "Set reporter" is only reachable on
+    // rows that have no creator either, which the UI cannot produce.
+    test('changes the reporter and clears it back to the creator', async ({ page }) => {
+        await boardWithOpenCard(page, 'reporter')
+
+        const reporterChip = peek(page).getByRole('button', { name: 'Change reporter' })
+        await expect(reporterChip).toBeVisible()
+        const creatorName = ((await reporterChip.textContent()) ?? '').trim()
+        expect(creatorName).not.toBe('')
+
+        // Reassign. A fresh board's roster is just the creator, so this
+        // re-selects the same person — which still exercises the write, and
+        // keeps the spec independent of board-sharing's subject matter.
+        await reporterChip.click()
+        const option = page.getByRole('menuitem').first()
+        const picked = ((await option.textContent()) ?? '').trim()
+        await option.click()
+        await expect(reporterChip).toContainText(picked)
+
+        // Clearing restores the created_by fallback rather than emptying the
+        // row — the chip stays, naming the creator. A spec asserting a ghost
+        // chip here would be asserting the wrong model of the field.
+        await reporterChip.click()
+        await page.getByRole('menuitem', { name: 'Clear reporter' }).click()
+        await expect(reporterChip).toBeVisible()
+        await expect(reporterChip).toContainText(creatorName)
+
+        // The write reached the server, not just the optimistic cache.
+        // Navigated in-app rather than reloading — a reload tears down the SPA
+        // and re-races the realtime reconnect. Via settings, not another
+        // package: CI assembles cards alone, so a mail rail link never exists
+        // there and the wait times out against a full suite that is otherwise
+        // green.
+        await navigateToPackage(page, 'settings')
+        await navigateToPackage(page, 'cards')
+        await openCard(page, CARD_TITLE)
+        await expect(peek(page).getByRole('button', { name: 'Change reporter' })).toContainText(
+            creatorName
+        )
+    })
+
     test('creates a label, applies it, and removes it', async ({ page }) => {
         await boardWithOpenCard(page, 'label')
 

@@ -92,6 +92,7 @@ func registerShared(app *pocketbase.PocketBase) {
 	for _, ref := range []offboard.ReassignableRef{
 		{Collection: "cards_projects", Field: "created_by"},
 		{Collection: "cards_cards", Field: "created_by"},
+		{Collection: "cards_cards", Field: "reporter"},
 		{Collection: "cards_comments", Field: "author"},
 		{Collection: "cards_attachments", Field: "uploaded_by"},
 	} {

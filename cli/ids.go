@@ -56,8 +56,12 @@ type card struct {
 	Labels      []string `json:"labels"`
 	Archived    bool     `json:"archived"`
 	CreatedBy   string   `json:"created_by"`
-	Created     string   `json:"created"`
-	Updated     string   `json:"updated"`
+	// Who to ask about the card, as opposed to who inserted it (CreatedBy).
+	// Writable, unlike Number above: it defaults to the creator but exists
+	// precisely so it can be pointed at someone else.
+	Reporter string `json:"reporter"`
+	Created  string `json:"created"`
+	Updated  string `json:"updated"`
 
 	// Denormalized counters, maintained by server/counters.go. Read-only —
 	// the CLI must never write one: counters.go always RECOMPUTES, so a
@@ -67,6 +71,19 @@ type card struct {
 	ChecklistDone   int `json:"checklist_done"`
 	CommentCount    int `json:"comment_count"`
 	AttachmentCount int `json:"attachment_count"`
+}
+
+// reporterID is who the card reports to, falling back to whoever created it.
+//
+// The same fallback lib/board-project.ts applies, and it has to stay the same:
+// a card shown reporting to one person in the app and another on the terminal
+// is worse than the field not existing. Empty only when the card has no creator
+// either, which is true of rows written through the bootstrap path.
+func (c card) reporterID() string {
+	if c.Reporter != "" {
+		return c.Reporter
+	}
+	return c.CreatedBy
 }
 
 type label struct {

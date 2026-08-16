@@ -24,6 +24,23 @@ function descriptionEditor(page: Page) {
 }
 
 /**
+ * Enter edit mode, if the card is not in it already.
+ *
+ * A description renders as MARKDOWN until someone edits it — mounting a
+ * collaborative editor just to DISPLAY a card was the most expensive thing
+ * about opening one. So a spec that types has to open the editor first, the
+ * same way a user does. Idempotent, so calling it twice does not move a caret
+ * that is already placed.
+ */
+async function openDescription(page: Page) {
+    const editor = descriptionEditor(page)
+    if (await editor.isVisible().catch(() => false)) return editor
+    await page.getByRole('button', { name: 'Edit description' }).click()
+    await expect(editor).toBeVisible()
+    return editor
+}
+
+/**
  * The description's text, with collaborator-caret decorations removed.
  *
  * CollaborationCaret injects each remote user's NAME into the document as a
@@ -34,9 +51,12 @@ function descriptionEditor(page: Page) {
  */
 async function descriptionText(page: Page): Promise<string> {
     return page.evaluate(() => {
-        const editor = document.querySelector(
-            '[data-testid="cards-description-editor"] .ProseMirror'
-        )
+        // Either surface: a description renders as MARKDOWN until someone
+        // edits it, and only then is there a .ProseMirror to read. A viewer
+        // never sees an editor at all.
+        const editor =
+            document.querySelector('[data-testid="cards-description-editor"] .ProseMirror') ??
+            document.querySelector('[data-testid="cards-description-read"]')
         if (!editor) return ''
         const clone = editor.cloneNode(true) as HTMLElement
         for (const caret of clone.querySelectorAll(
@@ -64,7 +84,7 @@ async function expectDescriptionToContain(page: Page, text: string, timeout = 15
  * about replication rather than about pointer coordinates.
  */
 async function typeDescription(page: Page, text: string) {
-    const editor = descriptionEditor(page)
+    const editor = await openDescription(page)
     await expect(editor).toBeVisible()
     await editor.click()
     await page.keyboard.press('ControlOrMeta+End')
@@ -102,6 +122,14 @@ test.describe('Cards — collaborative descriptions', () => {
             await openBoard(bobPage, boardName, CARD_TITLE)
             await openCard(bobPage, CARD_TITLE)
             await openCard(page, CARD_TITLE)
+
+            // BOTH editors have to be open for this to be a test of live
+            // collaboration: a description renders as markdown until someone
+            // edits it, and only a mounted editor is joined to the Yjs room.
+            // The read view does update — it re-renders when the server flushes
+            // the record — but that is a different, slower path, and asserting
+            // against it would quietly stop testing the socket at all.
+            await openDescription(bobPage)
 
             // The owner types; bob must see it arrive over the socket.
             await typeDescription(page, 'Shipping on Friday.')
@@ -157,6 +185,12 @@ test.describe('Cards — collaborative descriptions', () => {
             await openBoard(bobPage, boardName, CARD_TITLE)
             await openCard(bobPage, CARD_TITLE)
             await openCard(page, CARD_TITLE)
+
+            // The owner needs an OPEN editor to draw a remote caret into: a
+            // description renders as markdown until edited, and markdown has
+            // nowhere to put a cursor. Opened before bob types so the room is
+            // joined when his caret arrives.
+            await openDescription(page)
 
             // Bob types, which both seeds the document and puts his caret in it.
             // His editor must KEEP focus from here on: y-tiptap nulls the cursor
@@ -243,6 +277,11 @@ test.describe('Cards — collaborative descriptions', () => {
             // Scoped to the DESCRIPTION editors and to the VISIBLE one — the
             // peek's editor is still in the DOM behind the page, and comment
             // editors are ProseMirror surfaces too now.
+            // Opened explicitly: the full page renders its description as
+            // markdown too, so there is no editor to find until an edit starts.
+            // `.first()` on the VISIBLE match — the peek is still mounted
+            // behind the page with an editor of its own.
+            await page.getByRole('button', { name: 'Edit description' }).first().click()
             const pageEditor = page
                 .getByTestId('cards-description-editor')
                 .locator('.ProseMirror:visible')
@@ -302,8 +341,13 @@ test.describe('Cards — collaborative descriptions', () => {
 
             // The viewer sees the text...
             await expectDescriptionToContain(bobPage, 'Owner wrote this.')
-            // ...in a surface that refuses input.
-            await expect(descriptionEditor(bobPage)).toHaveAttribute('contenteditable', 'false')
+            // ...and is offered no way to change it. A description renders as
+            // markdown until someone edits it, so for a viewer the assertion is
+            // stronger than the old read-only editor: there is no editor at
+            // all, and no affordance to open one.
+            await expect(bobPage.getByTestId('cards-description-read')).toBeVisible()
+            await expect(descriptionEditor(bobPage)).toHaveCount(0)
+            await expect(bobPage.getByRole('button', { name: 'Edit description' })).toHaveCount(0)
         } finally {
             await close()
         }

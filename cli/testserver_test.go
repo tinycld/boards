@@ -303,6 +303,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 			Description: str(body["description"]),
 			Due:         str(body["due"]),
 			CreatedBy:   str(body["created_by"]),
+			Reporter:    str(body["reporter"]),
 		}
 		f.cards[created.ID] = created
 		json.NewEncoder(w).Encode(created)
@@ -324,6 +325,9 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		}
 		if v, ok := body["due"].(string); ok {
 			c.Due = v
+		}
+		if v, ok := body["reporter"].(string); ok {
+			c.Reporter = v
 		}
 		if v, ok := body["list"].(string); ok {
 			c.List = v

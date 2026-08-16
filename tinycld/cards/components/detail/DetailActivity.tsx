@@ -204,6 +204,7 @@ function CommentRow({
                             comment={comment}
                             canEditOwn={canEditOwn}
                             onStartEdit={onStartEdit}
+                            projectId={projectId}
                         />
                     </>
                 )}
@@ -228,6 +229,8 @@ interface CommentBodyProps {
     comment: BoardComment
     canEditOwn: boolean
     onStartEdit: (commentId: string) => void
+    /** Resolves `[[@id]]` mention tokens to member names. */
+    projectId: string
 }
 
 /**
@@ -238,8 +241,9 @@ interface CommentBodyProps {
  * onPress claims the touch on both platforms. The editing state lives in
  * CommentRow, which swaps this AND the author line for InlineCommentEditor.
  */
-function CommentBody({ comment, canEditOwn, onStartEdit }: CommentBodyProps) {
-    if (!canEditOwn) return <MarkdownText body={comment.body} variant="comment" />
+function CommentBody({ comment, canEditOwn, onStartEdit, projectId }: CommentBodyProps) {
+    if (!canEditOwn)
+        return <MarkdownText body={comment.body} variant="comment" projectId={projectId} />
 
     return (
         <Pressable
@@ -247,7 +251,7 @@ function CommentBody({ comment, canEditOwn, onStartEdit }: CommentBodyProps) {
             accessibilityLabel="Edit comment"
             onPress={() => onStartEdit(comment.id)}
         >
-            <MarkdownText body={comment.body} variant="comment" />
+            <MarkdownText body={comment.body} variant="comment" projectId={projectId} />
         </Pressable>
     )
 }

@@ -61,11 +61,18 @@ any other number places it at that position, counting from zero.
 tinycld cards card edit <card> --title "Write the launch post"
 tinycld cards card edit <card> --due 2026-09-15
 tinycld cards card edit <card> --clear-due
+tinycld cards card edit <card> --reporter <user id>
+tinycld cards card edit <card> --clear-reporter
 ```
 
 `edit` only changes what you name. Editing the title leaves the description
 alone, so you cannot blank a field by not mentioning it. Due dates are whole
 days, written as `YYYY-MM-DD`.
+
+A new card reports to you. Pass `--reporter` on `add` or `edit` to point it at
+someone else — useful when a script or a shared account files cards that a real
+person should be asked about. `--clear-reporter` hands it back to whoever
+created the card. Both flags take a **user id**, not an email address.
 
 ## Moving cards
 

@@ -51,10 +51,12 @@ jobs:
           # back to its default branch when there is none (the ordinary
           # single-repo PR, where every sibling should be at its release state).
           #
-          # Only `tinycld` is listed: cards declares no sibling dependencies.
-          # M6's "attach from Drive" is presence-gated, so drive joins this loop
-          # (and the --with below) when that lands — not before, since cloning it
-          # now would slow every run for a package cards never imports.
+          # Only `tinycld` is listed: cards depends on core and nothing else.
+          # Mentions once threatened to add drive here (the shared
+          # comment_mentions table was drive's creation), but that was a
+          # sibling-on-sibling dependency — core's 1985000003 now owns the
+          # table's creation, so a cards-only assembly carries everything the
+          # mentions suites need.
           BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
           for repo in tinycld; do
             if [ -n "$BRANCH" ] && \

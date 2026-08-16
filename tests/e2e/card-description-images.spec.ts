@@ -28,6 +28,23 @@ function descriptionEditor(page: Page) {
     return page.getByTestId('cards-description-editor').locator('.ProseMirror')
 }
 
+/**
+ * Enter edit mode, if the card is not in it already.
+ *
+ * A description renders as MARKDOWN until someone edits it — mounting a
+ * collaborative editor just to DISPLAY a card was the most expensive thing
+ * about opening one. So a spec that types has to open the editor first, the
+ * same way a user does. Idempotent, so calling it twice does not move a caret
+ * that is already placed.
+ */
+async function openDescription(page: Page) {
+    const editor = descriptionEditor(page)
+    if (await editor.isVisible().catch(() => false)) return editor
+    await page.getByRole('button', { name: 'Edit description' }).click()
+    await expect(editor).toBeVisible()
+    return editor
+}
+
 /** An inserted description image — the tokenless stored src, re-signed. */
 function descriptionImage(page: Page) {
     return descriptionEditor(page).locator('img[src*="/api/files/cards_attachments/"]').first()
@@ -54,7 +71,7 @@ async function attachViaChooser(page: Page, trigger: Locator, name: string) {
  * Retried: ProseMirror can drop the click while still settling.
  */
 async function focusDescription(page: Page) {
-    const editor = descriptionEditor(page)
+    const editor = await openDescription(page)
     await expect(editor).toBeVisible()
     await expect(async () => {
         await editor.click()
@@ -128,7 +145,13 @@ test.describe('Cards — images in descriptions', () => {
         // editor replaces the plain one — an insert during that window
         // silently vanishes. Retried typing until the peer sees it pins
         // "both editors are on the shared document" as a fact, not a hope.
-        const pageEditor = descriptionEditor(page)
+        // Both editors open: only a MOUNTED editor is joined to the Yjs room,
+        // and a description renders as markdown until someone edits it. The
+        // peer's read view would eventually catch up from the record, which is
+        // a different and slower path — asserting against it would stop testing
+        // the socket this spec exists to test.
+        await openDescription(peer)
+        const pageEditor = await openDescription(page)
         await expect(pageEditor).toBeVisible()
         await pageEditor.click()
         await expect(async () => {
@@ -166,6 +189,11 @@ test.describe('Cards — images in descriptions', () => {
         await navigateToPackage(page, 'cards')
         await openBoard(page, board, CARD_TITLE)
         await openCard(page, CARD_TITLE)
+        // Reopened: a card shows markdown until edited, and descriptionImage
+        // looks for the <img> INSIDE the editor. Opening it also keeps this a
+        // genuine round trip — the image src had to survive into the stored
+        // markdown and be re-parsed out of it.
+        await openDescription(page)
         await expect(descriptionImage(page)).toBeVisible({ timeout: 15_000 })
     })
 
@@ -192,7 +220,7 @@ test.describe('Cards — images in descriptions', () => {
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
 
-        const editor = descriptionEditor(page)
+        const editor = await openDescription(page)
         await expect(editor).toBeVisible()
         await editor.click()
         await page.keyboard.type('First paragraph', { delay: 10 })

@@ -65,12 +65,27 @@ immediately.
 
 ## Card details
 
-An open card shows its assignees, labels, and due date, followed by the
-description, attachments, checklist, and comments. A due date turns amber when
-it's less than two days away and red once it has passed — the same colors the
-board shows on the card itself.
+An open card shows its reporter, assignees, labels, and due date, followed by
+the description, attachments, checklist, and comments. A due date turns amber
+when it's less than two days away and red once it has passed — the same colors
+the board shows on the card itself.
 
 To add a file, see [Attaching files to cards](help://cards:attaching-files).
+
+## Who to ask about a card
+
+The **reporter** is the person to go to with a question about the card — the
+one who wants it done, as distinct from the assignees, who are doing it. A new
+card reports to whoever created it.
+
+To change it, click the reporter and pick any member of the board. That is the
+whole point of the field: if you file a card on a colleague's behalf, or someone
+raises something in a meeting and you write it up, set them as the reporter so
+later questions reach the right person. Choose **Clear reporter** to hand it
+back to whoever created the card.
+
+Only board members appear in the list, because a reporter who cannot open the
+board cannot answer anything about it.
 
 ## Writing a description
 
@@ -98,11 +113,20 @@ There is no save button: every change is kept as you type. Esc leaves the
 description without discarding anything, and plain Enter starts a new line,
 since a description is prose.
 
+Clicking away closes the editor and shows the finished description again.
+Nothing is lost when it closes — the text was already saved as you wrote it.
+
 ## Writing a description together
 
-Several people can write the same description at once. Edits appear as they are
-typed, each person's cursor shows where they are working, and changes merge
-without anyone overwriting anyone else.
+Several people can write the same description at once. While you both have it
+open for editing, edits appear as they are typed, each person's cursor shows
+where they are working, and changes merge without anyone overwriting anyone
+else.
+
+If you are only reading a card, you still see other people's changes — they
+arrive a moment after the other person pauses, rather than letter by letter.
+Click the description to start editing and you are back in step with everyone
+else immediately.
 
 This works in the phone and tablet apps as well as the browser, and between
 them: someone typing on their phone and someone typing on a laptop are writing

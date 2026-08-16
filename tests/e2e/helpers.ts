@@ -104,9 +104,21 @@ export async function shareBoard(
     await expect(page.getByRole('button', { name: 'Done', exact: true })).toHaveCount(0)
 }
 
-/** Column root, located by walking up from the header title text. */
+/**
+ * A column's draggable header title.
+ *
+ * Anchored on the header Pressable's accessibility label (`BoardColumn.tsx`),
+ * NOT on a bare page-wide `getByText(name)`. The text match was wrong in a way
+ * that only showed up under parallel load: a list name is not unique on the
+ * page — it also appears in the card peek's ListStepper, the move-to-list menu
+ * and the column-actions menu — so `.first()` could resolve to a chrome node
+ * that satisfies `waitFor({ state: 'visible' })` while measuring zero-area,
+ * which is what surfaced as "locator has no bounding box (not visible?)" out of
+ * `centerOf`. The label is stamped only by the real header, so there is exactly
+ * one match and it is the element the drag helpers mean to grab.
+ */
 export function columnHeader(page: Page, name: string): Locator {
-    return page.getByText(name, { exact: true }).first()
+    return page.getByLabel(`${name} list — double tap to collapse`)
 }
 
 /**

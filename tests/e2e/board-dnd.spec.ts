@@ -5,7 +5,6 @@ import {
     addCard,
     boardCard,
     cardsInColumn,
-    centerOf,
     columnHeader,
     columnOrder,
     createBoard,
@@ -112,7 +111,15 @@ test.describe('Cards — drag and drop', () => {
             // preview flip with event timing; the bottom edge keeps ≥16px of
             // margin from both boundaries under that bias.
             const park = { x: restingA.x + restingA.width / 2, y: restingA.y + restingA.height }
-            const start = await centerOf(boardCard(page, 'mover'))
+            // stableBoxOf, not centerOf: a press at mid-animation coordinates
+            // lands on canvas the card no longer (or does not yet) occupies,
+            // and activateDrag's re-press loop re-aims at the same stale point
+            // — the drag can then never activate, however long it retries.
+            const moverBox = await stableBoxOf(boardCard(page, 'mover'))
+            const start = {
+                x: moverBox.x + moverBox.width / 2,
+                y: moverBox.y + moverBox.height / 2,
+            }
             await activateDrag(page, start)
             await travelTo(page, start, park)
 
@@ -231,10 +238,18 @@ test.describe('Cards — drag and drop', () => {
         await addCard(page, 0, 'task card')
         await boardCard(page, 'task card').click()
 
+        // Type into the INPUT, not at the page: the composer is autoFocused a
+        // tick after mount, so a blind `keyboard.type` races that focus and
+        // silently drops the label (the same defect fixed in `addCard`). The
+        // composer stays open after Enter, so the loop reuses one locator.
         await page.getByText('Add item', { exact: true }).click()
+        const itemInput = page.getByPlaceholder('Add an item').first()
+        await expect(itemInput).toBeVisible()
         for (const label of ['alpha', 'beta', 'gamma']) {
-            await page.keyboard.type(label)
-            await page.keyboard.press('Enter')
+            await itemInput.fill(label)
+            await expect(itemInput).toHaveValue(label)
+            await itemInput.press('Enter')
+            await expect(page.getByLabel(`Edit ${label}`).first()).toBeVisible()
         }
         await page.keyboard.press('Escape')
 

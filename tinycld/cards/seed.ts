@@ -45,6 +45,12 @@ interface CardSeed {
     /** Label NAMES, resolved against the board's own labels. */
     labels?: string[]
     assignees?: Who[]
+    /**
+     * Who to ask about the card. Defaults to the board owner, matching what
+     * created_by records — set it explicitly to seed a card that was filed on
+     * someone else's behalf, which is the case the field exists for.
+     */
+    reporter?: Who
     checklist?: { title: string; done?: boolean }[]
     comments?: CommentSeed[]
 }
@@ -157,6 +163,11 @@ const BOARDS: BoardSeed[] = [
                         title: 'Fix duplicate label colors in picker',
                         due: () => dueAt(1),
                         labels: ['Bug'],
+                        // A bug someone else hit and filed: the reporter is who
+                        // to ask about it, and it differs from created_by on
+                        // purpose so the Reporter row demonstrates something
+                        // after db:reset.
+                        reporter: 'teammate',
                     },
                     {
                         title: 'Onboarding checklist for new members',
@@ -203,6 +214,7 @@ const BOARDS: BoardSeed[] = [
                         due: () => dueAt(-2),
                         labels: ['Bug', 'Urgent'],
                         assignees: ['teammate'],
+                        reporter: 'teammate',
                     },
                 ],
             },
@@ -274,6 +286,11 @@ const BOARDS: BoardSeed[] = [
                 cards: [
                     {
                         title: 'Standups run long',
+                        // This board is owned by the admin, so a 'me' reporter
+                        // is the inverse of the two above: the role-gated view
+                        // renders a Reporter row naming someone who is NOT the
+                        // owner, with no picker.
+                        reporter: 'me',
                         comments: [
                             {
                                 author: 'teammate',
@@ -380,6 +397,7 @@ async function seedBoard(
                     .map(name => labelIds[name])
                     .filter(id => id !== undefined),
                 created_by: ownerId,
+                reporter: card.reporter ? who(card.reporter) : ownerId,
                 archived: false,
             })
 

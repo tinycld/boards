@@ -26,12 +26,18 @@ export interface MoveCardInput {
  * `due` is an ISO date string, or '' to clear it — NOT undefined. PocketBase
  * stores an unset date as '', and `toBoardCard` maps that back to undefined for
  * the UI, so '' is the wire value that actually clears the field.
+ *
+ * `reporter` follows the same convention: a users id to set it, '' to clear it,
+ * absent to leave it alone. Note that clearing is not the same as showing no
+ * reporter — `toBoardCard` falls back to `created_by`, so a cleared card
+ * reports to its creator again rather than to nobody.
  */
 export interface UpdateCardInput {
     cardId: string
     title?: string
     description?: string
     due?: string
+    reporter?: string
 }
 
 /**
@@ -72,6 +78,13 @@ export function useCreateCard(projectId: string) {
                 assignees: [],
                 labels: [],
                 created_by: user?.id ?? '',
+                // Same id as created_by, and deliberately written rather than
+                // left for a server default: there is no hook filling this in
+                // (core.RecordEvent carries no request auth, so it could not
+                // recover the caller anyway), and the client already holds the
+                // value. A card filed on someone else's behalf is reassigned
+                // afterwards from the detail row.
+                reporter: user?.id ?? '',
                 archived: false,
                 // Counters are server-maintained (server/counters.go) and
                 // recomputed on every child write; these are the at-rest values
@@ -105,6 +118,7 @@ export function useUpdateCard() {
                 if (input.title !== undefined) draft.title = input.title
                 if (input.description !== undefined) draft.description = input.description
                 if (input.due !== undefined) draft.due = input.due
+                if (input.reporter !== undefined) draft.reporter = input.reporter
             })
         }),
     })

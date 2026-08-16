@@ -102,11 +102,44 @@ export function toBoardCard(
         // disclose. Labels above still drop, deliberately: a deleted label
         // leaves its id behind and there is nothing to say about it.
         assignees: card.assignees.map(id => usersById.get(id) ?? anonymousMember(id)),
+        reporter: toReporter(card, usersById),
         checklistTotal: card.checklist_total,
         checklistDone: card.checklist_done,
         commentCount: card.comment_count,
         attachmentCount: card.attachment_count,
     }
+}
+
+/**
+ * Who the card reports to, falling back to whoever created it.
+ *
+ * `reporter` and `created_by` mean different things — created_by is immutable
+ * provenance, reporter is the correctable "ask this person" — but a reporter
+ * nobody has set yet IS the creator, so the fallback is what makes the field
+ * useful on day one instead of showing an empty row on every existing card.
+ * The migration backfills the same value onto rows that predate the field; this
+ * covers anything written since by a caller that omitted it.
+ *
+ * Both ids are `''` when unset, never undefined: the schema generator emits a
+ * maxSelect:1 relation as `string` regardless of `required`. Hence `||` — `??`
+ * would treat '' as a value and resolve a lookup for the empty string.
+ *
+ * Three outcomes, and the third is why this isn't a one-liner:
+ *   - a resolvable id → that member
+ *   - an id no `users` row backs → anonymousMember, the share-link case, for
+ *     the same reason assignees take a placeholder rather than vanishing
+ *   - no id at all → undefined. created_by is '' by convention on rows written
+ *     through the bootstrap path, and those cards genuinely have no reporter;
+ *     a faceless avatar there would claim someone owns the card when nobody
+ *     does, which is the one thing the placeholder must not say.
+ */
+function toReporter(
+    card: CardsCards,
+    usersById: Map<string, BoardMember>
+): BoardMember | undefined {
+    const id = card.reporter || card.created_by
+    if (id === '') return undefined
+    return usersById.get(id) ?? anonymousMember(id)
 }
 
 /**
@@ -224,6 +257,12 @@ function sameMember(a: BoardMember, b: BoardMember): boolean {
     return a.id === b.id && a.firstName === b.firstName && a.lastName === b.lastName
 }
 
+/** sameMember lifted over undefined, for a view field that may be absent. */
+function sameOptionalMember(a?: BoardMember, b?: BoardMember): boolean {
+    if (!a || !b) return a === b
+    return sameMember(a, b)
+}
+
 function sameLabel(a: BoardLabel, b: BoardLabel): boolean {
     return a.id === b.id && a.name === b.name && a.color === b.color
 }
@@ -245,7 +284,12 @@ function sameCard(a: BoardCardView, b: BoardCardView): boolean {
         a.commentCount === b.commentCount &&
         a.attachmentCount === b.attachmentCount &&
         sameElements(a.labels, b.labels, sameLabel) &&
-        sameElements(a.assignees, b.assignees, sameMember)
+        sameElements(a.assignees, b.assignees, sameMember) &&
+        // Reassigning a reporter changes nothing else on the card, so without
+        // this line the node compares equal, gets reused from the previous
+        // tree, and the new reporter never renders — the failure the key
+        // comparison above documents, in its quietest form.
+        sameOptionalMember(a.reporter, b.reporter)
     )
 }
 

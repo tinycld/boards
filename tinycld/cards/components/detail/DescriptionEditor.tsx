@@ -7,9 +7,11 @@ import type { Awareness } from 'y-protocols/awareness'
 import type * as Y from 'yjs'
 import type { PresenceUser } from '../../hooks/useBoardPresence'
 import { useEditorImageActions } from '../../hooks/useEditorImageActions'
+import { useMentionTrigger } from '../../hooks/useMentionTrigger'
 import type { BoardAttachment } from '../../types'
 import { ImageAttachmentPicker } from './ImageAttachmentPicker'
 import { MarkdownToolbar } from './MarkdownToolbar'
+import { MentionPopover } from './MentionPopover'
 
 /** Mirrors the max on cards_cards.description; the server clamps at the same. */
 const DESCRIPTION_LIMIT = 5000
@@ -34,6 +36,16 @@ interface DescriptionEditorProps {
     canEdit: boolean
     /** Shown while the socket is down; the local document keeps accepting text. */
     isConnected: boolean
+    /**
+     * The editing session ended — the caller should swap back to the read view
+     * and unmount this editor.
+     *
+     * Fired on blur, because there is nothing to commit: every keystroke was
+     * already shared and flushed, so leaving the editor is the whole of
+     * "finishing". Not fired while a dialog holds focus (the image picker, the
+     * link prompt) — that is a detour inside the session, not the end of it.
+     */
+    onDone?: () => void
 }
 
 export interface DescriptionEditorSlots {
@@ -91,9 +103,12 @@ export function useDescriptionEditor({
     identity,
     canEdit,
     isConnected,
+    onDone,
 }: DescriptionEditorProps): DescriptionEditorSlots {
     const containerRef = useRef<View>(null)
     const [isFocused, setIsFocused] = useState(false)
+    // Has this editing session ever held focus? See onBlur below.
+    const hasFocusedRef = useRef(false)
     const [isImagePickerOpen, setIsImagePickerOpen] = useState(false)
     const [isLinkOpen, setIsLinkOpen] = useState(false)
 
@@ -111,9 +126,15 @@ export function useDescriptionEditor({
         context: 'cards.description',
     })
 
+    // `@` autocomplete. The trigger is scoped to board members and gated on
+    // commenting standing — see useMentionTrigger.
+    const mention = useMentionTrigger(projectId)
+
     const { EditorComponent, editor, commands, toolbarState } = useRichEditor({
         contentFormat: 'markdown',
         placeholder: 'Add a description — what does done look like?',
+        triggers: mention.triggers,
+        overlayKey: mention.overlayKey,
         editable: canEdit,
         characterLimit: DESCRIPTION_LIMIT,
         // Held CONSTANT on purpose. The web hook memoizes EditorComponent on
@@ -122,8 +143,32 @@ export function useDescriptionEditor({
         // instant it focused — a flicker loop. The focus styling lives on our
         // own wrapper below instead.
         containerClassName: 'min-h-[72px]',
-        onFocus: () => setIsFocused(true),
-        onBlur: () => setIsFocused(false),
+        // Stated rather than inherited: the class above is web-only, and this
+        // matching only the native default by coincidence is not something a
+        // later change to that default should be free to break.
+        minHeight: 72,
+        // This editor is now mounted BY a tap rather than with the card, so it
+        // has to take the caret itself — otherwise tapping the description
+        // swaps in an editor the user then has to tap a second time.
+        autofocus: true,
+        onFocus: () => {
+            hasFocusedRef.current = true
+            setIsFocused(true)
+        },
+        onBlur: () => {
+            setIsFocused(false)
+            // A dialog taking focus is a detour inside the session, not its
+            // end — closing the editor under the image picker would unmount
+            // the surface the picked image is about to be inserted into.
+            if (isImagePickerOpen || isLinkOpen) return
+            // Never before the session has actually held focus. The editor
+            // mounts with autofocus while the WebView is still booting, and a
+            // blur from that race would close the editor the instant it opened
+            // — the same mount race that made an inline comment edit commit
+            // itself before anyone had touched it.
+            if (!hasFocusedRef.current) return
+            onDone?.()
+        },
         // Blur rather than close: the first Escape should leave the editor, and
         // only a second one should reach the panel behind it. Returning true
         // stops this one from bubbling.
@@ -210,6 +255,10 @@ export function useDescriptionEditor({
                 <View testID="cards-description-editor" className="py-2">
                     <EditorComponent />
                 </View>
+                {/* Portalled to <body> on web and drawn as a native Modal on
+                    device, so its position in this tree does not affect layout
+                    on either platform. */}
+                <MentionPopover state={mention.state} overlayKey={mention.overlayKey} />
                 <DescriptionStatus isConnected={isConnected} />
                 <ImageAttachmentPicker
                     isOpen={isImagePickerOpen}

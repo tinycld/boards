@@ -1,9 +1,12 @@
 import { MarkdownRenderer } from '@tinycld/core/components/help/MarkdownRenderer'
+import { markdownScale } from '@tinycld/core/components/help/markdown-purpose'
 import { useFileToken } from '@tinycld/core/file-viewer/use-authed-file-url'
 import { resolveProtectedFileSrc } from '@tinycld/core/lib/editor/rich/authed-image'
 import { pb } from '@tinycld/core/lib/pocketbase'
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { View } from 'react-native'
+import { useProjectMembers } from '../../hooks/useProjectMembers'
+import { renderMentionTokens } from '../../lib/mention-text'
 
 interface MarkdownTextProps {
     /** Markdown source. Callers must not render this component for empty text. */
@@ -14,6 +17,12 @@ interface MarkdownTextProps {
      * layout when it does, while a comment sits in a tight activity row.
      */
     variant?: 'description' | 'comment'
+    /**
+     * The board this text belongs to, used to turn `[[@id]]` tokens into names.
+     * Optional: a surface without one (the public board) renders mentions as
+     * the neutral `@someone` placeholder rather than leaking a record id.
+     */
+    projectId?: string
 }
 
 /**
@@ -39,7 +48,24 @@ interface MarkdownTextProps {
  * paragraph already has `marginVertical: 6`, so the section's own spacing is
  * applied outside to keep the display and edit states from jumping.
  */
-export function MarkdownText({ body, variant = 'description' }: MarkdownTextProps) {
+export function MarkdownText({ body, variant = 'description', projectId }: MarkdownTextProps) {
+    // A comment is a message in a thread; a description is the read state of
+    // the editor that replaces it on tap, so it matches that editor exactly.
+    const purpose = variant === 'comment' ? 'compact' : 'description'
+    // Mentions are stored as `[[@userId]]` — the wire format both the client
+    // and the Go flush hook parse. Substituted into `@Name` before parsing so
+    // this stays a pure string transform shared by web and native; see
+    // lib/mention-text.ts for why it is not a renderer node.
+    const { members } = useProjectMembers(projectId ?? '')
+    const text = useMemo(
+        () =>
+            renderMentionTokens(
+                body,
+                members.map(m => ({ userId: m.userId, label: m.name || m.email || 'Unknown' }))
+            ),
+        [body, members]
+    )
+
     // Description images are stored as tokenless protected-file paths (see
     // lib/description-image.ts); without a fresh ?token= the bytes 404. The
     // transform is a useCallback keyed on the token because its IDENTITY keys
@@ -54,12 +80,22 @@ export function MarkdownText({ body, variant = 'description' }: MarkdownTextProp
     )
 
     return (
-        <View className={variant === 'comment' ? '-my-2' : '-my-1.5'}>
+        // Cancels the renderer's own first/last paragraph margin so the section
+        // controls its own rhythm. DERIVED from the scale rather than a fixed
+        // class: the two are the same number by definition, and hard-coding it
+        // meant retuning a comment's typography silently shifted every comment
+        // below it (caught by comment-editing.spec's ±2px anchor).
+        <View style={{ marginVertical: -markdownScale(purpose).paragraphSpacing }}>
             <MarkdownRenderer
-                body={body}
+                body={text}
                 translateModifierKeys={false}
                 shortcutTableHeuristic={false}
                 transformImageUri={transformImageUri}
+                // A comment is a message in a thread; a description is the
+                // read state of the editor that replaces it on tap, so it
+                // matches that editor's proportions exactly. Neither is a help
+                // topic, which is what the renderer's defaults were tuned for.
+                purpose={purpose}
                 // A comment sits in a tight activity row; a full-width
                 // screenshot would dominate the thread, so images letterbox
                 // into a strip there. Descriptions keep the library sizing.

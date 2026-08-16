@@ -58,6 +58,10 @@ function card(
         assignees: [],
         labels: [],
         created_by: 'u1',
+        // '' rather than 'u1': the unset state is the interesting default,
+        // since toBoardCard falls back to created_by and the reporter tests
+        // below need both halves of that to be exercisable.
+        reporter: '',
         archived: false,
         // 1 rather than 0: a card that reached the server has a number, and 0
         // is specifically the not-yet-assigned state the key tests below cover.
@@ -216,6 +220,71 @@ describe('toBoardCard', () => {
             'OTTER'
         )
         expect(first.assignees).toEqual(second.assignees)
+    })
+
+    it('resolves the reporter against the user map', () => {
+        const result = toBoardCard(
+            card('c1', 'list1', 'a0', { reporter: 'u1' }),
+            labels,
+            users,
+            'OTTER'
+        )
+        expect(result.reporter?.id).toBe('u1')
+        expect(result.reporter?.firstName).toBe('Maya')
+    })
+
+    it('falls back to created_by when no reporter is set', () => {
+        // The field was added long after cards_cards shipped. Every row written
+        // before it — and any written since by a caller that omitted it — has
+        // reporter '', and showing an empty row on all of them would make the
+        // feature look broken on arrival. The creator is the honest default.
+        const result = toBoardCard(
+            card('c1', 'list1', 'a0', { reporter: '', created_by: 'u1' }),
+            labels,
+            users,
+            'OTTER'
+        )
+        expect(result.reporter?.id).toBe('u1')
+    })
+
+    it('prefers an explicit reporter over created_by', () => {
+        // The whole point of the field: a card filed on someone's behalf
+        // reports to them, not to whoever's session ran the insert.
+        const twoUsers = new Map(users)
+        twoUsers.set('u2', { id: 'u2', firstName: 'Sam', lastName: 'Doe' })
+        const result = toBoardCard(
+            card('c1', 'list1', 'a0', { reporter: 'u2', created_by: 'u1' }),
+            labels,
+            twoUsers,
+            'OTTER'
+        )
+        expect(result.reporter?.id).toBe('u2')
+    })
+
+    it('renders an unresolvable reporter anonymously', () => {
+        // Same share-link reasoning as assignees above: a visitor reads no
+        // `users` rows, and a card that HAS a reporter must not read as having
+        // none.
+        const result = toBoardCard(
+            card('c1', 'list1', 'a0', { reporter: 'gone' }),
+            labels,
+            users,
+            'OTTER'
+        )
+        expect(result.reporter).toEqual({ id: 'gone', firstName: 'Board', lastName: 'member' })
+    })
+
+    it('leaves the reporter undefined when the card has no creator either', () => {
+        // The one state the placeholder must NOT claim. created_by is '' by
+        // convention on bootstrap-written rows; a faceless avatar there would
+        // assert someone owns the card when nobody does.
+        const result = toBoardCard(
+            card('c1', 'list1', 'a0', { reporter: '', created_by: '' }),
+            labels,
+            users,
+            'OTTER'
+        )
+        expect(result.reporter).toBeUndefined()
     })
 
     it('carries the denormalized counters through', () => {
@@ -461,6 +530,40 @@ describe('buildBoardProject structural sharing', () => {
 
         expect(result?.lists[0]?.cards[0]).not.toBe(previous?.lists[0]?.cards[0])
         expect(result?.lists[0]?.cards[0]?.key).toBe('OTTER-4')
+    })
+
+    // The quietest instance of the sameCard trap. Reassigning a reporter
+    // changes nothing else on the card, so without a comparison line the node
+    // comes out value-equal, gets reused from the previous tree, and the new
+    // reporter never renders — including when a teammate changes it in another
+    // session, which is the case a person is most likely to be looking at.
+    it('replaces a card node when only its reporter changed', () => {
+        const before = input()
+        before.cards[0] = card('c1', 'list1', 'a0', { reporter: 'u1' })
+        before.users = [user('u1', 'Maya Kim'), user('u2', 'Sam Doe')]
+        const previous = buildBoardProject(before)
+        expect(previous?.lists[0]?.cards[0]?.reporter?.id).toBe('u1')
+
+        const after = input()
+        after.cards[0] = card('c1', 'list1', 'a0', { reporter: 'u2' })
+        after.users = [user('u1', 'Maya Kim'), user('u2', 'Sam Doe')]
+        const result = buildBoardProject(after, previous)
+
+        expect(result?.lists[0]?.cards[0]).not.toBe(previous?.lists[0]?.cards[0])
+        expect(result?.lists[0]?.cards[0]?.reporter?.id).toBe('u2')
+    })
+
+    // The other half of the same contract: an emission that did NOT change the
+    // reporter must still share, or the comparison above would be "fixed" by
+    // making every card node unstable — which breaks drags.
+    it('keeps the card node when the reporter is unchanged', () => {
+        const withReporter = () => {
+            const next = input()
+            next.cards[0] = card('c1', 'list1', 'a0', { reporter: 'u1' })
+            return next
+        }
+        const previous = buildBoardProject(withReporter())
+        expect(buildBoardProject(withReporter(), previous)).toBe(previous)
     })
 
     // Renaming the board's key re-keys every card on it, so neither the project
