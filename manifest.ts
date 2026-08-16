@@ -17,6 +17,11 @@ const manifest = {
         shortcut: 'k',
     },
     sidebar: { component: 'sidebar' },
+    // Mounted at the app root: watches this user's own membership rows and
+    // re-pulls the eager cards collections when a grant or revocation changes
+    // what the rules let them read — no realtime event exists for that (the
+    // board rows themselves never changed). See useMembershipVisibilitySync.
+    provider: { component: 'provider' },
     help: { directory: 'help' },
     tests: { directory: 'tests' },
     // Cards is searchable through core's federated /api/search, which reads the
@@ -68,6 +73,10 @@ const manifest = {
         scopes: ['cards:read', 'cards:write'],
     },
     collections: { register: 'collections', types: 'types' },
+    // Trigger + action catalog for workflow rules. The Go side
+    // (server/automation.go) resolves owners through board membership and
+    // gates card-completed to a list marked done.
+    automation: { definitions: 'automation' },
     seed: { script: 'seed' },
     // Without this, `useReportIssue` returns null and the Help menu's "Report
     // an issue" item is gated off entirely — cards was the only member missing

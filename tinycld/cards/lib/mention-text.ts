@@ -18,6 +18,8 @@
 // cost everybody pays. If that ever stops being true, the fix is a renderer
 // node, not a smarter regex.
 
+import { escapeMarkdown } from '@tinycld/core/lib/markdown-escape'
+
 // The brackets may arrive BACKSLASH-ESCAPED. The rich editor serializes to
 // markdown, where `[` is syntax, so a token typed by the mention picker is
 // stored as `\[\[@id\]\]` rather than `[[@id]]`. Both spellings mean the same
@@ -49,7 +51,12 @@ export function renderMentionTokens(body: string, names: MentionName[]): string 
     const byId = new Map(names.map(n => [n.userId, n.label]))
     return body.replace(TOKEN, (_match, userId: string, storedName?: string) => {
         const label = byId.get(userId) || decodeMentionName(storedName)
-        return label ? `@${label}` : '@someone'
+        // Escaped because this lands in markdown SOURCE, per the note at the
+        // top of this file — and the label is a display name, which any user
+        // can set on themselves. Unescaped, `[click](javascript:…)` as a name
+        // becomes a live link in every card that mentions its owner, and
+        // `![x](https://…)` becomes an image their client fetches on render.
+        return label ? `@${escapeMarkdown(label)}` : '@someone'
     })
 }
 

@@ -51,12 +51,14 @@ jobs:
           # back to its default branch when there is none (the ordinary
           # single-repo PR, where every sibling should be at its release state).
           #
-          # Only `tinycld` is listed: cards declares no sibling dependencies.
-          # M6's "attach from Drive" is presence-gated, so drive joins this loop
-          # (and the --with below) when that lands — not before, since cloning it
-          # now would slow every run for a package cards never imports.
+          # `drive` joined the loop with @mentions: the shared comment_mentions
+          # table is drive's (1781000000), so the RLS suite that proves cards'
+          # branch of its createRule — and the mentions e2e, whose UI is gated
+          # on the collection existing — can only run against a workspace that
+          # has it. Mentions stay presence-gated in the product; CI simply
+          # exercises the assembled half rather than skipping it silently.
           BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
-          for repo in tinycld; do
+          for repo in tinycld drive; do
             if [ -n "$BRANCH" ] && \
                git ls-remote --exit-code --heads "https://github.com/tinycld/$repo" "$BRANCH" >/dev/null 2>&1; then
               echo "${repo}_ref=@$BRANCH" >> "$GITHUB_OUTPUT"
@@ -71,12 +73,13 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
-      - name: Assemble workspace (app + core)
+      - name: Assemble workspace (app + core + drive)
         working-directory: ws
         run: |
           TINYCLD_REPO_BASE=https://github.com/tinycld \
             npx @tinycld/bootstrap@latest --assemble-only \
-            --with "tinycld${{ steps.sibling.outputs.tinycld_ref }}"
+            --with "tinycld${{ steps.sibling.outputs.tinycld_ref }}" \
+            --with "drive${{ steps.sibling.outputs.drive_ref }}"
       # Switch to the version the assembled workspace pins (ws/.node-version is
       # written by the assemble step above).
       - uses: actions/setup-node@v5
@@ -89,13 +92,22 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: ws/.go-version
-          # go.mod, not go.sum: cards deliberately commits no go.sum (see the
-          # comment in server/go.mod — every dep resolves through go.work
-          # replaces to local dirs, so there are no module hashes to record).
-          # The hand-maintained require block still changes whenever a
-          # dependency does, so it is the right key here.
+          # cards' own key is go.mod, not go.sum: cards deliberately commits no
+          # go.sum (see the comment in server/go.mod — every dep resolves
+          # through go.work replaces to local dirs, so there are no module
+          # hashes to record). The hand-maintained require block still changes
+          # whenever a dependency does, so it is the right key for this repo.
+          #
+          # The tinycld go.sum files join the key the way core's own CI keys on
+          # them: the modules the postinstall's schema generation (and the e2e
+          # server build) actually downloads are CORE's graph, resolved through
+          # go.work — so a key blind to those files caches almost none of what
+          # the job spends its time fetching. The assemble step above has
+          # already cloned ws/tinycld by the time this hashes.
           cache-dependency-path: |
             ws/cards/server/go.mod
+            ws/tinycld/server/go.sum
+            ws/tinycld/core/server/go.sum
       # corepack enables the pnpm version pinned in the workspace root's
       # "packageManager" field. pnpm discovers members from pnpm-workspace.yaml;
       # node-linker=hoisted (set there) gives a flat node_modules so member
@@ -166,9 +178,9 @@ jobs:
         if: steps.specs.outputs.found == 'true'
         id: sibling
         run: |
-          # See the check job for why this exists.
+          # See the check job for why this exists (incl. why drive is listed).
           BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
-          for repo in tinycld; do
+          for repo in tinycld drive; do
             if [ -n "$BRANCH" ] && \
                git ls-remote --exit-code --heads "https://github.com/tinycld/$repo" "$BRANCH" >/dev/null 2>&1; then
               echo "${repo}_ref=@$BRANCH" >> "$GITHUB_OUTPUT"
@@ -182,13 +194,14 @@ jobs:
         if: steps.specs.outputs.found == 'true'
         with:
           node-version: '24'
-      - name: Assemble workspace (app + core)
+      - name: Assemble workspace (app + core + drive)
         if: steps.specs.outputs.found == 'true'
         working-directory: ws
         run: |
           TINYCLD_REPO_BASE=https://github.com/tinycld \
             npx @tinycld/bootstrap@latest --assemble-only \
-            --with "tinycld${{ steps.sibling.outputs.tinycld_ref }}"
+            --with "tinycld${{ steps.sibling.outputs.tinycld_ref }}" \
+            --with "drive${{ steps.sibling.outputs.drive_ref }}"
       - uses: actions/setup-node@v5
         if: steps.specs.outputs.found == 'true'
         with:
@@ -197,9 +210,11 @@ jobs:
         if: steps.specs.outputs.found == 'true'
         with:
           go-version-file: ws/.go-version
-          # go.mod, not go.sum — see the note on the job above.
+          # Same key as the check job — see the note there.
           cache-dependency-path: |
             ws/cards/server/go.mod
+            ws/tinycld/server/go.sum
+            ws/tinycld/core/server/go.sum
       - name: Cache pnpm store
         if: steps.specs.outputs.found == 'true'
         uses: actions/cache@v6

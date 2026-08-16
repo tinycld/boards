@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard } from './helpers'
+import { addCard, createBoard, openBoard, openCard } from './helpers'
 
 // Card descriptions are stored as Markdown and edited in place: the editor IS
 // the rendering, so there is no view/edit swap and no commit step. Typing `## `
@@ -20,18 +20,6 @@ async function freshBoard(page: Page, label: string): Promise<string> {
     const name = `desc-${label}-${Date.now()}-${run++}`
     await createBoard(page, name)
     return name
-}
-
-async function openCard(page: Page, title: string) {
-    await boardCard(page, title).click()
-    await expect(page.getByText('Description', { exact: true })).toBeVisible()
-}
-
-/** Open a board from the sidebar. `.first()` because the name also renders in
- *  the board header once active. */
-async function openBoard(page: Page, name: string) {
-    await page.getByText(name, { exact: true }).first().click()
-    await expect(boardCard(page, CARD_TITLE)).toBeVisible()
 }
 
 function descriptionEditor(page: Page) {
@@ -127,12 +115,14 @@ test.describe('Cards — markdown descriptions', () => {
         await openCard(page, CARD_TITLE)
         await typeDescription(page, 'Persisted prose.')
 
-        // In-app rather than a reload: the description editor mounts only once
-        // the Yjs room is ready, so a cold reload races the reconnect against
-        // the card opening and this would be timing the socket.
-        await navigateToPackage(page, 'mail')
+        // Leaving cards and coming back proves this was WRITTEN, not just held in
+        // optimistic client state: the board screen unmounts and everything below
+        // is re-read from the server on the way back in. page.reload() would prove
+        // the same by tearing down the whole SPA — the hard navigation this suite
+        // forbids (it cancels in-flight chunk loads and is a CI flake source).
+        await navigateToPackage(page, 'settings')
         await navigateToPackage(page, 'cards')
-        await openBoard(page, boardName)
+        await openBoard(page, boardName, CARD_TITLE)
         await openCard(page, CARD_TITLE)
 
         // Reopened: a card shows MARKDOWN until someone edits it, so the

@@ -1,7 +1,12 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { createInvitedUser, login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard } from './helpers'
+import {
+    login,
+    navigateToPackage,
+    signInAsCollaborator,
+    TEST_COLLABORATOR_EMAIL,
+} from '@tinycld/core/e2e-helpers'
+import { addCard, closeCardPeek, createBoard, openBoard, openCard, shareBoard } from './helpers'
 
 // Editing your own comments in place: clicking the body (or the hover Edit
 // action) swaps the rendered markdown for the rich editor with the formatting
@@ -17,16 +22,6 @@ async function freshBoard(page: Page, label: string): Promise<string> {
     const name = `commentedit-${label}-${Date.now()}-${run++}`
     await createBoard(page, name)
     return name
-}
-
-async function openBoard(page: Page, name: string) {
-    await page.getByText(name, { exact: true }).first().click()
-    await expect(boardCard(page, CARD_TITLE)).toBeVisible()
-}
-
-async function openCard(page: Page, title: string) {
-    await boardCard(page, title).click()
-    await expect(page.getByText('Description', { exact: true })).toBeVisible()
 }
 
 function composer(page: Page) {
@@ -99,10 +94,12 @@ test.describe('Cards — editing comments', () => {
         await expect(page.getByText('Second take, considered.')).toBeVisible()
         await expect(page.getByText('First take.', { exact: true })).toHaveCount(0)
 
-        // Leaving and coming back proves the SOURCE was written, not just
-        // optimistic state. In-app rather than a reload, which would re-race
-        // the realtime reconnect.
-        await navigateToPackage(page, 'mail')
+        // Leaving cards and coming back proves this was WRITTEN, not just held in
+        // optimistic client state: the board screen unmounts and everything below
+        // is re-read from the server on the way back in. page.reload() would prove
+        // the same by tearing down the whole SPA — the hard navigation this suite
+        // forbids (it cancels in-flight chunk loads and is a CI flake source).
+        await navigateToPackage(page, 'settings')
         await navigateToPackage(page, 'cards')
         await openCard(page, CARD_TITLE)
         await expect(page.getByText('Second take, considered.')).toBeVisible()
@@ -256,38 +253,41 @@ test.describe('Cards — editing comments', () => {
         await page.keyboard.press('ControlOrMeta+Enter')
 
         await expect(page.getByText('Better phrasing.')).toBeVisible()
-        // The marker keys on the server's updated/created timestamps, so
-        // unlike the body (optimistic, instant) it appears only when the
-        // PATCH response lands back. The client applies that response in
-        // ~2ms (measured); the wait is for the round-trip itself, which is
-        // why this carries the suite's extended window for server-dependent
-        // assertions rather than the 5s default for locally-rendered state.
-        await expect(page.getByText('(edited)')).toBeVisible({ timeout: 15_000 })
+        // The marker keys on the explicit `edited_at` stamp, which the update
+        // mutation sets optimistically and the server hook (comment_edited.go)
+        // owns authoritatively. This suite once carried its only deliberate
+        // sleep here: the marker used to be INFERRED from `updated != created`,
+        // so a create and an edit reaching the server inside one autodate
+        // millisecond read as never-edited — permanently, however long the
+        // wait. The stamp records intent at write time, so nothing here needs
+        // to out-wait a clock.
+        await expect(page.getByText('(edited)')).toBeVisible()
+
+        // And it PERSISTED: leave cards and come back, so the marker below is
+        // re-read from the server's stamp rather than the optimistic one.
+        await navigateToPackage(page, 'settings')
+        await navigateToPackage(page, 'cards')
+        await openCard(page, CARD_TITLE)
+        await expect(page.getByText('Better phrasing.')).toBeVisible()
+        await expect(page.getByText('(edited)')).toBeVisible()
     })
 
     test('only your own comments offer the edit affordance', async ({ page }) => {
-        test.slow()
         const board = await freshBoard(page, 'gate')
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
         await postComment(page, 'Owner remark.')
-        await page.keyboard.press('Escape')
+        await closeCardPeek(page)
 
-        const {
-            user: bob,
-            inviteePage: bobPage,
-            close,
-        } = await createInvitedUser(page, 'commentedit')
+        await shareBoard(page, board, TEST_COLLABORATOR_EMAIL, 'Commentor')
+
+        // Share BEFORE signing the collaborator in — see shareBoard's doc: a
+        // session whose cards screen synced before the grant is never told the
+        // board exists.
+        const { page: bobPage, close } = await signInAsCollaborator(page)
         try {
-            // createInvitedUser drives the owner's page through the admin
-            // screens; bring it back before reaching for the Share button.
-            await login(page)
-            await navigateToPackage(page, 'cards')
-            await openBoard(page, board)
-            await shareBoard(page, board, bob.email, 'Commentor')
-
             await navigateToPackage(bobPage, 'cards')
-            await openBoard(bobPage, board)
+            await openBoard(bobPage, board, CARD_TITLE)
             await openCard(bobPage, CARD_TITLE)
             await postComment(bobPage, 'Commentor reply.')
             await expect(bobPage.getByText('Commentor reply.', { exact: true })).toBeVisible()
@@ -305,21 +305,3 @@ test.describe('Cards — editing comments', () => {
         }
     })
 })
-
-async function shareBoard(
-    page: Page,
-    boardName: string,
-    email: string,
-    role: 'Editor' | 'Viewer' | 'Commentor'
-) {
-    await page.getByRole('button', { name: 'Share board' }).click()
-    await expect(page.getByText(`Share “${boardName}”`)).toBeVisible()
-    await page.getByRole('button', { name: 'Add people' }).click()
-    await page.getByRole('button', { name: new RegExp(`^${role} — `) }).click()
-    await page.getByPlaceholder('Search by name or email').fill(email)
-    await expect(page.getByText(email)).toBeVisible()
-    await page.getByRole('button', { name: 'Add', exact: true }).click()
-    await expect(page.getByPlaceholder('Search by name or email')).not.toBeVisible()
-    await page.getByRole('button', { name: 'Done', exact: true }).click()
-    await expect(page.getByRole('button', { name: 'Done', exact: true })).toHaveCount(0)
-}

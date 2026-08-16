@@ -28,6 +28,13 @@ type Role = 'owner' | 'editor' | 'commentor' | 'viewer'
 interface CommentSeed {
     author: Who
     body: string
+    /**
+     * When set, the comment is created with `body` and then updated to this —
+     * a real edit through the server, so comment_edited.go stamps `edited_at`
+     * and a fresh DB demos the "(edited)" marker without hand-writing the
+     * server-owned column.
+     */
+    editedBody?: string
     replies?: { author: Who; body: string }[]
 }
 
@@ -221,7 +228,8 @@ const BOARDS: BoardSeed[] = [
                         comments: [
                             {
                                 author: 'me',
-                                body: 'Landed — moves are a single-row update now.',
+                                body: 'Landed — moves are a single-line update now.',
+                                editedBody: 'Landed — moves are a single-row update now.',
                             },
                         ],
                     },
@@ -414,6 +422,11 @@ async function seedBoard(
                     body: comment.body,
                     parent: '',
                 })
+                if (comment.editedBody) {
+                    await pb.collection('cards_comments').update(top.id, {
+                        body: comment.editedBody,
+                    })
+                }
                 for (const reply of comment.replies ?? []) {
                     await pb.collection('cards_comments').create({
                         card: cardRecord.id,

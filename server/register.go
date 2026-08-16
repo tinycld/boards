@@ -99,12 +99,21 @@ func registerShared(app *pocketbase.PocketBase) {
 		offboard.RegisterReassignable(ref)
 	}
 
+	// Personal automation rules on cards resolve their owner through board
+	// membership; created_by would scope them to whoever made the card, so a
+	// colleague moving your card would never fire your rule.
+	registerAutomation()
+
 	registerBoardCounters(app)
 	// Unrelated to the counters above despite the adjacency, and the opposite
 	// of them in every invariant: this one is a monotonic sequence, it runs
 	// before the row lands, and it FAILS the write when it cannot allocate.
 	// See card_number.go.
 	registerCardNumbers(app)
+	// edited_at on comments is server-owned the same way `number` is: the
+	// hook stamps it when the body actually changes and discards any
+	// client-supplied value when it does not. See comment_edited.go.
+	registerCommentEditedAt(app)
 	registerMemberLastOwnerGuard(app)
 	registerRealtime(app)
 
