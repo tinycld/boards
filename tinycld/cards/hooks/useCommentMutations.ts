@@ -1,24 +1,8 @@
-import type { Transaction } from '@tanstack/react-db'
 import { useAuth } from '@tinycld/core/lib/auth'
 import { mutation, useMutation } from '@tinycld/core/lib/mutations'
-import { stores, useStore } from '@tinycld/core/lib/pocketbase'
+import { useStore } from '@tinycld/core/lib/pocketbase'
 import { newRecordId } from 'pbtsdb/core'
 import { buildCommentMentionRows } from '../lib/mention-text'
-
-// `comment_mentions` is the SHARED mentions table, and it is registered by
-// @tinycld/drive (which owns its migration), not by core. A workspace can
-// install cards without drive — so this is looked up on the store map rather
-// than through `useStore('comment_mentions')`, which assumes the collection is
-// there. Absent, mentions simply do not notify: comments still post, the token
-// still renders as a name, and nothing throws. That is the lean-shell
-// guarantee, and it is why cards declares no dependency on drive.
-//
-// Deliberately NOT a hard import of @tinycld/drive: that would make the
-// dependency load-bearing at compile time (CLAUDE.md, "Cross-package coupling").
-const mentionsCollection = () =>
-    (stores as Record<string, unknown>).comment_mentions as
-        | { insert: (row: Record<string, unknown>) => Transaction<Record<string, unknown>> }
-        | undefined
 
 export interface CreateCommentInput {
     body: string
@@ -44,7 +28,13 @@ export function useCommentMutations(cardId: string, projectId: string) {
     // session and the affordances that would invoke them are already gated
     // off. Throwing here made merely RENDERING a shared board an error.
     const { user } = useAuth({ throwIfAnon: false })
-    const [commentsCollection] = useStore('cards_comments')
+    // `comment_mentions` is the SHARED mentions table — core's, on every
+    // assembly (core creates it in 1985000003 and registers the store
+    // unconditionally). This was a soft lookup on the raw store map while the
+    // registration was drive's, and the fallback's "mentions simply do not
+    // notify" degradation is exactly what cards' single-package CI caught
+    // running for real: comments posted, tokens rendered, nobody notified.
+    const [commentsCollection, mentionsCollection] = useStore('cards_comments', 'comment_mentions')
 
     const createComment = useMutation<string, Error, CreateCommentInput>({
         mutationKey: ['cards', 'comment', 'create'],
@@ -77,17 +67,14 @@ export function useCommentMutations(cardId: string, projectId: string) {
             // Self-mentions are dropped by buildCommentMentionRows: the picker
             // already excludes you, so a self-mention only arrives from a
             // hand-typed token — and the Go hook drops it again server-side.
-            const mentions = mentionsCollection()
-            if (mentions) {
-                const rows = buildCommentMentionRows({
-                    body: input.body,
-                    commentId,
-                    cardId,
-                    authorId: user?.id ?? '',
-                })
-                for (const row of rows) {
-                    yield mentions.insert({ id: newRecordId(), ...row })
-                }
+            const rows = buildCommentMentionRows({
+                body: input.body,
+                commentId,
+                cardId,
+                authorId: user?.id ?? '',
+            })
+            for (const row of rows) {
+                yield mentionsCollection.insert({ id: newRecordId(), ...row })
             }
             return commentId
         }),

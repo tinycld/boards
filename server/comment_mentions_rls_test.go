@@ -2,11 +2,13 @@ package cards
 
 // RLS suite for cards' branch of the shared `comment_mentions` createRule.
 //
-// The table is created by @tinycld/drive (1781000000), generalized to a
-// polymorphic target by core (1985000002), and authorized for cards by
-// cards/pb-migrations/1986000000. Those three files compose a rule NO single
-// package can read in isolation, which is exactly why it needs executing
-// rather than reading: the composition is the thing that can break.
+// The table is CORE's (1985000003 creates it when no package has), and cards'
+// 1986000000 appends the cards branch to its createRule. This suite therefore
+// stages exactly what a cards-only assembly boots with: core's mentions
+// migrations plus cards' own — no sibling. Drive's own contribution (its
+// drive_item column and rule branch) is drive's to test in drive's repo; a
+// feature package may depend on core and nothing else, and replaying another
+// sibling's migrations here was that forbidden dependency in test form.
 //
 // Why the branch lives in cards rather than core, since that will look
 // misplaced otherwise: PocketBase's rule validator resolves every
@@ -38,8 +40,8 @@ import (
 	"tinycld.org/core/rlstest"
 )
 
-// mentionsEnv is the cards fixture plus drive and the core generalization, so
-// the shared comment_mentions table exists to authorize against.
+// mentionsEnv is the cards fixture plus core's mentions migrations, so the
+// shared comment_mentions table exists to authorize against.
 type mentionsEnv struct {
 	*cardsEnv
 	// The user being mentioned. Any board member will do — the rule gates the
@@ -47,20 +49,27 @@ type mentionsEnv struct {
 	target *core.Record
 }
 
-// coreGeneralizeDir stages just the core generalizing migration in a temp dir.
-// Core's full migration directory is NOT replayed: tests.NewTestApp already
-// ships a users collection and replaying core collides with it (1820000000).
-func coreGeneralizeDir(t *testing.T) string {
+// coreMentionsDir stages core's two mentions migrations in a temp dir: the
+// generalization (a no-op here, kept so the staged set matches what a real
+// boot applies) and the create-if-absent that owns the table on any assembly
+// drive hasn't reached first. Core's full migration directory is NOT
+// replayed: tests.NewTestApp already ships a users collection and replaying
+// core collides with it (1820000000).
+func coreMentionsDir(t *testing.T) string {
 	t.Helper()
-	const name = "1985000002_generalize_comment_mentions_target.js"
 	src := rlstest.MigrationsDir(t, "../../tinycld/core/server/pb_migrations")
-	body, err := os.ReadFile(filepath.Join(src, name))
-	if err != nil {
-		t.Fatalf("read %s: %v", name, err)
-	}
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, name), body, 0o644); err != nil {
-		t.Fatalf("stage %s: %v", name, err)
+	for _, name := range []string{
+		"1985000002_generalize_comment_mentions_target.js",
+		"1985000003_create_comment_mentions_if_absent.js",
+	} {
+		body, err := os.ReadFile(filepath.Join(src, name))
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), body, 0o644); err != nil {
+			t.Fatalf("stage %s: %v", name, err)
+		}
 	}
 	return dir
 }
@@ -86,20 +95,19 @@ func setupMentionsEnv(t *testing.T) *mentionsEnv {
 		t.Fatalf("add users.role/users.disabled: %v", err)
 	}
 
-	// Applied in the order a real boot reaches them, which is filename order
-	// across the flat directory:
+	// Applied in the order a cards-only boot reaches them, which is filename
+	// order across the flat directory:
 	//
-	//	drive 1781000000  (creates comment_mentions)
-	//	core  1985000002  (adds target_collection / target_record)
-	//	cards 1986000000  (appends the branch that READS those columns)
+	//	core  1985000002  (generalize — no-op with no table yet)
+	//	core  1985000003  (creates comment_mentions, core-owned shape)
+	//	cards 1986000000  (appends the branch that READS its columns)
 	//
 	// That ordering is a REQUIREMENT, not an observation: cards' file is
 	// numbered 1986000000 precisely so it sorts after core's. Applying these
 	// dirs in dependency order here would hide a mis-numbering — this suite
 	// happens to agree with filename order, and must keep agreeing.
 	rlstest.Apply(t, app,
-		rlstest.MigrationsDir(t, "../../drive/pb-migrations"),
-		coreGeneralizeDir(t),
+		coreMentionsDir(t),
 		rlstest.MigrationsDir(t, "../pb-migrations"),
 	)
 
@@ -147,12 +155,11 @@ func postMention(t *testing.T, env *mentionsEnv, token string, want int) {
 		want:   want,
 	}
 	if want == http.StatusOK {
-		// Assert the row landed with the CARDS target and an EMPTY drive_item.
-		// Status alone would pass even if the row had somehow been coerced back
-		// into drive's shape, which is the thing the generalization changed.
+		// Assert the row landed with the CARDS target. Status alone would
+		// pass even if the row had somehow been coerced into another shape.
 		r.content = []string{
 			`"target_collection":"cards_cards"`,
-			`"drive_item":""`,
+			`"target_record":"` + env.card.Id + `"`,
 		}
 	}
 	r.run(t, env.cardsEnv)
@@ -216,22 +223,54 @@ func TestCommentMentionsRLS_UnknownCardRefused(t *testing.T) {
 	}.run(t, env.cardsEnv)
 }
 
-// The composition itself: drive's branch must survive cards appending to it.
-// A migration that SET the rule instead of appending would pass every test
-// above and still have silently broken drive's mentions.
-func TestCommentMentionsRLS_DriveBranchSurvives(t *testing.T) {
-	env := setupMentionsEnv(t)
-	mentions, err := env.app.FindCollectionByNameOrId("comment_mentions")
+// The append semantics: another package's pre-existing branch must survive
+// cards appending its own. A migration that SET the rule instead of appending
+// would pass every test above and still have silently broken every other
+// package's mentions. The prior branch is SYNTHETIC (parse-safe against core
+// collections alone) rather than a replay of any real sibling's — proving the
+// contract without depending on which siblings this workspace has.
+func TestCommentMentionsRLS_AppendPreservesExistingBranch(t *testing.T) {
+	app := rlstest.NewApp(t)
+
+	users, err := app.FindCollectionByNameOrId("users")
+	if err != nil {
+		t.Fatalf("find users: %v", err)
+	}
+	users.Fields.Add(&core.SelectField{
+		Name: "role", Required: false, MaxSelect: 1,
+		Values: []string{"owner", "admin", "member", "guest"},
+	})
+	users.Fields.Add(&core.BoolField{Name: "disabled"})
+	if err := app.Save(users); err != nil {
+		t.Fatalf("add users.role/users.disabled: %v", err)
+	}
+
+	rlstest.Apply(t, app, coreMentionsDir(t))
+
+	const priorBranch = `(target_collection = "synthetic_pkg" && @request.auth.id != "")`
+	mentions, err := app.FindCollectionByNameOrId("comment_mentions")
 	if err != nil {
 		t.Fatalf("find comment_mentions: %v", err)
+	}
+	prior := priorBranch
+	mentions.CreateRule = &prior
+	if err := app.Save(mentions); err != nil {
+		t.Fatalf("plant prior branch: %v", err)
+	}
+
+	rlstest.Apply(t, app, rlstest.MigrationsDir(t, "../pb-migrations"))
+
+	mentions, err = app.FindCollectionByNameOrId("comment_mentions")
+	if err != nil {
+		t.Fatalf("re-find comment_mentions: %v", err)
 	}
 	if mentions.CreateRule == nil {
 		t.Fatal("createRule is nil — the table would be superuser-only")
 	}
 	rule := *mentions.CreateRule
 	for _, want := range []string{
-		"drive_shares_via_item",             // drive's branch
-		`target_collection = "cards_cards"`, // cards' branch
+		`target_collection = "synthetic_pkg"`, // the pre-existing branch
+		`target_collection = "cards_cards"`,   // cards' branch
 	} {
 		if !containsSub(rule, want) {
 			t.Errorf("createRule lost %q.\nrule = %s", want, rule)
@@ -239,9 +278,10 @@ func TestCommentMentionsRLS_DriveBranchSurvives(t *testing.T) {
 	}
 }
 
-// The generalization itself: drive_item must no longer be required, or no
-// cards row could ever be inserted.
-func TestCommentMentionsRLS_DriveItemRelaxed(t *testing.T) {
+// The core-owned shape this suite boots with: the polymorphic target columns
+// exist, and no sibling's fields do — a drive_item here would mean the staged
+// set regressed into replaying a sibling.
+func TestCommentMentionsRLS_CoreOwnedShape(t *testing.T) {
 	env := setupMentionsEnv(t)
 	mentions, err := env.app.FindCollectionByNameOrId("comment_mentions")
 	if err != nil {
@@ -252,12 +292,8 @@ func TestCommentMentionsRLS_DriveItemRelaxed(t *testing.T) {
 			t.Errorf("core migration did not add %q", name)
 		}
 	}
-	di := mentions.Fields.GetByName("drive_item")
-	if di == nil {
-		t.Fatal("drive_item vanished — drive's own inserts would break")
-	}
-	if r, ok := di.(interface{ IsRequired() bool }); ok && r.IsRequired() {
-		t.Error("drive_item is still required — the core migration did not relax it")
+	if mentions.Fields.GetByName("drive_item") != nil {
+		t.Error("drive_item present — a sibling's migrations leaked into the staged set")
 	}
 }
 

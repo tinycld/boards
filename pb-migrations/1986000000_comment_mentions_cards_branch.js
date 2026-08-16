@@ -2,10 +2,12 @@
 //
 // Authorize cards mentions on the shared `comment_mentions` table.
 //
-// The table is created by @tinycld/drive (1781000000) and generalized by core
-// (1985000002), which adds `target_collection` / `target_record` and relaxes
-// `drive_item` to optional. Neither of those files can authorize a cards
-// mention, and the reason is a hard constraint rather than a preference:
+// The table is core's: 1985000003 creates it (generalized shape, no rule
+// branches) on any assembly where no package has yet, and on drive-first
+// assemblies drive's 1781000000 creates it and core's 1985000002 generalizes
+// it — either way the columns this rule reads exist by the time this file
+// runs. Core cannot authorize a cards mention itself, and the reason is a
+// hard constraint rather than a preference:
 // PocketBase's rule validator resolves every `@collection.<name>` reference
 // eagerly when the rule is SAVED and rejects the whole expression if one is
 // missing — including an OR-ed rule where only a single branch is absent (it
@@ -53,9 +55,9 @@ migrate(
         try {
             mentions = app.findCollectionByNameOrId('comment_mentions')
         } catch {
-            // No @tinycld/drive in this workspace, so the shared table does not
-            // exist. Cards mentions are simply unavailable until it does —
-            // the client-side insert is gated on the collection being present.
+            // Unreachable on a current assembly — core's 1985000003 creates
+            // the table when no package has — but kept so this file stays
+            // order-independent of core's, per the append-only doctrine.
             return
         }
 

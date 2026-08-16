@@ -1,6 +1,12 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
-import { createInvitedUser, login, navigateToPackage } from '@tinycld/core/e2e-helpers'
+import {
+    createInvitedUser,
+    login,
+    navigateToPackage,
+    signInAsCollaborator,
+    TEST_COLLABORATOR_EMAIL,
+} from '@tinycld/core/e2e-helpers'
 import { addCard, boardCard, createBoard } from './helpers'
 
 // @mentions, end to end through the UI.
@@ -12,9 +18,11 @@ import { addCard, boardCard, createBoard } from './helpers'
 // picking one writes the token, and that a second human's bell actually
 // increments. That is the whole point of this file.
 //
-// Two sessions: the owner mentions, the invitee receives. The invitee comes
-// from createInvitedUser (the real invite flow) in its own browser context, so
-// the two never share auth state.
+// Two sessions: the owner mentions, the other person receives, each in its
+// own browser context so the two never share auth state. The notify test uses
+// the seeded collaborator (the invite arc's cost blew the CI budget); the
+// remaining tests still mint an invited user where a THROWAWAY account keeps
+// the assertions independent of the shared collaborator's accumulated state.
 //
 // This suite runs on web. The native picker exists too, but its popover is
 // drawn by the host over a WebView, which Playwright cannot reach — so the
@@ -76,6 +84,14 @@ function bell(page: Page) {
     return page.getByLabel(/^Notifications/)
 }
 
+/** The unread count the bell's label carries, 0 when it reads bare
+ *  "Notifications". */
+async function unreadCount(page: Page): Promise<number> {
+    const label = (await bell(page).getAttribute('aria-label')) ?? ''
+    const match = label.match(/\((\d+) unread\)/)
+    return match ? Number(match[1]) : 0
+}
+
 async function addMemberToBoard(page: Page, boardName: string, email: string, role: string) {
     await page.getByRole('button', { name: 'Share board' }).click()
     await expect(page.getByText(`Share “${boardName}”`)).toBeVisible()
@@ -98,21 +114,24 @@ test.describe('card mentions', () => {
         const boardName = `mention-${Date.now()}`
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
+        await openBoard(page, boardName)
+        await addMemberToBoard(page, boardName, TEST_COLLABORATOR_EMAIL, 'Editor')
 
-        const { user: bob, inviteePage: bobPage, close } = await createInvitedUser(page, 'cardment')
+        // The mentioned person is the SEEDED collaborator, signed in AFTER the
+        // share (see shareBoard's doc for why the order matters), not a
+        // createInvitedUser account: the full invite arc plus this test's own
+        // work blew the CI budget — the exact cost class the fixture exists to
+        // remove — and the flow under test is the mention, not the invite.
+        const { page: bobPage, close } = await signInAsCollaborator(page)
         try {
-            // The invite flow left `page` on settings; return to the board.
-            await login(page)
-            await navigateToPackage(page, 'cards')
-            await openBoard(page, boardName)
-            await addMemberToBoard(page, boardName, bob.email, 'Editor')
-
-            // Bob's starting point, so the assertion below measures a CHANGE
-            // rather than any pre-existing notification.
             await navigateToPackage(bobPage, 'cards')
             await expect(bell(bobPage)).toBeVisible()
+            // The account is shared across the run and accumulates
+            // notifications, so the assertion below measures a CHANGE from
+            // this baseline rather than "any unread exists" — which would
+            // pass on a leftover.
+            const baseline = await unreadCount(bobPage)
 
-            await openBoard(page, boardName)
             await openCard(page, CARD_TITLE)
 
             // --- The picker ---
@@ -122,9 +141,9 @@ test.describe('card mentions', () => {
             await page.keyboard.type('please review ', { delay: 20 })
             await page.keyboard.type('@', { delay: 20 })
 
-            // The pool is BOARD MEMBERS, so bob is offered...
+            // The pool is BOARD MEMBERS, so the collaborator is offered...
             await expect(popover(page)).toBeVisible()
-            await expect(popover(page).getByText(bob.email)).toBeVisible()
+            await expect(popover(page).getByText(TEST_COLLABORATOR_EMAIL)).toBeVisible()
 
             // ...and the author is not. Mentioning yourself is noise, and the
             // picker excluding you is the client half of a rule the server
@@ -137,7 +156,7 @@ test.describe('card mentions', () => {
             // Pick by clicking rather than Enter: the pointer path is the one
             // a popover can get wrong (the editor blurs on mouse-down), and
             // the keyboard path is covered by the trigger's own handler.
-            await popover(page).getByText(bob.email).click()
+            await popover(page).getByText(TEST_COLLABORATOR_EMAIL).click()
             await expect(popover(page)).toHaveCount(0)
 
             // The token is written, not the display name — the wire format is
@@ -157,14 +176,13 @@ test.describe('card mentions', () => {
             // prefers name over email.
             await expect(page.getByText(/please review @\S/)).toBeVisible()
 
-            // --- Bob is notified ---
-            await expect(async () => {
-                await bobPage.reload()
-                await expect(bell(bobPage)).toHaveAttribute(
-                    'aria-label',
-                    /Notifications \(\d+ unread\)/
-                )
-            }).toPass({ timeout: 20_000 })
+            // --- The collaborator is notified, LIVE ---
+            // No reload (banned in this suite): notifications are a pbtsdb
+            // store, so the row the mention's notify hook writes arrives over
+            // the existing realtime subscription and the bell re-renders.
+            await expect
+                .poll(() => unreadCount(bobPage), { timeout: 20_000 })
+                .toBeGreaterThan(baseline)
         } finally {
             await close()
         }
@@ -200,7 +218,21 @@ test.describe('card mentions', () => {
             const editor = await openDescription(page)
             await expect(editor).toBeVisible()
             await editor.click()
-            await page.keyboard.type('owner is ', { delay: 20 })
+            // Retried until the prose actually holds: the description editor
+            // accepts input while the Yjs room is still latching, and content
+            // typed pre-latch dies when the bound editor swaps in (the
+            // card-description-images spec documents the same race). Typing
+            // the '@' before the prefix survived would hang the popover flow
+            // on an empty editor.
+            await expect(async () => {
+                if (!(await descriptionText(page)).includes('owner is ')) {
+                    await page.keyboard.press('ControlOrMeta+A')
+                    await page.keyboard.press('Backspace')
+                    await page.keyboard.type('owner is ', { delay: 20 })
+                }
+                expect(await descriptionText(page)).toContain('owner is')
+            }).toPass({ timeout: 15_000 })
+            await page.keyboard.press('ControlOrMeta+End')
             await page.keyboard.type('@', { delay: 20 })
 
             await expect(popover(page)).toBeVisible()
@@ -216,7 +248,9 @@ test.describe('card mentions', () => {
             // In-app rather than page.reload(): the description editor mounts
             // only once the Yjs room is ready, so a cold reload would race the
             // reconnect against the card opening — see card-description.spec.
-            await navigateToPackage(page, 'mail')
+            // Via settings, not another package: CI assembles cards alone, so
+            // a mail rail link never exists there.
+            await navigateToPackage(page, 'settings')
             await navigateToPackage(page, 'cards')
             await openBoard(page, boardName)
             await openCard(page, CARD_TITLE)
