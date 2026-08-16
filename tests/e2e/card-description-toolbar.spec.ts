@@ -307,8 +307,16 @@ test.describe('Cards — description formatting toolbar', () => {
 
         const editor = await openDescription(page)
         await editor.click()
-        for (let i = 0; i < 40; i++) {
-            await page.keyboard.type(`line ${i} of filler\n`, { delay: 2 })
+        // The filler exists ONLY to make the panel scroll — its content is
+        // irrelevant, so it is as short as it can be. Every character is a
+        // full ProseMirror+Yjs transaction, and a contended CI runner types
+        // ~25 of them a second: the previous 40×"line N of filler" (~680
+        // characters) burned the entire 30s test budget mid-loop, timing out
+        // at line 37 with the assertions never reached. 32 two-character
+        // lines (~96 keystrokes) still overfills the panel by a comfortable
+        // margin.
+        for (let i = 0; i < 32; i++) {
+            await page.keyboard.type('x\n', { delay: 2 })
         }
 
         await expect(boldButton(page)).toBeVisible()
