@@ -331,7 +331,10 @@ export function CommentEditor({
                         // nothing, leaving the read view holding the stashed
                         // draft — ⌘↩ worked, the button did not.
                         {...(Platform.OS === 'web'
-                            ? { onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault() }
+                            ? {
+                                  onMouseDown: (e: { preventDefault: () => void }) =>
+                                      e.preventDefault(),
+                              }
                             : {})}
                     >
                         <ButtonText>{isPending ? 'Sending…' : 'Send'}</ButtonText>
