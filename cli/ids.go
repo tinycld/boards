@@ -40,22 +40,22 @@ type list struct {
 }
 
 type card struct {
-	ID          string   `json:"id"`
-	Project     string   `json:"project"`
-	List        string   `json:"list"`
-	Position    string   `json:"position"`
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
+	ID          string `json:"id"`
+	Project     string `json:"project"`
+	List        string `json:"list"`
+	Position    string `json:"position"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
 	// The card half of a key (the 123 in OTTER-123). Assigned by
 	// server/card_number.go — read-only here, exactly like the counters below.
 	// The CLI must never write one: the hook overwrites whatever a body
 	// carries, so a written value is discarded.
-	Number      int      `json:"number"`
-	Due         string   `json:"due"`
-	Assignees   []string `json:"assignees"`
-	Labels      []string `json:"labels"`
-	Archived    bool     `json:"archived"`
-	CreatedBy   string   `json:"created_by"`
+	Number    int      `json:"number"`
+	Due       string   `json:"due"`
+	Assignees []string `json:"assignees"`
+	Labels    []string `json:"labels"`
+	Archived  bool     `json:"archived"`
+	CreatedBy string   `json:"created_by"`
 	// Who to ask about the card, as opposed to who inserted it (CreatedBy).
 	// Writable, unlike Number above: it defaults to the creator but exists
 	// precisely so it can be pointed at someone else.
