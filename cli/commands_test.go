@@ -394,6 +394,64 @@ func TestCardViewFallsBackToCreator(t *testing.T) {
 	}
 }
 
+// Every other field in `card view` renders a name; the list used to render a
+// raw foreign key, so one row read `lstTodo` among human text. `board view`
+// shows the same field resolved, so the two commands disagreed about what a
+// list is called.
+func TestCardViewShowsTheListName(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	out, _, err := runCmd(t, c, "cards", "card", "view", "crdCopy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "To do") {
+		t.Errorf("card view did not resolve the list name:\n%s", out)
+	}
+	if strings.Contains(out, "lstTodo") {
+		t.Errorf("card view leaked the raw list id:\n%s", out)
+	}
+}
+
+// --json is the scripting surface, so it keeps the id the record actually
+// stores. Resolving the name for the table must not rewrite the payload.
+func TestCardViewJSONKeepsTheListID(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	out, _, err := runCmd(t, c, "--json", "cards", "card", "view", "crdCopy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var detail struct {
+		List string `json:"list"`
+	}
+	if err := json.Unmarshal([]byte(out), &detail); err != nil {
+		t.Fatalf("--json is not stable: %v\n%s", err, out)
+	}
+	if detail.List != "lstTodo" {
+		t.Errorf("--json list = %q, want the raw id lstTodo", detail.List)
+	}
+}
+
+// A list that cannot be read must not blank the row: the id is worse than a
+// name but far better than nothing, and it is still enough to identify the
+// list by hand.
+func TestCardViewFallsBackToTheListIDWhenUnreadable(t *testing.T) {
+	f := board(t)
+	delete(f.lists, "lstTodo")
+	_, c := f.serve()
+
+	out, _, err := runCmd(t, c, "cards", "card", "view", "crdCopy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "lstTodo") {
+		t.Errorf("an unresolvable list must still print its id:\n%s", out)
+	}
+}
+
 func TestCardArchiveAndRestore(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()

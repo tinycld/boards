@@ -99,9 +99,22 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 				cardKey = formatCardKey(board.Slug, cd.Number)
 			}
 
+			// The list is a foreign key, and every other field in the table
+			// below renders a name. Printing the raw id here left one row
+			// reading `c7fehmjobre6hr9` among human text — and `board view`
+			// shows the same field resolved, so the two commands disagreed
+			// about what a list is called. Fetched after the JSON
+			// short-circuit: --json carries the id, as a script wants.
+			listName := cd.List
+			if lists, listErr := listsByID(ctx, c, []string{cd.List}); listErr == nil {
+				if l, ok := lists[cd.List]; ok && l.Name != "" {
+					listName = l.Name
+				}
+			}
+
 			rows := [][]string{
 				{"Title", cd.Title},
-				{"List", cd.List},
+				{"List", listName},
 				{"Due", dueCell(cd)},
 				{"Assignees", names(cd.Assignees, users)},
 				{"Labels", labelNames(cd.Labels, labels)},
@@ -488,6 +501,10 @@ func parseDue(v string) (string, error) {
 
 func labelsByID(ctx context.Context, c *client.Client, ids []string) (map[string]label, error) {
 	return recordsByID(ctx, c, labelsCollection, ids, func(l label) string { return l.ID })
+}
+
+func listsByID(ctx context.Context, c *client.Client, ids []string) (map[string]list, error) {
+	return recordsByID(ctx, c, listsCollection, ids, func(l list) string { return l.ID })
 }
 
 // labelNames renders a card's labels. An id with no readable row is DROPPED

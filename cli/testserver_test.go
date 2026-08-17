@@ -169,6 +169,24 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 	// --- lists --------------------------------------------------------------
 	mux.HandleFunc("GET /api/collections/cards_lists/records", func(w http.ResponseWriter, r *http.Request) {
 		filter := r.URL.Query().Get("filter")
+		// `card view` resolves its one list by id so the table can print a
+		// name instead of a raw foreign key, so this collection is read both
+		// ways: by project (the board's columns, rank-sorted) and by id.
+		if reIDList.MatchString(filter) {
+			want := map[string]bool{}
+			for _, m := range reIDTerm.FindAllStringSubmatch(filter, -1) {
+				want[unquote(m[1])] = true
+			}
+			var out []list
+			for _, l := range f.lists {
+				if want[l.ID] {
+					out = append(out, *l)
+				}
+			}
+			sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+			listResponse(w, out)
+			return
+		}
 		m := reProjectEq.FindStringSubmatch(filter)
 		if m == nil {
 			f.t.Errorf("unsupported cards_lists filter: %q", filter)
