@@ -58,7 +58,16 @@ async function attachViaChooser(page: Page, trigger: Locator, name: string) {
     const chooser = await chooserPromise
     await page.evaluate(() => window.dispatchEvent(new Event('blur')))
     await page.evaluate(() => window.dispatchEvent(new Event('focus')))
-    await page.waitForTimeout(250)
+    // The blur/focus pair mimics the OS file dialog opening and closing, which
+    // is what the real picker does around a chooser. Nothing in the app listens
+    // for those events, so there is no app-side signal to await — but the
+    // chooser must be settled before setFiles, and a wall-clock sleep is both
+    // slower than needed and flaky under load. Waiting for the renderer to go
+    // idle (one animation frame after the event loop drains) is the condition
+    // that actually matters.
+    await page.evaluate(
+        () => new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)))
+    )
     await chooser.setFiles({
         name,
         mimeType: 'image/png',

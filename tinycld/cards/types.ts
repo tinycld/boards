@@ -236,6 +236,17 @@ export interface BoardProject {
      * which is a superset of any one card's `labels`.
      */
     labels: BoardLabel[]
+    /**
+     * Cards whose `list` names a row this client hasn't synced yet. Lists and
+     * cards arrive on independent live queries, so a card can legitimately land
+     * before its list does.
+     *
+     * They are held here rather than dropped: a dropped card is invisible AND
+     * uncounted, which makes a list look empty enough to delete — and deleting
+     * a list cascades its cards. Normally empty, and self-clearing once the
+     * list row arrives.
+     */
+    unplacedCards: BoardCardView[]
 }
 
 /**

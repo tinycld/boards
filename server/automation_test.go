@@ -5,6 +5,8 @@ import (
 
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tests"
+
+	"tinycld.org/core/automation"
 )
 
 // automation_test.go covers cards' two registrations: the board-membership
@@ -153,5 +155,86 @@ func TestCardMovedToDoneList_UnresolvableListFailsClosed(t *testing.T) {
 
 	if cardMovedToDoneList(env.app, card) {
 		t.Error("an unresolvable destination list must not read as completed")
+	}
+}
+
+// moveDestinationAuthorizer is what makes cards:move-card runnable at all: the
+// engine refuses an action whose relation param has no registered authorizer.
+// These cover the two questions the engine's view-rule floor cannot answer —
+// may this owner WRITE the board, and is the destination even on it.
+
+func TestMoveDestination_AllowsAWriterMovingWithinTheBoard(t *testing.T) {
+	env := setupCardsAutomation(t)
+	card := cardsCard(t, env.app, env.project, env.todo, "Ship it", "a", env.owner)
+
+	for _, user := range []*core.Record{env.owner, env.member} {
+		req := automation.ActionRequest{OwnerID: user.Id, Record: card}
+		if err := moveDestinationAuthorizer(env.app, req, env.done.Id); err != nil {
+			t.Errorf("a writer must be able to move a card within its board: %v", err)
+		}
+	}
+}
+
+// A card flung onto another board's list keeps its own `project`, so it matches
+// neither board's query and disappears from both. Any list the OWNER can see
+// would pass the engine's floor, so this has to be checked here.
+func TestMoveDestination_RefusesAListOnAnotherBoard(t *testing.T) {
+	env := setupCardsAutomation(t)
+	card := cardsCard(t, env.app, env.project, env.todo, "Ship it", "a", env.owner)
+
+	// A second board the same user owns — so this is refused for being the
+	// wrong board, not for being invisible.
+	other := cardsProject(t, env.app, "Other board", env.owner)
+	cardsMember(t, env.app, other, env.owner, "owner")
+	otherList := cardsList(t, env.app, other, "Elsewhere", "a")
+
+	req := automation.ActionRequest{OwnerID: env.owner.Id, Record: card}
+	if err := moveDestinationAuthorizer(env.app, req, otherList.Id); err == nil {
+		t.Fatal("a destination on a different board must be refused")
+	}
+}
+
+func TestMoveDestination_RefusesNonWriters(t *testing.T) {
+	env := setupCardsAutomation(t)
+	card := cardsCard(t, env.app, env.project, env.todo, "Ship it", "a", env.owner)
+
+	viewer := cardsUser(t, env.app, "viewer@test.local", "member")
+	cardsMember(t, env.app, env.project, viewer, "viewer")
+	commentor := cardsUser(t, env.app, "commentor@test.local", "member")
+	cardsMember(t, env.app, env.project, commentor, "commentor")
+
+	for _, tc := range []struct {
+		name string
+		user *core.Record
+	}{
+		{"viewer", viewer},
+		{"commentor", commentor},
+		{"outsider", env.outsider},
+	} {
+		req := automation.ActionRequest{OwnerID: tc.user.Id, Record: card}
+		if err := moveDestinationAuthorizer(env.app, req, env.done.Id); err == nil {
+			t.Errorf("%s must not be able to move cards", tc.name)
+		}
+	}
+}
+
+func TestMoveDestination_FailsClosedOnMissingInputs(t *testing.T) {
+	env := setupCardsAutomation(t)
+	card := cardsCard(t, env.app, env.project, env.todo, "Ship it", "a", env.owner)
+
+	cases := map[string]automation.ActionRequest{
+		"no trigger record": {OwnerID: env.owner.Id, Record: nil},
+		"no rule owner":     {OwnerID: "", Record: card},
+	}
+	for name, req := range cases {
+		if err := moveDestinationAuthorizer(env.app, req, env.done.Id); err == nil {
+			t.Errorf("%s must fail closed", name)
+		}
+	}
+
+	// An unresolvable destination is not evidence of permission either.
+	req := automation.ActionRequest{OwnerID: env.owner.Id, Record: card}
+	if err := moveDestinationAuthorizer(env.app, req, "nonexistentlist"); err == nil {
+		t.Error("an unknown destination list must fail closed")
 	}
 }

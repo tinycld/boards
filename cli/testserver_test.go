@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -103,6 +104,8 @@ var (
 	reProjectEq  = regexp.MustCompile(`^project = "((?:[^"\\]|\\.)*)"$`)
 	reListEq     = regexp.MustCompile(`^list = "((?:[^"\\]|\\.)*)"$`)
 	reListActive = regexp.MustCompile(`^list = "((?:[^"\\]|\\.)*)" && archived = false$`)
+	// Card-key lookup: getCard resolves OTTER-12 to a board id + number.
+	reCardByNumber = regexp.MustCompile(`^project = "((?:[^"\\]|\\.)*)" && number = (\d+)$`)
 
 	// The board view reads a whole board's cards at once rather than one
 	// request per column, so cards_cards accepts a project-scoped filter too
@@ -259,7 +262,12 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 			projectID string
 			onlyLive  bool
 		)
+		byNumber := -1
 		switch {
+		case reCardByNumber.MatchString(filter):
+			m := reCardByNumber.FindStringSubmatch(filter)
+			projectID = unquote(m[1])
+			byNumber, _ = strconv.Atoi(m[2])
 		case reListActive.MatchString(filter):
 			listID, onlyLive = unquote(reListActive.FindStringSubmatch(filter)[1]), true
 		case reListEq.MatchString(filter):
@@ -274,8 +282,11 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 			return
 		}
 		// A project-scoped read spans columns, so it must additionally GROUP by
-		// list — `position` orders only within one column.
-		if projectID != "" {
+		// list — `position` orders only within one column. A by-number lookup
+		// selects one card, so no ordering contract applies.
+		if byNumber >= 0 {
+			// nothing to assert
+		} else if projectID != "" {
 			f.assertGroupedRankSort(r)
 		} else {
 			f.assertRankSort(r)
@@ -289,6 +300,9 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 				continue
 			}
 			if onlyLive && c.Archived {
+				continue
+			}
+			if byNumber >= 0 && c.Number != byNumber {
 				continue
 			}
 			out = append(out, *c)

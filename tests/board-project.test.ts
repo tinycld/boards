@@ -449,6 +449,92 @@ describe('buildBoardProject', () => {
 // Identity is the contract here, not just value: memoized columns and drax's
 // sortable lists key their "did the data change" checks on object identity, so
 // a rebuild from an emission that changed nothing must return the SAME nodes.
+// Lists and cards arrive on independent live queries, so a card can land
+// before the list it names. Dropping it would make it invisible AND uncounted
+// — and an apparently empty list is deletable, which cascades its cards.
+describe('buildBoardProject with an unsynced list', () => {
+    const base = {
+        labels: [],
+        members: [user('u1', 'Maya Kim')],
+        users: [user('u1', 'Maya Kim')],
+    }
+
+    it('surfaces a card whose list has not arrived instead of dropping it', () => {
+        const result = buildBoardProject({
+            ...base,
+            project: project(),
+            lists: [list('list1', 'a0')],
+            cards: [card('c1', 'list1', 'a0'), card('orphan', 'listMissing', 'a0')],
+        })
+        expect(result?.lists[0]?.cards.map(c => c.id)).toEqual(['c1'])
+        expect(result?.unplacedCards.map(c => c.id)).toEqual(['orphan'])
+    })
+
+    it('is empty in the ordinary case', () => {
+        const result = buildBoardProject({
+            ...base,
+            project: project(),
+            lists: [list('list1', 'a0')],
+            cards: [card('c1', 'list1', 'a0')],
+        })
+        expect(result?.unplacedCards).toEqual([])
+    })
+
+    it('places the card once its list arrives', () => {
+        const before = buildBoardProject({
+            ...base,
+            project: project(),
+            lists: [],
+            cards: [card('c1', 'list1', 'a0')],
+        })
+        expect(before?.unplacedCards.map(c => c.id)).toEqual(['c1'])
+
+        const after = buildBoardProject(
+            {
+                ...base,
+                project: project(),
+                lists: [list('list1', 'a0')],
+                cards: [card('c1', 'list1', 'a0')],
+            },
+            before
+        )
+        expect(after?.unplacedCards).toEqual([])
+        expect(after?.lists[0]?.cards.map(c => c.id)).toEqual(['c1'])
+    })
+
+    it('does not reuse the previous project when only the unplaced set changed', () => {
+        const previous = buildBoardProject({
+            ...base,
+            project: project(),
+            lists: [list('list1', 'a0')],
+            cards: [card('c1', 'list1', 'a0')],
+        })
+        const result = buildBoardProject(
+            {
+                ...base,
+                project: project(),
+                lists: [list('list1', 'a0')],
+                cards: [card('c1', 'list1', 'a0'), card('orphan', 'listMissing', 'a0')],
+            },
+            previous
+        )
+        expect(result).not.toBe(previous)
+        expect(result?.unplacedCards.map(c => c.id)).toEqual(['orphan'])
+        // The placed column is untouched, so it keeps its identity.
+        expect(result?.lists[0]).toBe(previous?.lists[0])
+    })
+
+    it('archived cards stay omitted even when their list is missing', () => {
+        const result = buildBoardProject({
+            ...base,
+            project: project(),
+            lists: [list('list1', 'a0')],
+            cards: [card('gone', 'listMissing', 'a0', { archived: true })],
+        })
+        expect(result?.unplacedCards).toEqual([])
+    })
+})
+
 describe('buildBoardProject structural sharing', () => {
     const input = () => ({
         project: project(),
