@@ -2,13 +2,16 @@ package cards
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/pocketbase/pocketbase/core"
 	"tinycld.org/core/automation"
 )
 
-// registerAutomation installs cards' owner resolver and the card-completed
-// trigger filter. Called from registerShared before hooks load.
+// registerAutomation installs cards' automation surface: the owner resolver
+// shared by all four card triggers, the card-completed trigger filter, and the
+// native action handlers with the relation authorizers the engine requires
+// before it will run them. Called from registerShared before hooks load.
 func registerAutomation() {
 	// One resolver, four triggers: every card event belongs to the same
 	// people — the members of the card's board.
@@ -27,6 +30,168 @@ func registerAutomation() {
 	// action whose relation param has no registered authorizer — without this
 	// the action is greyed out in the catalog and fails at execution.
 	automation.RegisterRelationAuthorizer("cards:move-card", "list", moveDestinationAuthorizer)
+
+	automation.RegisterAction("cards:add-assignee", addAssignee)
+	automation.RegisterRelationAuthorizer("cards:add-assignee", "user", assigneeAuthorizer)
+
+	automation.RegisterAction("cards:add-label", addLabel)
+	automation.RegisterRelationAuthorizer("cards:add-label", "label", labelAuthorizer)
+}
+
+// maxRelationValues mirrors the maxSelect on cards_cards' `assignees` and
+// `labels` (both 20, migration 1980000000). Checked in the handlers so an
+// over-cap append fails with a message naming the cap, rather than as
+// PocketBase's opaque validation error in run history.
+const maxRelationValues = 20
+
+// assigneeAuthorizer answers the which-record question for cards:add-assignee's
+// `user` param.
+//
+// This action has the weakest engine-supplied guarantees of cards' set, because
+// its relation target is `users`: EVERY authenticated user passes the users view
+// rule, so the engine's floor establishes nothing here. Compare move-card, whose
+// cards_lists target means the floor has already proven board visibility. All of
+// the authorization below is therefore ours to do.
+//
+// Two DIFFERENT questions, which is why this does not just call checkBoardWrite
+// twice:
+//
+//   - The rule OWNER must be able to write the board (owner|editor). Assigning
+//     is a write to the card.
+//   - The ASSIGNEE need only be a MEMBER, at any role. A viewer can legitimately
+//     be assigned a card; requiring write access here would refuse a case the
+//     app itself allows.
+//
+// The membership requirement is not extra strictness: the board UI only ever
+// offers board members (BoardCard.tsx renders BoardMember), so assigning an
+// outsider produces a card the assignee cannot see — a silently broken state
+// rather than a visible error.
+//
+// Fails closed on anything unresolvable, per moveDestinationAuthorizer: an
+// unreadable membership row is not evidence of permission.
+func assigneeAuthorizer(app core.App, req automation.ActionRequest, userID string) error {
+	// Nothing stops a user attaching this action to a core:schedule rule, which
+	// has no trigger record. A builder-reachable misconfiguration, not an
+	// impossible state — so it gets a message that reads as one in run history.
+	if req.Record == nil {
+		return fmt.Errorf("cards:add-assignee needs a card to assign — attach it to a card trigger, not a schedule")
+	}
+	projectID := req.Record.GetString("project")
+	if projectID == "" {
+		return fmt.Errorf("card %s has no board", req.Record.Id)
+	}
+	if err := checkBoardWrite(app, req.OwnerID, projectID); err != nil {
+		return err
+	}
+	return checkBoardMembership(app, userID, projectID)
+}
+
+// checkBoardMembership reports whether a user belongs to a board at ANY role.
+// Distinct from checkBoardWrite, which additionally requires owner|editor — see
+// assigneeAuthorizer for why being assignable and being able to write are not
+// the same question.
+func checkBoardMembership(app core.App, userID, projectID string) error {
+	if userID == "" {
+		return fmt.Errorf("no user to assign")
+	}
+	members, err := app.FindRecordsByFilter(
+		"cards_project_members",
+		"project = {:project} && user = {:user}",
+		"", 1, 0,
+		map[string]any{"project": projectID, "user": userID},
+	)
+	if err != nil {
+		return fmt.Errorf("membership lookup for board %s: %w", projectID, err)
+	}
+	if len(members) != 1 {
+		return fmt.Errorf("user %s is not a member of board %s", userID, projectID)
+	}
+	return nil
+}
+
+// labelAuthorizer answers the which-record question for cards:add-label's
+// `label` param.
+//
+// Simpler than assigneeAuthorizer in one respect: cards_labels rows are
+// board-scoped (cards_labels.project), so the engine's view-rule floor already
+// carries real information, and asserting the label belongs to the card's own
+// board subsumes the separate "is it a member" question that a users target
+// required. A label from another board is the same cross-board leak
+// moveDestinationAuthorizer refuses for lists.
+func labelAuthorizer(app core.App, req automation.ActionRequest, labelID string) error {
+	if req.Record == nil {
+		return fmt.Errorf("cards:add-label needs a card to label — attach it to a card trigger, not a schedule")
+	}
+	projectID := req.Record.GetString("project")
+	if projectID == "" {
+		return fmt.Errorf("card %s has no board", req.Record.Id)
+	}
+	label, err := app.FindRecordById("cards_labels", labelID)
+	if err != nil {
+		return fmt.Errorf("label %s: %w", labelID, err)
+	}
+	if label.GetString("project") != projectID {
+		return fmt.Errorf("label %s is on a different board than the card", labelID)
+	}
+	return checkBoardWrite(app, req.OwnerID, projectID)
+}
+
+// addAssignee appends one user to the trigger card's assignees.
+//
+// Authorization lives in assigneeAuthorizer, which the engine runs before this
+// — the engine refuses the action outright if that authorizer is unregistered,
+// so this handler validates only that the write itself is coherent.
+func addAssignee(app core.App, req automation.ActionRequest) error {
+	return appendRelation(app, req, "cards:add-assignee", "assignees", req.Params["user"])
+}
+
+// addLabel appends one label to the trigger card's labels. Authorization lives
+// in labelAuthorizer; see addAssignee.
+func addLabel(app core.App, req automation.ActionRequest) error {
+	return appendRelation(app, req, "cards:add-label", "labels", req.Params["label"])
+}
+
+// appendRelation adds one id to a multi-value relation on the trigger card.
+//
+// Shared by add-assignee and add-label, which differ only in the column they
+// append to and the authorizer the engine ran before them: both must append
+// rather than replace (a record-op `set` would drop the existing values), both
+// must be idempotent, and both must respect maxSelect.
+func appendRelation(app core.App, req automation.ActionRequest, ref, field, id string) error {
+	if req.Record == nil {
+		return fmt.Errorf("%s needs a card", ref)
+	}
+	if id == "" {
+		return fmt.Errorf("%s: nothing to add", ref)
+	}
+
+	card, err := app.FindRecordById("cards_cards", req.Record.Id)
+	if err != nil {
+		return fmt.Errorf("load card %s: %w", req.Record.Id, err)
+	}
+
+	current := card.GetStringSlice(field)
+	if slices.Contains(current, id) {
+		// Already present: return without saving. An unchanged Save still fires
+		// the card's update triggers and burns a chain-depth level, so a rule
+		// that re-matches would churn for no visible effect.
+		return nil
+	}
+	if len(current) >= maxRelationValues {
+		return fmt.Errorf("card %s already has the maximum %d %s", card.Id, maxRelationValues, field)
+	}
+
+	card.Set(field, append(current, id))
+
+	// cards:card-assigned watches `assignees`, so this write re-enters the
+	// engine. Unstamped it would arrive as an ordinary user edit at depth 0 —
+	// the depth cap only ever sees the stamp, so without this the chain never
+	// terminates. `labels` is watched by no trigger today, but stamping is
+	// unconditional on purpose: that is a property of the current catalog, and a
+	// later card-labeled trigger would otherwise reopen the loop silently.
+	return automation.MarkEngineWrite(req, card.Id, func() error {
+		return app.Save(card)
+	})
 }
 
 // moveDestinationAuthorizer answers the which-record question for

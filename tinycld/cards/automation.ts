@@ -99,6 +99,42 @@ const automation = {
             },
             params: [{ key: 'list', field: 'list', label: 'Destination list' }],
         },
+        {
+            // Native, not a record-op: `assignees` is a multi-value relation
+            // and a record-op `set` REPLACES the whole value, so appending one
+            // assignee would silently drop the others.
+            //
+            // `relationTarget` is what lets a native action offer a picker at
+            // all — a native action declares no collection, so there is no
+            // column for the param to inherit a target from.
+            id: 'add-assignee',
+            label: 'Assign the card to someone',
+            kind: 'native',
+            params: [
+                {
+                    key: 'user',
+                    type: 'relation',
+                    relationTarget: 'users',
+                    label: 'Assignee',
+                },
+            ],
+        },
+        {
+            // Native for the same reason as add-assignee: `labels` is a
+            // multi-value relation, so a record-op `set` would replace the
+            // card's whole label set rather than add to it.
+            id: 'add-label',
+            label: 'Add a label to the card',
+            kind: 'native',
+            params: [
+                {
+                    key: 'label',
+                    type: 'relation',
+                    relationTarget: 'cards_labels',
+                    label: 'Label',
+                },
+            ],
+        },
     ],
 } satisfies AutomationDefinitions<CardsSchema>
 

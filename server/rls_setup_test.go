@@ -194,6 +194,24 @@ func cardsMember(t *testing.T, app core.App, project, user *core.Record, role st
 	return r
 }
 
+// cardsLabel seeds a label. Labels are BOARD-SCOPED (cards_labels.project),
+// which is what lets a label authorizer refuse one belonging to another board.
+func cardsLabel(t *testing.T, app core.App, project *core.Record, name, color string) *core.Record {
+	t.Helper()
+	col, err := app.FindCollectionByNameOrId("cards_labels")
+	if err != nil {
+		t.Fatalf("find cards_labels: %v", err)
+	}
+	r := core.NewRecord(col)
+	r.Set("project", project.Id)
+	r.Set("name", name)
+	r.Set("color", color)
+	if err := app.Save(r); err != nil {
+		t.Fatalf("save label %s: %v", name, err)
+	}
+	return r
+}
+
 // cardsList seeds a column. `position` is a FRACTIONAL RANK STRING (see
 // tinycld/cards/lib/rank.ts), not a number — the field is text and a numeric
 // value would silently stringify into a rank that sorts wrong.

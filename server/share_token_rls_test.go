@@ -107,25 +107,6 @@ func tok64(name string) string {
 	return name + strings.Repeat("0", 64-len(name))
 }
 
-// cardsLabel seeds a label. Lives here rather than in rls_setup_test.go
-// because this is the first suite that needs one — the role-matrix suites
-// exercise labels only through create attempts.
-func cardsLabel(t *testing.T, app core.App, project *core.Record, name, color string) *core.Record {
-	t.Helper()
-	col, err := app.FindCollectionByNameOrId("cards_labels")
-	if err != nil {
-		t.Fatalf("find cards_labels: %v", err)
-	}
-	r := core.NewRecord(col)
-	r.Set("project", project.Id)
-	r.Set("name", name)
-	r.Set("color", color)
-	if err := app.Save(r); err != nil {
-		t.Fatalf("save label %s: %v", name, err)
-	}
-	return r
-}
-
 func setupShareTokenEnv(t *testing.T) *shareTokenEnv {
 	t.Helper()
 	base := setupCardsEnv(t)
