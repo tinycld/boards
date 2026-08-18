@@ -70,6 +70,17 @@ async function visitAnonymously(browser: Browser, url: string): Promise<Page> {
     return page
 }
 
+/**
+ * Open a share URL in a new page of an EXISTING context, so the visitor keeps
+ * that context's session (signed in as the stranger) but arrives at the link as
+ * a fresh load. A goto on a live SPA page would tear its shell down instead.
+ */
+async function visitAsStranger(page: Page, url: string): Promise<Page> {
+    const visitor = await page.context().newPage()
+    await visitor.goto(url)
+    return visitor
+}
+
 test.describe('Cards — a board opened by share link', () => {
     test('an owner mints a viewer link and a stranger can read the board', async ({
         page,
@@ -197,10 +208,17 @@ test.describe('Cards — a board opened by share link', () => {
 
         // While it is still live, the link resolves to the SHARED board — not
         // the stranger's own, which they can equally well read.
-        await stranger.page.goto(url)
-        await expect(stranger.page.getByText(ownerBoard).first()).toBeVisible()
-        await expect(boardCard(stranger.page, CARD_TITLE)).toBeVisible()
-        await expect(stranger.page.getByText(strangerBoard)).toHaveCount(0)
+        //
+        // A fresh context rather than a goto on stranger.page: that page is a
+        // live SPA, and navigating it tears the shell down (cancelling in-flight
+        // lazy route chunks). The visitor is still signed in as the stranger —
+        // the context carries their session — so this stays the "a signed-in
+        // non-member follows the link" case it is testing.
+        const liveVisit = await visitAsStranger(stranger.page, url)
+        await expect(liveVisit.getByText(ownerBoard).first()).toBeVisible()
+        await expect(boardCard(liveVisit, CARD_TITLE)).toBeVisible()
+        await expect(liveVisit.getByText(strangerBoard)).toHaveCount(0)
+        await liveVisit.close()
 
         // Now kill it. The owner's page is still on its board, but the share
         // dialog was closed when the link was minted — reopen it.
@@ -209,17 +227,16 @@ test.describe('Cards — a board opened by share link', () => {
         await page.getByRole('button', { name: 'Revoke share link' }).click()
         await expect(page.getByText('Restricted', { exact: false })).toBeVisible()
 
-        // Re-open the dead link. This is a PUBLIC route outside the app shell,
-        // so a goto is how a visitor actually arrives at it — the same entry
-        // the live-link assertion above used.
-        await stranger.page.goto(url)
+        // Re-open the dead link, the same way the live one was opened.
+        const deadVisit = await visitAsStranger(stranger.page, url)
 
         // Refused, in the visitor's own words. Nothing to fall back to: the
         // token is the only thing that ever named a board, and it is dead.
-        await expect(stranger.page.getByText('This link is no longer available')).toBeVisible()
+        await expect(deadVisit.getByText('This link is no longer available')).toBeVisible()
         // The failure this pins — a readable board of their own standing in
         // for the one the dead link pointed at.
-        await expect(stranger.page.getByText(strangerBoard)).toHaveCount(0)
+        await expect(deadVisit.getByText(strangerBoard)).toHaveCount(0)
+        await deadVisit.close()
         await expect(stranger.page.getByText('Read only')).toHaveCount(0)
         await expect(boardCard(stranger.page, CARD_TITLE)).toHaveCount(0)
 

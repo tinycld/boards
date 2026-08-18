@@ -2,8 +2,8 @@ import { PB_SERVER_ADDR } from '@tinycld/core/lib/pocketbase'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import * as Clipboard from 'expo-clipboard'
 import { Check, Link2 } from 'lucide-react-native'
-import { useState } from 'react'
 import { Platform, Pressable, Text, View } from 'react-native'
+import { useCopiedFlag } from '../../hooks/useCopiedFlag'
 
 /**
  * The card key in a detail header — the peek's and the full page's — with a
@@ -43,7 +43,7 @@ export function CardKeyBadge({ cardKey }: { cardKey: string }) {
  * toast for a copy is noise.
  */
 function CopyLinkButton({ cardKey }: { cardKey: string }) {
-    const [copied, setCopied] = useState(false)
+    const [copied, markCopied] = useCopiedFlag()
     // Muted in both states, matching ShareLinkSection's copy button: the icon
     // swap is the whole signal, and recoloring it would make a routine copy
     // look like a status change.
@@ -51,8 +51,7 @@ function CopyLinkButton({ cardKey }: { cardKey: string }) {
 
     const onCopy = async () => {
         await Clipboard.setStringAsync(focusedCardURL(cardKey))
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
+        markCopied()
     }
 
     return (

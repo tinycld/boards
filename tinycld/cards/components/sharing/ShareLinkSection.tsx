@@ -5,6 +5,7 @@ import * as Clipboard from 'expo-clipboard'
 import { Check, ChevronDown, Copy, Globe, Lock } from 'lucide-react-native'
 import { useState } from 'react'
 import { Platform, Pressable, Text, View } from 'react-native'
+import { useCopiedFlag } from '../../hooks/useCopiedFlag'
 import {
     DEFAULT_SHARE_LINK_EXPIRY_DAYS,
     SHARE_LINK_EXPIRY_OPTIONS,
@@ -36,7 +37,7 @@ export function ShareLinkSection({ projectId, isVisible }: ShareLinkSectionProps
     const { activeLink } = useShareLinks(projectId)
     const [role, setRole] = useState<CardsShareLinkRole>('viewer')
     const [expiry, setExpiry] = useState<ShareLinkExpiryDays>(DEFAULT_SHARE_LINK_EXPIRY_DAYS)
-    const [copied, setCopied] = useState(false)
+    const [copied, markCopied] = useCopiedFlag()
     const [error, setError] = useState<string | null>(null)
 
     const createLink = useCreateShareLink(projectId)
@@ -62,8 +63,7 @@ export function ShareLinkSection({ projectId, isVisible }: ShareLinkSectionProps
     const onCopy = async () => {
         if (!activeLink) return
         await Clipboard.setStringAsync(shareLinkURL(activeLink.token))
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
+        markCopied()
     }
 
     return (
