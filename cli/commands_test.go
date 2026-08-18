@@ -1039,3 +1039,76 @@ func TestIDLookupDedupesBeforeChunking(t *testing.T) {
 		t.Errorf("a deduped lookup took %d requests, want 1", got)
 	}
 }
+
+// `card edit` and `card archive` took args[0] as a raw record id, so a card key
+// (OTTER-12) — accepted by every sibling command — failed with a 404. They
+// resolve through getCard now, like `card view` and `card move` always did.
+func TestCardEditAndArchiveAcceptCardKeys(t *testing.T) {
+	f := board(t)
+	f.projects["prjA"].Slug = "OTTER"
+	f.cards["crdCopy"].Number = 12
+	f.cards["crdVenue"].Number = 13
+	_, c := f.serve()
+
+	if _, _, err := runCmd(t, c, "cards", "card", "edit", "OTTER-12", "--title", "Renamed by key"); err != nil {
+		t.Fatalf("card edit must accept a card key: %v", err)
+	}
+	if got := f.cards["crdCopy"].Title; got != "Renamed by key" {
+		t.Errorf("the wrong card was edited: crdCopy.Title = %q", got)
+	}
+
+	if _, _, err := runCmd(t, c, "cards", "card", "archive", "OTTER-13"); err != nil {
+		t.Fatalf("card archive must accept a card key: %v", err)
+	}
+	if !f.cards["crdVenue"].Archived {
+		t.Error("archive by key did not apply")
+	}
+
+	// Plain ids keep working — the key form is an addition, not a replacement.
+	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdDeck", "--title", "By id"); err != nil {
+		t.Fatalf("card edit must still accept a record id: %v", err)
+	}
+	if got := f.cards["crdDeck"].Title; got != "By id" {
+		t.Errorf("edit by id did not apply: %q", got)
+	}
+}
+
+// cards' rm/archive demanded --yes outright while every other package prompts.
+// They use ui.Confirm now: a TTY asks, a non-TTY still refuses (so scripts are
+// unaffected), and --yes proceeds. The cascade detail survives on both paths.
+func TestDestructiveCommandsPromptRatherThanDemandYes(t *testing.T) {
+	t.Run("card remove proceeds with --yes", func(t *testing.T) {
+		f := board(t)
+		_, c := f.serve()
+		if _, _, err := runCmd(t, c, "cards", "card", "remove", "crdCopy", "--yes"); err != nil {
+			t.Fatalf("--yes must delete: %v", err)
+		}
+		if len(f.deletedCards) != 1 || f.deletedCards[0] != "crdCopy" {
+			t.Fatalf("deleted = %v", f.deletedCards)
+		}
+	})
+
+	t.Run("list remove proceeds with --yes", func(t *testing.T) {
+		f := board(t)
+		_, c := f.serve()
+		if _, _, err := runCmd(t, c, "cards", "list", "remove", "To do",
+			"--board", "prjA", "--yes"); err != nil {
+			t.Fatalf("--yes must delete: %v", err)
+		}
+		if len(f.deletedLists) != 1 {
+			t.Fatalf("deleted = %v", f.deletedLists)
+		}
+	})
+
+	// An empty column has no cascade to warn about, so it never prompts.
+	t.Run("an empty list deletes without asking", func(t *testing.T) {
+		f := board(t)
+		_, c := f.serve()
+		if _, _, err := runCmd(t, c, "cards", "list", "remove", "Done", "--board", "prjA"); err != nil {
+			t.Fatalf("an empty column must delete without --yes: %v", err)
+		}
+		if len(f.deletedLists) != 1 {
+			t.Fatalf("deleted = %v", f.deletedLists)
+		}
+	})
+}

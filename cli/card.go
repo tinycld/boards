@@ -11,6 +11,7 @@ import (
 
 	"tinycld.org/cli/client"
 	"tinycld.org/cli/output"
+	"tinycld.org/cli/ui"
 )
 
 func newCardCmd(c *client.Client) *cobra.Command {
@@ -301,7 +302,13 @@ func newCardEditCmd(c *client.Client) *cobra.Command {
 			if len(body) == 0 {
 				return fmt.Errorf("nothing to change — pass --title, --description, --due, --clear-due, --reporter, or --clear-reporter")
 			}
-			updated, err := client.UpdateRecord[card](ctx, c, cardsCollection, args[0], body)
+			// Through getCard so a card key (OTTER-12) works here exactly as it
+			// does in `card view`/`card move` — the id is what the API needs.
+			cd, err := getCard(ctx, c, args[0])
+			if err != nil {
+				return err
+			}
+			updated, err := client.UpdateRecord[card](ctx, c, cardsCollection, cd.ID, body)
 			if err != nil {
 				return err
 			}
@@ -419,7 +426,13 @@ func newCardArchiveCmd(c *client.Client) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			updated, err := client.UpdateRecord[card](cmd.Context(), c, cardsCollection, args[0],
+			ctx := cmd.Context()
+			// Same key-or-id resolution as the sibling commands.
+			cd, err := getCard(ctx, c, args[0])
+			if err != nil {
+				return err
+			}
+			updated, err := client.UpdateRecord[card](ctx, c, cardsCollection, cd.ID,
 				map[string]any{"archived": !unset})
 			if err != nil {
 				return err
@@ -455,11 +468,20 @@ func newCardRemoveCmd(c *client.Client) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if !yes {
-				return fmt.Errorf(
-					"deleting %q also deletes its checklist, comments and attachments, "+
-						"and this cannot be undone; re-run with --yes to confirm, or use "+
-						"`cards card archive` to hide it reversibly", cd.Title)
+			// Prompt on a TTY like every other package's rm; ui.Confirm still
+			// refuses (rather than hanging) when there is no terminal, so a
+			// script must pass --yes exactly as before.
+			question := fmt.Sprintf(
+				"PERMANENTLY delete %q, with its checklist, comments and attachments? "+
+					"(`cards card archive` hides it reversibly)", cd.Title)
+			ok, err := ui.Confirm(o, yes, cmd.InOrStdin(), cmd.ErrOrStderr(), question)
+			if err != nil {
+				// The generic "pass --yes" refusal alone would not say WHAT the
+				// delete destroys, which is the whole point of the warning.
+				return fmt.Errorf("%s: %w", question, err)
+			}
+			if !ok {
+				return nil
 			}
 			if err := client.DeleteRecord(ctx, c, cardsCollection, cd.ID); err != nil {
 				return err

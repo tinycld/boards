@@ -8,6 +8,7 @@ import (
 
 	"tinycld.org/cli/client"
 	"tinycld.org/cli/output"
+	"tinycld.org/cli/ui"
 )
 
 func newListCmd(c *client.Client) *cobra.Command {
@@ -256,10 +257,19 @@ func newListRemoveCmd(c *client.Client) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if len(cards) > 0 && !yes {
-				return fmt.Errorf(
-					"deleting %q also deletes its %d card(s), and this cannot be undone; "+
-						"re-run with --yes to confirm", l.Name, len(cards))
+			if len(cards) > 0 {
+				question := fmt.Sprintf(
+					"Deleting %q also deletes its %d card(s), and this cannot be undone. Continue?",
+					l.Name, len(cards))
+				ok, err := ui.Confirm(o, yes, cmd.InOrStdin(), cmd.ErrOrStderr(), question)
+				if err != nil {
+					// Keep the cascade detail on the non-TTY path: a bare
+					// "pass --yes" would hide how many cards go with the column.
+					return fmt.Errorf("%s: %w", question, err)
+				}
+				if !ok {
+					return nil
+				}
 			}
 			if err := client.DeleteRecord(ctx, c, listsCollection, l.ID); err != nil {
 				return err
