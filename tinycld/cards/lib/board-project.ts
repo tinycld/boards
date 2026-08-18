@@ -222,6 +222,14 @@ export function buildBoardProject(
     }
 
     const sortedLists = [...lists].sort(byRank)
+    // Cards whose list hasn't synced yet would otherwise vanish from the board
+    // entirely — including from the per-list count that gates list deletion.
+    const listIds = new Set(sortedLists.map(list => list.id))
+    const unplacedCards: BoardCardView[] = []
+    for (const [listId, bucket] of cardsByList) {
+        if (!listIds.has(listId)) unplacedCards.push(...bucket)
+    }
+
     const fresh: BoardProject = {
         id: project.id,
         name: project.name,
@@ -239,6 +247,7 @@ export function buildBoardProject(
             cards: cardsByList.get(list.id) ?? [],
         })),
         listOrder: sortedLists.map(list => ({ id: list.id, position: list.position })),
+        unplacedCards,
     }
 
     if (!previous || previous.id !== fresh.id) return fresh
@@ -358,12 +367,14 @@ function shareTree(previous: BoardProject, fresh: BoardProject): BoardProject {
     const listOrder = sameElements(previous.listOrder, fresh.listOrder, sameRank)
         ? previous.listOrder
         : fresh.listOrder
+    const unplacedCards = shareById(previous.unplacedCards, fresh.unplacedCards, sameCard)
 
     if (
         sharedLists === previous.lists &&
         labels === previous.labels &&
         members === previous.members &&
         listOrder === previous.listOrder &&
+        unplacedCards === previous.unplacedCards &&
         previous.name === fresh.name &&
         // An owner editing the board's key re-keys every card on it, and the
         // card nodes above already reflect that. Without this line the PROJECT
@@ -373,5 +384,5 @@ function shareTree(previous: BoardProject, fresh: BoardProject): BoardProject {
     ) {
         return previous
     }
-    return { ...fresh, lists: sharedLists, labels, members, listOrder }
+    return { ...fresh, lists: sharedLists, labels, members, listOrder, unplacedCards }
 }

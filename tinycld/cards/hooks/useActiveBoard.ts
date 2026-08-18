@@ -198,8 +198,12 @@ export function useBoardContent(projectId: string) {
     )
     previousProjectRef.current = project
 
+    // Unplaced cards count too: they are real cards the user created, briefly
+    // waiting on their list row to sync.
     const cardCount = useMemo(
-        () => project?.lists.reduce((total, list) => total + list.cards.length, 0) ?? 0,
+        () =>
+            (project?.lists.reduce((total, list) => total + list.cards.length, 0) ?? 0) +
+            (project?.unplacedCards.length ?? 0),
         [project]
     )
 
