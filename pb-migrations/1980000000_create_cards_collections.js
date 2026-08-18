@@ -908,6 +908,16 @@ migrate(
         })
         app.save(listsCol)
 
+        // cards_cards.created_by is deliberately NOT pinned to the caller, and
+        // the asymmetry with its siblings is intentional: comments pin `author`
+        // and attachments pin `uploaded_by` (below) because those rows ARE an
+        // attribution — a comment credited to someone who did not write it is a
+        // forgery. A card is shared work: any writer may create one on another
+        // member's behalf (an importer, a template, a triage bot filing for the
+        // reporter), and created_by records provenance rather than conferring
+        // rights. Nothing reads it for authorization — the write rules are
+        // membership+role based (viaWriter), so an unpinned value grants nobody
+        // anything.
         const cardsCol = app.findCollectionByNameOrId('cards_cards')
         setRules(cardsCol, {
             list: `${enabled} && ${viaMember}`,
