@@ -73,20 +73,6 @@ export function BoardCard({ card, projectId, isDone, canDrag }: BoardCardProps) 
     // is a deliberate action taken at rest, never mid-drag.
     const isCompact = useCardsUIStore(s => s.isCompactCards)
 
-    if (isCompact && !isDone) {
-        return (
-            <CompactCard
-                card={card}
-                isOpen={isOpen}
-                isFocused={isFocused}
-                onPress={onPress}
-                canDrag={canDrag}
-                isDropTarget={isDropTarget}
-                dropRef={dropRef}
-            />
-        )
-    }
-
     if (isDone) {
         return (
             <DoneCard
@@ -100,13 +86,18 @@ export function BoardCard({ card, projectId, isDone, canDrag }: BoardCardProps) 
         )
     }
 
+    // One Pressable for both densities, branching INSIDE. A separate component
+    // per density would make the toggle unmount this subtree: the file-drop ref
+    // detaches mid-transfer and an in-flight OS drop is lost. Same element type
+    // + same hook order = the toggle is a re-render, not a remount.
+    const layout = isCompact ? 'px-3 py-1.5 flex-row items-center gap-2' : 'px-3 py-2.5 gap-1.5'
     return (
         <Pressable
             ref={dropRef}
             accessibilityRole="button"
             testID={`board-card-${card.id}`}
             onPress={onPress}
-            className={`bg-card border rounded-[10px] px-3 py-2.5 gap-1.5 shadow-sm ${canDrag ? 'web:cursor-grab' : ''} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${cardRingClass(
+            className={`bg-card border rounded-[10px] shadow-sm ${layout} ${canDrag ? 'web:cursor-grab' : ''} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${cardRingClass(
                 isOpen,
                 isFocused,
                 'border-border hover:border-muted/50',
@@ -115,6 +106,46 @@ export function BoardCard({ card, projectId, isDone, canDrag }: BoardCardProps) 
         >
             <DropMarker isDropTarget={isDropTarget} cardId={card.id} />
             <FocusMarker isFocused={isFocused} cardId={card.id} />
+            <CardFace card={card} isCompact={isCompact} />
+        </Pressable>
+    )
+}
+
+/**
+ * The part of a card face that differs by density. Kept in one component so the
+ * toggle never changes the card root's element type — see the note in BoardCard.
+ *
+ * The dense face is not a uniformly shrunken card. It keeps what lets someone
+ * SCAN a board and drops what belongs to the card detail:
+ *
+ *   kept    title (one line) and assignees, the two cues you actually search a
+ *           board by, plus due state — lateness must never be something you
+ *           have to expand a card to see
+ *   demoted labels to their colours alone; the colour is the scanning cue and
+ *           the word is what costs the room
+ *   dropped checklist and comment counts, which nobody scans a board for
+ *
+ * The done face is already this dense (a check and one line), so it is shared
+ * across both densities rather than given a compact variant of its own.
+ */
+function CardFace({ card, isCompact }: { card: BoardCardView; isCompact: boolean }) {
+    if (isCompact) {
+        return (
+            <>
+                <CompactLabelDots labels={card.labels ?? []} />
+                <Text
+                    className="flex-1 text-[13.5px] font-medium leading-[18px] text-foreground"
+                    numberOfLines={1}
+                >
+                    {card.title}
+                </Text>
+                <CompactDueIcon due={card.due} />
+                <CardAssignees assignees={card.assignees} />
+            </>
+        )
+    }
+    return (
+        <>
             <CardTopRow labels={card.labels ?? []} cardKey={card.key} />
             <Text
                 className="text-[13.5px] font-medium leading-[18px] text-foreground"
@@ -123,7 +154,7 @@ export function BoardCard({ card, projectId, isDone, canDrag }: BoardCardProps) 
                 {card.title}
             </Text>
             <CardMeta card={card} />
-        </Pressable>
+        </>
     )
 }
 
@@ -197,67 +228,6 @@ function DropMarker({ isDropTarget, cardId }: { isDropTarget: boolean; cardId: s
 function FocusMarker({ isFocused, cardId }: { isFocused: boolean; cardId: string }) {
     if (!isFocused) return null
     return <View testID={`cards-focused-${cardId}`} />
-}
-
-/**
- * The dense card face. Not a uniformly shrunken card — it keeps what lets
- * someone SCAN a board and drops what belongs to the card detail:
- *
- *   kept    title (one line) and assignees, the two cues you actually search a
- *           board by, plus due state — lateness must never be something you
- *           have to expand a card to see
- *   demoted labels to their colours alone; the colour is the scanning cue and
- *           the word is what costs the room
- *   dropped checklist and comment counts, which nobody scans a board for
- *
- * The done face is already this dense (a check and one line), so it is shared
- * across both densities rather than given a compact variant of its own.
- */
-function CompactCard({
-    card,
-    isOpen,
-    isFocused,
-    onPress,
-    canDrag,
-    isDropTarget,
-    dropRef,
-}: CompactCardProps) {
-    return (
-        <Pressable
-            ref={dropRef}
-            accessibilityRole="button"
-            testID={`board-card-${card.id}`}
-            onPress={onPress}
-            className={`bg-card border rounded-[10px] px-3 py-1.5 flex-row items-center gap-2 shadow-sm ${canDrag ? 'web:cursor-grab' : ''} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${cardRingClass(
-                isOpen,
-                isFocused,
-                'border-border hover:border-muted/50',
-                isDropTarget
-            )}`}
-        >
-            <DropMarker isDropTarget={isDropTarget} cardId={card.id} />
-            <FocusMarker isFocused={isFocused} cardId={card.id} />
-            <CompactLabelDots labels={card.labels ?? []} />
-            <Text
-                className="flex-1 text-[13.5px] font-medium leading-[18px] text-foreground"
-                numberOfLines={1}
-            >
-                {card.title}
-            </Text>
-            <CompactDueIcon due={card.due} />
-            <CardAssignees assignees={card.assignees} />
-        </Pressable>
-    )
-}
-
-interface CompactCardProps {
-    card: BoardCardView
-    isOpen: boolean
-    isFocused: boolean
-    onPress: () => void
-    canDrag: boolean
-    isDropTarget: boolean
-    dropRef: (node: unknown) => void
 }
 
 /**
