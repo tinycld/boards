@@ -26,6 +26,12 @@ import { useProjectRole } from './useProjectRole'
 /** How many rows the popover shows. Beyond this, keep typing to narrow. */
 const MAX_SUGGESTIONS = 6
 
+/**
+ * Module-level so its identity is stable: the trigger config is memoized, and a
+ * fresh `[]` here would make a new one on every render.
+ */
+const EMPTY_CANDIDATES: TriggerItem[] = []
+
 export interface MentionTrigger {
     /** Pass to `useRichEditor({ triggers })`. */
     triggers: TriggerConfig[]
@@ -74,12 +80,23 @@ export function useMentionTrigger(projectId: string): MentionTrigger {
     )
 
     const triggers = useMemo<TriggerConfig[]>(() => {
-        if (!canComment) return []
         return [
             {
                 id: 'cards-mention',
                 char: '@',
-                allItems: candidates,
+                // Empty rather than absent when the reader may not comment.
+                //
+                // The trigger must stay PRESENT either way: its existence is
+                // what the editor keys its extension list on, and `canComment`
+                // resolves asynchronously from a live query. Dropping the
+                // trigger until that answer arrived rebuilt the editor a beat
+                // after it mounted — which destroys it, takes its DOM node out
+                // of the document, and blurs the caret someone had just placed
+                // by clicking a description.
+                //
+                // With no candidates the popover has nothing to offer, so `@`
+                // is inert exactly as it was before.
+                allItems: canComment ? candidates : EMPTY_CANDIDATES,
                 limit: MAX_SUGGESTIONS,
                 // Still the STORED form — the Go flush hook parses it out of
                 // the description, and being id-based is what makes a mention
