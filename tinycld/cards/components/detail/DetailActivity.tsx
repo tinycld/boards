@@ -1,3 +1,4 @@
+import { pressPoint } from '@tinycld/core/components/editor/LazyEditor'
 import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useAuth } from '@tinycld/core/lib/auth'
 import { formatRelativeDate } from '@tinycld/core/lib/format-utils'
@@ -21,8 +22,10 @@ interface DetailActivityProps {
     attachments: BoardAttachment[]
     /** The comment open for inline editing, or null. At most one at a time. */
     editingCommentId: string | null
+    /** Where the press that opened the current edit landed; see CardDetail. */
+    editStartPoint?: { x: number; y: number }
     isSaving: boolean
-    onStartEdit: (commentId: string) => void
+    onStartEdit: (commentId: string, at?: { x: number; y: number }) => void
     onCancelEdit: () => void
     onSaveEdit: (commentId: string, body: string) => void
     onReply: (comment: BoardComment) => void
@@ -37,6 +40,7 @@ export function DetailActivity({
     projectId,
     attachments,
     editingCommentId,
+    editStartPoint,
     isSaving,
     onStartEdit,
     onCancelEdit,
@@ -53,6 +57,7 @@ export function DetailActivity({
         projectId,
         attachments,
         editingCommentId,
+        editStartPoint,
         isSaving,
         onStartEdit,
         onCancelEdit,
@@ -104,8 +109,10 @@ interface CommentRowProps {
     projectId: string
     attachments: BoardAttachment[]
     editingCommentId: string | null
+    /** Where the press that opened the current edit landed; see CardDetail. */
+    editStartPoint?: { x: number; y: number }
     isSaving: boolean
-    onStartEdit: (commentId: string) => void
+    onStartEdit: (commentId: string, at?: { x: number; y: number }) => void
     onCancelEdit: () => void
     onSaveEdit: (commentId: string, body: string) => void
     onReply: (comment: BoardComment) => void
@@ -120,6 +127,7 @@ function CommentRow({
     projectId,
     attachments,
     editingCommentId,
+    editStartPoint,
     isSaving,
     onStartEdit,
     onCancelEdit,
@@ -186,6 +194,7 @@ function CommentRow({
                         canEdit={canEditOwn}
                         onSubmit={body => onSaveEdit(comment.id, body)}
                         onCancel={onCancelEdit}
+                        editStartPoint={editStartPoint}
                         // Only mounted while this comment is the one being
                         // edited, so the swap-back is the parent's to make —
                         // these are what LazyEditor shows if it ends the session
@@ -251,7 +260,7 @@ function EditedMarker({ comment }: { comment: BoardComment }) {
 interface CommentBodyProps {
     comment: BoardComment
     canEditOwn: boolean
-    onStartEdit: (commentId: string) => void
+    onStartEdit: (commentId: string, at?: { x: number; y: number }) => void
     /** Resolves `[[@id]]` mention tokens to member names. */
     projectId: string
 }
@@ -272,7 +281,14 @@ function CommentBody({ comment, canEditOwn, onStartEdit, projectId }: CommentBod
         <Pressable
             accessibilityRole="button"
             accessibilityLabel="Edit comment"
-            onPress={() => onStartEdit(comment.id)}
+            // The press POINT rides along, not just the id. The rendered comment
+            // and the editor that replaces it occupy the same box, so where
+            // someone pressed the prose is where the caret belongs — without it
+            // every edit opened with the caret at the end of the comment. The
+            // description gets this from LazyEditor's own press target; a
+            // comment cannot, because the parent decides which one is editing
+            // and the editor is not mounted yet when this fires.
+            onPress={event => onStartEdit(comment.id, pressPoint(event))}
         >
             <MarkdownText body={comment.body} variant="comment" projectId={projectId} />
         </Pressable>

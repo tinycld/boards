@@ -4,8 +4,9 @@ import {
     type LazyEditorSlots,
     useLazyEditor,
 } from '@tinycld/core/components/editor/LazyEditor'
-import { markdownScale } from '@tinycld/core/components/help/markdown-purpose'
+import { MARKDOWN_TRAILING_SPACE } from '@tinycld/core/components/help/MarkdownRenderer'
 import type { ToolbarItem } from '@tinycld/core/components/ResponsiveToolbar'
+import { editorScaleFor } from '@tinycld/core/lib/editor/rich/editor-scale'
 import type { EditorCommands, EditorToolbarState } from '@tinycld/core/lib/editor/types'
 import { useDraftStore } from '@tinycld/core/lib/editor/warm'
 import type { SurfaceId } from '@tinycld/core/lib/editor/warm/warm-editor-store'
@@ -19,6 +20,21 @@ import type { BoardAttachment } from '../../types'
 import { ImageAttachmentPicker } from './ImageAttachmentPicker'
 import { MarkdownToolbar } from './MarkdownToolbar'
 import { MentionPopover } from './MentionPopover'
+
+/**
+ * Bottom padding for the inline comment editor, in px.
+ *
+ * Reserves the trailing space the RENDERED comment leaves below its last block,
+ * so the comments underneath hold their place when one opens for editing. It is
+ * the renderer's own trailing space MINUS the few px the editing surface adds
+ * on its own — MEASURED against comment-editing.spec's anchor, which is the
+ * only thing that can see it.
+ *
+ * Derived from the shared constant rather than written as a literal: when the
+ * renderer's trailing space moves, this follows it. The subtraction is the part
+ * that must be re-measured if that anchor ever fails by a few px.
+ */
+const INLINE_EDITOR_TRAILING_SPACE = MARKDOWN_TRAILING_SPACE - 3
 
 /** Mirrors the max on cards_comments.body; the server clamps at the same. */
 const COMMENT_LIMIT = 10000
@@ -76,6 +92,8 @@ interface CommentEditorCoreOptions {
     canEdit: boolean
     /** Both variants are mounted only once editing has begun — see LazyEditor. */
     startOpen?: boolean
+    /** Viewport point to put the caret at when the session opens. */
+    openAt?: { x: number; y: number }
     /** The composer sends and stays open; an inline edit ends at its commit. */
     stayOpenOnCommit?: boolean
     testID?: string
@@ -113,6 +131,7 @@ function useCommentEditorCore({
     renderHeader,
     canEdit,
     startOpen,
+    openAt,
     stayOpenOnCommit,
     testID,
     accessibilityLabel,
@@ -167,6 +186,7 @@ function useCommentEditorCore({
         commitOnBlur,
         isDialogOpen,
         startOpen,
+        openAt,
         stayOpenOnCommit,
         onCommit: body => {
             // An empty comment is not a write. LazyEditor has no opinion on
@@ -184,6 +204,13 @@ function useCommentEditorCore({
             characterLimit: COMMENT_LIMIT,
             containerClassName,
             minHeight,
+            // The SAME scale MarkdownText renders a comment at, so opening an
+            // edit does not resize the message. A comment reads on the COMPACT
+            // scale — capped headings, tight rhythm — because it is a message in
+            // a thread, not a document. The editor used to apply the
+            // description's proportions here regardless, so an edit opened with
+            // headings half again too large and blocks spaced twice as far.
+            scale: editorScaleFor('compact'),
             onImageDrop: imageActions.onImageDrop,
             // Handled: the first Escape ends the writing session; only a second
             // one should reach the peek panel behind it.
@@ -420,6 +447,15 @@ interface InlineCommentEditorProps {
     readView: ReactNode
     /** The author/timestamp row, shown in the header slot while idle. */
     authorLine: ReactNode
+    /**
+     * Where the press that opened this edit landed, so the caret goes there
+     * rather than to the end of the comment.
+     *
+     * Passed in rather than captured here: the parent decides which comment is
+     * editing, so this component does not exist yet when the press happens and
+     * cannot observe it the way a description's own press target does.
+     */
+    editStartPoint?: { x: number; y: number }
     testID: string
 }
 
@@ -443,6 +479,7 @@ export function InlineCommentEditor({
     onCancel,
     readView,
     authorLine,
+    editStartPoint,
     testID,
 }: InlineCommentEditorProps) {
     const core = useCommentEditorCore({
@@ -463,6 +500,7 @@ export function InlineCommentEditor({
         // The parent decides which single comment is open (editingCommentId), so
         // this is mounted already editing.
         startOpen: true,
+        openAt: editStartPoint,
         containerClassName: 'min-h-[24px]',
         // A FLOOR the caret fits inside, not the 24px the class asks for.
         //
@@ -510,19 +548,14 @@ export function InlineCommentEditor({
                     sits on, and the whole point of this variant is that entering
                     an edit moves nothing.
 
-                    The bottom padding reproduces the RENDERED comment's trailing
-                    rhythm, so the comments below do not slide up when a one-line
-                    comment opens for editing.
-
-                    The paragraph-spacing term is DERIVED, because that is the part
-                    a typography change moves: retuning the compact scale used to
-                    silently break the ±2px anchor comment-editing.spec asserts.
-                    The constant beside it is the renderer's own leftover trailing
-                    space, which has no exported source — it was MEASURED against
-                    that spec, exactly as the previous hard-coded 20px was. If the
-                    spec starts failing by a few px after a renderer change, this
-                    is the number to re-measure. */}
-                <View style={{ paddingBottom: markdownScale('compact').paragraphSpacing * 2 + 13 }}>
+                    The bottom padding reserves exactly the trailing space the
+                    RENDERED comment leaves below its last block, so the comments
+                    underneath do not shift when this opens. Both numbers are
+                    DERIVED from core rather than measured: this used to be a
+                    hand-tuned constant, and it went stale the moment the
+                    renderer's spacing changed — a multi-paragraph comment nudged
+                    everything below it by 3px on every focus and blur. */}
+                <View style={{ paddingBottom: INLINE_EDITOR_TRAILING_SPACE }}>
                     <slots.EditorComponent />
                 </View>
             </>
