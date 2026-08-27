@@ -73,6 +73,7 @@ export function MarkdownText({ body, variant = 'description', projectId }: Markd
     // renderer per render. An anonymous public-board viewer has no token, so
     // protected images stay broken there; they cannot fetch the bytes under
     // any renderer, and that is the viewRule doing its job.
+    const scale = markdownScale(purpose)
     const { data: token } = useFileToken()
     const transformImageUri = useCallback(
         (uri: string) => resolveProtectedFileSrc(uri, pb.baseURL, token),
@@ -80,12 +81,17 @@ export function MarkdownText({ body, variant = 'description', projectId }: Markd
     )
 
     return (
-        // Cancels the renderer's own first/last paragraph margin so the section
-        // controls its own rhythm. DERIVED from the scale rather than a fixed
-        // class: the two are the same number by definition, and hard-coding it
-        // meant retuning a comment's typography silently shifted every comment
-        // below it (caught by comment-editing.spec's ±2px anchor).
-        <View style={{ marginVertical: -markdownScale(purpose).paragraphSpacing }}>
+        // Cancels the leading margin the renderer puts on the FIRST block, so
+        // the section controls its own rhythm. DERIVED from the scale rather
+        // than a fixed class: the two are the same number by definition, and
+        // hard-coding it meant retuning a comment's typography silently shifted
+        // every comment below it (caught by comment-editing.spec's ±2px anchor).
+        //
+        // A top margin only, matching the renderer: blocks now state their gap
+        // once as `marginTop` (RN margins do not collapse), so cancelling both
+        // ends would pull the block after this one upward by a gap that was
+        // never applied.
+        <View style={{ marginTop: -scale.paragraphSpacing }}>
             <MarkdownRenderer
                 body={text}
                 translateModifierKeys={false}
