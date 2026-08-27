@@ -81,6 +81,53 @@ test.describe('Cards — editing comments', () => {
         await navigateToPackage(page, 'cards')
     })
 
+    // Clicking a comment's prose must put the caret IN the editor, the same way
+    // clicking a description does. Both surfaces run the same swap, so this is
+    // one behavior — but a comment's session is parent-owned and outlives its
+    // holding of the shared editor, and re-acquiring used to hand back the very
+    // same instance and be skipped as "already focused". The whole suite missed
+    // it because every other case clicks the editor before typing.
+    test('clicking a comment puts the caret in it', async ({ page }) => {
+        await freshBoard(page, 'focus')
+        await addCard(page, 0, CARD_TITLE)
+        await openCard(page, CARD_TITLE)
+        await postComment(page, 'Original text.')
+        await expect(page.getByText('Original text.', { exact: true })).toBeVisible()
+
+        await beginEdit(page, 'Original text.')
+
+        // No click on the editor first — that is the point. Typing straight
+        // away proves the caret is already there.
+        await expect(commentEditor(page)).toBeFocused()
+        await page.keyboard.type('X')
+        await expect(commentEditor(page)).toContainText('X')
+    })
+
+    // The caret must land where the press was, not at the end. A comment cannot
+    // get this from LazyEditor's own press target — the parent decides which
+    // comment is editing, so the editor is not mounted when the press happens —
+    // so the point travels with onStartEdit.
+    test('puts the caret where the comment was clicked', async ({ page }) => {
+        await freshBoard(page, 'caretpos')
+        await addCard(page, 0, CARD_TITLE)
+        await openCard(page, CARD_TITLE)
+        // Two blocks, so clicking the first is unambiguously not the end.
+        await postComment(page, 'Alpha line')
+
+        // Click at the very START of the text, so a caret placed here and one
+        // parked at the end are far apart. `position` keeps the press inside
+        // the pressable that opens the edit.
+        await page.getByText('Alpha line', { exact: true }).click({ position: { x: 2, y: 8 } })
+
+        const editor = commentEditor(page)
+        await expect(editor).toBeVisible()
+        await expect(editor).toBeFocused()
+        await page.keyboard.type('Z')
+
+        // Landed at the click, not appended at the end.
+        await expect(editor).toContainText('ZAlpha line')
+    })
+
     test('click-to-edit saves and persists', async ({ page }) => {
         await freshBoard(page, 'save')
         await addCard(page, 0, CARD_TITLE)
