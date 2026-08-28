@@ -1,3 +1,4 @@
+import { appHref } from '@tinycld/core/lib/org-routes'
 import { PB_SERVER_ADDR } from '@tinycld/core/lib/pocketbase'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import * as Clipboard from 'expo-clipboard'
@@ -74,7 +75,7 @@ function CopyLinkButton({ cardKey }: { cardKey: string }) {
 /**
  * The absolute URL that opens this card focused on its board.
  *
- * `?focused=` rather than the full-page `/cards/<key>` route: a link shared with
+ * `?focused=` rather than the full-page `/a/cards/<key>` route: a link shared with
  * a colleague should land them on the BOARD with the card open beside it, which
  * is the view that carries context. The full page is a deliberate promotion the
  * reader can still make from there.
@@ -83,7 +84,7 @@ function CopyLinkButton({ cardKey }: { cardKey: string }) {
  * address on native, where there is no window to read.
  */
 export function focusedCardURL(cardKey: string): string {
-    const path = `/cards?focused=${encodeURIComponent(cardKey)}`
+    const path = `${appHref('cards')}?focused=${encodeURIComponent(cardKey)}`
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
         return `${window.location.origin}${path}`
     }

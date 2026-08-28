@@ -1,9 +1,12 @@
+import { appHref } from '@tinycld/core/lib/org-routes'
 import type { Href } from 'expo-router'
 import { describe, expect, it } from 'vitest'
 import { buildDueItems } from '../tinycld/cards/calendar-source'
 
+// Delegates the prefix to appHref so this stand-in can't drift from the app's
+// actual route shape.
 const orgHref = (path: string, extra?: Record<string, string>): Href =>
-    ({ pathname: `/${path}`, params: extra }) as Href
+    ({ pathname: appHref(path), params: extra }) as Href
 
 describe('buildDueItems', () => {
     it('maps a due card to a local all-day item with a card href', () => {
@@ -17,7 +20,7 @@ describe('buildDueItems', () => {
         expect(item.title).toBe('Ship the release')
         expect(item.allDay).toBe(true)
         expect(item.href).toEqual({
-            pathname: '/cards/[cardId]',
+            pathname: '/a/cards/[cardId]',
             params: { cardId: 'r8f3k2m9x1p7q4w' },
         })
         // The stored value names a DAY; the item must span that day in the

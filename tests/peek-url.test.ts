@@ -14,10 +14,17 @@ vi.mock('expo-router', () => ({
     useLocalSearchParams: () => ({ focused: h.focusedParam }),
 }))
 
-vi.mock('@tinycld/core/lib/org-routes', () => ({
-    useOrgHref: () => (path: string, extra?: Record<string, string>) =>
-        extra ? { pathname: `/${path}`, params: extra } : `/${path}`,
-}))
+// Mirrors the real useOrgHref (string when bare, object when params are
+// present) but delegates the prefix to appHref, so this fake cannot drift from
+// the app's actual route shape.
+vi.mock('@tinycld/core/lib/org-routes', async importOriginal => {
+    const { appHref } = await importOriginal<typeof import('@tinycld/core/lib/org-routes')>()
+    return {
+        appHref,
+        useOrgHref: () => (path: string, extra?: Record<string, string>) =>
+            extra ? { pathname: appHref(path), params: extra } : appHref(path),
+    }
+})
 
 const openCard = vi.fn()
 vi.mock('~/tinycld/cards/stores/cards-ui-store', () => ({
@@ -112,7 +119,7 @@ describe('usePeekUrl', () => {
         h.openCardId = 'c2'
         renderHook(() => usePeekUrl(board()))
         expect(replace).toHaveBeenCalledWith({
-            pathname: '/cards',
+            pathname: '/a/cards',
             params: { focused: 'HOME-2' },
         })
     })
@@ -129,7 +136,7 @@ describe('usePeekUrl', () => {
 
         h.openCardId = null
         rerender()
-        expect(replace).toHaveBeenCalledWith('/cards')
+        expect(replace).toHaveBeenCalledWith('/a/cards')
     })
 
     // THE CLOSE REGRESSION. Closing is not one render: the store clears first
@@ -151,7 +158,7 @@ describe('usePeekUrl', () => {
         rerender()
 
         expect(openCard).not.toHaveBeenCalled()
-        expect(replace).toHaveBeenCalledWith('/cards')
+        expect(replace).toHaveBeenCalledWith('/a/cards')
     })
 
     // The two directions must not fight: when they already agree, neither the
@@ -221,7 +228,7 @@ describe('usePeekUrl', () => {
         h.openCardId = 'c2'
         rerender()
         expect(replace).toHaveBeenCalledWith({
-            pathname: '/cards',
+            pathname: '/a/cards',
             params: { focused: 'HOME-2' },
         })
     })
@@ -243,7 +250,7 @@ describe('usePeekUrl', () => {
         })
         renderHook(() => usePeekUrl(noSlug))
         expect(replace).toHaveBeenCalledWith({
-            pathname: '/cards',
+            pathname: '/a/cards',
             params: { focused: 'c1' },
         })
     })
@@ -267,7 +274,7 @@ describe('usePeekUrl', () => {
         h.focusedParam = 'HOME-99'
         h.openCardId = null
         renderHook(() => usePeekUrl(board()))
-        expect(replace).toHaveBeenCalledWith('/cards')
+        expect(replace).toHaveBeenCalledWith('/a/cards')
     })
 
     it('does nothing at all before the board has loaded', () => {
