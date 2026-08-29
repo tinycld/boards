@@ -93,11 +93,11 @@ test('opens a card from its key in the address bar', async ({ page }) => {
 
     // The one legitimate page.goto in these specs: URL entry IS what is under
     // test here, and it is an initial load rather than in-app navigation.
-    await page.goto(`/cards/${key}-1`)
+    await page.goto(`/a/cards/${key}-1`)
     await expect(page.getByTestId('cards-detail-key')).toHaveText(`${key}-1`)
     await expect(page.getByText('Deep linked card').first()).toBeVisible()
 
     // Lower case has to reach the same card — a key gets retyped from memory.
-    await page.goto(`/cards/${key.toLowerCase()}-1`)
+    await page.goto(`/a/cards/${key.toLowerCase()}-1`)
     await expect(page.getByTestId('cards-detail-key')).toHaveText(`${key}-1`)
 })

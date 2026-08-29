@@ -40,7 +40,7 @@ describe('decidePublicBoardRoute', () => {
         // a whole board, so the live board beats a read-only rendering of it.
         expect(decidePublicBoardRoute(input({ isSignedIn: true, isMember: true }))).toEqual({
             kind: 'redirect',
-            href: '/cards',
+            href: '/a/cards',
         })
     })
 

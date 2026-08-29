@@ -1,3 +1,4 @@
+import { appHref } from '@tinycld/core/lib/org-routes'
 /**
  * Where a visitor arriving on a board share link should end up.
  *
@@ -74,7 +75,7 @@ export function decidePublicBoardRoute(input: PublicBoardRouteInput): PublicBoar
     // else. The read-only public view would be a strictly worse rendering of
     // something they fully own.
     if (input.isSignedIn && input.isMember) {
-        return { kind: 'redirect', href: '/cards' }
+        return { kind: 'redirect', href: appHref('cards') }
     }
 
     return { kind: 'public' }
