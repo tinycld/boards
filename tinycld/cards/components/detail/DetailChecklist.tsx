@@ -2,7 +2,7 @@ import { SortableDragHandle, SortableList } from '@tinycld/core/components/Sorta
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
 import { Check, Plus, X } from 'lucide-react-native'
-import { useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { Platform, Pressable, Text, View } from 'react-native'
 import { useChecklistMutations } from '../../hooks/useChecklistMutations'
 import { checklistProgress } from '../../lib/board-cards'
@@ -246,6 +246,33 @@ function ChecklistItemInput({
     onDone: () => void
 }) {
     const [draft, setDraft] = useState(title)
+    const inputRef = useRef<React.ComponentRef<typeof PlainInput>>(null)
+
+    // Select the whole title through the `selection` prop rather than
+    // selectTextOnFocus, and focus before paint rather than via autoFocus. Both
+    // of those defaults land late — autoFocus after the click has been handed
+    // back, and react-native-web defers selectTextOnFocus into a setTimeout (its
+    // Safari workaround). Typing before that timer fires lets the pending select
+    // re-select what was just typed, so the next character replaces it: renaming
+    // by typing over the title lost its leading character ("run the..." landing
+    // as "un the...").
+    //
+    // The prop is applied synchronously in a ref callback, so no keystroke can
+    // race it. It must then be dropped: react-native-web re-asserts a non-null
+    // `selection` whenever the caret drifts from it, which would pin the caret
+    // and stop the user clicking elsewhere in the field.
+    const [selection, setSelection] = useState<{ start: number; end: number } | undefined>(() => ({
+        start: 0,
+        end: title.length,
+    }))
+
+    // Runs once when the field opens. `title` is deliberately not a dependency:
+    // it is the SAVED value, so it changes exactly when a commit lands and the
+    // row is closing, and re-focusing there would fight the teardown.
+    useLayoutEffect(() => {
+        inputRef.current?.focus()
+        setSelection(undefined)
+    }, [])
 
     const commit = () => {
         onDone()
@@ -258,10 +285,10 @@ function ChecklistItemInput({
 
     return (
         <PlainInput
+            ref={inputRef}
             value={draft}
             onChangeText={setDraft}
-            autoFocus
-            selectTextOnFocus
+            selection={selection}
             returnKeyType="done"
             onSubmitEditing={commit}
             onBlur={commit}
@@ -287,7 +314,14 @@ function ChecklistComposer({ onSubmit }: { onSubmit: (title: string) => void }) 
             return
         }
         onSubmit(trimmed)
-        setTitle('')
+        // Drop exactly what was submitted and keep the rest, rather than
+        // clearing to a constant: the row stays open for the next item, so
+        // anything typed between this submit and React committing the clear is
+        // already in the pending value. `setTitle('')` discarded it — typing two
+        // items back to back lost the start of the second ("run the gate"
+        // arriving as "gate").
+        const submitted = title
+        setTitle(pending => (pending.startsWith(submitted) ? pending.slice(submitted.length) : ''))
         inputRef.current?.focus()
     }
 
