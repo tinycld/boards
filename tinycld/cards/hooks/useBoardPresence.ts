@@ -61,6 +61,18 @@ export function useBoardPresence(projectId: string, openCardId: string | null) {
         // Seeds the slot so it is populated the instant the socket opens. NOT
         // sufficient on its own — see the publish effect below for why.
         initialAwareness: identity ? { user: identity, cardId: null } : null,
+        // The board document is EVICTABLE: the server's janitor closes a board
+        // that has been quiet, and the next joiner rebuilds it by re-seeding
+        // every card's stored description. Our surviving doc holds the same
+        // prose under a clientID that incarnation never saw, so merging the two
+        // converges on the description TWICE — which is what put a card's
+        // description on screen doubled and then tripled.
+        //
+        // Handing the epoch over opts this room into discarding local state
+        // when the server reports a different incarnation. It must be the
+        // client's call: to the server those inserts are indistinguishable from
+        // someone genuinely typing, and refusing them would drop real edits.
+        docEpochOf: hello => boardHello(hello)?.docEpoch ?? null,
     })
 
     const awareness = room?.awareness ?? null

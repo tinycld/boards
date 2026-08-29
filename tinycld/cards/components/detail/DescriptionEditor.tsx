@@ -1,4 +1,6 @@
 import { type LazyEditorSlots, useLazyEditor } from '@tinycld/core/components/editor/LazyEditor'
+import { MARKDOWN_TRAILING_SPACE } from '@tinycld/core/components/help/MarkdownRenderer'
+import { editorScaleFor } from '@tinycld/core/lib/editor/rich/editor-scale'
 import type { EditorCommands } from '@tinycld/core/lib/editor/types'
 import { PromptDialog } from '@tinycld/core/ui/PromptDialog'
 import { type ReactNode, type RefObject, useRef, useState } from 'react'
@@ -12,6 +14,25 @@ import type { BoardAttachment } from '../../types'
 import { ImageAttachmentPicker } from './ImageAttachmentPicker'
 import { MarkdownToolbar } from './MarkdownToolbar'
 import { MentionPopover } from './MentionPopover'
+
+/**
+ * Floor for the description body, in px.
+ *
+ * The EDITOR needs it so an empty description is still a target worth tapping.
+ * The READ view must reserve the same, or a description shorter than this grows
+ * by the difference the moment someone taps it and every section below —
+ * Attachments, Checklist, Activity — slides down. Exported for that reason: one
+ * number, both states.
+ */
+export const DESCRIPTION_MIN_BODY_HEIGHT = 72
+
+/**
+ * Vertical padding around the description body, in px — Tailwind's `py-2`.
+ *
+ * Named because BOTH states apply it and the read view has to add it back when
+ * matching the editor's floor, which sits inside it.
+ */
+export const DESCRIPTION_BODY_PADDING = 8
 
 /** Mirrors the max on cards_cards.description; the server clamps at the same. */
 const DESCRIPTION_LIMIT = 5000
@@ -158,16 +179,22 @@ export function useDescriptionEditor({
             overlayKey: mention.overlayKey,
             editable: canEdit,
             characterLimit: DESCRIPTION_LIMIT,
+            // The SAME scale MarkdownText renders the read view at, so tapping
+            // to edit does not resize the prose. Derived from the shared source
+            // rather than restated, because the two drifting is the whole bug
+            // this prevents — on web the editor used to inherit the app's 16px
+            // body and every line and heading grew on focus.
+            scale: editorScaleFor('description'),
             // Held CONSTANT on purpose. The web hook memoizes EditorComponent on
             // this string, so varying it with focus would hand React a new
             // component identity, remount ProseMirror, and blur the editor the
             // instant it focused — a flicker loop. The focus styling lives on our
             // own wrapper below instead.
-            containerClassName: 'min-h-[72px]',
+            containerClassName: `min-h-[${DESCRIPTION_MIN_BODY_HEIGHT}px]`,
             // Stated rather than inherited: the class above is web-only, and this
             // matching only the native default by coincidence is not something a
             // later change to that default should be free to break.
-            minHeight: 72,
+            minHeight: DESCRIPTION_MIN_BODY_HEIGHT,
             // Blur rather than close: the first Escape should leave the editor,
             // and only a second one should reach the panel behind it. Returning
             // true stops this one bubbling.
@@ -191,6 +218,12 @@ export function useDescriptionEditor({
             // collab option as a plain local editor, which is exactly the
             // non-collaborative fallback, and it starts collaborating the moment a
             // doc arrives (the extension list rebuilds on the document identity).
+            //
+            // `awareness` and `identity` resolve on their own schedules and are
+            // deliberately NOT rebuild inputs — useRichEditor reads them live at
+            // configure time. Passing them here as they arrive used to destroy
+            // and rebuild the editor a beat after it mounted, blurring the caret
+            // the reader had just placed.
             collab: !doc
                 ? undefined
                 : {
@@ -340,7 +373,17 @@ function DescriptionBody({
             {/* The testID scopes e2e locators: '.ProseMirror' alone is
                     ambiguous now that the comment composer and the inline
                     comment editor can each mount an instance beside this. */}
-            <View testID="cards-description-editor" className="py-2">
+            {/* The bottom padding reserves the trailing space the RENDERED
+                description leaves below its last block, so the sections beneath
+                (Attachments, Checklist, Activity) hold their place when someone
+                taps to edit. Derived from core rather than measured, for the
+                same reason the comment editor derives it: a hand-tuned constant
+                goes stale the moment the renderer's spacing changes. */}
+            <View
+                testID="cards-description-editor"
+                className="pt-2"
+                style={{ paddingBottom: 8 + MARKDOWN_TRAILING_SPACE }}
+            >
                 <EditorComponent />
             </View>
             {/* Portalled to <body> on web and drawn as a native Modal on

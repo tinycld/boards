@@ -1,4 +1,5 @@
 import { DropZone } from '@tinycld/core/components/DropZone'
+import { MARKDOWN_TRAILING_SPACE } from '@tinycld/core/components/help/MarkdownRenderer'
 import { useAuth } from '@tinycld/core/lib/auth'
 import { type RefObject, useRef, useState } from 'react'
 import { ScrollView, Text, View } from 'react-native'
@@ -13,7 +14,9 @@ import { useBoardPresenceContext } from '../BoardPresenceProvider'
 import { LabelManagerDialog } from '../LabelManagerDialog'
 import { CommentComposer } from './CommentComposer'
 import {
+    DESCRIPTION_BODY_PADDING,
     DESCRIPTION_HEADER_HEIGHT,
+    DESCRIPTION_MIN_BODY_HEIGHT,
     type DescriptionEditorSlots,
     useDescriptionEditor,
 } from './DescriptionEditor'
@@ -113,6 +116,16 @@ export function CardDetail({
     // Which comment is open for inline editing — at most one; starting a new
     // edit closes the previous one.
     const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
+    // Where the press that opened the current inline edit landed, handed to the
+    // editor so the caret lands there rather than at the end of the comment.
+    //
+    // A ref, not state: it is read once by the editor as it mounts and would
+    // otherwise re-render the whole card panel for a value nothing displays.
+    const editStartPointRef = useRef<{ x: number; y: number } | undefined>(undefined)
+    const startEditingComment = (commentId: string, at?: { x: number; y: number }) => {
+        editStartPointRef.current = at
+        setEditingCommentId(commentId)
+    }
 
     const submitComment = (body: string) => {
         createComment.mutate(
@@ -212,7 +225,8 @@ export function CardDetail({
                             attachments={attachments}
                             editingCommentId={editingCommentId}
                             isSaving={updateComment.isPending}
-                            onStartEdit={setEditingCommentId}
+                            onStartEdit={startEditingComment}
+                            editStartPoint={editStartPointRef.current}
                             onCancelEdit={() => setEditingCommentId(null)}
                             onSaveEdit={saveComment}
                             onReply={comment =>
@@ -410,6 +424,24 @@ function DescriptionReadView({
                 description
                     ? 'py-2 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring rounded-lg'
                     : 'bg-foreground/5 rounded-lg px-3.5 py-3'
+            }
+            // The SAME floor the editor applies, so a short description does not
+            // grow the section when it is tapped — see the constant's note.
+            //
+            // The editor's floor sits on the editing SURFACE, inside that
+            // component's own vertical padding, so the equivalent here has to
+            // clear this box's padding too or the two reserve different spans.
+            // Only while there is prose: the empty state is its own filled box
+            // and sizes itself.
+            style={
+                description
+                    ? {
+                          minHeight:
+                              DESCRIPTION_MIN_BODY_HEIGHT +
+                              DESCRIPTION_BODY_PADDING * 2 +
+                              MARKDOWN_TRAILING_SPACE,
+                      }
+                    : undefined
             }
         >
             {description ? (
