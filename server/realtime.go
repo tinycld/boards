@@ -51,7 +51,11 @@ func registerRealtime(app core.App) {
 		// Read-only members still see presence: awareness frames are routed
 		// without consulting the write gate, so a viewer keeps their avatar
 		// while being unable to change a word.
-		WritePredicate: func(c *realtime.Client, _ string) bool { return !c.ReadOnly() },
+		//
+		// Not a bare `!c.ReadOnly()`: a connection that opened before its own
+		// membership row committed would cache "read-only" for good and drop
+		// every edit silently. See boardWritePredicate.
+		WritePredicate: boardWritePredicate(app),
 		OnRoomCreate: func(projectID string, handle realtime.DocHandle, room *realtime.Room) {
 			runtime.NoteRoom(projectID, room)
 			saveCoordinator.OnRoomCreate(projectID, handle, room)
