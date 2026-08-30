@@ -138,7 +138,15 @@ export function CardDetail({
         // Close immediately — the pbtsdb update is optimistic, so the new
         // body renders at once; failures surface through the mutation.
         updateComment.mutate({ commentId, body })
-        setEditingCommentId(null)
+        // Close THIS comment, not whichever one happens to be open.
+        //
+        // A save can land after the editor has moved on: clicking a second
+        // comment hands the editor over and the first commits on its way out,
+        // and that commit reads its content asynchronously. A bare
+        // `setEditingCommentId(null)` then closes the comment the user just
+        // clicked into — the edit saved correctly, but the new editor vanished
+        // as it opened.
+        setEditingCommentId(current => (current === commentId ? null : current))
     }
 
     const description = useDescriptionSection({
