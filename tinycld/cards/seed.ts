@@ -5,8 +5,13 @@ function log(...args: unknown[]) {
     process.stdout.write(`[seed:cards] ${args.join(' ')}\n`)
 }
 
+// Structural mirror of core's SeedContext (core/lib/packages/config-types.ts).
+// Declared locally rather than imported so this package stays decoupled.
 interface SeedContext {
     user: { id: string; email: string; name: string }
+    // The seeded collaborator — the teammate who owns a board, is assigned
+    // cards, and authors comments.
+    companion?: { id: string; email: string; name: string }
 }
 
 // Day-granular due dates as offsets from local midnight today (calendar's
@@ -441,7 +446,7 @@ async function seedBoard(
     }
 }
 
-export default async function seed(pb: PocketBase, { user }: SeedContext) {
+export default async function seed(pb: PocketBase, { user, companion }: SeedContext) {
     const existing = await pb.collection('cards_projects').getList(1, 1, {
         filter: pb.filter('created_by = {:id}', { id: user.id }),
     })
@@ -450,11 +455,12 @@ export default async function seed(pb: PocketBase, { user }: SeedContext) {
         return
     }
 
-    // Every other user in the database is someone the seed can share with —
-    // on a fresh dev DB that is exactly the admin app user.
-    const teammates = await pb.collection('users').getFullList({
-        filter: pb.filter('id != {:id}', { id: user.id }),
-    })
+    // The seeded companion is the teammate. Resolving this from "any other user
+    // in the database" attached demo rows — board ownership, memberships,
+    // comment authorship — to real accounts, which a user-scoped reset can
+    // never reclaim: the teammate-owned board's created_by pointed at a real
+    // coworker and looked indistinguishable from their own data.
+    const teammates = companion ? [companion] : []
 
     // The teammate-owned board only makes sense when a teammate exists.
     const boards = teammates.length > 0 ? BOARDS : BOARDS.filter(b => b.owner === 'me')
