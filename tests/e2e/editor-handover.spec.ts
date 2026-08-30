@@ -95,10 +95,16 @@ test.describe('Cards — one editor, handed between surfaces', () => {
 
     /**
      * The ordinary handover. Editing comment A and then clicking comment B's
-     * prose moves the single instance — and because an inline edit commits on
-     * blur, A saves on the way out.
+     * prose moves the single instance, and A's half-finished revision goes to
+     * the draft store.
+     *
+     * Losing the editor is NOT a save. A comment is a discrete authored
+     * statement, so the record moves only when its author presses Save —
+     * publishing a mid-sentence revision to everyone watching the card is what
+     * that button exists to prevent. The words are not lost either: they come
+     * back when A is reopened, which is the last assertion below.
      */
-    test('moves the instance between comment surfaces, committing the one it leaves', async ({
+    test('moves the instance between comment surfaces, stashing the one it leaves', async ({
         page,
     }) => {
         const board = await freshBoard(page, 'comments')
@@ -122,9 +128,15 @@ test.describe('Cards — one editor, handed between surfaces', () => {
         // Still exactly one editor — B has it, A does not.
         await expectSingleEditor(page)
 
-        // A committed on the way out (commitOnBlur), so its edit persisted
-        // rather than being lost to the steal.
-        await expect(page.getByText('first comment edited', { exact: true })).toBeVisible()
+        // A did NOT write: the stored comment still reads as it was posted.
+        await expect(page.getByText('first comment', { exact: true })).toBeVisible()
+        await expect(page.getByText('first comment edited', { exact: true })).toHaveCount(0)
+
+        // But the revision survived the steal. Reopening A restores it from the
+        // draft store, so the text was stashed rather than dropped.
+        await page.getByText('first comment', { exact: true }).click()
+        await expect(commentEditor(page)).toContainText('first comment edited')
+        await expectSingleEditor(page)
     })
 
     /**

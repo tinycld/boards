@@ -226,9 +226,15 @@ function useCommentEditorCore({
             //
             // Returning true stops the key reaching the peek panel: the first
             // press leaves the editor, only a second closes the card.
+            //
+            // BOTH branches run `cancel` first. It marks the session concluded,
+            // which is what stops the unmount that follows from stashing the
+            // very text this press discarded — a composer's Escape would
+            // otherwise clear its draft and immediately save it again, so the
+            // box reopened holding what the user had just dismissed.
             onEscape: () => {
-                if (onCancel) cancelRef.current()
-                else onEscapeClose?.()
+                cancelRef.current()
+                if (!onCancel) onEscapeClose?.()
                 return true
             },
         },
@@ -512,20 +518,44 @@ export function InlineCommentEditor({
     editStartPoint,
     testID,
 }: InlineCommentEditorProps) {
+    const surfaceId: SurfaceId = `comment:${commentId}`
+    // Half-finished revisions live in the draft store, exactly as the
+    // composer's do.
+    const drafts = useDraftStore()
+    // Subscribed rather than read once: the stash comes from an async read of
+    // the editor, so it lands after the render that lost the instance.
+    const draft = useDraft(surfaceId)
+
     const core = useCommentEditorCore({
         cardId,
         projectId,
-        surfaceId: `comment:${commentId}`,
-        initialContent,
+        surfaceId,
+        // The draft wins over the stored body — this is the same revision
+        // resumed, not a fresh edit of what is on the record.
+        initialContent: draft ?? initialContent,
         placeholder: 'Edit comment…',
         isPending,
-        onSubmit,
-        onCancel,
-        // Switching to another surface WRITES this edit rather than discarding
-        // it — clicking a second comment finishes the first. Keyed on the
-        // handover rather than on focus, so pressing a toolbar menu (which also
-        // blurs) no longer ends the session behind the user's back.
-        commitOnDisplace: true,
+        onSubmit: body => {
+            drafts?.clear(surfaceId)
+            onSubmit(body)
+        },
+        onCancel: () => {
+            // Discarding the revision discards its draft too, or re-opening the
+            // comment would restore the text just abandoned.
+            drafts?.clear(surfaceId)
+            onCancel()
+        },
+        // Losing the editor STASHES rather than writes.
+        //
+        // Switching surfaces used to commit — clicking a second comment
+        // finished the first. But a comment is a discrete authored statement,
+        // and displacement says only that someone else is editing now, not that
+        // this revision is done: committing there publishes a half-typed
+        // sentence to everyone watching the card, which is precisely what an
+        // explicit Save exists to prevent. The draft is what makes deferring
+        // safe — the words survive the steal, the record simply does not move
+        // until the author says so.
+        onRelease: body => drafts?.stash(surfaceId, body),
         canEdit,
         readView,
         // The parent decides which single comment is open (editingCommentId), so
