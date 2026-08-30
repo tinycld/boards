@@ -382,26 +382,14 @@ test.describe('the editor lays out exactly as the read view', () => {
         const below = page.getByTestId('cards-comment-composer')
         const topOf = async () => Math.round((await below.boundingBox())?.y ?? -1)
         const atRest = await topOf()
-        console.log(`JUMP_REST=${atRest}`)
 
         await page.getByText(PARAGRAPHS[0], { exact: true }).click()
+        // The toolbar is the last thing to land, and it is what would push the
+        // composer down. Waiting for it is the settled state; a timeout here
+        // would only be guessing at the same thing.
         await expect(page.getByTestId('cards-comment-editor').locator('.ProseMirror')).toBeVisible()
-        await page.waitForTimeout(500)
-        const during = await topOf()
-        console.log(`JUMP_EDIT=${during}`)
-        // Is the panel SCROLLED? A scroll moves everything and would mask or
-        // fake a jump measured in viewport coords.
-        const scroll = await page.evaluate(() => {
-            const els = Array.from(document.querySelectorAll('*')).filter(
-                e => e.scrollHeight > e.clientHeight + 4
-            )
-            return els.map(e => ({
-                t: e.getAttribute('data-testid') || e.tagName,
-                st: Math.round(e.scrollTop),
-            }))
-        })
-        console.log(`JUMP_SCROLL=${JSON.stringify(scroll)}`)
-        expectWithin(during, atRest, 'comment below, while editing')
+        await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible()
+        expectWithin(await topOf(), atRest, 'comment below, while editing')
 
         // Leaving must put it back exactly, not merely close to.
         await page.getByRole('button', { name: 'Cancel' }).click()

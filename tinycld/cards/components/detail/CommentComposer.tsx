@@ -81,6 +81,18 @@ export function CommentComposer({
                         handleRef={editorHandle}
                         isPending={isPending}
                         onSubmit={onSubmit}
+                        // Escape puts the composer away, back to the collapsed
+                        // prompt. It used to work by blurring, which stopped
+                        // closing anything once focus and the session were
+                        // separated — so without this Escape does nothing here.
+                        //
+                        // The reply target goes too: `isOpen` is derived from
+                        // it, so leaving it set would re-open the box on the
+                        // very next render.
+                        onEscapeClose={() => {
+                            setWasOpened(false)
+                            onCancelReply()
+                        }}
                         testID="cards-comment-composer-editor"
                     />
                 ) : (

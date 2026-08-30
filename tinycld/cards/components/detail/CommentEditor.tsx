@@ -8,7 +8,7 @@ import { MARKDOWN_TRAILING_SPACE } from '@tinycld/core/components/help/MarkdownR
 import type { ToolbarItem } from '@tinycld/core/components/ResponsiveToolbar'
 import { editorScaleFor } from '@tinycld/core/lib/editor/rich/editor-scale'
 import type { EditorCommands, EditorToolbarState } from '@tinycld/core/lib/editor/types'
-import { useDraftStore } from '@tinycld/core/lib/editor/warm'
+import { useDraft, useDraftStore } from '@tinycld/core/lib/editor/warm'
 import type { SurfaceId } from '@tinycld/core/lib/editor/warm/warm-editor-store'
 import { Button, ButtonText } from '@tinycld/core/ui/button'
 import { PromptDialog } from '@tinycld/core/ui/PromptDialog'
@@ -24,17 +24,14 @@ import { MentionPopover } from './MentionPopover'
 /**
  * Bottom padding for the inline comment editor, in px.
  *
- * Reserves the trailing space the RENDERED comment leaves below its last block,
- * so the comments underneath hold their place when one opens for editing. It is
- * the renderer's own trailing space MINUS the few px the editing surface adds
- * on its own — MEASURED against comment-editing.spec's anchor, which is the
- * only thing that can see it.
+ * Reserves exactly the trailing space the RENDERED comment leaves below its last
+ * block, so the comments underneath hold their place when one opens for editing.
  *
- * Derived from the shared constant rather than written as a literal: when the
- * renderer's trailing space moves, this follows it. The subtraction is the part
- * that must be re-measured if that anchor ever fails by a few px.
+ * It used to carry a hand-measured `- 3`, compensating for an editing surface
+ * whose floor was larger than a line. The floor is one line now, so the two
+ * sides simply agree and there is nothing left to fudge.
  */
-const INLINE_EDITOR_TRAILING_SPACE = MARKDOWN_TRAILING_SPACE - 3
+const INLINE_EDITOR_TRAILING_SPACE = MARKDOWN_TRAILING_SPACE
 
 /** Mirrors the max on cards_comments.body; the server clamps at the same. */
 const COMMENT_LIMIT = 10000
@@ -75,13 +72,22 @@ interface CommentEditorCoreOptions {
     onSubmit: (body: string) => void
     /** Present on the inline editor only — enables Escape-cancel semantics. */
     onCancel?: () => void
+    /**
+     * Escape on a surface with no cancel semantics: the composer.
+     *
+     * It has no `onCancel` — leaving it must never post, and there is nothing to
+     * revert TO, since a composer starts empty. Escape there means "put this
+     * away", which is the parent's business: it owns whether the box is
+     * expanded. Absent, Escape does nothing.
+     */
+    onEscapeClose?: () => void
     /** Uncommitted text as the session ends — the composer stashes it. */
     onRelease?: (content: string) => void
-    /** Commit on focus loss (the EditableText convention for an EDIT). */
-    commitOnBlur?: boolean
+    /** Commit when another surface takes the shared editor. */
+    commitOnDisplace?: boolean
     /** The wrapping class for the editing surface (web). */
-    containerClassName: string
-    /** The same floor as `containerClassName`, for native — see the option. */
+    containerClassName?: string
+    /** The editing surface's floor, honoured on both platforms. */
     minHeight: number
     /** Shown while idle; LazyEditor swaps the editor in on press. */
     readView: ReactNode
@@ -122,8 +128,9 @@ function useCommentEditorCore({
     isPending,
     onSubmit,
     onCancel,
+    onEscapeClose,
     onRelease,
-    commitOnBlur,
+    commitOnDisplace,
     containerClassName,
     minHeight,
     readView,
@@ -155,11 +162,6 @@ function useCommentEditorCore({
     // `@` autocomplete, same trigger the description uses.
     const mention = useMentionTrigger(projectId)
 
-    // A dialog holding the focus is a detour inside the session, not the end of
-    // it — closing the editor under the image picker would unmount the surface
-    // the picked image is about to land in.
-    const isDialogOpen = isImagePickerOpen || isLinkOpen
-
     // Escape must cancel the session, but `cancel` comes back from the hook
     // below — read through a ref so the option can reach it without a TDZ.
     const cancelRef = useRef<() => void>(() => {})
@@ -183,8 +185,7 @@ function useCommentEditorCore({
         value: initialContent ?? '',
         contentFormat: 'markdown',
         canEdit,
-        commitOnBlur,
-        isDialogOpen,
+        commitOnDisplace,
         startOpen,
         openAt,
         stayOpenOnCommit,
@@ -214,9 +215,26 @@ function useCommentEditorCore({
             onImageDrop: imageActions.onImageDrop,
             // Handled: the first Escape ends the writing session; only a second
             // one should reach the peek panel behind it.
+            // Escape ends the session — it no longer works by blurring, which
+            // stopped closing anything when focus and the session were
+            // separated.
+            //
+            // An inline edit CANCELS: the comment is a record, and discarding is
+            // the meaningful opposite of Save. The composer has no such
+            // opposite, so it hands the decision to the parent that owns
+            // whether the box is open.
+            //
+            // Returning true stops the key reaching the peek panel: the first
+            // press leaves the editor, only a second closes the card.
+            //
+            // BOTH branches run `cancel` first. It marks the session concluded,
+            // which is what stops the unmount that follows from stashing the
+            // very text this press discarded — a composer's Escape would
+            // otherwise clear its draft and immediately save it again, so the
+            // box reopened holding what the user had just dismissed.
             onEscape: () => {
-                if (onCancel) cancelRef.current()
-                else blurActiveElement()
+                cancelRef.current()
+                if (!onCancel) onEscapeClose?.()
                 return true
             },
         },
@@ -264,6 +282,8 @@ interface CommentComposerEditorProps {
     handleRef?: RefObject<LazyEditorHandle | null>
     isPending: boolean
     onSubmit: (body: string) => void
+    /** Escape puts the composer away — see the core hook's onEscapeClose. */
+    onEscapeClose?: () => void
     testID: string
 }
 
@@ -285,6 +305,7 @@ export function CommentEditor({
     handleRef,
     isPending,
     onSubmit,
+    onEscapeClose,
     testID,
 }: CommentEditorProps) {
     const surfaceId = `composer:${cardId}`
@@ -292,7 +313,14 @@ export function CommentEditor({
     // mounted composer — the instance moves to whatever the user tapped. The
     // draft store is where that text lives instead, on both platforms.
     const drafts = useDraftStore()
-    const draft = drafts?.take(surfaceId) ?? ''
+    // SUBSCRIBED, not read during render.
+    //
+    // The stash is written from an async read of the editor — its content
+    // cannot be read synchronously, since on native that is a WebView
+    // round-trip — so it lands after the render that would have shown it.
+    // Reading the store here used to mean the draft was stored correctly and
+    // displayed never: the composer showed its placeholder while holding text.
+    const draft = useDraft(surfaceId) ?? ''
 
     const core = useCommentEditorCore({
         cardId,
@@ -311,7 +339,15 @@ export function CommentEditor({
         // without it, tapping a comment's Edit would silently drop whatever was
         // half-typed here.
         onRelease: body => drafts?.stash(surfaceId, body),
-        // No commitOnBlur: leaving the composer must never post a comment.
+        // Escape puts the composer away. The draft goes with it — a composer is
+        // not a record, so there is nothing to keep it for once the user has
+        // said they are done with it.
+        onEscapeClose: () => {
+            drafts?.clear(surfaceId)
+            onEscapeClose?.()
+        },
+        // No commitOnDisplace: handing the editor to another surface must never
+        // post a comment. The draft is stashed instead — see onRelease above.
         canEdit: true,
         // What the composer shows whenever it does not hold the one editor:
         // displaced by an inline edit, or still waiting on the boot. It used to
@@ -348,15 +384,15 @@ export function CommentEditor({
                         onPress={slots.submit}
                         isDisabled={!dialogs.canSubmit(slots.toolbarState)}
                         size="sm"
-                        // The same load-bearing guard as MarkdownToolbar's
-                        // FormatButton and SessionButton: on web the press
-                        // would first move DOM focus off ProseMirror, and the
-                        // composer's blur RELEASES the shared editor (no
-                        // commit-on-blur here — leaving the composer must
-                        // never post). By the time the click fired, submit
-                        // addressed a released session and silently did
-                        // nothing, leaving the read view holding the stashed
-                        // draft — ⌘↩ worked, the button did not.
+                        // The same guard as MarkdownToolbar's FormatButton and
+                        // SessionButton: on web the press moves DOM focus off
+                        // ProseMirror, which collapses its selection before the
+                        // click is handled.
+                        //
+                        // Losing focus no longer ends the session, so this no
+                        // longer decides whether Send works at all — but the
+                        // selection still matters, and a control inside an
+                        // editor has no reason to take the caret away from it.
                         {...(Platform.OS === 'web'
                             ? {
                                   onMouseDown: (e: { preventDefault: () => void }) =>
@@ -391,13 +427,13 @@ type CommentEditorProps = CommentComposerEditorProps
  * The composer while it does not hold the editor.
  *
  * **Height-neutral with the editing chrome, and that is load-bearing.** This
- * swaps in on BLUR — the moment the user presses something else — so if it were
- * shorter than the editor it replaces, the whole comment list above would
- * reflow downward between that press's mousedown and its mouseup. The pointer
- * would no longer be over what the user aimed at, the browser would cancel the
- * click, and every first click on a comment would be silently swallowed. (It
- * was: the list jumped 94px and clicking a comment did nothing until the second
- * try.)
+ * swaps in when another surface TAKES the editor — the moment the user presses a
+ * comment — so if it were shorter than the editor it replaces, the whole comment
+ * list above would reflow downward between that press's mousedown and its
+ * mouseup. The pointer would no longer be over what the user aimed at, the
+ * browser would cancel the click, and every first click on a comment would be
+ * silently swallowed. (It was: the list jumped 94px and clicking a comment did
+ * nothing until the second try.)
  *
  * So the frame reproduces the editing surface's three stacked parts at their
  * real heights — toolbar row, framed input, button row — rather than just the
@@ -482,36 +518,60 @@ export function InlineCommentEditor({
     editStartPoint,
     testID,
 }: InlineCommentEditorProps) {
+    const surfaceId: SurfaceId = `comment:${commentId}`
+    // Half-finished revisions live in the draft store, exactly as the
+    // composer's do.
+    const drafts = useDraftStore()
+    // Subscribed rather than read once: the stash comes from an async read of
+    // the editor, so it lands after the render that lost the instance.
+    const draft = useDraft(surfaceId)
+
     const core = useCommentEditorCore({
         cardId,
         projectId,
-        surfaceId: `comment:${commentId}`,
-        initialContent,
+        surfaceId,
+        // The draft wins over the stored body — this is the same revision
+        // resumed, not a fresh edit of what is on the record.
+        initialContent: draft ?? initialContent,
         placeholder: 'Edit comment…',
         isPending,
-        onSubmit,
-        onCancel,
-        // Today's behavior, and the reason the commit rules matter: leaving an
-        // inline edit WRITES it, so switching to another surface commits rather
-        // than discarding.
-        commitOnBlur: true,
+        onSubmit: body => {
+            drafts?.clear(surfaceId)
+            onSubmit(body)
+        },
+        onCancel: () => {
+            // Discarding the revision discards its draft too, or re-opening the
+            // comment would restore the text just abandoned.
+            drafts?.clear(surfaceId)
+            onCancel()
+        },
+        // Losing the editor STASHES rather than writes.
+        //
+        // Switching surfaces used to commit — clicking a second comment
+        // finished the first. But a comment is a discrete authored statement,
+        // and displacement says only that someone else is editing now, not that
+        // this revision is done: committing there publishes a half-typed
+        // sentence to everyone watching the card, which is precisely what an
+        // explicit Save exists to prevent. The draft is what makes deferring
+        // safe — the words survive the steal, the record simply does not move
+        // until the author says so.
+        onRelease: body => drafts?.stash(surfaceId, body),
         canEdit,
         readView,
         // The parent decides which single comment is open (editingCommentId), so
         // this is mounted already editing.
         startOpen: true,
         openAt: editStartPoint,
-        containerClassName: 'min-h-[24px]',
-        // A FLOOR the caret fits inside, not the 24px the class asks for.
+        // One line, matching the rendered comment this replaces.
         //
-        // 24px is under one line, and the editor mounts at this height with
-        // autofocus while the page is still measuring its real content. The
-        // caret landed outside the visible box, the editor blurred on the spot,
-        // and — because a blur COMMITS an inline edit — the comment saved
-        // itself before the user had touched it. The measured height replaces
-        // this within a frame or two, so a larger floor costs nothing visually
-        // and is what keeps the session alive long enough to be one.
-        minHeight: 48,
+        // It was 48 — larger than a line — to survive a NATIVE race: the editor
+        // mounted at its floor with autofocus while the page was still measuring
+        // its real content, the caret landed outside the visible box, the editor
+        // blurred, and because a blur COMMITTED an inline edit the comment saved
+        // itself before anyone touched it. Blur no longer ends or commits a
+        // session, so that race has nowhere to land and the padding it bought is
+        // just a 24px jump when a one-line comment opens for editing.
+        minHeight: editorScaleFor('compact').bodyLineHeight,
         // The author line and the toolbar take turns in ONE fixed-height row,
         // which is what keeps entering an edit height-neutral.
         renderHeader: ({ isEditing, slots }, dialogs) => (
@@ -657,11 +717,13 @@ function CommentEditorDialogs({
 
 /**
  * Save/Cancel for the inline session — Pressables that never take focus (the
- * FormatButton `onMouseDown` guard), NOT core Buttons: pressing a focusable
- * control blurs the editor first, the blur-commit fires, and Cancel would
- * then run on a session that already wrote — cancelling would be impossible.
- * Save survives the same race through `settledRef`, but not stealing focus
- * keeps the selection intact if the press misses.
+ * FormatButton `onMouseDown` guard), NOT core Buttons.
+ *
+ * A focusable control blurs the editor on press. That used to fire the
+ * blur-commit, so Cancel ran against a session that had already written and
+ * cancelling was impossible; the session no longer ends on focus loss, so that
+ * race is gone. The guard stays because the SELECTION does not survive a blur,
+ * and a press that misses should leave the caret where the user left it.
  */
 function SessionButton({
     label,
@@ -700,15 +762,4 @@ function SessionButton({
             </Text>
         </Pressable>
     )
-}
-
-/**
- * Blur whatever holds focus — same rationale as the description editor's
- * copy: ProseMirror keeps the contenteditable focused through its own `blur`
- * command, so the caret stays visible and keystrokes keep landing.
- */
-function blurActiveElement() {
-    if (typeof document === 'undefined') return
-    const active = document.activeElement as HTMLElement | null
-    active?.blur?.()
 }

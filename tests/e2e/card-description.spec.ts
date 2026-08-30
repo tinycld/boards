@@ -130,6 +130,46 @@ test.describe('Cards — markdown descriptions', () => {
         await expect(editor.locator('p').last()).toHaveText('Third line')
     })
 
+    /**
+     * Three ways out, and they must all work.
+     *
+     * The description used to be left by BLURRING — Escape and ⌘↩ both just
+     * dropped focus, and losing focus closed the session. It no longer does, so
+     * a surface with no explicit exit would trap the reader in an editor. The
+     * close icon is the discoverable one; the two keys do the same thing.
+     *
+     * Escape must not reach the peek: the first press leaves the editor, only a
+     * second closes the card.
+     */
+    test('the close icon, Escape and ⌘↩ each end the session', async ({ page }) => {
+        await freshBoard(page, 'exits')
+        await addCard(page, 0, CARD_TITLE)
+        await openCard(page, CARD_TITLE)
+
+        const editor = descriptionEditor(page)
+        const read = page.getByTestId('cards-description-read')
+
+        await openDescription(page)
+        await editor.click()
+        await editor.pressSequentially('Leaving this behind', { delay: 15 })
+
+        await page.getByRole('button', { name: 'Done editing' }).click()
+        await expect(editor).toHaveCount(0)
+        await expect(read).toBeVisible()
+
+        await read.click()
+        await expect(editor).toBeVisible()
+        await page.keyboard.press('Escape')
+        await expect(editor).toHaveCount(0)
+        // The card is still open — the first Escape was consumed by the editor.
+        await expect(page.getByTestId('cards-card-peek')).toHaveCount(1)
+
+        await read.click()
+        await expect(editor).toBeVisible()
+        await page.keyboard.press('ControlOrMeta+Enter')
+        await expect(editor).toHaveCount(0)
+    })
+
     test('keeps a typed ⌘ glyph verbatim', async ({ page }) => {
         // Help topics are authored once with Mac glyphs and translated per
         // platform; a DESCRIPTION is user prose, so the same substitution would

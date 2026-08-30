@@ -2,9 +2,11 @@ import { type LazyEditorSlots, useLazyEditor } from '@tinycld/core/components/ed
 import { MARKDOWN_TRAILING_SPACE } from '@tinycld/core/components/help/MarkdownRenderer'
 import { editorScaleFor } from '@tinycld/core/lib/editor/rich/editor-scale'
 import type { EditorCommands } from '@tinycld/core/lib/editor/types'
+import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { PromptDialog } from '@tinycld/core/ui/PromptDialog'
+import { X } from 'lucide-react-native'
 import { type ReactNode, type RefObject, useRef, useState } from 'react'
-import { Platform, Text, View, type ViewStyle } from 'react-native'
+import { Platform, Pressable, Text, View, type ViewStyle } from 'react-native'
 import type { Awareness } from 'y-protocols/awareness'
 import type * as Y from 'yjs'
 import type { PresenceUser } from '../../hooks/useBoardPresence'
@@ -23,6 +25,11 @@ import { MentionPopover } from './MentionPopover'
  * by the difference the moment someone taps it and every section below —
  * Attachments, Checklist, Activity — slides down. Exported for that reason: one
  * number, both states.
+ *
+ * The web editor states this as the LITERAL class `min-h-[72px]` below, because
+ * Tailwind compiles by scanning source and an interpolated class never
+ * generates a rule. `editor-read-parity.spec.ts` measures the two states against
+ * each other, which is what keeps the literal and this constant in step.
  */
 export const DESCRIPTION_MIN_BODY_HEIGHT = 72
 
@@ -136,6 +143,12 @@ export function useDescriptionEditor({
     // a TDZ error. The ref is assigned right after the hook returns, and the
     // handler only fires on user events, long after that.
     const commandsRef = useRef<EditorCommands | null>(null)
+    // Ending the session, reachable from the editor options.
+    //
+    // `cancel` comes back from the hook below, so the options object — built
+    // first — cannot name it directly. Same TDZ dodge as commandsRef above, and
+    // the same one CommentEditor uses.
+    const cancelRef = useRef<() => void>(() => {})
 
     const { insertExisting, uploadAndInsert, onImageDrop } = useEditorImageActions({
         cardId,
@@ -149,13 +162,6 @@ export function useDescriptionEditor({
     // commenting standing — see useMentionTrigger.
     const mention = useMentionTrigger(projectId)
 
-    // Both dialogs steal focus, which blurs the editor — keeping the toolbar
-    // row alive while either is open is what stops the row from swapping back
-    // to the label mid-flow (and unmounting the button that opened it). The
-    // link dialog originally lived INSIDE the toolbar without this keep-alive
-    // and closed itself the instant its input autofocused.
-    const isDialogOpen = isImagePickerOpen || isLinkOpen
-
     const slots = useLazyEditor({
         surfaceId: `description:${cardId}`,
         readView,
@@ -167,12 +173,6 @@ export function useDescriptionEditor({
         // live. Leaving the editor is the whole of finishing, which LazyEditor
         // does on blur for a surface with no blur-commit.
         onCommit: () => {},
-        // Passed rather than pushed back up through setDialogOpen: this
-        // component already owns both dialogs' open state, and echoing it into
-        // the hook from an effect is the useState+useEffect pairing the style
-        // guide calls out. Keeps a blur under either dialog from ending the
-        // session — the editor must survive until the picked image lands in it.
-        isDialogOpen,
         editorOptions: {
             placeholder: 'Add a description — what does done look like?',
             triggers: mention.triggers,
@@ -185,15 +185,14 @@ export function useDescriptionEditor({
             // this prevents — on web the editor used to inherit the app's 16px
             // body and every line and heading grew on focus.
             scale: editorScaleFor('description'),
-            // Held CONSTANT on purpose. The web hook memoizes EditorComponent on
-            // this string, so varying it with focus would hand React a new
-            // component identity, remount ProseMirror, and blur the editor the
-            // instant it focused — a flicker loop. The focus styling lives on our
-            // own wrapper below instead.
-            containerClassName: `min-h-[${DESCRIPTION_MIN_BODY_HEIGHT}px]`,
-            // Stated rather than inherited: the class above is web-only, and this
-            // matching only the native default by coincidence is not something a
-            // later change to that default should be free to break.
+            // The floor, on both platforms, from ONE number.
+            //
+            // It used to be said twice — here and again as a `min-h-[…]` class —
+            // because web ignored this option. Written as a template literal
+            // that class produced no rule at all (Tailwind compiles by scanning
+            // source text), so the floor silently did not exist and the sections
+            // below jumped when the editor swapped in. useRichEditor honours
+            // this on web now, which is what its own doc always promised.
             minHeight: DESCRIPTION_MIN_BODY_HEIGHT,
             // Blur rather than close: the first Escape should leave the editor,
             // and only a second one should reach the panel behind it. Returning
@@ -208,11 +207,25 @@ export function useDescriptionEditor({
             // the session for a surface with no blur-commit, so this does not
             // need to reach into the editor handle (which the options object
             // cannot see anyway — it is built before the lease resolves).
+            // Both END the session now rather than merely blurring.
+            //
+            // They used to call blurActiveElement(), which worked only because
+            // losing focus closed the editor. It no longer does, so blurring
+            // would leave the reader in an editor they had just asked to leave.
+            //
+            // `cancel` on this surface is not a revert: there is no onCancel, so
+            // it reduces to ending the session. Every keystroke was already
+            // shared through Yjs and flushed by the server, so leaving IS the
+            // whole of finishing.
+            //
+            // Escape returns true to stop the key reaching the peek panel — the
+            // first press should leave the editor, only a second should close
+            // the card.
             onEscape: () => {
-                blurActiveElement()
+                cancelRef.current()
                 return true
             },
-            onSubmitShortcut: blurActiveElement,
+            onSubmitShortcut: () => cancelRef.current(),
             onImageDrop,
             // Undefined before the room is ready: useRichEditor treats a missing
             // collab option as a plain local editor, which is exactly the
@@ -254,24 +267,30 @@ export function useDescriptionEditor({
                 slots={editorSlots}
                 onOpenImagePicker={() => setIsImagePickerOpen(true)}
                 onOpenLinkDialog={() => setIsLinkOpen(true)}
+                onClose={() => cancelRef.current()}
             />
         ),
-        renderEditor: editorSlots => (
-            <DescriptionBody
-                containerRef={containerRef}
-                slots={editorSlots}
-                commandsRef={commandsRef}
-                mention={mention}
-                isConnected={isConnected}
-                attachments={attachments}
-                isImagePickerOpen={isImagePickerOpen}
-                setIsImagePickerOpen={setIsImagePickerOpen}
-                insertExisting={insertExisting}
-                uploadAndInsert={uploadAndInsert}
-                isLinkOpen={isLinkOpen}
-                setIsLinkOpen={setIsLinkOpen}
-            />
-        ),
+        renderEditor: editorSlots => {
+            // Published here rather than in an effect: the options above hold a
+            // ref to it, and it must be current before the first keystroke.
+            cancelRef.current = editorSlots.cancel
+            return (
+                <DescriptionBody
+                    containerRef={containerRef}
+                    slots={editorSlots}
+                    commandsRef={commandsRef}
+                    mention={mention}
+                    isConnected={isConnected}
+                    attachments={attachments}
+                    isImagePickerOpen={isImagePickerOpen}
+                    setIsImagePickerOpen={setIsImagePickerOpen}
+                    insertExisting={insertExisting}
+                    uploadAndInsert={uploadAndInsert}
+                    isLinkOpen={isLinkOpen}
+                    setIsLinkOpen={setIsLinkOpen}
+                />
+            )
+        },
         testID: 'cards-description-read',
         accessibilityLabel: 'Edit description',
     })
@@ -288,11 +307,13 @@ function DescriptionHeader({
     slots,
     onOpenImagePicker,
     onOpenLinkDialog,
+    onClose,
 }: {
     showToolbar: boolean
     slots: LazyEditorSlots | null
     onOpenImagePicker: () => void
     onOpenLinkDialog: () => void
+    onClose: () => void
 }) {
     return (
         // Fixed height, so the swap below costs no vertical space and the
@@ -320,6 +341,13 @@ function DescriptionHeader({
                     isVisible
                     onOpenImagePicker={onOpenImagePicker}
                     onOpenLinkDialog={onOpenLinkDialog}
+                    rightItems={[
+                        {
+                            type: 'custom',
+                            key: 'close',
+                            element: <CloseSessionButton onPress={onClose} />,
+                        },
+                    ]}
                 />
             ) : (
                 <Text className="text-[13px] font-semibold text-foreground">Description</Text>
@@ -329,6 +357,36 @@ function DescriptionHeader({
 }
 
 /** The editing surface, its popovers, and the two dialogs that drive it. */
+/**
+ * Leave the description.
+ *
+ * The only VISIBLE way out now that losing focus no longer closes the editor —
+ * Escape and ⌘↩ do the same thing, but neither is discoverable. There is nothing
+ * to save: every keystroke is already shared through Yjs and flushed by the
+ * server, so this ends the session and nothing else.
+ *
+ * Carries the onMouseDown guard every control inside an editor needs — without
+ * it the press moves DOM focus first and collapses the selection.
+ */
+function CloseSessionButton({ onPress }: { onPress: () => void }) {
+    const mutedColor = useThemeColor('muted')
+    const webProps =
+        Platform.OS === 'web'
+            ? { onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault() }
+            : {}
+    return (
+        <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Done editing"
+            onPress={onPress}
+            {...webProps}
+            className="justify-center rounded-md px-1.5"
+        >
+            <X size={16} color={mutedColor} />
+        </Pressable>
+    )
+}
+
 function DescriptionBody({
     containerRef,
     slots,
@@ -418,19 +476,6 @@ function DescriptionBody({
             />
         </View>
     )
-}
-
-/**
- * Blur whatever holds focus.
- *
- * The editor's own `blur` command is not enough on web: ProseMirror keeps the
- * contenteditable focused, so the caret stays visible and keystrokes keep
- * landing in the document.
- */
-function blurActiveElement() {
-    if (typeof document === 'undefined') return
-    const active = document.activeElement as HTMLElement | null
-    active?.blur?.()
 }
 
 /**

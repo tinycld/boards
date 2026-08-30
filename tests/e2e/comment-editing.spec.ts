@@ -10,7 +10,7 @@ import { addCard, closeCardPeek, createBoard, openBoard, openCard, shareBoard } 
 
 // Editing your own comments in place: clicking the body (or the hover Edit
 // action) swaps the rendered markdown for the rich editor with the formatting
-// toolbar; Save / ⌘↩ / clicking away commits through updateComment, Escape
+// toolbar; Save / ⌘↩ commits through updateComment, Escape
 // discards. The gate mirrors the PB rule — author AND current commenter
 // standing — so the specs assert the AFFORDANCE, and the rules suite already
 // proves the server refuses everyone else.
@@ -128,6 +128,40 @@ test.describe('Cards — editing comments', () => {
         await expect(editor).toContainText('ZAlpha line')
     })
 
+    /**
+     * Escape puts the composer away, taking the draft with it.
+     *
+     * It used to work by blurring, which stopped closing anything once focus and
+     * the session were separated — so without this Escape does nothing in the
+     * composer. A composer is not a record: there is nothing to revert to and
+     * nothing worth keeping once the user has said they are done, so the draft
+     * goes rather than lingering to reappear later.
+     *
+     * The first press must be consumed by the editor; only a second closes the
+     * card.
+     */
+    test('Escape collapses the composer and drops the draft', async ({ page }) => {
+        await freshBoard(page, 'composer-esc')
+        await addCard(page, 0, CARD_TITLE)
+        await openCard(page, CARD_TITLE)
+
+        const prompt = page.getByRole('button', { name: 'Write a comment' })
+        await prompt.click()
+        await expect(composerEditor(page)).toBeVisible()
+        await composerEditor(page).click()
+        await composerEditor(page).pressSequentially('half typed', { delay: 8 })
+
+        await page.keyboard.press('Escape')
+        await expect(composerEditor(page)).toHaveCount(0)
+        await expect(prompt).toBeVisible()
+        // Still on the card — the editor consumed that press.
+        await expect(page.getByTestId('cards-card-peek')).toHaveCount(1)
+
+        // Re-opening starts clean rather than restoring what was dismissed.
+        await prompt.click()
+        await expect(composerEditor(page)).toHaveText('')
+    })
+
     test('click-to-edit saves and persists', async ({ page }) => {
         await freshBoard(page, 'save')
         await addCard(page, 0, CARD_TITLE)
@@ -176,7 +210,16 @@ test.describe('Cards — editing comments', () => {
         await expect(page.getByTestId('cards-card-peek')).toBeVisible()
     })
 
-    test('clicking away commits the edit', async ({ page }) => {
+    /**
+     * Clicking elsewhere does NOT end the edit.
+     *
+     * It used to: losing focus committed and closed. That made every focusable
+     * control finish the edit behind the user's back — the toolbar's overflow
+     * menu was the case that surfaced it, since a portalled menu cannot be
+     * guarded the way the individual buttons are. An edit now ends only when
+     * another surface takes the editor, on Escape, or via Save.
+     */
+    test('clicking away leaves the editor open', async ({ page }) => {
         await freshBoard(page, 'blur')
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
@@ -184,12 +227,41 @@ test.describe('Cards — editing comments', () => {
 
         await beginEdit(page, 'Draft thought.')
         await typeInto(page, commentEditor(page), 'Settled thought.')
-        // Clicking elsewhere in the panel is how an edit usually ends —
-        // EditableText's convention, kept here.
         await page.getByText('Activity', { exact: true }).click()
 
+        // Still editing, and still holding what was typed.
+        await expect(page.getByTestId('cards-comment-editor')).toHaveCount(1)
+        await expect(commentEditor(page)).toContainText('Settled thought.')
+
+        // Save is what writes it.
+        await page.getByRole('button', { name: 'Save', exact: true }).click()
         await expect(page.getByTestId('cards-comment-editor')).toHaveCount(0)
         await expect(page.getByText('Settled thought.')).toBeVisible()
+    })
+
+    /**
+     * The bug this whole change exists for: at narrow widths every format button
+     * folds into the overflow menu, so a menu press that ended the session made
+     * the toolbar unusable exactly where there is least room to notice.
+     */
+    test('the overflow menu does not end the edit', async ({ page }) => {
+        await page.setViewportSize({ width: 900, height: 800 })
+        await freshBoard(page, 'overflow')
+        await addCard(page, 0, CARD_TITLE)
+        await openCard(page, CARD_TITLE)
+        await postComment(page, 'Menu safe.')
+
+        await beginEdit(page, 'Menu safe.')
+        // Select the word the menu action will apply to.
+        await commentEditor(page).click()
+        await page.keyboard.press('ControlOrMeta+A')
+
+        await page.getByLabel('More actions').first().click()
+        await expect(page.getByRole('menuitem').first()).toBeVisible()
+
+        await expect(page.getByTestId('cards-comment-editor')).toHaveCount(1)
+        // Still has its text — the edit was neither committed nor discarded.
+        await expect(commentEditor(page)).toContainText('Menu safe.')
     })
 
     test('composer toolbar formats, and the edit round-trips the markdown', async ({ page }) => {
