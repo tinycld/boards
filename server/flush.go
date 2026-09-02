@@ -1,6 +1,7 @@
 package cards
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -29,7 +30,7 @@ const descriptionRuneLimit = 5000
 // so an update that has not reached a record is still replayable. Any row that
 // did save advanced its baseline, so the retry is a no-op for it.
 func makeFlush(app core.App, state *boardDocState) realtime.FlushFn {
-	return func(projectID string, handle realtime.DocHandle) (returnedErr error) {
+	return func(_ context.Context, projectID string, handle realtime.DocHandle) (returnedErr error) {
 		defer func() {
 			// A panic here would take down the coordinator's goroutine and
 			// with it every board's persistence, not just this one.

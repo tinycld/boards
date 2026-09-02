@@ -65,7 +65,7 @@ func TestFlush_WritesAnEditedDescription(t *testing.T) {
 	_, _, flush, handle := boardRoom(t, env)
 
 	writeFragment(t, handle, env.card.Id, "## Plan\n\nShip **it**.\n")
-	if err := flush(env.project.Id, handle); err != nil {
+	if err := flush(t.Context(), env.project.Id, handle); err != nil {
 		t.Fatalf("flush: %v", err)
 	}
 
@@ -92,7 +92,7 @@ func TestFlush_LeavesAnUntouchedCardAlone(t *testing.T) {
 
 	_, _, flush, handle := boardRoom(t, env)
 	// No edit at all — just a flush, as happens when another card changes.
-	if err := flush(env.project.Id, handle); err != nil {
+	if err := flush(t.Context(), env.project.Id, handle); err != nil {
 		t.Fatalf("flush: %v", err)
 	}
 
@@ -126,7 +126,7 @@ func TestFlush_PreservesAnEditMadeOutsideTheRoom(t *testing.T) {
 		t.Fatalf("outside edit: %v", err)
 	}
 
-	if err := flush(env.project.Id, handle); err != nil {
+	if err := flush(t.Context(), env.project.Id, handle); err != nil {
 		t.Fatalf("flush: %v", err)
 	}
 	if got := description(t, env, env.card.Id); got != "Edited elsewhere." {
@@ -150,7 +150,7 @@ func TestFlush_SkipsACardFromAnotherBoard(t *testing.T) {
 	_, _, flush, handle := boardRoom(t, env)
 	writeFragment(t, handle, foreign.Id, "Injected by another board.\n")
 
-	if err := flush(env.project.Id, handle); err != nil {
+	if err := flush(t.Context(), env.project.Id, handle); err != nil {
 		t.Fatalf("flush: %v", err)
 	}
 	if got := description(t, env, foreign.Id); got != "Untouched." {
@@ -173,7 +173,7 @@ func TestFlush_SkipsADeletedCard(t *testing.T) {
 		t.Fatalf("delete: %v", err)
 	}
 
-	if err := flush(env.project.Id, handle); err != nil {
+	if err := flush(t.Context(), env.project.Id, handle); err != nil {
 		t.Errorf("a deleted card failed the whole board's flush: %v", err)
 	}
 }
@@ -185,7 +185,7 @@ func TestFlush_ClampsAnOversizeDescription(t *testing.T) {
 	_, _, flush, handle := boardRoom(t, env)
 	writeFragment(t, handle, env.card.Id, strings.Repeat("x", descriptionRuneLimit+500))
 
-	if err := flush(env.project.Id, handle); err != nil {
+	if err := flush(t.Context(), env.project.Id, handle); err != nil {
 		t.Fatalf("flush: %v", err)
 	}
 	if got := len([]rune(description(t, env, env.card.Id))); got > descriptionRuneLimit {
@@ -200,7 +200,7 @@ func TestFlush_IsIdempotent(t *testing.T) {
 	_, _, flush, handle := boardRoom(t, env)
 	writeFragment(t, handle, env.card.Id, "Saved once.\n")
 
-	if err := flush(env.project.Id, handle); err != nil {
+	if err := flush(t.Context(), env.project.Id, handle); err != nil {
 		t.Fatalf("first flush: %v", err)
 	}
 	first, err := env.app.FindRecordById("cards_cards", env.card.Id)
@@ -210,7 +210,7 @@ func TestFlush_IsIdempotent(t *testing.T) {
 	stamp := first.GetDateTime("updated")
 
 	time.Sleep(1100 * time.Millisecond) // the timestamp has second resolution
-	if err := flush(env.project.Id, handle); err != nil {
+	if err := flush(t.Context(), env.project.Id, handle); err != nil {
 		t.Fatalf("second flush: %v", err)
 	}
 	second, err := env.app.FindRecordById("cards_cards", env.card.Id)
@@ -275,7 +275,7 @@ func TestBootstrap_ThenFlushIsANoOp(t *testing.T) {
 	stamp := before.GetDateTime("updated")
 
 	_, _, flush, handle := boardRoom(t, env)
-	if err := flush(env.project.Id, handle); err != nil {
+	if err := flush(t.Context(), env.project.Id, handle); err != nil {
 		t.Fatalf("flush: %v", err)
 	}
 
