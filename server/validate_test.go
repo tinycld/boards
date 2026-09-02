@@ -1,6 +1,7 @@
 package cards
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -36,7 +37,7 @@ func updateWriting(t *testing.T, fragment string) []byte {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	runtime.SetBootstrap(func(_ string, doc *yjsdoc.Doc) error {
+	runtime.SetBootstrap(func(_ context.Context, _ string, doc *yjsdoc.Doc) error {
 		return yjsdoc.SeedFragmentFromPMJSON(doc, fragment, pmJSON)
 	})
 

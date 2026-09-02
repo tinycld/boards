@@ -1,6 +1,7 @@
 package cards
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -43,7 +44,7 @@ const seedBoardCountWarn = 200
 // the first edit of an untouched card correct: the fragment already holds the
 // stored prose, so a keystroke appends to it instead of replacing it.
 func makeBootstrap(app core.App, state *boardDocState) yjsdoc.BootstrapFn {
-	return func(projectID string, doc *yjsdoc.Doc) error {
+	return func(_ context.Context, projectID string, doc *yjsdoc.Doc) error {
 		state.open(projectID, time.Now())
 
 		records, err := app.FindRecordsByFilter(

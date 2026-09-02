@@ -40,8 +40,8 @@ import (
 //
 // WHO GETS ATTRIBUTED, and why it is "Someone". A comment has one author. A
 // description does not: the flush is per-BOARD and debounced across every
-// connected client, and realtime.FlushFn is `func(roomID string, handle
-// DocHandle) error` — it carries no auth, by construction. The typist is
+// connected client, and realtime.FlushFn is `func(ctx context.Context, roomID
+// string, handle DocHandle) error` — it carries no auth, by construction. The typist is
 // therefore unknowable at this layer. Rather than guess (attributing the edit
 // to the room's opener, or the card's reporter, would be wrong the moment two
 // people share a board — which is the only case that matters), the
