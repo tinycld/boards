@@ -16,6 +16,7 @@ import { CardKeyBadge } from './detail/CardKeyBadge'
 import type { EditableTextHandle } from './detail/EditableText'
 import { IconButton } from './detail/IconButton'
 import { ListStepper } from './detail/ListStepper'
+import { WatchButton } from './detail/WatchButton'
 import { ProjectWash } from './ProjectWash'
 
 interface CardPeekProps {
@@ -149,13 +150,15 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
                     />
                     <CardKeyBadge cardKey={entry.card.key} />
                     <View className="flex-1" />
+                    <WatchButton projectId={project.id} cardId={entry.card.id} />
                     <IconButton label="Open full page" onPress={expandCard}>
                         <Maximize2 size={14} color={mutedColor} strokeWidth={2.2} />
                     </IconButton>
                     {canEdit ? (
                         <CardActionsMenu
-                            cardId={entry.card.id}
-                            cardTitle={entry.card.title}
+                            card={entry.card}
+                            list={entry.list}
+                            projectId={project.id}
                             onDismiss={closeCard}
                         />
                     ) : null}
@@ -176,6 +179,7 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
                     projectId={project.id}
                     projectLabels={project.labels}
                     projectMembers={project.members}
+                    projectLists={project.lists}
                     titleRef={titleRef}
                 />
             </View>

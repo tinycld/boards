@@ -30,9 +30,12 @@
 //
 // The nested, render-ready shapes the board query assembles from the flat
 // records. See the block above them for why they are not just the records.
+
 import type {
+    CardsActivity,
     CardsAttachments,
     CardsCards,
+    CardsCardWatchers,
     CardsChecklistItems,
     CardsComments,
     CardsLabels,
@@ -42,10 +45,13 @@ import type {
     CardsShareLinks,
     Users,
 } from '@tinycld/core/types/pbSchema'
+import type { CardPriority } from './lib/priority'
 
 export type {
+    CardsActivity,
     CardsAttachments,
     CardsCards,
+    CardsCardWatchers,
     CardsChecklistItems,
     CardsComments,
     CardsLabels,
@@ -82,6 +88,14 @@ export type CardsShareLinkRole = CardsShareLinks['role']
 
 /** `link` means the board is reachable by anyone holding a live share link. */
 export type CardsProjectVisibility = CardsProjects['visibility']
+
+/**
+ * The five-step scale, re-exported from lib/priority.ts where its ORDER lives.
+ * Not aliased from the generated field: the schema emits an optional select
+ * with '' in its union, and '' is normalized away at the boundary (see
+ * `normalizePriority`) so no component ever meets it.
+ */
+export type { CardPriority } from './lib/priority'
 
 // ---------------------------------------------------------------------------
 // Board view models
@@ -139,6 +153,21 @@ export interface BoardComment {
     parent: string
 }
 
+/** The history vocabulary — derived from the migration's select, never restated. */
+export type ActivityKind = CardsActivity['kind']
+
+export interface BoardActivity {
+    id: string
+    kind: ActivityKind
+    /** Undefined for a write with no person behind it (a rule, a seed, the description flush). */
+    actor?: BoardMember
+    /** Raw values — ids, ISO dates, titles — resolved to names at render. */
+    from: string
+    to: string
+    /** ISO timestamp from `created`. */
+    created: string
+}
+
 export interface BoardAttachment {
     id: string
     /** PocketBase's stored name, `{name}_{random10}.{ext}` — what URLs use. */
@@ -189,6 +218,13 @@ export interface BoardCardView {
      * ignores `required` for a maxSelect:1 relation.
      */
     reporter?: BoardMember
+    /** Already normalized — never '' — see lib/priority.ts. */
+    priority: CardPriority
+    /**
+     * ISO timestamp from `created`, '' for an optimistic insert the server has
+     * not echoed yet. What "sort by created" orders on; see lib/created-order.
+     */
+    created: string
     /** Denormalized counters, maintained by server/counters.go. */
     checklistTotal: number
     checklistDone: number
@@ -202,7 +238,14 @@ export interface BoardListView {
     /** Fractional rank — see lib/rank.ts. Sort by `position, id`. */
     position: string
     isDone: boolean
+    /** The cards that pass the board filter, in the chosen sort order. */
     cards: BoardCardView[]
+    /**
+     * Every live card in the list, filtered or not. Differs from
+     * `cards.length` only while a filter is on — that gap is what the column's
+     * "3/12" count shows.
+     */
+    totalCount: number
 }
 
 /**
@@ -231,6 +274,8 @@ export interface BoardProject {
     lists: BoardListView[]
     /** `lists` reduced to ranks — identity changes only when list ROWS change. */
     listOrder: BoardListRank[]
+    /** Live cards across the whole board before the filter, for the header. */
+    cardTotal: number
     /**
      * Every label defined on this board — what the card label picker offers,
      * which is a superset of any one card's `labels`.

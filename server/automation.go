@@ -13,13 +13,14 @@ import (
 // native action handlers with the relation authorizers the engine requires
 // before it will run them. Called from registerShared before hooks load.
 func registerAutomation() {
-	// One resolver, four triggers: every card event belongs to the same
+	// One resolver, five triggers: every card event belongs to the same
 	// people — the members of the card's board.
 	for _, ref := range []string{
 		"cards:card-created",
 		"cards:card-moved",
 		"cards:card-completed",
 		"cards:card-assigned",
+		"cards:card-priority-changed",
 	} {
 		automation.RegisterOwnerResolver(ref, cardOwnerResolver)
 	}

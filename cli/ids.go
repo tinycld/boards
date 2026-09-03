@@ -60,6 +60,10 @@ type card struct {
 	// Writable, unlike Number above: it defaults to the creator but exists
 	// precisely so it can be pointed at someone else.
 	Reporter string `json:"reporter"`
+	// One of priorities below, or "" on a row written before the column
+	// existed — which the app reads as "none". The CLI writes it only when
+	// asked, and validates against the same list the schema enforces.
+	Priority string `json:"priority"`
 	Created  string `json:"created"`
 	Updated  string `json:"updated"`
 
@@ -135,6 +139,30 @@ func (u user) displayName() string {
 }
 
 var errNotFound = errors.New("not found")
+
+// priorities is the schema's select, in scale order (most urgent first). The
+// server refuses anything else, but validating here turns a 400 from the API
+// into a message that names the choices.
+var priorities = []string{"urgent", "high", "medium", "low", "none"}
+
+func validPriority(v string) bool {
+	for _, p := range priorities {
+		if p == v {
+			return true
+		}
+	}
+	return false
+}
+
+// priorityCell renders a card's priority for a table. "" and "none" are the
+// same state and both show as "-", matching what the board face shows for
+// them (nothing at all).
+func priorityCell(cd card) string {
+	if cd.Priority == "" || cd.Priority == "none" {
+		return "-"
+	}
+	return cd.Priority
+}
 
 const (
 	projectsCollection  = "cards_projects"

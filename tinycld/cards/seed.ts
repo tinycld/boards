@@ -1,4 +1,5 @@
 import type PocketBase from 'pocketbase'
+import type { CardPriority } from './lib/priority'
 import { initialRanks } from './lib/rank'
 
 function log(...args: unknown[]) {
@@ -56,6 +57,7 @@ interface CardSeed {
      * someone else's behalf, which is the case the field exists for.
      */
     reporter?: Who
+    priority?: CardPriority
     checklist?: { title: string; done?: boolean }[]
     comments?: CommentSeed[]
 }
@@ -115,6 +117,7 @@ const BOARDS: BoardSeed[] = [
                     },
                     {
                         title: 'Export boards to CSV',
+                        priority: 'low',
                         labels: ['Feature'],
                     },
                     {
@@ -155,6 +158,7 @@ const BOARDS: BoardSeed[] = [
                 cards: [
                     {
                         title: 'Draft the launch announcement',
+                        priority: 'medium',
                         due: () => dueAt(3),
                         labels: ['Feature'],
                         assignees: ['me'],
@@ -166,6 +170,7 @@ const BOARDS: BoardSeed[] = [
                     },
                     {
                         title: 'Fix duplicate label colors in picker',
+                        priority: 'high',
                         due: () => dueAt(1),
                         labels: ['Bug'],
                         // A bug someone else hit and filed: the reporter is who
@@ -216,6 +221,7 @@ const BOARDS: BoardSeed[] = [
                     },
                     {
                         title: 'Payment provider webhook retries',
+                        priority: 'urgent',
                         due: () => dueAt(-2),
                         labels: ['Bug', 'Urgent'],
                         assignees: ['teammate'],
@@ -403,6 +409,7 @@ async function seedBoard(
                     .filter(id => id !== undefined),
                 created_by: ownerId,
                 reporter: card.reporter ? who(card.reporter) : ownerId,
+                priority: card.priority ?? 'none',
                 archived: false,
             })
 

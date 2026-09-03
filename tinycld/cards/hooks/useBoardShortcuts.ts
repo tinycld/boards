@@ -1,9 +1,11 @@
+import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { type Shortcut, useRegisterShortcuts, useShortcutScope } from '@tinycld/core/lib/shortcuts'
+import { useRouter } from 'expo-router'
 import { useMemo } from 'react'
 import { findCardEntry, neighborCardId } from '../lib/board-cards'
 import { columnStep, composerTargetColumnId, targetColumnForMove } from '../lib/board-focus'
 import { rankForAppend, rankForReorder } from '../lib/move'
-import { useCardsUIStore } from '../stores/cards-ui-store'
+import { selectBoardSort, useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardProject } from '../types'
 import { useArchiveCard, useMoveCard } from './useCardMutations'
 
@@ -20,7 +22,25 @@ import { useArchiveCard, useMoveCard } from './useCardMutations'
  * is an effect chasing six live queries — exactly the per-emission re-render
  * this board is built to avoid.
  */
-export function useBoardShortcuts(project: BoardProject, canEdit: boolean) {
+export interface BoardShortcutOptions {
+    /**
+     * The table view's row order. When set, j/k walk THIS list rather than
+     * board order, and the shortcuts that only make sense on the canvas —
+     * within-column moves, the composers — are left out. Column moves,
+     * open, archive and Escape keep working: they resolve through
+     * `project.lists`, which both views share.
+     */
+    visibleOrder?: string[]
+}
+
+export function useBoardShortcuts(
+    project: BoardProject,
+    canEdit: boolean,
+    options: BoardShortcutOptions = {}
+) {
+    const { visibleOrder } = options
+    const router = useRouter()
+    const orgHref = useOrgHref()
     // The id is passed to the register call rather than left to the stack: a
     // blurred-but-mounted screen (web `freezeOnBlur` only hides the subtree)
     // re-registers on its own live-query schedule, and re-deriving the stamp
@@ -43,7 +63,18 @@ export function useBoardShortcuts(project: BoardProject, canEdit: boolean) {
             return { focusedCardId, focusedColumnId }
         }
 
-        const firstCardId = () => project.lists.flatMap(list => list.cards)[0]?.id ?? null
+        const firstCardId = () =>
+            visibleOrder
+                ? (visibleOrder[0] ?? null)
+                : (project.lists.flatMap(list => list.cards)[0]?.id ?? null)
+
+        const neighbor = (cardId: string, delta: 1 | -1): string | null => {
+            if (!visibleOrder) return neighborCardId(project, cardId, delta)
+            const index = visibleOrder.indexOf(cardId)
+            if (index === -1) return null
+            const next = Math.min(Math.max(index + delta, 0), visibleOrder.length - 1)
+            return next === index ? null : (visibleOrder[next] ?? null)
+        }
 
         const step = (delta: 1 | -1) => {
             const { focusedCardId } = focus()
@@ -54,8 +85,18 @@ export function useBoardShortcuts(project: BoardProject, canEdit: boolean) {
                 if (first) focusCard(first)
                 return
             }
-            const next = neighborCardId(project, focusedCardId, delta)
-            if (next) focusCard(next)
+            const next = neighbor(focusedCardId, delta)
+            if (next) {
+                focusCard(next)
+                return
+            }
+            // A focused card that a filter has since hidden is nowhere in the
+            // tree, so stepping from it goes nowhere; adopt the first visible
+            // card rather than leaving j/k dead until the user clicks.
+            if (!findCardEntry(project, focusedCardId)) {
+                const first = firstCardId()
+                if (first) focusCard(first)
+            }
         }
 
         const stepColumn = (delta: 1 | -1) => {
@@ -86,6 +127,10 @@ export function useBoardShortcuts(project: BoardProject, canEdit: boolean) {
         const moveWithin = (delta: 1 | -1) => {
             const { focusedCardId } = focus()
             if (!focusedCardId) return
+            // A within-column move is a rank edit against the column's order,
+            // and under a sort the column is not in rank order — the same
+            // reason ColumnCards refuses a drag reorder.
+            if (selectBoardSort(useCardsUIStore.getState(), project.id).field !== 'manual') return
             const entry = findCardEntry(project, focusedCardId)
             if (!entry) return
             const cards = entry.list.cards
@@ -151,21 +196,29 @@ export function useBoardShortcuts(project: BoardProject, canEdit: boolean) {
             nav('cards.board.open', 'Enter', 'Open card', open),
             nav('cards.board.openAlt', 'o', 'Open card (alt)', open),
             nav('cards.board.clearFocus', 'Escape', 'Clear focus', () => focusCard(null)),
+            nav('cards.board.myCards', 'g m', 'Go to My cards', () =>
+                router.push(orgHref('cards/my-cards'))
+            ),
         ]
 
         if (!canEdit) return list
 
-        return [
-            ...list,
+        const editing: Shortcut[] = [
             nav('cards.board.moveLeft', 'Shift+ArrowLeft', 'Move card to previous column', () =>
                 moveAcross(-1)
             ),
             nav('cards.board.moveRight', 'Shift+ArrowRight', 'Move card to next column', () =>
                 moveAcross(1)
             ),
+            nav('cards.board.archive', 'x', 'Archive card', archive),
+        ]
+        if (visibleOrder) return [...list, ...editing]
+
+        return [
+            ...list,
+            ...editing,
             nav('cards.board.moveUp', 'Shift+ArrowUp', 'Move card up', () => moveWithin(-1)),
             nav('cards.board.moveDown', 'Shift+ArrowDown', 'Move card down', () => moveWithin(1)),
-            nav('cards.board.archive', 'x', 'Archive card', archive),
             nav('cards.board.addCard', 'n', 'Add card to this column', addCard),
             // Shift+N is a no-op on an empty board, where BoardCanvas renders
             // EmptyBoard and mounts no AddListColumn to open.
@@ -176,6 +229,9 @@ export function useBoardShortcuts(project: BoardProject, canEdit: boolean) {
     }, [
         project,
         canEdit,
+        visibleOrder,
+        router,
+        orgHref,
         openCard,
         focusCard,
         focusColumn,

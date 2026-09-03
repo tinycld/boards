@@ -13,9 +13,11 @@ import { Pressable, Text, View } from 'react-native'
 import type { RemoteCardsPresence } from '../hooks/useBoardPresence'
 import { useCardFileDrop } from '../hooks/useCardFileDrop'
 import { dueStateFor, formatDueDate } from '../lib/due-state'
+import type { CardPriority } from '../lib/priority'
 import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardCardView, BoardLabel, BoardMember } from '../types'
 import { useCardPresence } from './BoardPresenceProvider'
+import { PriorityGlyph } from './PriorityGlyph'
 
 const MAX_LABELS = 3
 // Three watchers is already unusual company on one card; past that a count
@@ -132,6 +134,7 @@ function CardFace({ card, isCompact }: { card: BoardCardView; isCompact: boolean
     if (isCompact) {
         return (
             <>
+                <PriorityGlyph priority={card.priority} size={12} />
                 <CompactLabelDots labels={card.labels ?? []} />
                 <Text
                     className="flex-1 text-[13.5px] font-medium leading-[18px] text-foreground"
@@ -146,7 +149,7 @@ function CardFace({ card, isCompact }: { card: BoardCardView; isCompact: boolean
     }
     return (
         <>
-            <CardTopRow labels={card.labels ?? []} cardKey={card.key} />
+            <CardTopRow labels={card.labels ?? []} cardKey={card.key} priority={card.priority} />
             <Text
                 className="text-[13.5px] font-medium leading-[18px] text-foreground"
                 numberOfLines={3}
@@ -170,13 +173,24 @@ function CardFace({ card, isCompact }: { card: BoardCardView; isCompact: boolean
  * The key is pushed RIGHT with a spacer so it lands in a consistent spot down a
  * column, instead of jittering with each card's label widths.
  *
- * Renders nothing at all when there are no labels AND no key — the case for
- * most cards on a fresh board, which should not carry an empty row.
+ * Renders nothing at all when there are no labels, no key AND no priority —
+ * the case for most cards on a fresh board, which should not carry an empty
+ * row. Priority leads the row: it is the one glyph a reader scans a column
+ * for, so it sits in the same left-hand spot on every card that has one.
  */
-function CardTopRow({ labels, cardKey }: { labels: BoardLabel[]; cardKey: string }) {
-    if (labels.length === 0 && !cardKey) return null
+function CardTopRow({
+    labels,
+    cardKey,
+    priority,
+}: {
+    labels: BoardLabel[]
+    cardKey: string
+    priority: CardPriority
+}) {
+    if (labels.length === 0 && !cardKey && priority === 'none') return null
     return (
         <View className="flex-row items-center gap-1">
+            <PriorityGlyph priority={priority} />
             <CardLabels labels={labels} />
             <View className="flex-1" />
             <CardKey cardKey={cardKey} />

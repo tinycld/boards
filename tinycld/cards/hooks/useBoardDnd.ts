@@ -23,8 +23,8 @@ import {
     isColumnDragPayload,
     setGrabbingCursor,
 } from '../lib/dnd'
-import { rankForInsert } from '../lib/move'
-import { useCardsUIStore } from '../stores/cards-ui-store'
+import { rankForAppend, rankForInsert } from '../lib/move'
+import { selectBoardSort, useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardCardView, BoardProject } from '../types'
 import { useMoveCard } from './useCardMutations'
 
@@ -140,10 +140,18 @@ export function useBoardDnd(project: BoardProject, canEdit: boolean): BoardDnd {
         const target = project.lists.find(list => list.id === event.toContainerId)
         if (!target) return
         hapticSuccess()
+        // Under a non-manual sort the target column is not in rank order, so
+        // the drop index names a slot that has no rank meaning; the card
+        // appends instead (after the column's highest rank) and settles into
+        // its sorted place on the next render. Read imperatively: the sort
+        // changes at rest, never mid-drag.
+        const isSorted = selectBoardSort(useCardsUIStore.getState(), project.id).field !== 'manual'
         moveCard.mutate({
             cardId: event.item.id,
             listId: event.toContainerId,
-            position: rankForInsert(target.cards, event.toIndex),
+            position: isSorted
+                ? rankForAppend(target.cards)
+                : rankForInsert(target.cards, event.toIndex),
         })
     }
 

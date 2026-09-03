@@ -2,6 +2,8 @@ import { DocumentTitle } from '@tinycld/core/components/DocumentTitle'
 import { LoadingState } from '@tinycld/core/components/LoadingState'
 import { useDeviceInsets } from '@tinycld/core/lib/use-safe-area'
 import { View } from 'react-native'
+import { ArchivedBoardBanner } from '../components/ArchivedBoardBanner'
+import { ArchivedCardsPanel } from '../components/ArchivedCardsPanel'
 import { BoardCanvas } from '../components/BoardCanvas'
 import { BoardHeader } from '../components/BoardHeader'
 import { BoardPresenceProvider } from '../components/BoardPresenceProvider'
@@ -9,17 +11,19 @@ import { CardPeek } from '../components/CardPeek'
 import { NoBoards } from '../components/EmptyBoard'
 import { NewBoardDialog } from '../components/NewBoardDialog'
 import { ProjectWash } from '../components/ProjectWash'
+import { BoardTable } from '../components/table/BoardTable'
 import { useActiveBoard } from '../hooks/useActiveBoard'
 import { usePeekUrl } from '../hooks/usePeekUrl'
-import { useCardsUIStore } from '../stores/cards-ui-store'
+import { selectViewMode, useCardsUIStore } from '../stores/cards-ui-store'
 
 export default function CardsIndex() {
-    const { project, cardCount, isLoading, hasProjects } = useActiveBoard()
+    const { project, isArchived, cardCount, isLoading, hasProjects } = useActiveBoard()
     const insets = useDeviceInsets()
     // Published into the presence slot so peers see which card this user has
     // open. Read here rather than inside the provider so the provider stays a
     // plain wrapper over the hook.
     const openCardId = useCardsUIStore(s => s.openCardId)
+    const viewMode = useCardsUIStore(s => selectViewMode(s, project?.id ?? ''))
     // Mirrors the open peek into `?focused=` and back. Called before the early
     // returns below because hooks cannot be conditional; it no-ops until there
     // is a board.
@@ -52,9 +56,15 @@ export default function CardsIndex() {
             <View className="flex-1 bg-background">
                 <DocumentTitle pkg="Cards" title={project.name} />
                 <ProjectWash color={project.color} bleedRight={insets.right} />
-                <BoardHeader project={project} cardCount={cardCount} />
-                <BoardCanvas project={project} />
+                <BoardHeader project={project} cardCount={cardCount} isArchived={isArchived} />
+                <ArchivedBoardBanner project={project} isVisible={isArchived} />
+                {viewMode === 'list' ? (
+                    <BoardTable project={project} />
+                ) : (
+                    <BoardCanvas project={project} />
+                )}
                 <CardPeek project={project} />
+                <ArchivedCardsPanel project={project} />
                 <NewBoardDialog />
             </View>
         </BoardPresenceProvider>

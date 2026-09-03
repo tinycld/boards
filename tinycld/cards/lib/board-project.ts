@@ -17,7 +17,10 @@ import type {
     CardsProjects,
     Users,
 } from '../types'
+import { type BoardFilter, cardMatchesFilter } from './board-filter'
+import { type BoardSort, compareCards } from './board-sort'
 import { formatCardKey } from './card-key'
+import { normalizePriority } from './priority'
 
 /** The subset of a user row the board actually renders. */
 type UserLike = Pick<Users, 'id' | 'name' | 'email'>
@@ -103,6 +106,8 @@ export function toBoardCard(
         // leaves its id behind and there is nothing to say about it.
         assignees: card.assignees.map(id => usersById.get(id) ?? anonymousMember(id)),
         reporter: toReporter(card, usersById),
+        priority: normalizePriority(card.priority),
+        created: card.created ?? '',
         checklistTotal: card.checklist_total,
         checklistDone: card.checklist_done,
         commentCount: card.comment_count,
@@ -176,8 +181,22 @@ function byRank<T extends { position: string; id: string }>(a: T, b: T): number 
     return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }
 
+/**
+ * The per-user view of a board: which cards to show and in what order. Absent
+ * on the public board and the card page, which render everything in rank
+ * order. `userId` resolves the filter's "me"; `now` pins the due facets for
+ * tests.
+ */
+export interface BoardViewOptions {
+    filter: BoardFilter
+    sort: BoardSort
+    userId: string
+    now?: Date
+}
+
 export interface BuildBoardInput {
     project: CardsProjects | undefined
+    view?: BoardViewOptions
     lists: CardsLists[]
     cards: CardsCards[]
     labels: CardsLabels[]
@@ -206,19 +225,38 @@ export function buildBoardProject(
     input: BuildBoardInput,
     previous?: BoardProject | null
 ): BoardProject | null {
-    const { project, lists, cards, labels, members, users } = input
+    const { project, lists, cards, labels, members, users, view } = input
     if (!project) return null
 
     const labelsById = new Map(labels.map(l => [l.id, toBoardLabel(l)]))
     const usersById = new Map(users.map(u => [u.id, toBoardMember(u)]))
 
+    // The filter is applied HERE, beside the archived skip, so `list.cards` and
+    // what the column renders are one and the same array. Handing a column a
+    // filtered copy would leave drax reporting indices into the rendered set
+    // while the rank helpers computed against the full one — a drop that
+    // lands in the wrong place, silently, only while a filter is on. Hidden
+    // cards keep their ranks; a card dropped between two visible neighbours
+    // lands between them in rank order, which is where it reappears once the
+    // filter clears.
     const cardsByList = new Map<string, BoardCardView[]>()
+    const totals = new Map<string, number>()
+    let cardTotal = 0
     for (const card of [...cards].sort(byRank)) {
         if (card.archived) continue
-        const view = toBoardCard(card, labelsById, usersById, project.slug)
+        cardTotal += 1
+        totals.set(card.list, (totals.get(card.list) ?? 0) + 1)
+        const cardView = toBoardCard(card, labelsById, usersById, project.slug)
+        if (view && !cardMatchesFilter(cardView, view.filter, view)) continue
         const bucket = cardsByList.get(card.list)
-        if (bucket) bucket.push(view)
-        else cardsByList.set(card.list, [view])
+        if (bucket) bucket.push(cardView)
+        else cardsByList.set(card.list, [cardView])
+    }
+    // Sorting per bucket AFTER the rank pass keeps the manual order as the
+    // tiebreak inside every comparator (see board-sort.ts).
+    if (view && view.sort.field !== 'manual') {
+        const compare = compareCards(view.sort)
+        for (const bucket of cardsByList.values()) bucket.sort(compare)
     }
 
     const sortedLists = [...lists].sort(byRank)
@@ -245,8 +283,10 @@ export function buildBoardProject(
             position: list.position,
             isDone: list.is_done,
             cards: cardsByList.get(list.id) ?? [],
+            totalCount: totals.get(list.id) ?? 0,
         })),
         listOrder: sortedLists.map(list => ({ id: list.id, position: list.position })),
+        cardTotal,
         unplacedCards,
     }
 
@@ -288,6 +328,8 @@ function sameCard(a: BoardCardView, b: BoardCardView): boolean {
         a.title === b.title &&
         a.description === b.description &&
         (a.due?.getTime() ?? null) === (b.due?.getTime() ?? null) &&
+        a.priority === b.priority &&
+        a.created === b.created &&
         a.checklistTotal === b.checklistTotal &&
         a.checklistDone === b.checklistDone &&
         a.commentCount === b.commentCount &&
@@ -354,6 +396,9 @@ function shareTree(previous: BoardProject, fresh: BoardProject): BoardProject {
             prior.name === list.name &&
             prior.position === list.position &&
             prior.isDone === list.isDone &&
+            // A filter that hides a card changes the count but not the list's
+            // own row; without this line the column keeps its stale "12".
+            prior.totalCount === list.totalCount &&
             allShared(cards, prior.cards)
         ) {
             return prior
@@ -380,7 +425,8 @@ function shareTree(previous: BoardProject, fresh: BoardProject): BoardProject {
         // card nodes above already reflect that. Without this line the PROJECT
         // node would still be reused, so the header would keep the old slug.
         previous.slug === fresh.slug &&
-        previous.color === fresh.color
+        previous.color === fresh.color &&
+        previous.cardTotal === fresh.cardTotal
     ) {
         return previous
     }

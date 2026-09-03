@@ -6,10 +6,13 @@ import { forwardRef, type ReactNode } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useToggleCardRelation, useUpdateCard } from '../../hooks/useCardMutations'
 import { dueStateFor, formatDueDate } from '../../lib/due-state'
+import { type CardPriority, priorityLabel } from '../../lib/priority'
 import type { BoardCardView, BoardLabel, BoardMember } from '../../types'
+import { PriorityGlyph } from '../PriorityGlyph'
 import { AssigneePicker } from './AssigneePicker'
 import { DuePicker } from './DuePicker'
 import { LabelPicker } from './LabelPicker'
+import { PriorityPicker } from './PriorityPicker'
 import { ReporterPicker } from './ReporterPicker'
 
 interface DetailPropertiesProps {
@@ -55,6 +58,9 @@ export function DetailProperties({
                 <PropertyRow name="Due">
                     <DueValue due={card.due} />
                 </PropertyRow>
+                <PropertyRow name="Priority">
+                    <PriorityValue priority={card.priority} />
+                </PropertyRow>
             </View>
         )
     }
@@ -97,9 +103,59 @@ export function DetailProperties({
                     <DueValue due={card.due} />
                 </DuePicker>
             </PropertyRow>
+            <PropertyRow name="Priority">
+                <PriorityPicker
+                    selected={card.priority}
+                    onSelect={priority => updateCard.mutate({ cardId: card.id, priority })}
+                >
+                    <PriorityValue priority={card.priority} />
+                </PriorityPicker>
+            </PropertyRow>
         </View>
     )
 }
+
+/**
+ * The priority chip, and the PriorityPicker's trigger — the DueValue shape:
+ * a Pressable root in every openable state so Menu.Trigger has something to
+ * clone onPress into, and a plain View when the card is read-only.
+ */
+const PriorityValue = forwardRef<View, { priority: CardPriority; onPress?: () => void }>(
+    function PriorityValue({ priority, onPress }, ref) {
+        if (priority === 'none') {
+            if (!onPress) return <EmptyValue />
+            return <GhostChip ref={ref} label="Set priority" onPress={onPress} />
+        }
+
+        const label = priorityLabel(priority)
+        const chipContent = (
+            <>
+                <PriorityGlyph priority={priority} size={12} />
+                <Text className="text-[12.5px] font-medium text-foreground">{label}</Text>
+            </>
+        )
+
+        if (!onPress) {
+            return (
+                <View className="flex-row items-center gap-[5px] rounded-md px-2 py-[3px] bg-foreground/[0.06]">
+                    {chipContent}
+                </View>
+            )
+        }
+
+        return (
+            <Pressable
+                ref={ref}
+                accessibilityRole="button"
+                accessibilityLabel={`Priority ${label}. Change priority`}
+                onPress={onPress}
+                className="flex-row items-center gap-[5px] rounded-md px-2 py-[3px] bg-foreground/[0.06] web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+            >
+                {chipContent}
+            </Pressable>
+        )
+    }
+)
 
 /** What an empty property shows on a read-only card, in place of a ghost chip. */
 function EmptyValue() {

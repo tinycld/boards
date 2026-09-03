@@ -17,7 +17,7 @@ import {
     isColumnDragPayload,
 } from '../lib/dnd'
 import { rankForAppend, rankForReorder } from '../lib/move'
-import { useCardsUIStore } from '../stores/cards-ui-store'
+import { selectBoardSort, useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardCardView, BoardListRank, BoardListView } from '../types'
 import { BoardCard } from './BoardCard'
 import { CardComposer } from './CardComposer'
@@ -116,6 +116,9 @@ export const BoardColumn = memo(function BoardColumn({
     // the structural sharing that keeps drags stable.
     const isCollapsed = useCardsUIStore(s => !!s.collapsedColumnIds[list.id])
     const toggleCollapsed = useCardsUIStore(s => s.toggleColumnCollapsed)
+    // A boolean, so the memoized card stack below only re-renders when the
+    // sort flips between manual and not — a deliberate action taken at rest.
+    const isSorted = useCardsUIStore(s => selectBoardSort(s, projectId).field !== 'manual')
     // Same per-column discipline: `n` opens exactly one column's composer, and
     // only that column re-renders.
     const isComposerOpen = useCardsUIStore(s => s.composerOpenListId === list.id)
@@ -261,6 +264,7 @@ export const BoardColumn = memo(function BoardColumn({
                         registerMeasure={registerBothMeasures}
                         onReceivingChange={setIsReceiving}
                         canEdit={canEdit}
+                        isSorted={isSorted}
                     />
                 )}
                 {canEdit && !isCollapsed ? (
@@ -324,8 +328,11 @@ function CollapsedColumnFace({
                 className="items-center gap-2 py-2 rounded-[10px] hover:bg-foreground/5 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
             >
                 <View className="bg-foreground/[0.06] rounded-full px-1.5 py-px">
-                    <Text className="text-[11px] font-semibold text-muted">
-                        {list.cards.length}
+                    <Text
+                        className="text-[11px] font-semibold text-muted"
+                        testID={`cards-column-count-${list.id}`}
+                    >
+                        {countLabel(list)}
                     </Text>
                 </View>
                 <CollapsedColumnName name={list.name} />
@@ -574,10 +581,21 @@ function ColumnTitle({ list }: { list: BoardListView }) {
             </Text>
             {/* shrink-0: the count must never be squeezed to nothing. */}
             <View className="bg-foreground/[0.06] rounded-full px-1.5 py-px shrink-0">
-                <Text className="text-[11px] font-semibold text-muted">{list.cards.length}</Text>
+                <Text
+                    className="text-[11px] font-semibold text-muted"
+                    testID={`cards-column-count-${list.id}`}
+                >
+                    {countLabel(list)}
+                </Text>
             </View>
         </>
     )
+}
+
+/** "7" normally; "3/7" while a filter hides some of the column. */
+function countLabel(list: BoardListView): string {
+    if (list.cards.length === list.totalCount) return String(list.totalCount)
+    return `${list.cards.length}/${list.totalCount}`
 }
 
 /** The rename input. Mounted only while renaming — see the key at its call site. */
@@ -636,6 +654,8 @@ interface ColumnCardsProps {
      *  so the flip cannot re-render this subtree. */
     onReceivingChange: (isReceiving: boolean) => void
     canEdit: boolean
+    /** A non-manual sort is on: within-column reorders must not commit. */
+    isSorted: boolean
 }
 
 /**
@@ -660,6 +680,7 @@ const ColumnCards = memo(function ColumnCards({
     registerMeasure,
     onReceivingChange,
     canEdit,
+    isSorted,
 }: ColumnCardsProps) {
     const scrollRef = useRef<ScrollView>(null)
     const moveCard = useMoveCard()
@@ -672,6 +693,10 @@ const ColumnCards = memo(function ColumnCards({
         keyExtractor: card => card.id,
         onReorder: event => {
             if (event.fromIndex === event.toIndex) return
+            // Under a sort the rendered order is not rank order, so the drop
+            // index has no rank to translate to; the card snaps back and the
+            // sort keeps deciding. Cross-column drops still work (they append).
+            if (isSorted) return
             hapticSuccess()
             moveCard.mutate({
                 cardId: event.fromItem.id,

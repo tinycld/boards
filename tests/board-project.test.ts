@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { type BoardFilter, EMPTY_FILTER } from '../tinycld/cards/lib/board-filter'
 import { buildBoardProject, toBoardCard, toBoardMember } from '../tinycld/cards/lib/board-project'
+import { type BoardSort, MANUAL_SORT } from '../tinycld/cards/lib/board-sort'
 import type {
     BoardLabel,
     BoardMember,
@@ -62,6 +64,7 @@ function card(
         // since toBoardCard falls back to created_by and the reporter tests
         // below need both halves of that to be exercisable.
         reporter: '',
+        priority: 'none',
         archived: false,
         // 1 rather than 0: a card that reached the server has a number, and 0
         // is specifically the not-yet-assigned state the key tests below cover.
@@ -305,6 +308,14 @@ describe('toBoardCard', () => {
         expect(result.attachmentCount).toBe(4)
     })
 
+    it('carries the priority through', () => {
+        expect(toBoardCard(card('c1', 'l1', 'a0'), labels, users, 'OTTER').priority).toBe('none')
+        expect(
+            toBoardCard(card('c1', 'l1', 'a0', { priority: 'high' }), labels, users, 'OTTER')
+                .priority
+        ).toBe('high')
+    })
+
     it('formats the card key from the board slug and the card number', () => {
         const result = toBoardCard(
             card('c1', 'list1', 'a0', { number: 123 }),
@@ -452,6 +463,82 @@ describe('buildBoardProject', () => {
 // Lists and cards arrive on independent live queries, so a card can land
 // before the list it names. Dropping it would make it invisible AND uncounted
 // — and an apparently empty list is deletable, which cascades its cards.
+describe('buildBoardProject with a view', () => {
+    const base = {
+        project: project(),
+        lists: [list('l1', 'a0')],
+        labels: [],
+        members: [],
+        users: [],
+    }
+    const view = (filter: Partial<BoardFilter>, sort: BoardSort = MANUAL_SORT) => ({
+        filter: { ...EMPTY_FILTER, ...filter },
+        sort,
+        userId: 'u1',
+    })
+
+    it('hides filtered cards but keeps counting them', () => {
+        const result = buildBoardProject({
+            ...base,
+            cards: [
+                card('keep', 'l1', 'a0', { priority: 'high' }),
+                card('drop', 'l1', 'a1'),
+                card('gone', 'l1', 'a2', { archived: true }),
+            ],
+            view: view({ priorities: ['high'] }),
+        })
+        expect(result?.lists[0]?.cards.map(c => c.id)).toEqual(['keep'])
+        expect(result?.lists[0]?.totalCount).toBe(2)
+        expect(result?.cardTotal).toBe(2)
+    })
+
+    it('counts every live card when there is no view', () => {
+        const result = buildBoardProject({
+            ...base,
+            cards: [card('a', 'l1', 'a0'), card('b', 'l1', 'a1')],
+        })
+        expect(result?.lists[0]?.totalCount).toBe(2)
+        expect(result?.cardTotal).toBe(2)
+    })
+
+    it('sorts each column by the chosen field', () => {
+        const result = buildBoardProject({
+            ...base,
+            cards: [
+                card('low', 'l1', 'a0', { priority: 'low' }),
+                card('urgent', 'l1', 'a1', { priority: 'urgent' }),
+            ],
+            view: view({}, { field: 'priority', direction: 'asc' }),
+        })
+        expect(result?.lists[0]?.cards.map(c => c.id)).toEqual(['urgent', 'low'])
+    })
+
+    // The whole point of applying the predicate inside the build: the rendered
+    // array IS list.cards, so drag indices and rank math share one space.
+    it('keeps the previous tree identity under an equal filter', () => {
+        const input = () => ({
+            ...base,
+            cards: [card('a', 'l1', 'a0', { priority: 'high' }), card('b', 'l1', 'a1')],
+            view: view({ priorities: ['high'] }),
+        })
+        const previous = buildBoardProject(input())
+        expect(buildBoardProject(input(), previous)).toBe(previous)
+    })
+
+    it('replaces the list node when the filter changes what it shows', () => {
+        const cards = [card('a', 'l1', 'a0', { priority: 'high' }), card('b', 'l1', 'a1')]
+        const previous = buildBoardProject({ ...base, cards, view: view({}) })
+        const result = buildBoardProject(
+            { ...base, cards, view: view({ priorities: ['high'] }) },
+            previous
+        )
+        expect(result).not.toBe(previous)
+        expect(result?.lists[0]).not.toBe(previous?.lists[0])
+        // The surviving card node is reused — only the list around it changed.
+        expect(result?.lists[0]?.cards[0]).toBe(previous?.lists[0]?.cards[0])
+    })
+})
+
 describe('buildBoardProject with an unsynced list', () => {
     const base = {
         labels: [],
@@ -654,6 +741,21 @@ describe('buildBoardProject structural sharing', () => {
 
     // Renaming the board's key re-keys every card on it, so neither the project
     // node nor the card nodes may be reused.
+    // Priority changes nothing else on the card, so without its own line in
+    // sameCard the node would compare equal and the new glyph never render.
+    it('replaces a card node when only its priority changed', () => {
+        const before = input()
+        before.cards[0] = card('c1', 'list1', 'a0', { priority: 'low' })
+        const previous = buildBoardProject(before)
+
+        const after = input()
+        after.cards[0] = card('c1', 'list1', 'a0', { priority: 'urgent' })
+        const result = buildBoardProject(after, previous)
+
+        expect(result?.lists[0]?.cards[0]).not.toBe(previous?.lists[0]?.cards[0])
+        expect(result?.lists[0]?.cards[0]?.priority).toBe('urgent')
+    })
+
     it('replaces the tree when the board slug changes', () => {
         const previous = buildBoardProject(input())
         const next = input()

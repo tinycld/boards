@@ -65,8 +65,19 @@ export function registerCollections(
     // mail's `webhook_secret`. The optimistically-inserted card therefore has
     // no number — and so no key — until the server echo lands, which
     // formatCardKey renders as ''.
+    // `archived_at` is server-owned too (server/card_archived.go stamps it
+    // when `archived` flips), so an insert never carries it.
     const cards_cards = newCollection('cards_cards', {
-        omitOnInsert: ['created', 'updated', 'number'] as const,
+        omitOnInsert: [
+            'created',
+            'updated',
+            'number',
+            'archived_at',
+            // The due-notice stamps (server/due_notices.go) are the ticker's;
+            // an insert never carries them.
+            'due_soon_notified_at',
+            'overdue_notified_at',
+        ] as const,
         collectionOptions: indexed,
     })
 
@@ -98,7 +109,26 @@ export function registerCollections(
         collectionOptions: indexed,
     })
 
+    // Server-written history (server/activity.go); the client only reads it,
+    // and only for the open card. No expand: `actor` resolves against the
+    // eager `users` store like every other user relation here.
+    const cards_activity = newCollection('cards_activity', {
+        omitOnInsert: ['created'] as const,
+        syncMode: 'on-demand' as const,
+        collectionOptions: indexed,
+    })
+
+    // Who follows a card. On-demand: read for the open card (the Watch
+    // button) and for the My cards "Watching" tab.
+    const cards_card_watchers = newCollection('cards_card_watchers', {
+        omitOnInsert: ['created'] as const,
+        syncMode: 'on-demand' as const,
+        collectionOptions: indexed,
+    })
+
     return {
+        cards_activity,
+        cards_card_watchers,
         cards_projects,
         cards_project_members,
         cards_share_links,

@@ -114,8 +114,14 @@ func registerShared(app *pocketbase.PocketBase) {
 	// hook stamps it when the body actually changes and discards any
 	// client-supplied value when it does not. See comment_edited.go.
 	registerCommentEditedAt(app)
+	registerCardArchivedAt(app)
+	registerActorCapture(app)
+	registerCardActivity(app)
+	registerAutoWatch(app)
+	registerCardNotifications(app)
+	registerDueNotices(app)
 	registerMemberLastOwnerGuard(app)
-	registerRealtime(app)
+	rt := registerRealtime(app)
 
 	// FTS index-sync record hooks only — deliberately NOT fts.Register, which
 	// would also mount GET /api/cards/search. Cards has no in-app search box,
@@ -128,7 +134,7 @@ func registerShared(app *pocketbase.PocketBase) {
 	// search identically.
 	search.RegisterSources(searchSource())
 
-	registerShareLinkEndpoints(app)
+	registerShareLinkEndpoints(app, rt)
 }
 
 // registerShareLinkEndpoints mounts cards' first HTTP routes (M6a).
@@ -142,9 +148,13 @@ func registerShared(app *pocketbase.PocketBase) {
 //
 // Every route requires auth. A public route here would be one that omits
 // requireAuth; there is no exemptPaths list to add to.
-func registerShareLinkEndpoints(app *pocketbase.PocketBase) {
+func registerShareLinkEndpoints(app *pocketbase.PocketBase, rt *boardRealtime) {
 	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
 		bindShareLinkRoutes(e)
+		bindCardRoutes(e, rt)
+		// A minute ticker for due-date notices; bails out on its own once
+		// the app is torn down (cardsAppIsLive).
+		go startDueNoticeScheduler(app)
 		return e.Next()
 	})
 }

@@ -9,7 +9,7 @@ not bundled), and the other feature packages.
 
 ## Automation rules
 
-The package publishes four triggers and one action to the automation-rules
+The package publishes five triggers and four actions to the automation-rules
 engine, so a rule can fire on board activity:
 
 - **`cards:card-created`** — "A card is created". A `cards_cards` create.
@@ -25,12 +25,17 @@ engine, so a rule can fire on board activity:
   trigger record's own fields.
 - **`cards:card-assigned`** — "A card is assigned". An update watching
   `assignees`.
+- **`cards:card-priority-changed`** — "A card's priority changes". An update
+  watching `priority`.
 - **`cards:move-card`** — "Move the card to a list". A `kind: 'record-op'`
   action: an update targeting the trigger record, with a `list` param.
 - **`cards:add-assignee`** — "Assign the card to someone". A `kind: 'native'`
   action with a `user` relation param.
 - **`cards:add-label`** — "Add a label to the card". A `kind: 'native'` action
   with a `label` relation param targeting the board's own `cards_labels`.
+- **`cards:set-priority`** — "Set the card priority". A `kind: 'record-op'`
+  update of the trigger record's `priority` select; `none` is one of the
+  options so a rule can lower a card as well as raise it.
 
 The last two are native rather than record-ops because `assignees` and
 `labels` are multi-value relations, and a record-op `set` **replaces** the
@@ -38,9 +43,9 @@ whole value — appending one entry would silently drop the rest. Being native
 is also why each declares `relationTarget` explicitly: a native action names no
 collection, so its params have no column to inherit a target from.
 
-All four triggers cover every card on a board you belong to, not only cards you
+All five triggers cover every card on a board you belong to, not only cards you
 created. `server/automation.go` supplies the server-side pieces:
-`cardOwnerResolver` scopes personal rules by board membership across all four
+`cardOwnerResolver` scopes personal rules by board membership across all five
 triggers, a `cardMovedToDoneList` filter gates `cards:card-completed`, and a
 RelationAuthorizer guards every relation param — the `list` destination, the
 assignee's board membership, and a label's ownership by that same board.
@@ -65,11 +70,13 @@ the Go module and the OAuth scopes it needs (`cards:read`, `cards:write`). The
 server cross-compiles the binary; users download it from **Settings → Personal
 → About**.
 
-Fourteen commands:
+Eighteen commands:
 
 ```sh
 tinycld cards board list          # boards you can see
 tinycld cards board view
+tinycld cards board archive       # or --unset to restore
+tinycld cards board remove        # deletes everything on it; asks first
 tinycld cards list show           # the lists (columns) on a board
 tinycld cards list add
 tinycld cards list rename
@@ -79,7 +86,8 @@ tinycld cards list remove         # also deletes the cards in it
 tinycld cards card view
 tinycld cards card add            # requires both -b/--board and -l/--list
 tinycld cards card edit
-tinycld cards card move
+tinycld cards card move           # --board <other> moves it to another board
+tinycld cards card copy           # duplicate, with the checklist
 tinycld cards card archive
 tinycld cards card remove
 ```

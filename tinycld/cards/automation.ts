@@ -29,6 +29,7 @@ const automation = {
                 'due',
                 { key: 'assignees', label: 'Assignees' },
                 'labels',
+                'priority',
             ],
         },
         {
@@ -46,6 +47,7 @@ const automation = {
                 { key: 'project', label: 'Board' },
                 'due',
                 { key: 'assignees', label: 'Assignees' },
+                'priority',
             ],
         },
         {
@@ -78,6 +80,21 @@ const automation = {
                 { key: 'list', label: 'List' },
                 { key: 'project', label: 'Board' },
                 'due',
+                'priority',
+            ],
+        },
+        {
+            id: 'card-priority-changed',
+            label: "A card's priority changes",
+            collection: 'cards_cards',
+            on: 'update',
+            watch: ['priority'],
+            fields: [
+                'title',
+                'priority',
+                { key: 'list', label: 'List' },
+                { key: 'project', label: 'Board' },
+                { key: 'assignees', label: 'Assignees' },
             ],
         },
     ],
@@ -98,6 +115,23 @@ const automation = {
                 set: { list: { param: 'list' } },
             },
             params: [{ key: 'list', field: 'list', label: 'Destination list' }],
+        },
+        {
+            // A record-op like move-card: `priority` is a single select, so a
+            // `set` is exactly the right verb — nothing to append to, nothing
+            // to preserve. Naming the real column lets the catalog offer the
+            // enum as the param's options; `none` is among them, which is
+            // why the migration lists it as a value.
+            id: 'set-priority',
+            label: 'Set the card priority',
+            kind: 'record-op',
+            collection: 'cards_cards',
+            op: {
+                type: 'update',
+                target: 'trigger-record',
+                set: { priority: { param: 'priority' } },
+            },
+            params: [{ key: 'priority', field: 'priority', label: 'Priority' }],
         },
         {
             // Native, not a record-op: `assignees` is a multi-value relation

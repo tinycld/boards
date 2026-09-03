@@ -5,8 +5,8 @@ tags: [rules, automation, workflow, boards]
 order: 50
 ---
 
-Boards take part in [automation rules](help://core:rules) through four
-triggers and one action.
+Boards take part in [automation rules](help://core:rules) through five
+triggers and four actions.
 
 ## What starts a rule
 
@@ -16,8 +16,9 @@ triggers and one action.
 | **A card moves to another list** | a card changes list — not when it's just reordered |
 | **A card is completed** | a card moves into a list marked as done |
 | **A card is assigned** | a card's assignees change |
+| **A card's priority changes** | a card is set to a different priority, including back to none |
 
-All four cover every card on a board you belong to, not only cards you
+All five cover every card on a board you belong to, not only cards you
 created — so a rule fires when a colleague moves your card, which is usually
 the point.
 
@@ -33,6 +34,10 @@ Reordering a card within a list is not a move. Only a change of list counts.
 **Move the card to a list** files the card that started the rule into a list
 you pick. It only ever moves that card — a rule can't reach out and move a
 different one.
+
+**Set the card priority** gives the card that started the rule the priority
+you pick — including **No priority**, so a rule can lower a card as well as
+raise it.
 
 ## Recipes
 

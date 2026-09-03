@@ -44,6 +44,18 @@ tinycld cards card view OTTER-12            # one card, in full
 include them. `card view` shows the description, checklist and comments that
 the board view leaves out.
 
+## Archiving and deleting a board
+
+```
+tinycld cards board archive "Product launch"            # out of the way, reversibly
+tinycld cards board archive "Product launch" --unset    # bring it back
+tinycld cards board remove "Product launch" --yes       # delete it for good
+```
+
+`remove` deletes every list, card, comment and attachment on the board along
+with its members and share links, and tells you how many before it asks for
+`--yes`. Only a board's owner can archive or remove it.
+
 ## Adding and editing cards
 
 ```
@@ -63,11 +75,15 @@ tinycld cards card edit <card> --due 2026-09-15
 tinycld cards card edit <card> --clear-due
 tinycld cards card edit <card> --reporter <user id>
 tinycld cards card edit <card> --clear-reporter
+tinycld cards card edit <card> --priority high
 ```
 
 `edit` only changes what you name. Editing the title leaves the description
 alone, so you cannot blank a field by not mentioning it. Due dates are whole
 days, written as `YYYY-MM-DD`.
+
+`--priority` takes `urgent`, `high`, `medium`, `low` or `none`, on `add` as
+well as `edit`. A new card has no priority; `--priority none` clears one.
 
 A new card reports to you. Pass `--reporter` on `add` or `edit` to point it at
 someone else — useful when a script or a shared account files cards that a real
@@ -84,6 +100,18 @@ tinycld cards card move <card> --list Done --index 0
 
 Moving to another column with no `--index` puts the card at the bottom, which
 is where a dragged card lands when you do not aim at a particular slot.
+
+```
+tinycld cards card move <card> --board "Roadmap"               # to another board's first list
+tinycld cards card move <card> --board "Roadmap" --list Backlog
+tinycld cards card copy <card>                                 # "Copy of …", same list
+tinycld cards card copy <card> --title "Second attempt"
+```
+
+A move to another board keeps the checklist, comments and attachments,
+matches labels by name (dropping the rest, which the command reports), and
+gives the card a new key. `copy` duplicates a card with its checklist;
+attachments are not copied.
 
 ## Archiving and deleting
 

@@ -1,0 +1,219 @@
+import { LabelBadge } from '@tinycld/core/components/LabelBadge'
+import { NameAvatar } from '@tinycld/core/components/NameAvatar'
+import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
+import { CalendarDays, Clock } from 'lucide-react-native'
+import { Pressable, Text, View } from 'react-native'
+import { dueStateFor, formatDueDate } from '../../lib/due-state'
+import { priorityLabel } from '../../lib/priority'
+import type { BoardCardView, BoardMember } from '../../types'
+import { PriorityGlyph } from '../PriorityGlyph'
+
+export interface CardRowBoard {
+    id: string
+    name: string
+    color: string
+}
+
+interface CardRowProps {
+    card: BoardCardView
+    listName: string
+    /** Present on the cross-board list; the board's own table omits it. */
+    board?: CardRowBoard
+    /** `table` lays cells out under DataTableHeader; `stacked` is the phone row. */
+    variant: 'table' | 'stacked'
+    isFocused?: boolean
+    onPress: () => void
+}
+
+/** Column widths, shared with BoardTable's header so the tracks line up. */
+export const TABLE_COLUMNS = {
+    key: 92,
+    title: 3,
+    list: 1.2,
+    assignees: 96,
+    labels: 1.6,
+    due: 104,
+    priority: 96,
+} as const
+
+/**
+ * One card as a row — the board's table view and the cross-board list share
+ * it, so a card reads the same wherever it is listed. Cells reuse the face's
+ * pieces (label badges, avatars, the due colouring) rather than restating
+ * them.
+ */
+export function CardRow({
+    card,
+    listName,
+    board,
+    variant,
+    isFocused = false,
+    onPress,
+}: CardRowProps) {
+    const ring = isFocused ? 'bg-foreground/[0.04]' : ''
+    if (variant === 'stacked') {
+        return (
+            <Pressable
+                accessibilityRole="button"
+                testID={`cards-row-${card.id}`}
+                onPress={onPress}
+                className={`px-4 py-2.5 border-b border-border gap-1 ${ring}`}
+            >
+                <FocusMarker isFocused={isFocused} cardId={card.id} />
+                <View className="flex-row items-center gap-2">
+                    <PriorityGlyph priority={card.priority} size={12} />
+                    <Text
+                        className="flex-1 text-[14px] font-medium text-foreground"
+                        numberOfLines={2}
+                    >
+                        {card.title}
+                    </Text>
+                    <Assignees assignees={card.assignees} />
+                </View>
+                <View className="flex-row flex-wrap items-center gap-x-2 gap-y-1">
+                    <BoardTile board={board} />
+                    <Meta text={[card.key, listName].filter(Boolean).join(' · ')} />
+                    <DueCell due={card.due} />
+                    <Labels card={card} />
+                </View>
+            </Pressable>
+        )
+    }
+
+    return (
+        <Pressable
+            accessibilityRole="button"
+            testID={`cards-row-${card.id}`}
+            onPress={onPress}
+            className={`flex-row items-center px-3 py-2 border-b border-border hover:bg-foreground/[0.03] ${ring}`}
+        >
+            <FocusMarker isFocused={isFocused} cardId={card.id} />
+            <View style={{ width: TABLE_COLUMNS.key }}>
+                <Meta text={card.key} />
+            </View>
+            <View
+                style={{ flex: TABLE_COLUMNS.title }}
+                className="flex-row items-center gap-2 pr-3"
+            >
+                <BoardTile board={board} />
+                <Text
+                    className="flex-1 text-[13.5px] font-medium text-foreground"
+                    numberOfLines={1}
+                >
+                    {card.title}
+                </Text>
+            </View>
+            <View style={{ flex: TABLE_COLUMNS.list }} className="pr-2">
+                <Text className="text-[12.5px] text-muted" numberOfLines={1}>
+                    {listName}
+                </Text>
+            </View>
+            <View style={{ width: TABLE_COLUMNS.assignees }}>
+                <Assignees assignees={card.assignees} />
+            </View>
+            <View style={{ flex: TABLE_COLUMNS.labels }} className="pr-2">
+                <Labels card={card} />
+            </View>
+            <View style={{ width: TABLE_COLUMNS.due }}>
+                <DueCell due={card.due} />
+            </View>
+            <View
+                style={{ width: TABLE_COLUMNS.priority }}
+                className="flex-row items-center gap-1.5"
+            >
+                <PriorityGlyph priority={card.priority} size={12} />
+                {card.priority !== 'none' ? (
+                    <Text className="text-[12.5px] text-muted">{priorityLabel(card.priority)}</Text>
+                ) : null}
+            </View>
+        </Pressable>
+    )
+}
+
+/** Zero-size marker the keyboard e2e asserts on — the same one BoardCard mounts. */
+function FocusMarker({ isFocused, cardId }: { isFocused: boolean; cardId: string }) {
+    if (!isFocused) return null
+    return <View testID={`cards-focused-${cardId}`} />
+}
+
+function Meta({ text }: { text: string }) {
+    if (!text) return null
+    return (
+        <Text className="text-[11.5px] font-medium tracking-wide text-muted" numberOfLines={1}>
+            {text}
+        </Text>
+    )
+}
+
+function BoardTile({ board }: { board?: CardRowBoard }) {
+    if (!board) return null
+    return (
+        <View className="flex-row items-center gap-1.5">
+            <View className="w-2.5 h-2.5 rounded-[3px]" style={{ backgroundColor: board.color }} />
+            <Text className="text-[11.5px] font-medium text-muted" numberOfLines={1}>
+                {board.name}
+            </Text>
+        </View>
+    )
+}
+
+function Assignees({ assignees }: { assignees: BoardMember[] }) {
+    if (assignees.length === 0) return null
+    return (
+        <View className="flex-row">
+            {assignees.slice(0, 3).map((member, index) => (
+                <View
+                    key={member.id}
+                    className={`rounded-full border-2 border-background ${index > 0 ? '-ml-1.5' : ''}`}
+                >
+                    <NameAvatar
+                        firstName={member.firstName}
+                        lastName={member.lastName}
+                        size={20}
+                        colorKey={member.id}
+                    />
+                </View>
+            ))}
+            {assignees.length > 3 ? (
+                <Text className="text-[11px] font-medium text-muted ml-1">
+                    +{assignees.length - 3}
+                </Text>
+            ) : null}
+        </View>
+    )
+}
+
+function Labels({ card }: { card: BoardCardView }) {
+    if (card.labels.length === 0) return null
+    return (
+        <View className="flex-row flex-wrap items-center gap-1">
+            {card.labels.slice(0, 3).map(label => (
+                <LabelBadge key={label.id} name={label.name} color={label.color} />
+            ))}
+            {card.labels.length > 3 ? (
+                <Text className="text-[11px] font-medium text-muted">
+                    +{card.labels.length - 3}
+                </Text>
+            ) : null}
+        </View>
+    )
+}
+
+function DueCell({ due }: { due?: Date }) {
+    const warningColor = useThemeColor('warning')
+    const dangerColor = useThemeColor('danger')
+    const mutedColor = useThemeColor('muted')
+    if (!due) return null
+    const state = dueStateFor(due)
+    const isOverdue = state === 'overdue'
+    const Icon = isOverdue ? Clock : CalendarDays
+    const color = isOverdue ? dangerColor : state === 'soon' ? warningColor : mutedColor
+    return (
+        <View className="flex-row items-center gap-1">
+            <Icon size={11} color={color} strokeWidth={2.2} />
+            <Text className="text-[12px] font-medium" style={{ color }}>
+                {formatDueDate(due)}
+            </Text>
+        </View>
+    )
+}

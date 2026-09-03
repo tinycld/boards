@@ -677,7 +677,8 @@ where there's a form, `captureException` context strings like
       nothing reads.
     - `Shift+N` is a no-op on an empty board, where `BoardCanvas` renders
       `EmptyBoard` and mounts no `AddListColumn`.
-- [ ] **Deferred: `d` / `l` / `a`** (due, labels, assignees) — blocked, not
+- [ ] **Deferred: `d` / `l` / `a` / `p` / `f`** (due, labels, assignees,
+      priority, filter panel) — blocked, not
       forgotten. All three are core `Menu` pickers, and **a keyboard-opened
       `Menu` has never measured its trigger**: `setTriggerLayout` is called
       only from `Trigger`'s click and `onMouseEnter` handlers, so

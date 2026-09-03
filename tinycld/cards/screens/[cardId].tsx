@@ -15,6 +15,7 @@ import { CardDetail } from '../components/detail/CardDetail'
 import { CardKeyBadge } from '../components/detail/CardKeyBadge'
 import type { EditableTextHandle } from '../components/detail/EditableText'
 import { ListStepper } from '../components/detail/ListStepper'
+import { WatchButton } from '../components/detail/WatchButton'
 import { ProjectWash } from '../components/ProjectWash'
 import { useCardRoute } from '../hooks/useCardRoute'
 import { useProjectRole } from '../hooks/useProjectRole'
@@ -154,10 +155,12 @@ function CardPage({ project, entry, cardId, navigateBack }: CardPageProps) {
                 />
                 <CardKeyBadge cardKey={entry.card.key} />
                 <View className="flex-1" />
+                <WatchButton projectId={project.id} cardId={entry.card.id} />
                 {canEdit ? (
                     <CardActionsMenu
-                        cardId={entry.card.id}
-                        cardTitle={entry.card.title}
+                        card={entry.card}
+                        list={entry.list}
+                        projectId={project.id}
                         onDismiss={navigateBack}
                     />
                 ) : null}
@@ -171,6 +174,7 @@ function CardPage({ project, entry, cardId, navigateBack }: CardPageProps) {
                 projectId={project.id}
                 projectLabels={project.labels}
                 projectMembers={project.members}
+                projectLists={project.lists}
                 titleRef={titleRef}
             />
         </View>

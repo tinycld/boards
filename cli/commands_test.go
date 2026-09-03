@@ -251,15 +251,20 @@ func TestCardMoveRequiresSomethingToDo(t *testing.T) {
 
 // A card names its own board, so --board is only for resolving a list NAME and
 // must agree. Letting the two disagree is how a command acts on another board.
-func TestCardMoveRefusesAMismatchedBoard(t *testing.T) {
+// A --board naming a different board is a cross-board move (through the
+// server endpoint), and --list then names a column on THAT board.
+func TestCardMoveWithABoardAndListGoesToThatBoardsList(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
 	_, _, err := runCmd(t, c, "cards", "card", "move", "crdCopy", "--board", "Home projects", "--list", "Someday")
-	if err == nil {
-		t.Fatal("moving a card onto another board's list was allowed")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), "not on board") {
-		t.Errorf("error should say the card is not on that board, got %q", err)
+	if got := str(f.lastMoveBody["list_id"]); got != "lstSomeday" {
+		t.Fatalf("list_id = %q, want lstSomeday", got)
+	}
+	if f.lastCardPatch != nil {
+		t.Fatalf("a cross-board move must not PATCH: %v", f.lastCardPatch)
 	}
 }
 
@@ -1111,4 +1116,176 @@ func TestDestructiveCommandsPromptRatherThanDemandYes(t *testing.T) {
 			t.Fatalf("deleted = %v", f.deletedLists)
 		}
 	})
+}
+
+func TestCardAddAndEditPriority(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	// Omitted → "none", written explicitly so the row never carries ''.
+	_, _, err := runCmd(t, c, "cards", "card", "add", "Triage me", "--board", "prjA", "--list", "To do")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := str(f.lastCardCreate["priority"]); got != "none" {
+		t.Fatalf("priority default = %q, want none", got)
+	}
+
+	_, _, err = runCmd(t, c, "cards", "card", "add", "Hot fix", "--board", "prjA", "--list", "To do",
+		"--priority", "urgent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := str(f.lastCardCreate["priority"]); got != "urgent" {
+		t.Fatalf("priority = %q, want urgent", got)
+	}
+
+	_, _, err = runCmd(t, c, "cards", "card", "edit", "crdCopy", "--priority", "low")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := str(f.lastCardPatch["priority"]); got != "low" {
+		t.Fatalf("patched priority = %q, want low", got)
+	}
+	if _, sent := f.lastCardPatch["title"]; sent {
+		t.Fatalf("edit --priority must not touch the title: %v", f.lastCardPatch)
+	}
+}
+
+func TestCardEditRejectsUnknownPriority(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+	_, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--priority", "blocker")
+	if err == nil {
+		t.Fatal("expected an error for an unknown priority")
+	}
+	for _, want := range []string{"blocker", "urgent", "none"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q should name %q", err.Error(), want)
+		}
+	}
+	if f.lastCardPatch != nil {
+		t.Fatalf("nothing should have been sent, got %v", f.lastCardPatch)
+	}
+}
+
+func TestBoardArchiveAndRestore(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	if _, _, err := runCmd(t, c, "cards", "board", "archive", "Product launch"); err != nil {
+		t.Fatal(err)
+	}
+	if f.lastProjectPatch["archived"] != true {
+		t.Fatalf("archive sent %v, want archived:true", f.lastProjectPatch)
+	}
+	out, _, err := runCmd(t, c, "cards", "board", "list")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "Product launch") {
+		t.Fatalf("archived board still listed without --all:\n%s", out)
+	}
+
+	if _, _, err := runCmd(t, c, "cards", "board", "archive", "prjA", "--unset"); err != nil {
+		t.Fatal(err)
+	}
+	if f.lastProjectPatch["archived"] != false {
+		t.Fatalf("restore sent %v, want archived:false", f.lastProjectPatch)
+	}
+	out, _, err = runCmd(t, c, "cards", "board", "list")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "Product launch") {
+		t.Fatalf("restored board missing from list:\n%s", out)
+	}
+}
+
+func TestBoardRemoveNeedsConfirmationAndCounts(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	// No TTY and no --yes: refused, and the refusal names what would go.
+	_, _, err := runCmd(t, c, "cards", "board", "remove", "Product launch")
+	if err == nil {
+		t.Fatal("expected a refusal without --yes")
+	}
+	for _, want := range []string{"3 list", "3 card", "archive"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("refusal %q should mention %q", err.Error(), want)
+		}
+	}
+	if len(f.deletedProjects) != 0 {
+		t.Fatalf("board deleted despite the refusal: %v", f.deletedProjects)
+	}
+
+	if _, _, err := runCmd(t, c, "cards", "board", "remove", "Product launch", "--yes"); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.deletedProjects) != 1 || f.deletedProjects[0] != "prjA" {
+		t.Fatalf("deleted %v, want [prjA]", f.deletedProjects)
+	}
+	out, _, err := runCmd(t, c, "cards", "board", "list", "--all")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "Product launch") {
+		t.Fatalf("deleted board still listed:\n%s", out)
+	}
+}
+
+func TestCardMoveToAnotherBoardCallsTheEndpoint(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+	_, _, err := runCmd(t, c, "cards", "card", "move", "crdCopy", "--board", "Home projects")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.lastMoveBody == nil {
+		t.Fatal("the move endpoint was not called")
+	}
+	if got := str(f.lastMoveBody["project_id"]); got != "prjB" {
+		t.Fatalf("project_id = %q, want prjB", got)
+	}
+	// No --list: the target's first column.
+	if got := str(f.lastMoveBody["list_id"]); got != "lstSomeday" {
+		t.Fatalf("list_id = %q, want lstSomeday", got)
+	}
+	if str(f.lastMoveBody["position"]) == "" {
+		t.Fatal("position was not computed")
+	}
+	if f.lastCardPatch != nil {
+		t.Fatalf("a cross-board move must not PATCH: %v", f.lastCardPatch)
+	}
+}
+
+func TestCardCopyCreatesCardAndChecklist(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+	f.checklist["chk1"] = &checklistItem{ID: "chk1", Card: "crdCopy", Title: "Outline", IsDone: true, Position: "a0"}
+	f.checklist["chk2"] = &checklistItem{ID: "chk2", Card: "crdCopy", Title: "Draft", Position: "a1"}
+
+	_, _, err := runCmd(t, c, "cards", "card", "copy", "crdCopy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := str(f.lastCardCreate["title"]); got != "Copy of Write copy" {
+		t.Fatalf("title = %q, want the Copy of prefix", got)
+	}
+	if got := str(f.lastCardCreate["list"]); got != "lstTodo" {
+		t.Fatalf("list = %q, want the source column", got)
+	}
+	if len(f.createdChecklist) != 2 {
+		t.Fatalf("checklist rows created = %d, want 2", len(f.createdChecklist))
+	}
+	if f.createdChecklist[0]["is_done"] != true || str(f.createdChecklist[0]["title"]) != "Outline" {
+		t.Fatalf("first item = %v, want Outline done", f.createdChecklist[0])
+	}
+	newID := str(f.lastCardCreate["id"])
+	for _, row := range f.createdChecklist {
+		if newID != "" && str(row["card"]) != newID {
+			t.Fatalf("checklist row names card %q, want the copy", str(row["card"]))
+		}
+	}
 }

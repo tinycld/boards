@@ -30,8 +30,10 @@ import (
 // Must match the roomKind string in hooks/useBoardPresence.ts.
 const roomKindCards = "cards-board"
 
-// registerRealtime wires /api/realtime/cards-board/<projectID>.
-func registerRealtime(app core.App) {
+// registerRealtime wires /api/realtime/cards-board/<projectID> and returns
+// the handles the cross-board move endpoint needs to flush a source room and
+// seed a target one (endpoints_move_card.go).
+func registerRealtime(app core.App) *boardRealtime {
 	state := newBoardDocState()
 
 	runtime := yjsdoc.NewRuntime()
@@ -82,6 +84,8 @@ func registerRealtime(app core.App) {
 		}
 		return e.Next()
 	})
+
+	return &boardRealtime{state: state, runtime: runtime, flushNow: saveCoordinator.FlushNow}
 }
 
 // makeAuthorize gates connections: any non-disabled member of the board may

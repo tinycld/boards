@@ -1,7 +1,10 @@
 import { useAuth } from '@tinycld/core/lib/auth'
+import { toDateString } from '@tinycld/core/lib/dates'
 import { mutation, useMutation } from '@tinycld/core/lib/mutations'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { newRecordId } from 'pbtsdb/core'
+import type { CardPriority } from '../lib/priority'
+import type { BoardCardView } from '../types'
 
 export interface CreateCardInput {
     /** The column the card is added to. */
@@ -38,6 +41,8 @@ export interface UpdateCardInput {
     description?: string
     due?: string
     reporter?: string
+    /** `none` is a real value, not a clear — see pb-migrations/1980000006. */
+    priority?: CardPriority
 }
 
 /**
@@ -85,6 +90,11 @@ export function useCreateCard(projectId: string) {
                 // value. A card filed on someone else's behalf is reassigned
                 // afterwards from the detail row.
                 reporter: user?.id ?? '',
+                // Written rather than left for the column default: an omitted
+                // optional select arrives as '', which reads the same after
+                // normalizePriority but leaves the row looking half-written to
+                // anyone reading the database directly.
+                priority: 'none',
                 archived: false,
                 // Counters are server-maintained (server/counters.go) and
                 // recomputed on every child write; these are the at-rest values
@@ -95,6 +105,76 @@ export function useCreateCard(projectId: string) {
                 attachment_count: 0,
             })
 
+            return cardId
+        }),
+    })
+}
+
+export interface DuplicateCardInput {
+    card: BoardCardView
+    /** rankForInsert right after the source, computed by the caller. */
+    position: string
+}
+
+/**
+ * Copy a card on its own board: the fields, then the checklist rows.
+ *
+ * Attachments are NOT copied. A file field only accepts a multipart upload,
+ * and core has no server-side copy for one — so the copy would need every
+ * file re-uploaded from the client, which is a download-and-upload of
+ * possibly large files for a "duplicate" press. Comments are not copied
+ * either: they are a conversation about the ORIGINAL.
+ *
+ * The checklist is read from the local store rather than passed in: the
+ * items collection syncs on demand for the OPEN card, which is the only card
+ * a duplicate is ever pressed on, so the rows are there.
+ */
+export function useDuplicateCard(projectId: string) {
+    const { user } = useAuth({ throwIfAnon: false })
+    const [cardsCollection, itemsCollection] = useStore('cards_cards', 'cards_checklist_items')
+
+    return useMutation<string, Error, DuplicateCardInput>({
+        mutationKey: ['cards', 'card', 'duplicate'],
+        mutationFn: mutation(function* ({ card, position }: DuplicateCardInput) {
+            const cardId = newRecordId()
+            yield cardsCollection.insert({
+                id: cardId,
+                project: projectId,
+                list: card.listId,
+                position,
+                title: `Copy of ${card.title}`,
+                description: card.description,
+                due: card.due ? toDateString(card.due) : '',
+                assignees: card.assignees.map(member => member.id),
+                labels: card.labels.map(label => label.id),
+                created_by: user?.id ?? '',
+                reporter: card.reporter?.id ?? user?.id ?? '',
+                priority: card.priority,
+                archived: false,
+                checklist_total: 0,
+                checklist_done: 0,
+                comment_count: 0,
+                attachment_count: 0,
+            })
+
+            const items = itemsCollection.toArray
+                .filter(item => item.card === card.id)
+                .sort((a, b) =>
+                    a.position === b.position
+                        ? a.id.localeCompare(b.id)
+                        : a.position.localeCompare(b.position)
+                )
+            // Positions are per-card ranks, so they copy verbatim.
+            yield items.map(item =>
+                itemsCollection.insert({
+                    id: newRecordId(),
+                    card: cardId,
+                    project: projectId,
+                    title: item.title,
+                    position: item.position,
+                    is_done: item.is_done,
+                })
+            )
             return cardId
         }),
     })
@@ -119,6 +199,7 @@ export function useUpdateCard() {
                 if (input.description !== undefined) draft.description = input.description
                 if (input.due !== undefined) draft.due = input.due
                 if (input.reporter !== undefined) draft.reporter = input.reporter
+                if (input.priority !== undefined) draft.priority = input.priority
             })
         }),
     })

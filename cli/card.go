@@ -17,7 +17,7 @@ import (
 func newCardCmd(c *client.Client) *cobra.Command {
 	card := &cobra.Command{
 		Use:     "card",
-		Short:   "Cards: view, add, edit, move, archive, remove",
+		Short:   "Cards: view, add, edit, move, copy, archive, remove",
 		Aliases: []string{"cards"},
 	}
 	card.AddCommand(
@@ -25,6 +25,7 @@ func newCardCmd(c *client.Client) *cobra.Command {
 		newCardAddCmd(c),
 		newCardEditCmd(c),
 		newCardMoveCmd(c),
+		newCardCopyCmd(c),
 		newCardArchiveCmd(c),
 		newCardRemoveCmd(c),
 	)
@@ -136,6 +137,11 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 			if reporterID := cd.reporterID(); reporterID != "" {
 				rows = append(rows, []string{"Reporter", names([]string{reporterID}, users)})
 			}
+			// Appended, and only when set, for the same reason: a card with
+			// no priority shows nothing on the board face either.
+			if p := priorityCell(cd); p != "-" {
+				rows = append(rows, []string{"Priority", p})
+			}
 			if cd.Description != "" {
 				rows = append(rows, []string{"Description", firstLine(cd.Description)})
 			}
@@ -160,7 +166,7 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 }
 
 func newCardAddCmd(c *client.Client) *cobra.Command {
-	var boardRef, listRef, description, due, reporter string
+	var boardRef, listRef, description, due, reporter, priority string
 	var index int
 	cmd := &cobra.Command{
 		Use:   "add <title>",
@@ -208,6 +214,9 @@ func newCardAddCmd(c *client.Client) *cobra.Command {
 			if cmd.Flags().Changed("reporter") {
 				reporterID = reporter
 			}
+			if !validPriority(priority) {
+				return fmt.Errorf("--priority %q is not one of %s", priority, strings.Join(priorities, ", "))
+			}
 			// `project` is written explicitly even though `list` implies it:
 			// the column is DENORMALIZED onto the card so the access rules can
 			// resolve membership without a two-hop back-relation, and the
@@ -221,6 +230,7 @@ func newCardAddCmd(c *client.Client) *cobra.Command {
 				"due":         dueValue,
 				"created_by":  userID,
 				"reporter":    reporterID,
+				"priority":    priority,
 				"archived":    false,
 			}
 			created, err := client.CreateRecord[card](ctx, c, cardsCollection, body)
@@ -241,15 +251,16 @@ func newCardAddCmd(c *client.Client) *cobra.Command {
 	// resolver nobody has specified. Stated in the help so it is a documented
 	// limit rather than a surprise.
 	cmd.Flags().StringVar(&reporter, "reporter", "", "user id to report to (default: you)")
+	cmd.Flags().StringVar(&priority, "priority", "none", "one of "+strings.Join(priorities, ", "))
 	return cmd
 }
 
 func newCardEditCmd(c *client.Client) *cobra.Command {
-	var title, description, due, reporter string
+	var title, description, due, reporter, priority string
 	var clearDue, clearReporter bool
 	cmd := &cobra.Command{
 		Use:   "edit <id>",
-		Short: "Change a card's title, description, due date, or reporter",
+		Short: "Change a card's title, description, due date, reporter, or priority",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o, _, err := output.FromCommand(cmd)
@@ -299,8 +310,16 @@ func newCardEditCmd(c *client.Client) *cobra.Command {
 				}
 				body["reporter"] = reporter
 			}
+			// `none` is how a priority is cleared — it is a value the schema
+			// names, so there is no --clear-priority to pair with it.
+			if cmd.Flags().Changed("priority") {
+				if !validPriority(priority) {
+					return fmt.Errorf("--priority %q is not one of %s", priority, strings.Join(priorities, ", "))
+				}
+				body["priority"] = priority
+			}
 			if len(body) == 0 {
-				return fmt.Errorf("nothing to change — pass --title, --description, --due, --clear-due, --reporter, or --clear-reporter")
+				return fmt.Errorf("nothing to change — pass --title, --description, --due, --clear-due, --reporter, --clear-reporter, or --priority")
 			}
 			// Through getCard so a card key (OTTER-12) works here exactly as it
 			// does in `card view`/`card move` — the id is what the API needs.
@@ -322,6 +341,7 @@ func newCardEditCmd(c *client.Client) *cobra.Command {
 	cmd.Flags().BoolVar(&clearDue, "clear-due", false, "remove the due date")
 	cmd.Flags().StringVar(&reporter, "reporter", "", "user id to report to")
 	cmd.Flags().BoolVar(&clearReporter, "clear-reporter", false, "report to the card's creator again")
+	cmd.Flags().StringVar(&priority, "priority", "", "one of "+strings.Join(priorities, ", ")+" (none clears it)")
 	return cmd
 }
 
@@ -349,14 +369,12 @@ func newCardMoveCmd(c *client.Client) *cobra.Command {
 			}
 			hasList := cmd.Flags().Changed("list")
 			hasIndex := cmd.Flags().Changed("index")
-			if !hasList && !hasIndex {
-				return fmt.Errorf("nothing to move — pass --list, --index, or both")
-			}
 
-			// The card's OWN project, not a --board flag: a card is addressed
-			// by id and already names its board, so asking for one again is
-			// redundant and lets the two disagree. --board is accepted only to
-			// resolve a --list NAME, and must match.
+			// The card's OWN project by default: a card is addressed by id and
+			// already names its board. A --board naming ANOTHER board is a
+			// cross-board move, which goes through the server endpoint —
+			// the rules pin `project`, so no PATCH could do it — and needs
+			// neither --list nor --index (the target's first column, appended).
 			projectID := cd.Project
 			if boardRef != "" {
 				p, err := resolveProject(ctx, c, boardRef)
@@ -364,8 +382,11 @@ func newCardMoveCmd(c *client.Client) *cobra.Command {
 					return err
 				}
 				if p.ID != projectID {
-					return fmt.Errorf("card %s is not on board %q", cd.ID, boardRef)
+					return moveCardToBoard(cmd, c, o, cd, p, listRef, hasList)
 				}
+			}
+			if !hasList && !hasIndex {
+				return fmt.Errorf("nothing to move — pass --list, --index, or both")
 			}
 
 			targetList := cd.List
@@ -490,6 +511,140 @@ func newCardRemoveCmd(c *client.Client) *cobra.Command {
 			return nil
 		},
 	}
+	return cmd
+}
+
+// moveCardToBoard moves a card to another board through
+// POST /api/cards/cards/{id}/move. The destination list defaults to the
+// target board's first column; the rank appends, as a cross-column move
+// with no --index does.
+func moveCardToBoard(cmd *cobra.Command, c *client.Client, o output.Options, cd card, target project, listRef string, hasList bool) error {
+	ctx := cmd.Context()
+	lists, err := projectLists(ctx, c, target.ID)
+	if err != nil {
+		return err
+	}
+	if len(lists) == 0 {
+		return fmt.Errorf("board %q has no lists to move the card into", target.Name)
+	}
+	dest := lists[0]
+	if hasList {
+		dest, err = resolveList(ctx, c, target.ID, listRef)
+		if err != nil {
+			return err
+		}
+	}
+	siblings, err := listCards(ctx, c, dest.ID, true)
+	if err != nil {
+		return err
+	}
+	position, err := rankForAppend(cardPositions(siblings))
+	if err != nil {
+		return err
+	}
+	var result struct {
+		Card          card     `json:"card"`
+		PreviousKey   string   `json:"previous_key"`
+		DroppedLabels []string `json:"dropped_labels"`
+	}
+	err = c.PostJSON(ctx, "/api/cards/cards/"+cd.ID+"/move", map[string]any{
+		"project_id": target.ID,
+		"list_id":    dest.ID,
+		"position":   position,
+	}, &result)
+	if err != nil {
+		return err
+	}
+	o.Info(cmd.ErrOrStderr(), "moved %q to %s as %s", result.Card.Title, target.Name,
+		formatCardKey(target.Slug, result.Card.Number))
+	if len(result.DroppedLabels) > 0 {
+		o.Info(cmd.ErrOrStderr(), "dropped labels not on %s: %s", target.Name,
+			strings.Join(result.DroppedLabels, ", "))
+	}
+	return writeCardResult(cmd, o, result.Card)
+}
+
+func newCardCopyCmd(c *client.Client) *cobra.Command {
+	var title string
+	cmd := &cobra.Command{
+		Use:   "copy <id>",
+		Short: "Duplicate a card on its board, with its checklist",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			o, _, err := output.FromCommand(cmd)
+			if err != nil {
+				return err
+			}
+			ctx := cmd.Context()
+			cd, err := getCard(ctx, c, args[0])
+			if err != nil {
+				return err
+			}
+			siblings, err := listCards(ctx, c, cd.List, true)
+			if err != nil {
+				return err
+			}
+			position, err := rankForAppend(cardPositions(siblings))
+			if err != nil {
+				return err
+			}
+			userID, err := c.UserID(ctx)
+			if err != nil {
+				return err
+			}
+			newTitle := "Copy of " + cd.Title
+			if cmd.Flags().Changed("title") {
+				newTitle = title
+			}
+			reporter := cd.Reporter
+			if reporter == "" {
+				reporter = userID
+			}
+			body := map[string]any{
+				"project":     cd.Project,
+				"list":        cd.List,
+				"position":    position,
+				"title":       newTitle,
+				"description": cd.Description,
+				"due":         cd.Due,
+				"assignees":   cd.Assignees,
+				"labels":      cd.Labels,
+				"created_by":  userID,
+				"reporter":    reporter,
+				"priority":    cd.Priority,
+				"archived":    false,
+			}
+			created, err := client.CreateRecord[card](ctx, c, cardsCollection, body)
+			if err != nil {
+				return err
+			}
+			items, err := client.ListAll[checklistItem](ctx, c, checklistCollection,
+				client.Filter("card = {:c}", map[string]any{"c": cd.ID}), rankSort)
+			if err != nil {
+				return err
+			}
+			for _, it := range items {
+				_, err := client.CreateRecord[checklistItem](ctx, c, checklistCollection, map[string]any{
+					"card":     created.ID,
+					"project":  cd.Project,
+					"title":    it.Title,
+					"is_done":  it.IsDone,
+					"position": it.Position,
+				})
+				if err != nil {
+					return err
+				}
+			}
+			o.Info(cmd.ErrOrStderr(), "copied %q as %q", cd.Title, created.Title)
+			// Attachments are files, and a file cannot be copied with a JSON
+			// create; the app leaves them behind for the same reason.
+			if cd.AttachmentCount > 0 {
+				o.Info(cmd.ErrOrStderr(), "note: %d attachment(s) were not copied", cd.AttachmentCount)
+			}
+			return writeCardResult(cmd, o, created)
+		},
+	}
+	cmd.Flags().StringVar(&title, "title", "", "title for the copy (default: \"Copy of …\")")
 	return cmd
 }
 

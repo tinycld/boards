@@ -64,13 +64,14 @@ export function useUpdateProject() {
 }
 
 /**
- * Archive a board — the only removal the UI offers.
+ * Archive a board — the removal the UI offers FIRST.
  *
- * `useActiveBoard` already filters archived projects out of the sidebar, so the
- * board disappears without destroying its lists, cards, members or history.
- * There is deliberately NO delete: a project cascades to everything beneath it,
- * and an owner who wants a board gone is almost always saying "get it out of my
- * sidebar", not "destroy six months of work".
+ * `useActiveBoard` moves archived projects out of the sidebar's Projects list
+ * and into its Archived section, so the board disappears from daily view
+ * without destroying its lists, cards, members or history. Delete exists too
+ * (useDeleteProject) but behind a typed-name confirm: a project cascades to
+ * everything beneath it, and an owner who wants a board gone is almost always
+ * saying "get it out of my sidebar", not "destroy six months of work".
  */
 export function useArchiveProject() {
     const [projectsCollection] = useStore('cards_projects')
@@ -86,6 +87,47 @@ export function useArchiveProject() {
         // Clearing the stored id lets useActiveBoard fall back to the first
         // remaining board; leaving it would point the store at a project the
         // query no longer returns.
+        onSuccess: () => setActiveProject(''),
+    })
+}
+
+/**
+ * Bring an archived board back. The active id is left alone: restoring is
+ * done from the board itself (the banner) or the sidebar's Archived section,
+ * and in both cases the user wants to stay where they are.
+ */
+export function useRestoreProject() {
+    const [projectsCollection] = useStore('cards_projects')
+
+    return useMutation<void, Error, string>({
+        mutationKey: ['cards', 'project', 'restore'],
+        mutationFn: mutation(function* (projectId: string) {
+            yield projectsCollection.update(projectId, draft => {
+                draft.archived = false
+            })
+        }),
+    })
+}
+
+/**
+ * Delete a board outright. Owner-only by rule.
+ *
+ * Every child collection relates to `project` with cascadeDelete, so the
+ * lists, cards, checklist items, comments, attachments, memberships and share
+ * links all go server-side in the same request. Other members see the board
+ * vanish through the membership cascade (useMembershipVisibilitySync), and
+ * server/realtime.go truncates the board's document journal. Callers MUST
+ * confirm first — DeleteBoardDialog requires the name to be typed.
+ */
+export function useDeleteProject() {
+    const [projectsCollection] = useStore('cards_projects')
+    const setActiveProject = useCardsUIStore(s => s.setActiveProject)
+
+    return useMutation<void, Error, string>({
+        mutationKey: ['cards', 'project', 'delete'],
+        mutationFn: mutation(function* (projectId: string) {
+            yield projectsCollection.delete(projectId)
+        }),
         onSuccess: () => setActiveProject(''),
     })
 }

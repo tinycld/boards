@@ -1,7 +1,7 @@
 import { DropZone } from '@tinycld/core/components/DropZone'
 import { MARKDOWN_TRAILING_SPACE } from '@tinycld/core/components/help/MarkdownRenderer'
 import { useAuth } from '@tinycld/core/lib/auth'
-import { type RefObject, useRef, useState } from 'react'
+import { type RefObject, useMemo, useRef, useState } from 'react'
 import { ScrollView, Text, View } from 'react-native'
 import { useAttachmentMutations } from '../../hooks/useAttachmentMutations'
 import { useCardDetail } from '../../hooks/useCardDetail'
@@ -52,6 +52,8 @@ interface CardDetailProps {
     /** The board's labels and roster — what the pickers offer. */
     projectLabels: BoardLabel[]
     projectMembers: BoardMember[]
+    /** The board's lists, so history can name where a card moved. */
+    projectLists: { id: string; name: string }[]
     /**
      * Lets the container start a title edit for the `e` shortcut.
      *
@@ -77,13 +79,18 @@ export function CardDetail({
     projectId,
     projectLabels,
     projectMembers,
+    projectLists,
     titleRef,
 }: CardDetailProps) {
     const [isManagingLabels, setIsManagingLabels] = useState(false)
     const widthClass = variant === 'page' ? 'w-full max-w-[1200px] self-center' : ''
     // Fetched here rather than threaded in as props, so the peek and the page
     // both get it without either container knowing about on-demand collections.
-    const { checklist, comments, attachments, isReady } = useCardDetail(card.id)
+    const { checklist, comments, attachments, activity, isReady } = useCardDetail(card.id)
+    const activityContext = useMemo(
+        () => ({ lists: projectLists, labels: projectLabels, members: projectMembers }),
+        [projectLists, projectLabels, projectMembers]
+    )
     // Resolved here for the same reason — both containers share the gates.
     const { canEdit, canComment, isOwner } = useProjectRole(projectId)
     // The card's CHILDREN are not editable until the detail query has SETTLED,
@@ -226,6 +233,8 @@ export function CardDetail({
                     <View className={`px-6 pb-6 ${widthClass}`}>
                         <DetailActivity
                             comments={comments}
+                            activity={activity}
+                            activityContext={activityContext}
                             canComment={canCommentNow}
                             canModerate={isOwner}
                             cardId={card.id}

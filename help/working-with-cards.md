@@ -31,6 +31,12 @@ To move a whole list, drag it by its name in the list header. A colored bar
 shows which side of the neighboring list it will land on. The list menu's
 **Move left** and **Move right** do the same thing one step at a time.
 
+## Showing only some cards
+
+The filter and sort icons in the board's top bar narrow the board to the cards
+you care about and order each list — see
+[Filtering and sorting a board](help://cards:filtering-and-sorting).
+
 ## Making room on a busy board
 
 Two controls change how much of the board you see at once. Both are yours
@@ -71,6 +77,23 @@ when it's less than two days away and red once it has passed — the same colors
 the board shows on the card itself.
 
 To add a file, see [Attaching files to cards](help://cards:attaching-files).
+
+## Card priority
+
+Each card can carry one of four priorities — **Urgent**, **High**, **Medium**
+or **Low** — or none at all, which is where every card starts. To set one, open
+the card and click **Set priority** (or the current priority) in the details,
+then pick a level. Choose **No priority** to clear it.
+
+A card with a priority shows a small glyph at the top-left of its face on the
+board: an alert octagon for urgent, and one to three signal bars for high,
+medium and low. Cards without a priority show nothing, so a board where only
+the important cards are marked stays easy to scan. The glyph is kept when you
+hide card details.
+
+Priority is also available to [board rules](help://cards:rules): a rule can
+react when a card's priority changes, and can set a card's priority as its
+action.
 
 ## Who to ask about a card
 
@@ -139,6 +162,20 @@ description says when that is happening.
 People with **View** access can read a description but not change it, so the
 formatting buttons never appear for them.
 
+## Card history
+
+The **Activity** section of an open card lists everything that happened to
+it, in order, alongside the comments: who created it, moved it between lists,
+assigned or unassigned someone, added or removed a label, changed the due
+date, title, priority or reporter, edited the description, archived or
+restored it, ticked off a checklist item, or attached a file. Reordering a
+card within its list is not recorded — only a change of list is.
+
+Changes made by a board rule show as **Automatically**, and a description
+edited over a stretch of a few minutes shows as one entry rather than one per
+keystroke. History is visible to everyone who can see the card, including
+people reading a shared board by link.
+
 ## Comments
 
 Click the box at the bottom of an open card to write a comment. It works the
@@ -196,6 +233,30 @@ different card.
 
 A board without a key still works normally; its cards simply have no key to
 quote.
+
+## Duplicating a card
+
+To make a copy of a card on the same board, open it, click **More actions**,
+and choose **Duplicate card**. The copy lands right after the original with
+"Copy of" in front of its title, carrying the description, due date,
+priority, labels, assignees, reporter and checklist (with nothing ticked).
+Comments and attachments stay with the original.
+
+## Moving a card to another board
+
+Open the card, click **More actions**, and choose **Move to board…**. Pick any
+board you can edit, then the list it should land in. The card takes its
+checklist, comments, attachments and history with it. Because labels belong
+to a board, only labels with the same name on the new board are kept — the
+dialog tells you which will be dropped — and people who are not members of
+the new board are unassigned. The card gets a new key there; the old one
+stops working.
+
+## Archived cards
+
+A card you archived is not gone: the archive icon in the board's top bar opens
+the list of archived cards, where it can be restored or deleted for good. See
+[Archiving and deleting](help://cards:archiving-and-deleting).
 
 ## Finding a card
 
