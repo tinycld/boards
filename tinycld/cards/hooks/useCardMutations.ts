@@ -62,6 +62,11 @@ export interface UpdateCardInput {
      * id to set, '' to clear, absent to leave alone.
      */
     parent?: string
+    /**
+     * The epic, or '' to unfile. Same convention. Always an epic on the SAME
+     * board — the pin in 1980000017 refuses anything else.
+     */
+    epic?: string
 }
 
 /**
@@ -246,6 +251,7 @@ export function useUpdateCard() {
                 if (input.priority !== undefined) draft.priority = input.priority
                 if (input.estimate !== undefined) draft.estimate = input.estimate
                 if (input.parent !== undefined) draft.parent = input.parent
+                if (input.epic !== undefined) draft.epic = input.epic
             })
         }),
     })

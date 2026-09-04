@@ -22,7 +22,7 @@ import { isClosedCategory, type ListCategory } from '../lib/list-category'
 import type { CardPriority } from '../lib/priority'
 import { subtasksComplete } from '../lib/subtasks'
 import { useCardsUIStore } from '../stores/cards-ui-store'
-import type { BoardCardView, BoardLabel, BoardMember } from '../types'
+import type { BoardCardView, BoardEpic, BoardLabel, BoardMember } from '../types'
 import { useCardPresence } from './BoardPresenceProvider'
 import { PriorityGlyph } from './PriorityGlyph'
 
@@ -164,6 +164,7 @@ function CardFace({ card, isCompact }: { card: BoardCardView; isCompact: boolean
                 cardKey={card.key}
                 priority={card.priority}
                 parentKey={card.parentKey}
+                epic={card.epic}
             />
             <Text
                 testID="cards-card-title"
@@ -199,17 +200,20 @@ function CardTopRow({
     cardKey,
     priority,
     parentKey,
+    epic,
 }: {
     labels: BoardLabel[]
     cardKey: string
     priority: CardPriority
     parentKey: string
+    epic: BoardEpic | null
 }) {
-    if (labels.length === 0 && !cardKey && !parentKey && priority === 'none') return null
+    if (labels.length === 0 && !cardKey && !parentKey && !epic && priority === 'none') return null
     return (
         <View className="flex-row items-center gap-1">
             <PriorityGlyph priority={priority} />
             <ParentChip parentKey={parentKey} />
+            <EpicChip epic={epic} />
             <CardLabels labels={labels} />
             <View className="flex-1" />
             <CardKey cardKey={cardKey} />
@@ -238,6 +242,30 @@ function ParentChip({ parentKey }: { parentKey: string }) {
         >
             ↳ {parentKey}
         </Text>
+    )
+}
+
+/**
+ * The epic this card is filed under, as a colored dot and its title.
+ *
+ * On the top row beside the parent chip, for the same reason: both answer
+ * "what is this part of", and a reader scanning a column looks in one band for
+ * it. Renders nothing for an unfiled card — and for one whose epic has been
+ * DELETED, which orphans rather than cascades, so `epic` resolves to null and
+ * the card reads as unfiled rather than showing a chip for a row that is gone.
+ */
+function EpicChip({ epic }: { epic: BoardEpic | null }) {
+    if (!epic) return null
+    return (
+        <View className="flex-row items-center gap-[3px]" testID="cards-epic-chip">
+            <View
+                className="w-[6px] h-[6px] rounded-full"
+                style={{ backgroundColor: epic.color || undefined }}
+            />
+            <Text className="text-[10.5px] font-medium text-muted" numberOfLines={1}>
+                {epic.title}
+            </Text>
+        </View>
     )
 }
 

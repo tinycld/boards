@@ -233,6 +233,7 @@ export function CardDetail({
                         <DetailProperties
                             card={card}
                             projectLabels={projectLabels}
+                            projectEpics={projectEpics}
                             projectMembers={projectMembers}
                             onManageLabels={() => setIsManagingLabels(true)}
                             canEdit={canEdit}

@@ -21,10 +21,14 @@ export type EstimateFilter = 'estimated' | 'unestimated'
 export const ME = 'me'
 /** No assignee at all. Only meaningful in `assigneeIds`. */
 export const UNASSIGNED = 'unassigned'
+/** Filed under no epic. Only meaningful in `epicIds` — the UNASSIGNED shape. */
+export const NO_EPIC = 'none'
 
 export interface BoardFilter {
     /** OR within the facet: a card with ANY of these labels passes. */
     labelIds: string[]
+    /** Epic ids, or `NO_EPIC` for unfiled cards. OR within the facet. */
+    epicIds: string[]
     /** User ids, `ME`, or `UNASSIGNED`. OR within the facet. */
     assigneeIds: string[]
     /** User ids or `ME`. OR within the facet. */
@@ -45,6 +49,7 @@ export interface BoardFilter {
  */
 export const EMPTY_FILTER: BoardFilter = Object.freeze({
     labelIds: [],
+    epicIds: [],
     assigneeIds: [],
     reporterIds: [],
     due: null,
@@ -62,6 +67,7 @@ export function isFilterActive(filter: BoardFilter): boolean {
 export function activeFacetCount(filter: BoardFilter): number {
     let count = 0
     if (filter.labelIds.length > 0) count += 1
+    if (filter.epicIds.length > 0) count += 1
     if (filter.assigneeIds.length > 0) count += 1
     if (filter.reporterIds.length > 0) count += 1
     if (filter.due !== null) count += 1
@@ -79,6 +85,16 @@ export interface FilterContext {
 }
 
 /** AND across facets, OR within each. An empty facet constrains nothing. */
+/**
+ * A card passes when its epic is among the chosen ids, or when NO_EPIC is
+ * chosen and it is unfiled. A card whose epic was DELETED resolves to null and
+ * so reads as unfiled here — consistent with how the face renders it.
+ */
+function matchesEpic(card: BoardCardView, epicIds: string[]): boolean {
+    if (!card.epic) return epicIds.includes(NO_EPIC)
+    return epicIds.includes(card.epic.id)
+}
+
 export function cardMatchesFilter(
     card: BoardCardView,
     filter: BoardFilter,
@@ -88,6 +104,9 @@ export function cardMatchesFilter(
         filter.labelIds.length > 0 &&
         !card.labels.some(label => filter.labelIds.includes(label.id))
     ) {
+        return false
+    }
+    if (filter.epicIds.length > 0 && !matchesEpic(card, filter.epicIds)) {
         return false
     }
     if (filter.assigneeIds.length > 0 && !matchesAssignees(card, filter.assigneeIds, ctx.userId)) {
