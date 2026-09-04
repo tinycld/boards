@@ -17,4 +17,21 @@ const TEST_DIR = path.join(WS_ROOT, 'node_modules', '@tinycld', 'cards', 'tests'
 export default defineConfig({
     ...appConfig,
     testDir: TEST_DIR,
+    // Two workers, cards only, as an experiment.
+    //
+    // Playwright resolves `workers` to 50% OF CPUS by default — not a CI
+    // special case, whatever the folklore says; see resolveWorkers in its
+    // config.js. A standard 2-core GitHub runner therefore resolves to ONE
+    // worker, and the log said so: "Running 140 tests using 1 worker", 16.7
+    // minutes. The same 140 tests take 4.7 locally, in parallel.
+    //
+    // Oversubscribing 2 cores with 2 browsers is the tradeoff being tested. It
+    // is safe on correctness grounds — every spec builds its own board with a
+    // unique name (`estimate-${Date.now()}-${run++}`), which is what already
+    // lets the local run use many workers against one shared PocketBase — but
+    // contention could make it slower rather than faster, or surface a latent
+    // order dependency as a flake. If either happens, drop this override rather
+    // than papering over the result: a flake it exposes is a real bug in the
+    // test, per the no-retries note in the app shell's config.
+    workers: 2,
 })
