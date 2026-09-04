@@ -6,7 +6,7 @@ import (
 
 // Fractional ranks for ordering lists and cards.
 //
-// This is the Go half of what `tinycld/cards/lib/rank.ts` does on the client,
+// This is the Go half of what `tinycld/boards/lib/rank.ts` does on the client,
 // and it is the SAME LIBRARY: the app uses npm `fractional-indexing`
 // (rocicorp/fractional-indexing) and this uses `roci.dev/fracdex`, the same
 // authors' Go port, which is byte-for-byte compatible with it. Both implement
@@ -20,7 +20,7 @@ import (
 // package rather than taking the README's word for it.
 //
 // This file is deliberately only a thin naming layer over fracdex, mirroring
-// what lib/rank.ts is over the npm package: it names the operations in cards'
+// what lib/rank.ts is over the npm package: it names the operations in boards'
 // terms and keeps the choice of implementation in one place.
 //
 // TWO PROPERTIES CALLERS MUST KNOW, both inherited from the TS side:

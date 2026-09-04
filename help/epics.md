@@ -29,7 +29,7 @@ Open a card and use the **Epic** row in its details. A card belongs to at most
 one epic — pick a different one to move it, or **No epic** to unfile it.
 
 The epic then shows on the card's face as a colored dot and its name, beside the
-sub-task chip. Epics only ever offer the cards' own board, so a card is never
+sub-task chip. Epics only ever offer the boards' own board, so a card is never
 filed under a plan its readers cannot see.
 
 ## Progress

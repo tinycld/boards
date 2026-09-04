@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { remapLabels } from '../tinycld/cards/lib/remap-labels'
+import { remapLabels } from '../tinycld/boards/lib/remap-labels'
 
 const label = (id: string, name: string) => ({ id, name, color: '#000' })
 

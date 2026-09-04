@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"strings"
@@ -23,9 +23,9 @@ func setupLinkHookEnv(t *testing.T) *linkEnv {
 // refusal can be asserted on.
 func saveLink(t *testing.T, env *linkEnv, source, target, linkType string) error {
 	t.Helper()
-	col, err := env.app.FindCollectionByNameOrId("cards_card_links")
+	col, err := env.app.FindCollectionByNameOrId("boards_card_links")
 	if err != nil {
-		t.Fatalf("find cards_card_links: %v", err)
+		t.Fatalf("find boards_card_links: %v", err)
 	}
 	row := core.NewRecord(col)
 	row.Set("source", source)
@@ -132,7 +132,7 @@ func TestCardLinkActivity_WritesOnBothCards(t *testing.T) {
 	}
 
 	for _, cardID := range []string{env.card.Id, other.Id} {
-		n, err := env.app.CountRecords("cards_activity",
+		n, err := env.app.CountRecords("boards_activity",
 			dbx.HashExp{"card": cardID, "kind": "link_added"})
 		if err != nil {
 			t.Fatalf("count activity: %v", err)
@@ -170,7 +170,7 @@ func TestCardLinkActivity_RecordsARemoval(t *testing.T) {
 		t.Fatalf("link: %v", err)
 	}
 
-	links, err := env.app.FindRecordsByFilter("cards_card_links",
+	links, err := env.app.FindRecordsByFilter("boards_card_links",
 		"source = {:card}", "", 1, 0, dbx.Params{"card": env.card.Id})
 	if err != nil || len(links) != 1 {
 		t.Fatalf("reload link: %v (%d rows)", err, len(links))
@@ -180,7 +180,7 @@ func TestCardLinkActivity_RecordsARemoval(t *testing.T) {
 	}
 
 	for _, cardID := range []string{env.card.Id, other.Id} {
-		n, err := env.app.CountRecords("cards_activity",
+		n, err := env.app.CountRecords("boards_activity",
 			dbx.HashExp{"card": cardID, "kind": "link_removed"})
 		if err != nil {
 			t.Fatalf("count activity: %v", err)
@@ -201,7 +201,7 @@ func TestCardLinkActivity_SurvivesACascadeDelete(t *testing.T) {
 		t.Fatalf("link: %v", err)
 	}
 
-	doomed, err := env.app.FindRecordById("cards_cards", other.Id)
+	doomed, err := env.app.FindRecordById("boards_cards", other.Id)
 	if err != nil {
 		t.Fatalf("load card: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestCardLinkActivity_SurvivesACascadeDelete(t *testing.T) {
 	}
 
 	// The link is gone with the card.
-	n, err := env.app.CountRecords("cards_card_links", dbx.HashExp{"target": other.Id})
+	n, err := env.app.CountRecords("boards_card_links", dbx.HashExp{"target": other.Id})
 	if err != nil {
 		t.Fatalf("count links: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestCardLinkActivity_SurvivesACascadeDelete(t *testing.T) {
 		t.Fatalf("links pointing at the deleted card = %d, want 0", n)
 	}
 	// And the surviving card recorded the removal.
-	rows, err := env.app.CountRecords("cards_activity",
+	rows, err := env.app.CountRecords("boards_activity",
 		dbx.HashExp{"card": env.card.Id, "kind": "link_removed"})
 	if err != nil {
 		t.Fatalf("count activity: %v", err)

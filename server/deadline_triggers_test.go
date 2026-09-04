@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"testing"
@@ -42,7 +42,7 @@ func dueCard(t *testing.T, env *cardsAutomationEnv, list *core.Record, title, ra
 func sweptRecord(t *testing.T, env *cardsAutomationEnv, cardID string, now time.Time) *core.Record {
 	t.Helper()
 	var seen *core.Record
-	env.app.OnRecordAfterUpdateSuccess("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	env.app.OnRecordAfterUpdateSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		if e.Record.Id == cardID {
 			seen = e.Record
 		}
@@ -80,13 +80,13 @@ func TestCardBecameOverdue_RefusesAClearedStamp(t *testing.T) {
 
 	// Push the deadline out: registerDueNotices clears both stamps.
 	var seen *core.Record
-	env.app.OnRecordAfterUpdateSuccess("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	env.app.OnRecordAfterUpdateSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		if e.Record.Id == card.Id {
 			seen = e.Record
 		}
 		return e.Next()
 	})
-	fresh, err := env.app.FindRecordById("cards_cards", card.Id)
+	fresh, err := env.app.FindRecordById("boards_cards", card.Id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,13 +115,13 @@ func TestDeadlineTriggers_IgnoreAnOrdinaryEdit(t *testing.T) {
 	checkDueNotices(env.app, now)
 
 	var seen *core.Record
-	env.app.OnRecordAfterUpdateSuccess("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	env.app.OnRecordAfterUpdateSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		if e.Record.Id == card.Id {
 			seen = e.Record
 		}
 		return e.Next()
 	})
-	fresh, err := env.app.FindRecordById("cards_cards", card.Id)
+	fresh, err := env.app.FindRecordById("boards_cards", card.Id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestCardBecameOverdue_RefusesAClosedCard(t *testing.T) {
 
 	// The sweep itself skips closed cards, so stamp it directly: the filter is
 	// the second line of defence, and it must hold on its own.
-	fresh, err := env.app.FindRecordById("cards_cards", card.Id)
+	fresh, err := env.app.FindRecordById("boards_cards", card.Id)
 	if err != nil {
 		t.Fatal(err)
 	}

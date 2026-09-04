@@ -25,7 +25,7 @@ async function freshBoard(page: Page, label: string): Promise<string> {
 }
 
 function descriptionEditor(page: Page) {
-    return page.getByTestId('cards-description-editor').locator('.ProseMirror')
+    return page.getByTestId('boards-description-editor').locator('.ProseMirror')
 }
 
 /**
@@ -47,7 +47,7 @@ async function openDescription(page: Page) {
 
 /** An inserted description image — the tokenless stored src, re-signed. */
 function descriptionImage(page: Page) {
-    return descriptionEditor(page).locator('img[src*="/api/files/cards_attachments/"]').first()
+    return descriptionEditor(page).locator('img[src*="/api/files/boards_attachments/"]').first()
 }
 
 /** Attach via the strip's picker, with the blur/focus dance the real dialog
@@ -117,10 +117,10 @@ async function dropPngAt(page: Page, x: number, y: number, name: string) {
     )
 }
 
-test.describe('Cards — images in descriptions', () => {
+test.describe('Boards — images in descriptions', () => {
     test.beforeEach(async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
     })
 
     test('inserts an existing image attachment at the caret, and it survives a reload', async ({
@@ -130,7 +130,7 @@ test.describe('Cards — images in descriptions', () => {
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
 
-        await attachViaChooser(page, page.getByTestId('cards-attach-file'), 'diagram.png')
+        await attachViaChooser(page, page.getByTestId('boards-attach-file'), 'diagram.png')
         await expect(page.getByText('diagram.png', { exact: true })).toBeVisible({
             timeout: 15_000,
         })
@@ -144,7 +144,7 @@ test.describe('Cards — images in descriptions', () => {
         // document — the spec would be testing scheduler luck.
         const peer = await page.context().newPage()
         await login(peer)
-        await navigateToPackage(peer, 'cards')
+        await navigateToPackage(peer, 'boards')
         await openBoard(peer, board, CARD_TITLE)
         await openCard(peer, CARD_TITLE)
 
@@ -195,7 +195,7 @@ test.describe('Cards — images in descriptions', () => {
         // the same by tearing down the whole SPA — the hard navigation this suite
         // forbids (it cancels in-flight chunk loads and is a CI flake source).
         await navigateToPackage(page, 'settings')
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         await openBoard(page, board, CARD_TITLE)
         await openCard(page, CARD_TITLE)
         // Reopened: a card shows markdown until edited, and descriptionImage
@@ -214,7 +214,7 @@ test.describe('Cards — images in descriptions', () => {
         await focusDescription(page)
         await page.getByRole('button', { name: 'Insert image' }).click()
         await expect(page.getByText('No image attachments yet.')).toBeVisible()
-        await attachViaChooser(page, page.getByTestId('cards-image-picker-upload'), 'fresh.png')
+        await attachViaChooser(page, page.getByTestId('boards-image-picker-upload'), 'fresh.png')
 
         await expect(descriptionImage(page)).toBeVisible({ timeout: 15_000 })
         // The upload went through the ordinary attachment path, so the strip
@@ -251,7 +251,7 @@ test.describe('Cards — images in descriptions', () => {
         // document order against the second paragraph rather than expecting
         // the <img> inside the first (it isn't; the paragraph was split).
         const imgBeforeSecond = await editor.evaluate(el => {
-            const img = el.querySelector('img[src*="cards_attachments"]')
+            const img = el.querySelector('img[src*="boards_attachments"]')
             const second = Array.from(el.querySelectorAll('p')).find(p =>
                 (p.textContent ?? '').includes('Second paragraph')
             )

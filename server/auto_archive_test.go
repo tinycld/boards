@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"testing"
@@ -56,7 +56,7 @@ func agedCard(t *testing.T, env *autoArchiveEnv, list *core.Record, title string
 
 func isArchived(t *testing.T, app core.App, id string) bool {
 	t.Helper()
-	card, err := app.FindRecordById("cards_cards", id)
+	card, err := app.FindRecordById("boards_cards", id)
 	if err != nil {
 		t.Fatal(err)
 	}

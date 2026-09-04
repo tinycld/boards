@@ -1,6 +1,6 @@
 # Cards — parity TODO vs Jira, Trello and Linear
 
-What the Cards package lacks to stand beside Jira, Trello and Linear, in
+What the Boards package lacks to stand beside Jira, Trello and Linear, in
 priority order. Ranked by (1) how many of the three treat a feature as core,
 (2) how often it is touched in daily use, and (3) how much existing core
 infrastructure it can reuse. Ties go to the cheaper item.
@@ -9,7 +9,7 @@ Status as of 2026-09-04: Tier 1 shipped on `feat/tier1-parity`. Tier 2's
 four chosen items — 8, 10, 12, 13 — and their rule/notification follow-ups
 shipped as five stacked branches (`feat/tier2-estimates` → `-status` →
 `-reactions` → `-timeline` → `-events`, PRs #46–#50), with the matching
-notification preferences on `tinycld`'s `feat/cards-notification-prefs`
+notification preferences on `tinycld`'s `feat/boards-notification-prefs`
 (PR #229). Sub-tasks (9a) followed on `feat/tier2-subtasks`, card links (9b)
 on `feat/tier2-links`, and time-based automation (11) on
 `feat/tier2-automation`. Open: 14–21 and Tier 3.
@@ -17,7 +17,7 @@ on `feat/tier2-links`, and time-based automation (11) on
 ## Tier 1 — table stakes in all three ✅ shipped
 
 1. **Card activity history** — who moved, assigned, relabelled, rescheduled
-   or archived a card, interleaved with comments. Landed as `cards_activity`,
+   or archived a card, interleaved with comments. Landed as `boards_activity`,
    written from after-save hooks with actor capture (`server/actor.go`,
    `server/activity.go`); reorders never log and description keystrokes are
    coalesced into one row per sitting.
@@ -27,7 +27,7 @@ on `feat/tier2-links`, and time-based automation (11) on
    disables drag reorder within a column. Swimlanes deferred (needs a
    lane×list drag grid).
 3. **Notifications and card watching** — assignment, replies, changes to
-   watched cards, due soon / overdue. Landed as the `cards_card_watchers`
+   watched cards, due soon / overdue. Landed as the `boards_card_watchers`
    junction, auto-watch on create / assign / comment, once-per-deadline
    reminders stamped on the card, and five mute switches in Settings.
 4. **Priority field** — urgent / high / medium / low / none. Landed with face
@@ -38,7 +38,7 @@ on `feat/tier2-links`, and time-based automation (11) on
    restore, a typed-name board delete for owners, and `board archive` /
    `board remove`.
 6. **Move card between boards; duplicate** — landed as
-   `POST /api/cards/cards/{id}/move` (remaps labels by name, drops
+   `POST /api/boards/cards/{id}/move` (remaps labels by name, drops
    non-member assignees, re-keys, carries children), a duplicate action that
    copies fields and checklist, and `card move --board` / `card copy`.
 7. **My cards and a list view** — landed as the My cards screen (assigned /
@@ -49,15 +49,15 @@ on `feat/tier2-links`, and time-based automation (11) on
 
 ### Shipped ✅
 
-8. **Comment reactions** — landed as the `cards_comment_reactions (comment,
+8. **Comment reactions** — landed as the `boards_comment_reactions (comment,
    user, emoji)` junction over a six-emoji select (so byte-variant sequences
    cannot defeat the unique index), carrying `card` so the open card reads its
    reactions in one query. Commentors and up react, anyone removes only their
    own, members and live share links read. A reaction bar under each comment
-   sits outside the inline-edit swap; the author gets a `cards_reaction`
+   sits outside the inline-edit swap; the author gets a `boards_reaction`
    notification (own mute switch); the `comment-reacted` trigger fires for
    rules. Deferred: CLI reaction commands (need the core scope map widened).
-10. **Start date, due time, timeline view** — landed as `cards_cards.start`
+10. **Start date, due time, timeline view** — landed as `boards_cards.start`
     (a day) and a `due_has_time` flag that lets `due` carry an instant; day
     values keep the calendar-day semantics everywhere, timed ones are
     overdue from their instant (face, filter, reminder sweep) and land on
@@ -97,10 +97,10 @@ on `feat/tier2-links`, and time-based automation (11) on
     BOTH directions (a reschedule clears them), so each trigger has a filter
     asserting the stamp was just SET; `card-due-soon` also refuses an
     already-overdue card, since the sweep stamps the soon column even when it
-    sends no soon notice. `cards:create-card` derives `project` from the list
+    sends no soon notice. `boards:create-card` derives `project` from the list
     (a record-op cannot, and a mismatch makes the card invisible) and leaves
     `number` to the OnRecordCreate hook that owns it; its destination MAY
-    cross boards, gated on write access there. `cards:set-due-date` is
+    cross boards, gated on write access there. `boards:set-due-date` is
     relative-only and always lands on a day — the server has no user time
     zone, so an absolute hour would mean the server's — and clears both stamps
     so a rule-moved deadline notifies again. Adds `roci.dev/fracdex` to
@@ -109,7 +109,7 @@ on `feat/tier2-links`, and time-based automation (11) on
     byte-compatibility structural. Deferred: an exact time of day (needs a
     user time zone in core); removing an assignee or label.
 
-9a. **Sub-tasks** — landed as `cards_cards.parent` (a card that names another
+9a. **Sub-tasks** — landed as `boards_cards.parent` (a card that names another
     card, `cascadeDelete: false` so deleting a parent ORPHANS its children
     rather than destroying them) plus a `subtask_total` / `subtask_done`
     rollup on the face. The same-board invariant is a rule pin
@@ -122,11 +122,11 @@ on `feat/tier2-links`, and time-based automation (11) on
     (`family: move|unlink`) rather than picking for the user, and reports what
     it did. `--parent` / `--clear-parent` on the CLI, `--family` on
     `card move`, the `card-parented` trigger and the `set-parent` action.
-    Fixed alongside: `cards_comment_reactions` was missing from the move
+    Fixed alongside: `boards_comment_reactions` was missing from the move
     endpoint's re-projection list, so a cross-board move left reaction rows
     naming the source board — unreadable to everyone on the target.
 
-9b. **Card links** — landed as `cards_card_links (source, target, type)` over
+9b. **Card links** — landed as `boards_card_links (source, target, type)` over
     blocks / related / duplicates, stored ONCE and read from both ends
     ("blocked by" is `blocks` seen from the target, not a fourth type).
     Unlike sub-tasks these MAY CROSS BOARDS, which made it the first
@@ -143,7 +143,7 @@ on `feat/tier2-links`, and time-based automation (11) on
     would have leaked every board's links. Self-links and reversed `blocks`
     pairs are a Go guard; `related`/`duplicates` are symmetric so their
     mirrors are allowed. History writes onto BOTH cards.
-    Deferred: CLI commands (need `cards_card_links` in core's
+    Deferred: CLI commands (need `boards_card_links` in core's
     `collectionScopes` first — the cross-repo step that also defers reaction
     CLI commands); a cross-board card picker (the schema and rules support
     such links, but the picker offers the open board's cards); link-aware
@@ -151,9 +151,9 @@ on `feat/tier2-links`, and time-based automation (11) on
 
 ### Open
 
-14. **Cycles / sprints with a backlog.** `cards_cycles`, `cards_cards.cycle`,
+14. **Cycles / sprints with a backlog.** `boards_cycles`, `boards_cards.cycle`,
     a backlog view, rollover. Large; only for software-team personas.
-15. **Epics / milestones.** A lightweight `cards_epics` collection offered as
+15. **Epics / milestones.** A lightweight `boards_epics` collection offered as
     a grouping; roadmaps sit on top later.
 16. **Import and export.** CSV export (already filed in `TODO.md`) and a
     Trello JSON importer first. Prior art: `contacts/server/vcard_endpoints.go`,
@@ -202,7 +202,7 @@ on `feat/tier2-links`, and time-based automation (11) on
 - No responsive pass: fixed `COLUMN_WIDTH` / `PEEK_WIDTH`. The list and
   timeline views read `useBreakpoint`; the canvas and peek do not.
 - Reactions have no CLI commands; the core CLI scope map would need to grant
-  `cards_comment_reactions` first.
+  `boards_comment_reactions` first.
 - Rules cannot run at an exact time of day: the deadline triggers and
   `set-due-date` both work in whole days, because core carries no user time
   zone for the server to resolve an hour against.

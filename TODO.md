@@ -1,6 +1,6 @@
 # Cards — path to a finished package
 
-The UI was prototyped against `tinycld/cards/sample-projects.ts` (deleted in
+The UI was prototyped against `tinycld/boards/sample-projects.ts` (deleted in
 M3 once the live queries landed). Finishing the package means: real collections
 + migrations, per-project sharing (RBAC), wiring every stubbed interaction to
 live queries/mutations, and the mail + calendar integrations. Milestones are
@@ -89,7 +89,7 @@ Ecosystem facts these tasks rely on:
 - [x] **Role vocabulary for project sharing:** reuse drive's exactly —
       `owner`/`editor`/`commentor`/`viewer` (commentor can comment but not
       move/edit cards) — so a future core extraction has one vocabulary.
-- [x] **Sharing infra:** cards-local. Copy drive's `ShareDialog` pattern into
+- [x] **Sharing infra:** boards-local. Copy drive's `ShareDialog` pattern into
       cards now; extracting a shared members-junction + dialog into core is a
       filed follow-up (M6), triggered when a third package needs sharing.
 - [x] **Calendar integration:** build an **event-source registry in the
@@ -103,13 +103,13 @@ Ecosystem facts these tasks rely on:
       lists and cards — a move is a single-row update, and optimistic updates
       never reorder siblings. **Implemented over `fractional-indexing`**
       (already in the tree via TanStack DB), wrapped by
-      `tinycld/cards/lib/rank.ts`. Hand-rolling it was tried and abandoned:
+      `tinycld/boards/lib/rank.ts`. Hand-rolling it was tried and abandoned:
       the invariants are subtler than they look, and the library's keys stay
       far shorter under repeated prepends.
       **Ranks are NOT unique** — two offline clients splitting the same gap
       produce the same string, and there is deliberately no unique index on
       `position`. Every query ordering by rank MUST sort `position, id`.
-- [x] **Attachment storage:** a PB `file` field on a `cards_attachments`
+- [x] **Attachment storage:** a PB `file` field on a `boards_attachments`
       collection — mail's attachment pattern — NOT rows in `drive_items`.
       Rationale: a cards migration cannot declare a relation to `drive_items`
       when drive is absent (lean-shell), and drive-item storage would make
@@ -122,8 +122,8 @@ Ecosystem facts these tasks rely on:
 - [x] ~~**Public share links:** deferred out of v1.~~ **Reversed during M1.**
       Public boards with read AND write via share link are a goal, and a
       guest reaches a board only through a link — the two are one feature.
-      Since a shipped migration is frozen, `cards_share_links` and
-      `cards_projects.visibility` landed in the create migration with
+      Since a shipped migration is frozen, `boards_share_links` and
+      `boards_projects.visibility` landed in the create migration with
       owner-only rules; only the FLOW is deferred (see M6a).
 
 ## M1 — Data model: collections, migrations, types
@@ -132,17 +132,17 @@ Blueprint: calendar (`calendar/pb-migrations/1715000000_create_calendar_collecti
 `calendar/tinycld/calendar/collections.ts` + `types.ts`).
 
 - [x] Design the schema (one doc-comment block at the top of the migration):
-    - `cards_projects` — name, color, created_by (relation → users), archived?
-    - `cards_project_members` — project (cascadeDelete), user, role
-    - `cards_lists` — project (cascadeDelete), name, position, `is_done` flag
-    - `cards_cards` — list (relation), project (denormalized relation — lets
+    - `boards_projects` — name, color, created_by (relation → users), archived?
+    - `boards_project_members` — project (cascadeDelete), user, role
+    - `boards_lists` — project (cascadeDelete), name, position, `is_done` flag
+    - `boards_cards` — list (relation), project (denormalized relation — lets
       PB rules and board queries avoid a two-hop back-relation), position,
       title, description, due (ISO date, optional), assignees (multi-relation
-      → users), labels (multi-relation → cards_labels), created_by
-    - `cards_labels` — project (cascadeDelete), name, color
-    - `cards_checklist_items` — card (cascadeDelete), title, is_done, position
-    - `cards_comments` — card (cascadeDelete), author (relation → users), body, parent (can be threaded)
-    - `cards_attachments` — card (cascadeDelete), file (PB `file` field),
+      → users), labels (multi-relation → boards_labels), created_by
+    - `boards_labels` — project (cascadeDelete), name, color
+    - `boards_checklist_items` — card (cascadeDelete), title, is_done, position
+    - `boards_comments` — card (cascadeDelete), author (relation → users), body, parent (can be threaded)
+    - `boards_attachments` — card (cascadeDelete), file (PB `file` field),
       uploaded_by (relation → users); name/size/mime come from PB's file
       metadata. Model the field after mail's message-attachment file fields
       (`mail/pb-migrations/1713000000...js` ~L362); add a server-generated
@@ -154,11 +154,11 @@ Blueprint: calendar (`calendar/pb-migrations/1715000000_create_calendar_collecti
       unique, checklist/comments by card); phase 2 applies rules (see M2).
       Include the `down` migration.
 - [x] Add indexes for the calendar/mail-integration queries you know are
-      coming: `cards_cards (due)` and `cards_cards (project, due)`.
-- [x] Write `tinycld/cards/collections.ts` (`registerCollections`) + `types.ts`
-      (record interfaces + `CardsSchema` map). Use `expand`/joins to core
+      coming: `boards_cards (due)` and `boards_cards (project, due)`.
+- [x] Write `tinycld/boards/collections.ts` (`registerCollections`) + `types.ts`
+      (record interfaces + `BoardsSchema` map). Use `expand`/joins to core
       `users` where needed; evaluate `syncMode: 'on-demand'` for
-      `cards_comments` if comment volume warrants it (default eager is fine
+      `boards_comments` if comment volume warrants it (default eager is fine
       for the rest).
 - [x] Manifest: add `migrations`, `collections: { register: 'collections',
       types: 'types' }`, and `peerVersions: { '@tinycld/core': <range> }`.
@@ -174,7 +174,7 @@ Blueprint: calendar (`calendar/pb-migrations/1715000000_create_calendar_collecti
 
 **Done.** The access rules shipped with the M1 migration. The role-gated UI
 that was originally filed here (`useProjectRole`, affordance gating, the
-Share dialog) moved to **M3b** — it reads `cards_project_members`, so it
+Share dialog) moved to **M3b** — it reads `boards_project_members`, so it
 cannot be built while the board still renders `SAMPLE_PROJECTS`. Proving the
 rules behave as written moved to **M2a**; both have since shipped.
 
@@ -183,11 +183,11 @@ rules section, `drive/tinycld/drive/components/ShareDialog.tsx`), mail's
 `bootstrapFirstOwner` clause (`mail/pb-migrations/1713000000...js` ~L480).
 
 - [x] Phase-2 PB rules on all cards collections, resolved through
-      `cards_project_members`. Shipped in
+      `boards_project_members`. Shipped in
       `pb-migrations/1980000000_create_cards_collections.js`; three points
       where the rules deviate from this list as originally written:
-    - list/view: `cards_project_members_via_project.user ?= @request.auth.id`
-      (on `cards_cards` etc., via the denormalized `project` relation)
+    - list/view: `boards_project_members_via_project.user ?= @request.auth.id`
+      (on `boards_cards` etc., via the denormalized `project` relation)
     - create/update on content: **the writing roles are NAMED**
       (`role ?= "owner" || role ?= "editor"`), NOT `role ?!= "viewer"`.
       The `?!=` idiom admits every role that is not viewer, which is how
@@ -211,7 +211,7 @@ rules section, `drive/tinycld/drive/components/ShareDialog.tsx`), mail's
       Note `viewRule` is what gates the file BLOB, so it carries `disabled`.
     - conjoin `@request.auth.disabled != true` (not `= false`, so rows
       written before the field existed still pass)
-- [x] `cards_project_members` create rule needs mail's bootstrapFirstOwner
+- [x] `boards_project_members` create rule needs mail's bootstrapFirstOwner
       shape so creating a project can insert its own first owner row.
       Shipped, with mail's `1830000003` guest pin folded in.
 - [x] Verify the guest story. **Resolved: guests ARE project members in v1**,
@@ -223,9 +223,9 @@ rules section, `drive/tinycld/drive/components/ShareDialog.tsx`), mail's
       every cards content row names a `project`, so the create rule requires
       an existing editor/owner membership on it. That parent check IS the
       backstop, and it lives in the rule (a hosted tenant runs no feature Go).
-    - `notGuest` is KEPT on `cards_projects` create — a share-link visitor
+    - `notGuest` is KEPT on `boards_projects` create — a share-link visitor
       must never mint a board — and on the bootstrapFirstOwner branch.
-    - the member roster (`cards_project_members` list/view) is
+    - the member roster (`boards_project_members` list/view) is
       member-AND-non-guest, so a guest never reads the org's member names
       and emails. That leak is what `1870000000_exclude_guests_from_org_rls`
       exists to close.
@@ -265,7 +265,7 @@ in it too.
 - [x] `bootstrapFirstOwner`: `bootstrap_rls_test.go`. Cards closes the gap
       `calendar/server/bootstrap_probe_test.go` documents — calendar needs a
       privileged Go hook to write a first membership, so a hosted tenant (which
-      runs no feature Go) ends up with a calendar owned by nobody. Cards puts
+      runs no feature Go) ends up with a calendar owned by nobody. Boards puts
       the bootstrap in the RULE, so a tenant gets it too.
 - [x] **Clause correlation** — confirmed behaviourally, not just from a fork
       source reading. `clause_correlation_rls_test.go` builds the only fixture
@@ -279,7 +279,7 @@ in it too.
          Rewriting `viaWriter` to drive's `role ?!= "viewer"` idiom and
          re-running the suite flips exactly `CommentorCannotUpdateCard` and
          `CommentorCannotMoveCard` — and nothing else. `?!=` still refuses a
-         *viewer*, because `cards_project_members` is UNIQUE on
+         *viewer*, because `boards_project_members` is UNIQUE on
          (project, user): a viewer holds exactly one row, so there is no other
          row for "not equal to viewer" to match. Drive's bug needed a user
          holding two rows. That unique index is a real structural defence the
@@ -295,9 +295,9 @@ in it too.
       in the shell's CI asserting feature PRs verify their own Go. Worth
       fixing; cards sets the pattern.
 
-Deliberately not covered behaviourally: `cards_attachments` creates need a
+Deliberately not covered behaviourally: `boards_attachments` creates need a
 multipart body, and the rule composition (`viaWriter + isUploader + pin`) is
-identical to `cards_comments`' (`viaCommenter + isAuthor + pin`), which is.
+identical to `boards_comments`' (`viaCommenter + isAuthor + pin`), which is.
 The clauses are asserted in the shipped-rules table. Revisit with M6, when
 attachments are actually built.
 
@@ -333,7 +333,7 @@ every query below returns nothing until one exists:
 
 Queries:
 
-- [x] Sidebar: project list from `cards_projects` (rules already scope to
+- [x] Sidebar: project list from `boards_projects` (rules already scope to
       membership). Keep `activeProjectId` in the Zustand store, but persist it
       and fall back to first project; clear stale ids. **Shipped** — resolved
       during render in `useActiveBoard`, no effect.
@@ -341,7 +341,7 @@ Queries:
       the collection `expand`/join — one query, not N stitched ones), ordered
       by **`position, id`** — `id` is the tiebreaker that keeps duplicate
       ranks rendering identically on every client instead of flickering.
-      Note `cards_cards` registers with NO `expand`: assignees and labels are
+      Note `boards_cards` registers with NO `expand`: assignees and labels are
       already loaded eagerly, so expanding would ship duplicate rows per card
       — look them up by id instead.
       **Shipped** as `useActiveBoard` + `lib/board-project.ts`. It is SIX
@@ -351,26 +351,26 @@ Queries:
       `applyCardMoves` is already deleted; the `cardMoves` store overlay is
       still there, write-only and unread, and dies with the move mutation.
 - [x] **Board-face badges vs on-demand sync.** Resolved: denormalized counters
-      on `cards_cards`, maintained by `server/counters.go` (always RECOMPUTED,
+      on `boards_cards`, maintained by `server/counters.go` (always RECOMPUTED,
       never delta'd; never fails the user's write). `checklist_total`,
       `checklist_done` and `comment_count` shipped with the create migration;
       **`attachment_count` was appended in
       `1980000001_add_attachment_count_and_label_uniqueness.js`** so M6 has no
       schema work left — no badge renders it yet, that is M6's.
-      That migration also adds a UNIQUE index on `cards_labels (project, name)`:
+      That migration also adds a UNIQUE index on `boards_labels (project, name)`:
       two labels named "bug" on one board are indistinguishable in the UI.
 - [x] Card detail (`[cardId].tsx` + `CardPeek`): card + checklist + comments
       (comments join users for author names). Keep `findCardEntry`/
       `neighborCardId` working off the board query result so J/K still walk
       board order. **Shipped** in `useCardDetail`; J/K still walk board order.
-- [x] `BoardHeader` member avatars from `cards_project_members` join → users.
+- [x] `BoardHeader` member avatars from `boards_project_members` join → users.
       **Shipped** — `useActiveBoard` joins the roster to `users` rather than
       using the registered `expand`, so an optimistically-added member renders
       without waiting for a realtime round-trip.
 
 Mutations (all via `useMutation` generators, `handleMutationErrorsWithForm`
 where there's a form, `captureException` context strings like
-`'cards.card.move'`):
+`'boards.card.move'`):
 
 - [x] Project: create (EmptyBoard "New board" + sidebar action button),
       rename, change color, delete/archive (More-actions menu).
@@ -391,7 +391,7 @@ where there's a form, `captureException` context strings like
       columns shipped later (see the DnD task below) as an addition, never
       the only way to do something.
       **Card handling is already decided by the schema: deleting a
-      list DELETES ITS CARDS.** `cards_cards.list` ships `cascadeDelete: true`
+      list DELETES ITS CARDS.** `boards_cards.list` ships `cascadeDelete: true`
       (create migration ~L433), so PocketBase does it server-side in both the
       dev shell and a hosted tenant — no hook, no migration, and no way to
       delete a list without its cards short of moving them first.
@@ -440,12 +440,12 @@ where there's a form, `captureException` context strings like
       (DetailProperties). **Shipped** — `useLabelMutations`,
       `components/LabelManagerDialog.tsx` (create / rename / recolor / delete),
       and `detail/LabelPicker.tsx` for assignment.
-      **Cards does NOT use core's label system, and that is deliberate.** Core
+      **Boards does NOT use core's label system, and that is deliberate.** Core
       has `labels` + `label_assignments` (mail and contacts use them), but its
       assignments are PER-USER PRIVATE and its labels workspace-global — on a
       shared board every member would see only their own labels on cards
       everyone can read. A kanban label belongs to the card and the team, so
-      `cards_labels` stays project-scoped with a multi-relation on the card.
+      `boards_labels` stays project-scoped with a multi-relation on the card.
       Core's `ColorPickerGrid`, `LabelBadge` and `MenuActionItem` ARE imported;
       only the dialog's structure is cloned.
       Deleting a label leaves its id on cards that carried it
@@ -535,7 +535,7 @@ where there's a form, `captureException` context strings like
       data-change effect listed `keyExtractor` in its deps and treated every
       re-run as an external data change, so the receiving column's own
       highlight re-render wiped the preview shifts the frame they applied —
-      hovered columns outlined but their cards never moved aside. The fork
+      hovered columns outlined but their boards never moved aside. The fork
       now resets only when the `rawData` REFERENCE changes. Cards-side, the
       receiving column grows by one card height (`PHANTOM_SLOT_HEIGHT`
       padding) — the shifts are pure transforms, so without real layout room
@@ -569,7 +569,7 @@ where there's a form, `captureException` context strings like
       rather than trusting Drax's card-center hit point (off by ~136pt, which on
       a phone exceeds the zone itself). `useBoardDnd` suspends the MobileDrawer
       edge-swipe for the duration of a drag.
-    - **The board switcher is the drawer, not cards' chrome.** `MobileDrawer`
+    - **The board switcher is the drawer, not boards' chrome.** `MobileDrawer`
       (20px edge strip, 280px panel) renders the active package's sidebar on a
       left-edge swipe, and `sidebar.tsx` IS the board list — so no mobile
       navigation affordance was needed in `BoardHeader`. This is also why the
@@ -587,7 +587,7 @@ where there's a form, `captureException` context strings like
       import it (`board-cards.test.ts`, `due-state.test.ts`). **Done** — the
       file is gone and no source or test references `SAMPLE_PROJECTS`. Its
       content did NOT reach a seed; `seed.ts` is still to write (below).
-- [x] `tinycld/cards/seed.ts` (manifest `seed: { script: 'seed' }`): seed a
+- [x] `tinycld/boards/seed.ts` (manifest `seed: { script: 'seed' }`): seed a
       couple of projects with lists/cards/labels/checklists/comments,
       due dates relative to today (calendar's seed shows the offset
       convention). Raw PB writes are sanctioned in seeds only.
@@ -601,7 +601,7 @@ where there's a form, `captureException` context strings like
       the ShareDialog roster is populated too. The seed never writes the
       denormalized counters — `server/counters.go` recomputes them from the
       checklist/comment writes (verified: the REST hooks fire for
-      superusers). Idempotency probes user-owned `cards_projects` only, so
+      superusers). Idempotency probes user-owned `boards_projects` only, so
       the admin-owned board never trips the guard.
 - [x] Keyboard shortcuts: complete keyboard control of the BOARD. **Shipped** —
       `hooks/useBoardShortcuts.ts` at `'list'` scope: `j`/`k`/arrows walk cards
@@ -702,11 +702,11 @@ where there's a form, `captureException` context strings like
       palette mounts once in the app shell. Core owns the query grammar (`pkg:`
       chips, `-term` exclusion), the cross-package scorer and the section
       builder; mail, drive and contacts contribute alongside cards.
-      Cards' four pieces: `pb-migrations/1980000002_create_fts_cards.js` (FTS5
+      Boards' four pieces: `pb-migrations/1980000002_create_fts_cards.js` (FTS5
       **plus an explicit backfill** — cards shipped before the index existed, so
       unlike contacts/drive/mail the sync hooks alone would have left every
       pre-existing card unsearchable); `ftsConfig` in `server/register.go`
-      (`MemberScope` over `cards_project_members`, and `ExcludeField: 'archived'`
+      (`MemberScope` over `boards_project_members`, and `ExcludeField: 'archived'`
       because someone typing `/` wants active work, not history);
       `search-adapter.ts`; and `tests/search-adapter.test.ts`.
       Two live constraints:
@@ -715,7 +715,7 @@ where there's a form, `captureException` context strings like
       problem. Android registers no shortcuts at all (`provider.android.tsx` is
       a passthrough; a root-level focus grab broke the soft keyboard).
     - **Selection depends on the peek.** `useSearchActions` does
-      `router.replace(orgHref('cards'))` → `setActiveProject` → `openCard`, in
+      `router.replace(orgHref('boards'))` → `setActiveProject` → `openCard`, in
       that order (`setActiveProject` clears `openCardId`, so the reverse
       silently no-ops). Anything that stops rendering `CardPeek` — a mobile
       full-page detail, for instance — breaks search selection there. The fix
@@ -723,7 +723,7 @@ where there's a form, `captureException` context strings like
       breakpoint, which also retires the ordering hazard.
 - [x] Feature: add the ability to collapse columns and to toggle cards into a
       compact representation. **Shipped.** Both are per-user view preferences in
-      `cards-ui-store` (`collapsedColumnIds`, `isCompactCards`), both persisted.
+      `boards-ui-store` (`collapsedColumnIds`, `isCompactCards`), both persisted.
     - **Neither belongs on the board tree.** A UI toggle has no row to derive
       from, and adding a field to `BoardListView` would need a matching line in
       `buildBoardProject`'s structural sharing — where a missed field silently
@@ -814,7 +814,7 @@ where there's a form, `captureException` context strings like
       bugs; a standalone HTML reproduction misled here, because a raw `div`
       honours a width where react-native-web's `Text` does not.
       Note that `playwright.config.ts` routes `testDir` through
-      `node_modules/@tinycld/cards`, which symlinks to the main checkout — a
+      `node_modules/@tinycld/boards`, which symlinks to the main checkout — a
       run launched from a worktree tests the wrong tree. (Verified: in this
       assembly that symlink resolves to the same tree, so the runs above did
       exercise the edited code.)
@@ -825,7 +825,7 @@ where there's a form, `captureException` context strings like
       own for a fraction of the cost.
     - Core's `MarkdownRenderer` grew three optional props, all defaulting to
       today's behavior so `HelpTopicView` was untouched: `onLinkPress`,
-      `translateModifierKeys`, `shortcutTableHeuristic`. Cards opts out of all
+      `translateModifierKeys`, `shortcutTableHeuristic`. Boards opts out of all
       three. **`onLinkPress` is the load-bearing one** — it is what breaks the
       static import edge from a card description to `lib/help/open-help` and
       the help Zustand store; help now passes the exported `openHelpLink` back
@@ -837,7 +837,7 @@ where there's a form, `captureException` context strings like
     - Editing stays plain-text: `EditableText` gained `renderValue`, which
       replaces only the IDLE display. An edit still swaps to a raw input, so
       the markdown source never round-trips through a rich-text model.
-      `MarkdownText` (`components/detail/`) is the cards-side wrapper.
+      `MarkdownText` (`components/detail/`) is the boards-side wrapper.
     - The renderer instances are still cached, now keyed on the option tuple
       (a `WeakMap` tags the link handler by identity) rather than being two
       module-level singletons — allocating per render would churn the whole
@@ -870,10 +870,10 @@ where there's a form, `captureException` context strings like
       advance about the *leave* path were both disproven by measurement.
     - **What the diagnostic established, so the next person does not redo it:**
       two separate sessions DO connect, and to the same room — the server log
-      shows two `GET /api/realtime/cards-board/<projectId>` upgrades with
+      shows two `GET /api/realtime/boards/<projectId>` upgrades with
       different user tokens. So the room kind, the roomID and the Go authorize
       are all correct, and the failure is downstream of the connection.
-      Neither session renders `cards-live-presence`.
+      Neither session renders `boards-live-presence`.
     - **Two candidate causes, neither confirmed. Do not assume it is only one.**
       (1) The local slot may never reach the wire: `initialAwareness` is applied
       with `setLocalState` BEFORE `client.connect()`, and the client only sends
@@ -885,10 +885,10 @@ where there's a form, `captureException` context strings like
       the probe caught the owner sitting on a stale board from an earlier run,
       so the two sessions may never have been on the same board at the same
       time. **Fix the spec first**, then re-measure before touching the hook.
-    - **One room per BOARD, not per card** (`roomKind: 'cards-board'`,
+    - **One room per BOARD, not per card** (`roomKind: 'boards'`,
       `roomID` = project id). Which card a peer is on rides in the awareness
       SLOT, exactly as calc keeps `sheetId` there. Per-card rooms would open
-      and close a socket on every peek, need a `cards_cards → project` hop to
+      and close a socket on every peek, need a `boards_cards → project` hop to
       authorize, and still give no board-level view without a second room.
     - Go: `server/realtime.go`, `RegisterRoomKind` (the authorize-only form —
       an ephemeral awareness room needs no runtime, journal or write
@@ -925,7 +925,7 @@ where there's a form, `captureException` context strings like
 
 ## M3b — Role-gated UI and sharing ✅
 
-**Done.** Moved out of M2. These all read `cards_project_members`, so they
+**Done.** Moved out of M2. These all read `boards_project_members`, so they
 could not be built while the board rendered `SAMPLE_PROJECTS` — the rules were
 enforceable long before there was any live membership to gate on.
 
@@ -996,7 +996,7 @@ precedent for everything except the Modal shell.
       render-time fallback picks the next one. Help topic:
       `help/sharing-boards.md`.
 - [x] Add reporter field to track who opened card. **Shipped** —
-      `cards_cards.reporter` (relation → users, maxSelect 1), a Reporter row
+      `boards_cards.reporter` (relation → users, maxSelect 1), a Reporter row
       above Assignees on the card detail with a `ReporterPicker` over project
       members, `--reporter`/`--clear-reporter` on the CLI, and a seed that
       demonstrates it. Distinct from `created_by`, which stays immutable
@@ -1016,7 +1016,7 @@ precedent for everything except the Modal shell.
       still arrives empty. The CLI's `reporterID()` duplicates that fallback
       deliberately, so the terminal and the app can never disagree about who a
       card reports to.
-    - **No create-rule pin**, unlike `cards_comments`' `isAuthor`. A pin would
+    - **No create-rule pin**, unlike `boards_comments`' `isAuthor`. A pin would
       forbid the file-on-behalf case that justifies the field existing. The
       write is already gated by `viaWriter` and the value can only be a users
       id. Stated in the migration header so it does not read as an oversight.
@@ -1066,7 +1066,7 @@ precedent for everything except the Modal shell.
       open, and still a CORE gap rather than a cards one (below).
     - [x] **Native `@` picker — SHIPPED.** `MentionPopover.tsx` renders core's
       anchored overlay, driven by the page's suggestion plugin over the message
-      bus. **Not verified on a device yet** — cards' e2e is web-only, so
+      bus. **Not verified on a device yet** — boards' e2e is web-only, so
       nothing automated covers that path.
       **The entry that used to sit here called this "self-contained" and said
       the work was wiring core's trigger onto an existing bridge. That was
@@ -1124,7 +1124,7 @@ precedent for everything except the Modal shell.
       mention routes. So a preference written directly to that record IS
       honoured — there is just no screen to write it from.
       Mention types are `comment_mention` (text/calc, shared) and
-      `cards_mention` (cards; covers BOTH its comment and description
+      `boards_mention` (cards; covers BOTH its comment and description
       mentions — `mentionTypeFor` in core's notify hook derives this, and a
       test pins the two halves together).
       Whoever builds the screen should own every existing type, not only
@@ -1143,7 +1143,7 @@ precedent for everything except the Modal shell.
       because its body does not render the query), and core's bus filters by
       `editorInstanceId`.
     - [ ] **Verify the native picker on a device.** Nothing automated covers
-      it — cards' e2e is web-only. Worth checking specifically: that exactly
+      it — boards' e2e is web-only. Worth checking specifically: that exactly
       ONE popover appears with both the description and comment editors mounted
       (the multi-editor case text never had); that filtering does not lag as
       you type, which is the whole argument for pushing the roster instead of
@@ -1209,7 +1209,7 @@ Via the new thread-action contribution point (M0 decision) — this touches the
       card" flow — project picker + list picker (default: first list),
       title prefilled from subject, description from a snippet/permalink.
 - [ ] Decide provenance: add optional `origin_kind`/`origin_ref` fields to
-      `cards_cards` (new migration if M1 already shipped) so the card can
+      `boards_cards` (new migration if M1 already shipped) so the card can
       link back to the thread.
 - [ ] Card detail: show an "opened from email" chip that deep-links to the
       thread — presence-gated with `usePackages()` and a minimal local
@@ -1217,7 +1217,7 @@ Via the new thread-action contribution point (M0 decision) — this touches the
 - [ ] Handle the mail-absent workspace: cards must typecheck/run with no mail
       installed (lean-shell guarantee) — the contribution component lives
       behind the manifest so it only loads when mail loads it.
-- [ ] Help topic: creating cards from email (`help/cards-from-email.md`).
+- [ ] Help topic: creating cards from email (`help/boards-from-email.md`).
 
 ## M5 — Calendar integration: due dates on the calendar ✅
 
@@ -1257,8 +1257,8 @@ whole pipeline through the UI and is green.
       empty = all shown, no init handshake. A hidden source's collector
       UNMOUNTS, so its live query stops running. Host-rendered toggle rows
       (`EventSourceToggles`), so contributors ship zero toggle UI.
-- [x] Cards source: `tinycld/cards/calendar-source.ts` — ONE query joining
-      `cards_cards`→`cards_projects` (the M1 `due` indexes exist for exactly
+- [x] Cards source: `tinycld/boards/calendar-source.ts` — ONE query joining
+      `boards_cards`→`boards_projects` (the M1 `due` indexes exist for exactly
       this), due within the range as LOCAL `'YYYY-MM-DD'` string bounds
       (orders correctly against both the bare day the picker writes and the
       `'YYYY-MM-DD 00:00:00Z'` PB normalizes it to; the half-open window
@@ -1300,11 +1300,11 @@ whole pipeline through the UI and is green.
 and the full cards suite is 47/47.
 
 **There was no schema or Go work left, and that is worth knowing before
-touching this.** M1 shipped `cards_attachments` complete with a `size` column
+touching this.** M1 shipped `boards_attachments` complete with a `size` column
 added expressly "to declare a manifest quota against later" and a 100MB
 `maxSize`; M2 shipped its rules; `1980000001` appended `attachment_count`; and
 `server/counters.go:34` was ALREADY binding create/update/delete on
-`cards_attachments` and recomputing the badge. M6 turned out to be a purely
+`boards_attachments` and recomputing the badge. M6 turned out to be a purely
 client-side milestone plus one promotion into core.
 
 - [x] Attachment strip on `CardDetail` (peek + page) —
@@ -1315,7 +1315,7 @@ client-side milestone plus one promotion into core.
       so a section inserted above it silently pins the wrong child.
 - [x] Drive's registered preview actions appear automatically. The whole
       tie-in is one line — `getPreviewActionFactories().map(f => f())` fed to
-      `PreviewModal`'s `actions`. No cards-side reference to drive, and the
+      `PreviewModal`'s `actions`. No boards-side reference to drive, and the
       array is simply empty when drive is absent.
 - [x] Upload with **real progress**. This is the one place the never-bypass-
       pbtsdb rule is deliberately set aside, for file BYTES only: the PB SDK
@@ -1335,7 +1335,7 @@ client-side milestone plus one promotion into core.
 - [x] Board card face: paperclip + count, modelled on `CommentsPill`.
       Deliberately absent from the compact and done faces, matching the
       documented density policy.
-- [x] Storage accounting: `quota: [{ collection: 'cards_attachments',
+- [x] Storage accounting: `quota: [{ collection: 'boards_attachments',
       sizeField: 'size', ownerField: 'uploaded_by' }]`. **The client writes
       `size` on upload** — nothing populates it server-side, so an unwritten
       column would leave cards invisible to the org storage screen while
@@ -1380,16 +1380,16 @@ chooser-sheet fix.** Three attachment features in one pass:
       public boards in M6a). Errors toast via `notify.emit`
       (`cards.attachment_failed`, a new core event): the strip's error row is
       the only other surface and it isn't mounted while the card is closed.
-      Hover ring + `cards-card-dropping-<id>` marker; gated on the same role
+      Hover ring + `boards-card-dropping-<id>` marker; gated on the same role
       check as `canDrag`, so a viewer's drop is a no-op.
 - [x] **Images in card descriptions.** Toolbar image button (chooser over the
       card's image attachments + an upload action) on web AND native; on web an
       image file dropped or pasted onto the editor uploads and lands at the
       drop point (`view.posAtCoords`), stopPropagation preventing the wrapping
-      DropZone from attaching it twice. Storage is `cards_attachments` — an
+      DropZone from attaching it twice. Storage is `boards_attachments` — an
       inserted image is deliberately also a visible attachment row.
       **The stored src is root-relative and tokenless**
-      (`/api/files/cards_attachments/<id>/<file>`, `lib/description-image.ts`):
+      (`/api/files/boards_attachments/<id>/<file>`, `lib/description-image.ts`):
       a baked-in file token is per-user, hour-lived and would leak to every
       collaborator (text's rule), and an absolute URL bakes in a host that can
       change (the `{{server-host}}` reason) — text stores absolute URLs, and
@@ -1492,7 +1492,7 @@ Still filed, deliberately not built:
 
 - [ ] "Attach from Drive" (presence-gated with `usePackages()`):
       copy-on-attach — fetch the drive file via its authed URL and insert a
-      normal `cards_attachments` record, so project members' access never
+      normal `boards_attachments` record, so project members' access never
       depends on `drive_shares`. Picker UI: minimal file list over
       `drive_items` read via the minimal-local-interface pattern (core's
       contact-suggestions bridge is the shape); if that picker grows beyond
@@ -1504,7 +1504,7 @@ Still filed, deliberately not built:
 ## M6a — Public boards: the share-link flow ✅
 
 **Shipped.** An owner mints a link from the Share dialog; anyone with the URL
-reads the board at `/p/cards/board/<token>` with no account; a commentor or
+reads the board at `/p/boards/<token>` with no account; a commentor or
 editor link offers an email-OTP sign-in that mints a real membership. Four e2e
 specs drive the whole thing through the UI, cards e2e is 51/51, Go 189.
 
@@ -1539,13 +1539,13 @@ bump could change any of them. Two would have been silent:
   tests across both list and view. A single-board fixture cannot see this,
   which is why the suite carries two projects and two links.
 
-Also load-bearing and undocumented upstream: `cards_share_links`' owner-only
+Also load-bearing and undocumented upstream: `boards_share_links`' owner-only
 `listRule` would normally be AND-ed into the join and make the disjunct
 permanently false — it isn't, only because every rule path passes
 `allowHiddenFields=true`.
 
 - [x] Token minting — 32 bytes of entropy, hex, owner-only, plus list and
-      revoke. Cards' first HTTP routes; the slot had been reserved in
+      revoke. Boards' first HTTP routes; the slot had been reserved in
       `register.go` since M2a. Two deliberate divergences from drive: an
       unknown role is REFUSED rather than coerced to viewer (coercion is how a
       UI bug ships as "the link works, just not as asked"), and expiry is a
@@ -1564,7 +1564,7 @@ permanently false — it isn't, only because every rule path passes
       `role: "editor"` and expecting an anonymous editor is reading it wrong.
 - [x] Public route under `publicRoutes`. **`PackageProviderWrapper` turned out
       NOT to be needed** — drive's requirement comes from its share-editor
-      registry, populated by provider import side effects, and cards' public
+      registry, populated by provider import side effects, and boards' public
       board registers nothing.
 - [x] Share-link UI in the Share dialog, with a real role picker.
       `SHARE_LINK_ROLE_OPTIONS` is DERIVED from `ROLE_OPTIONS` minus owner so a
@@ -1596,7 +1596,7 @@ suites because none of them mounts the board unauthenticated:
   core; it would have broken any package's public route.
 - The mutation hooks `BoardColumn` constructs unconditionally threw the same
   way. They are never INVOKED on a public board, but merely rendering did it.
-- `useSignInRole` read `cards_share_links` to decide whether to offer a
+- `useSignInRole` read `boards_share_links` to decide whether to offer a
   sign-in. **That collection is owner-only by rule**, so a visitor read nothing
   and the button appeared only for people who already had access. The lesson
   generalizes: an owner-only collection cannot tell a visitor anything about
@@ -1606,9 +1606,9 @@ suites because none of them mounts the board unauthenticated:
 
 **And the same mistake had survived one function above it**, caught in review
 rather than by the e2e. `usePublicProjectId` resolved the board by reading
-`cards_share_links` for the token and falling back to `projects[0]` when that
+`boards_share_links` for the token and falling back to `projects[0]` when that
 read came back empty — which it always does for anyone who is not the owner.
-An anonymous visitor was fine by accident (the rules scope `cards_projects` to
+An anonymous visitor was fine by accident (the rules scope `boards_projects` to
 exactly one row, so `projects[0]` IS the shared board), but a SIGNED-IN
 NON-MEMBER — someone with an account here who was sent a link to a board they
 are not on — got an arbitrary one of their OWN boards rendered under a "Read
@@ -1640,7 +1640,7 @@ Two more findings worth keeping:
 
 - **`EXPLAIN QUERY PLAN` says the token join is a full `SCAN`**, not an index
   probe: the unconstrained join puts the token predicate in the `WHERE` under
-  an `OR`, so `idx_cards_sl_token` goes unused. Measured at **0.09ms/read with
+  an `OR`, so `idx_boards_sl_token` goes unused. Measured at **0.09ms/read with
   5,006 links**, so it is a non-issue at any realistic table size. Recorded
   rather than optimized.
 - **An assignee whose user row the caller cannot read now renders as a faceless
@@ -1677,7 +1677,7 @@ avatar" now holds across the ecosystem rather than only in cards.
 
 The plan changed in two places, both for the better:
 
-- **No cards-owned WebView bundle.** A shared editor went into core instead —
+- **No boards-owned WebView bundle.** A shared editor went into core instead —
   `@tinycld/core/lib/editor/rich` — and mail was retrofitted onto it, so there
   is ONE schema and one serializer rather than a third copy. Native originally
   used TenTap's stock bridges with HTML↔Markdown conversion on the React Native
@@ -1689,7 +1689,7 @@ The plan changed in two places, both for the better:
   ride the one socket. A Y.Doc is a container of named types and the broker
   treats updates as opaque bytes, so this needed no broker change at all.
 
-What that took, server-side (`cards/server/`): `RegisterRoomKindWith` with a
+What that took, server-side (`boards/server/`): `RegisterRoomKindWith` with a
 runtime, journal, save coordinator, `WritePredicate` (owner/editor write;
 commentor/viewer read-only), an `UpdateContentValidator` restricting writes to
 `^card:[a-z0-9]{1,32}$`, per-board seed + diff-on-flush with baselines, and a
@@ -1698,7 +1698,7 @@ project-delete WAL cascade. The generic Yjs machinery was promoted from
 `tinycld.org/core/markdown`. **Text was not touched.**
 
 - [x] The shared editor (in core, not a cards bundle).
-- [x] The document in the room, sharing `cards-board`.
+- [x] The document in the room, sharing `boards`.
 - [x] Collaborator cursors via `CollaborationCaret`. The clobber gotcha is real
       and handled: the publish effect MERGES into the awareness slot instead of
       replacing it, and the caret is handed the same `{id,name,color}` object
@@ -2031,7 +2031,7 @@ project-delete WAL cascade. The generic Yjs machinery was promoted from
     - `components/detail/CommentEditor.tsx` owns `useRichEditor` for
       comments — NON-collab, markdown in/out (`initialContent` →
       `editor.getMarkdown()`), 10000-char limit matching
-      `cards_comments.body`. A comment is a discrete record with one author,
+      `boards_comments.body`. A comment is a discrete record with one author,
       so unlike the description there IS a commit, and save/cancel semantics
       follow `EditableText`: Save/⌘↩/click-away commit, Escape reverts to a
       baseline snapshotted at mount, an unchanged edit is a cancel not a
@@ -2140,8 +2140,8 @@ project-delete WAL cascade. The generic Yjs machinery was promoted from
       height-stability anchors, reply-crash regression, "(edited)",
       commentor gating). Locator fallout handled by testIDs: `.ProseMirror`
       is no longer unique, so the description specs scope under
-      `cards-description-editor` and the composer under
-      `cards-comment-composer`; `board-sharing`'s RBAC matrix now asserts on
+      `boards-description-editor` and the composer under
+      `boards-comment-composer`; `board-sharing`'s RBAC matrix now asserts on
       the composer testID (present collapsed or open) instead of the input
       placeholder, and comments are TYPED, never `.fill()`ed — a filled
       contenteditable is literal text the serializer escapes to `\*\*`.
@@ -2172,7 +2172,7 @@ project-delete WAL cascade. The generic Yjs machinery was promoted from
 
 ## M8 — CLI ✅
 
-**Shipped.** `tinycld cards` carries `board list|view`, `list
+**Shipped.** `tinycld boards` carries `board list|view`, `list
 show|add|rename|move|done|remove` and `card view|add|edit|move|archive|remove`.
 40 Go tests in `cli/`, and the real per-org binary was built and driven, not
 just unit-tested.
@@ -2184,24 +2184,24 @@ copyable. gen-cli.ts even names the gap in its own comment ("cards and
 contacts contribute a search source but ship no CLI commands"). So the cards
 side was one module plus five lines of manifest.
 
-**What was NOT waiting, and would have shipped broken:** every `cards_*`
+**What was NOT waiting, and would have shipped broken:** every `boards_*`
 collection was absent from core's `collectionScopes`, whose default is DENY.
-`cards:read`/`cards:write` existed and `/api/cards/search` was classified, but
+`boards:read`/`boards:write` existed and `/api/boards/search` was classified, but
 no board row was reachable — so every CRUD command would have 403'd against a
 real server *while its own tests passed*, because a fake test server runs no
-scope middleware. Fixed in core (`feat/cards-cli-support`, stacked on the
+scope middleware. Fixed in core (`feat/boards-cli-support`, stacked on the
 share-link branch), with the classification pinned by tests.
 
-- [x] Manifest `cli` block + the Go module. Scopes are `cards:read` and
-      `cards:write`, asserted exactly in `tests/manifest.test.ts` — a missing
+- [x] Manifest `cli` block + the Go module. Scopes are `boards:read` and
+      `boards:write`, asserted exactly in `tests/manifest.test.ts` — a missing
       scope 403s everything while the Go suite stays green, and an extra one
       silently widens a grant on the consent screen.
 - [x] **The sharing surface is READ-ONLY for OAuth callers**, so there are
-      deliberately no `cards share` commands. `cards_project_members` and
-      `cards_share_links` map read-only in `collectionScopes`: a write there
+      deliberately no `boards share` commands. `boards_project_members` and
+      `boards_share_links` map read-only in `collectionScopes`: a write there
       adds a person to a board or mints a URL that opens it to anyone holding
       it, which is categorically larger than editing cards and is not what
-      "cards:write" reads as on a consent screen. Starting closed is
+      "boards:write" reads as on a consent screen. Starting closed is
       reversible in one line; the reverse would revoke a capability
       integrations had already built on. Every write VERB is asserted refused,
       not just POST — revoking a link is a DELETE and a role change is a PATCH.
@@ -2297,7 +2297,7 @@ wants them rather than guessing the shape now.
 - [x] Settings screen: **decided against.** Mail is the only member that
       declares one, and its entries (provider, mailboxes) are server-side
       account state. Every cards preference is per-device UI state already
-      persisted in `cards-ui-store` (`activeProjectId`, `collapsedColumnIds`,
+      persisted in `boards-ui-store` (`activeProjectId`, `collapsedColumnIds`,
       `isCompactCards`) and set where it is used — a board is chosen from the
       sidebar, density from the board header. Moving any of those to a settings
       screen would put the control further from the thing it changes. Revisit
@@ -2340,7 +2340,7 @@ wants them rather than guessing the shape now.
 
       - **Every card property was inert on web.** `Menu.Trigger` cloned its
         child to inject `onPress` on native but passed it straight through
-        inside a wrapper `div` on web. Cards' assignee/label/due values branch
+        inside a wrapper `div` on web. Boards' assignee/label/due values branch
         on `onPress` to decide whether they are interactive (that is how a
         read-only card is drawn), so an OWNER'S properties rendered as
         unpressable "None" text — three of the six editable fields, with no
@@ -2364,10 +2364,10 @@ wants them rather than guessing the shape now.
         is one terminal choice, so the sheet sat over the chip it had just
         written. Now controlled and dismissed on choose.
 
-      Two smaller fixes fell out: `cards_checklist_items`' checkbox rendered
+      Two smaller fixes fell out: `boards_checklist_items`' checkbox rendered
       `role="checkbox"` with no `aria-checked` (RN Web does not translate
       `accessibilityState.checked`), leaving screen readers with only a
-      background colour to go on; and `CardPeek` gained a `cards-card-peek`
+      background colour to go on; and `CardPeek` gained a `boards-card-peek`
       testID, because the board face behind it renders the same title, due
       chip and checklist ratio, so unscoped queries match two elements.
 
@@ -2390,10 +2390,10 @@ wants them rather than guessing the shape now.
       M3 core lifecycle fix. The section was re-read and needs no change.
       A later pass closed two discoverability gaps, both features that had
       shipped with no help at all:
-    - **"Finding a card"** — the `/` palette has been cards-searchable since
+    - **"Finding a card"** — the `/` palette has been boards-searchable since
       M3 and was documented nowhere here. Core owns the grammar
       (`core:search`), so this links there and carries only what is
-      cards-specific: the palette opens already scoped to cards
+      boards-specific: the palette opens already scoped to cards
       (`CoreShortcuts` calls `open(activeSlug)`; the store seeds `"cards: "`),
       and **archived cards are deliberately excluded** (`ExcludeField:
       "archived"`). That exclusion is the one someone would otherwise read as
@@ -2462,7 +2462,7 @@ wants them rather than guessing the shape now.
       cause was found by logging component mount/unmount and gate values in the
       browser and correlating against `router.replace`, not by reading source.
       Two theories died on measurement — `canComment` flipping (it never
-      changed: `true` across the collapse) and `CardsIndex`'s `isLoading`
+      changed: `true` across the collapse) and `BoardsIndex`'s `isLoading`
       early-return remounting the tree (`isLoading` stayed `false`). The
       probes are also a Heisenbug: enough `console.log` in the render path
       shifts the timing and the failure rate drops to zero, so a "0 collapses"
@@ -2517,7 +2517,7 @@ wants them rather than guessing the shape now.
       the registry Map's first slot forever — `findExactMatch` short-circuits
       on it, ran MAIL's handler for a keypress meant for the board, and the
       board's own handler never ran at all. Directly measured: every failing
-      run logged `M:2` (mail re-stamped with cards' id) immediately before the
+      run logged `M:2` (mail re-stamped with boards' id) immediately before the
       keypress; no passing run ever did. 14/14 correlation.
 
       The fix binds the id to the OWNER instead of the stack: an instance gets
@@ -2564,7 +2564,7 @@ wants them rather than guessing the shape now.
       added before the initial fetch settles.
 
       **Mitigated in the package, and the write window is now closed.**
-      `useCardDetail` is ONE query anchored on `cards_cards`, with each child set
+      `useCardDetail` is ONE query anchored on `boards_cards`, with each child set
       joining in as a subquery pre-filtered to the card (LEFT joins, so a
       childless card still returns its own row). Anchoring on the card matters
       beyond tidiness: the three per-child reads it replaces were three
@@ -2706,7 +2706,7 @@ wants them rather than guessing the shape now.
       `searchCards` mirroring `projectSlugs` — that shows the reporter on a
       result row without making it queryable.
       Do **NOT** add reporter to `ftsConfig.Columns`: FTS5 cannot ALTER-add a
-      column, so it means dropping, recreating and backfilling `fts_cards`. The
+      column, so it means dropping, recreating and backfilling `fts_boards`. The
       `number` field settled this same tradeoff the same way.
 
 ## Bug — `(edited)` marker never appears on an edited comment ✅ RESOLVED (stale report)
@@ -2761,7 +2761,7 @@ renders only when `comment.updated !== comment.created`. So the client's copy
 of the row still has the two equal after an edit.
 
 **The server is NOT the problem — this was measured, not assumed.** A Go probe
-against the real schema (`app.Save` on `cards_comments`, twice) showed:
+against the real schema (`app.Save` on `boards_comments`, twice) showed:
 
     at create   created=…19:43:25.617Z updated=…19:43:25.617Z  equal
     after 1.2s  created=…19:43:46.002Z updated=…19:43:47.202Z  DIFFER
@@ -2774,7 +2774,7 @@ human edit is always far outside that window. The migration is correct and
 needs no change.
 
 **Where it actually breaks: the client never receives the new `updated`.**
-`cards_comments` is `syncMode: 'on-demand'` (`tinycld/cards/collections.ts`).
+`boards_comments` is `syncMode: 'on-demand'` (`tinycld/boards/collections.ts`).
 The suspicion — NOT yet proven, this is where the next person picks up — is
 that pbtsdb's on-demand mode does not apply the PATCH response's autodate
 fields back onto the optimistically-updated local row: the mutation writes
@@ -2782,10 +2782,10 @@ fields back onto the optimistically-updated local row: the mutation writes
 the local copy keeps its original timestamps.
 
 **Why this is bigger than one marker.** THREE collections are on-demand —
-`cards_comments`, `cards_checklist_items`, `cards_attachments`. If the echo is
+`boards_comments`, `boards_checklist_items`, `boards_attachments`. If the echo is
 genuinely being dropped, every server-owned field on those tables is stale
 after a client write, and `(edited)` is just the one place it is visible. Worth
-checking whether `cards_cards.number` (server-allocated, eager collection)
+checking whether `boards_cards.number` (server-allocated, eager collection)
 behaves differently for the same reason.
 
 ~~**Next step.** Prove or disprove the sync hypothesis before changing

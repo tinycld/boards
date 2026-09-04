@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"encoding/json"
@@ -92,7 +92,7 @@ func handleCreateShareLink(app core.App, re *core.RequestEvent) error {
 		return re.InternalServerError("failed to generate token", err)
 	}
 
-	col, err := app.FindCollectionByNameOrId("cards_share_links")
+	col, err := app.FindCollectionByNameOrId("boards_share_links")
 	if err != nil {
 		return re.InternalServerError("share links unavailable", err)
 	}
@@ -114,7 +114,7 @@ func handleCreateShareLink(app core.App, re *core.RequestEvent) error {
 
 // handleListShareLinks returns every link on a board the caller owns.
 //
-// The rules would already scope cards_share_links to owners, so a client could
+// The rules would already scope boards_share_links to owners, so a client could
 // read this through ordinary REST. It exists so the dialog has one shape to
 // render and so listing stays symmetric with mint and revoke.
 func handleListShareLinks(app core.App, re *core.RequestEvent) error {
@@ -132,7 +132,7 @@ func handleListShareLinks(app core.App, re *core.RequestEvent) error {
 	}
 
 	records, err := app.FindRecordsByFilter(
-		"cards_share_links", "project = {:p}", "-created", 0, 0,
+		"boards_share_links", "project = {:p}", "-created", 0, 0,
 		dbx.Params{"p": projectID},
 	)
 	if err != nil {
@@ -154,7 +154,7 @@ func handleListShareLinks(app core.App, re *core.RequestEvent) error {
 // session or cache in between.
 //
 // Note what revoking does NOT do: someone who already redeemed the link holds a
-// real cards_project_members row and keeps their access. The dialog and the
+// real boards_project_members row and keeps their access. The dialog and the
 // help topic both say so, because "revoke" plainly means two different things
 // before and after a sign-in.
 func handleRevokeShareLink(app core.App, re *core.RequestEvent) error {
@@ -168,7 +168,7 @@ func handleRevokeShareLink(app core.App, re *core.RequestEvent) error {
 		return re.BadRequestError("share link id is required", nil)
 	}
 
-	link, err := app.FindRecordById("cards_share_links", id)
+	link, err := app.FindRecordById("boards_share_links", id)
 	if err != nil || link == nil {
 		return re.NotFoundError("share link not found", nil)
 	}
@@ -188,13 +188,13 @@ func handleRevokeShareLink(app core.App, re *core.RequestEvent) error {
 	return re.JSON(http.StatusOK, toShareLinkResponse(link))
 }
 
-// syncProjectVisibility keeps cards_projects.visibility in step with whether
+// syncProjectVisibility keeps boards_projects.visibility in step with whether
 // the board has at least one live link.
 //
 // DISPLAY ONLY. The rules deliberately do not consult it — authority is the
 // link row itself, and two sources of truth could disagree (a live link on a
 // board marked private: which wins?). It exists so the board list can show a
-// "shared" badge without querying cards_share_links, which non-owners cannot
+// "shared" badge without querying boards_share_links, which non-owners cannot
 // read. Because it is decorative, a desync is cosmetic rather than a hole; if
 // it is ever put in a rule it must be an AND, never an OR.
 //
@@ -210,14 +210,14 @@ func syncProjectVisibility(app core.App, projectID string) {
 	if projectID == "" {
 		return
 	}
-	n, err := app.CountRecords("cards_share_links",
+	n, err := app.CountRecords("boards_share_links",
 		dbx.HashExp{"project": projectID, "is_active": true})
 	if err != nil {
 		app.Logger().Warn("cards: counting share links for the visibility badge",
 			"project", projectID, "error", err)
 		return
 	}
-	project, err := app.FindRecordById("cards_projects", projectID)
+	project, err := app.FindRecordById("boards_projects", projectID)
 	if err != nil || project == nil {
 		app.Logger().Warn("cards: loading the board for the visibility badge",
 			"project", projectID, "error", err)

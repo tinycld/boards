@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"context"
@@ -48,7 +48,7 @@ func makeBootstrap(app core.App, state *boardDocState) yjsdoc.BootstrapFn {
 		state.open(projectID, time.Now())
 
 		records, err := app.FindRecordsByFilter(
-			"cards_cards",
+			"boards_cards",
 			"project = {:project} && description != ''",
 			"", 0, 0,
 			dbx.Params{"project": projectID},

@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"net/http"
@@ -55,7 +55,7 @@ func TestCardsRepoint_EditorCannotRepointCardOntoForeignProject(t *testing.T) {
 	r := setupRepoint(t)
 	req{
 		method: http.MethodPatch,
-		url:    "/api/collections/cards_cards/records/" + r.card,
+		url:    "/api/collections/boards_cards/records/" + r.card,
 		token:  r.editorToken,
 		body:   `{"project":"` + r.projectB + `"}`,
 		want:   http.StatusNotFound,
@@ -68,7 +68,7 @@ func TestCardsRepoint_EditorCanUpdateWithoutProjectField(t *testing.T) {
 	r := setupRepoint(t)
 	req{
 		method:  http.MethodPatch,
-		url:     "/api/collections/cards_cards/records/" + r.card,
+		url:     "/api/collections/boards_cards/records/" + r.card,
 		token:   r.editorToken,
 		body:    `{"title":"still-editable"}`,
 		want:    http.StatusOK,
@@ -83,7 +83,7 @@ func TestCardsRepoint_EditorCanRestateStoredProject(t *testing.T) {
 	r := setupRepoint(t)
 	req{
 		method:  http.MethodPatch,
-		url:     "/api/collections/cards_cards/records/" + r.card,
+		url:     "/api/collections/boards_cards/records/" + r.card,
 		token:   r.editorToken,
 		body:    `{"project":"` + r.projectA + `","title":"echoed"}`,
 		want:    http.StatusOK,
@@ -101,12 +101,12 @@ func TestCardsRepoint_ChecklistItemCannotBeRepointedOntoAnotherCard(t *testing.T
 
 	req{
 		method: http.MethodPatch,
-		url:    "/api/collections/cards_checklist_items/records/" + item.Id,
+		url:    "/api/collections/boards_checklist_items/records/" + item.Id,
 		token:  env.editorToken,
 		body:   `{"card":"` + other.Id + `"}`,
 		want:   http.StatusNotFound,
 		after: func(t testing.TB, app *tests.TestApp) {
-			fresh, err := app.FindRecordById("cards_checklist_items", item.Id)
+			fresh, err := app.FindRecordById("boards_checklist_items", item.Id)
 			if err != nil {
 				t.Fatalf("re-read checklist item: %v", err)
 			}
@@ -124,12 +124,12 @@ func TestCardsRepoint_CommentCannotBeRepointedOntoAnotherCard(t *testing.T) {
 
 	req{
 		method: http.MethodPatch,
-		url:    "/api/collections/cards_comments/records/" + comment.Id,
+		url:    "/api/collections/boards_comments/records/" + comment.Id,
 		token:  env.editorToken,
 		body:   `{"card":"` + other.Id + `"}`,
 		want:   http.StatusNotFound,
 		after: func(t testing.TB, app *tests.TestApp) {
-			fresh, err := app.FindRecordById("cards_comments", comment.Id)
+			fresh, err := app.FindRecordById("boards_comments", comment.Id)
 			if err != nil {
 				t.Fatalf("re-read comment: %v", err)
 			}
@@ -147,7 +147,7 @@ func TestCardsRepoint_MemberRowCannotBeRepointedOntoAnotherProject(t *testing.T)
 	r := setupRepoint(t)
 
 	ownerRow, err := r.app.FindFirstRecordByFilter(
-		"cards_project_members", "project = {:p} && user = {:u}",
+		"boards_project_members", "project = {:p} && user = {:u}",
 		map[string]any{"p": r.projectA, "u": r.owner.Id},
 	)
 	if err != nil {
@@ -156,12 +156,12 @@ func TestCardsRepoint_MemberRowCannotBeRepointedOntoAnotherProject(t *testing.T)
 
 	req{
 		method: http.MethodPatch,
-		url:    "/api/collections/cards_project_members/records/" + ownerRow.Id,
+		url:    "/api/collections/boards_project_members/records/" + ownerRow.Id,
 		token:  r.ownerToken,
 		body:   `{"project":"` + r.projectB + `"}`,
 		want:   http.StatusNotFound,
 		after: func(t testing.TB, app *tests.TestApp) {
-			fresh, err := app.FindRecordById("cards_project_members", ownerRow.Id)
+			fresh, err := app.FindRecordById("boards_project_members", ownerRow.Id)
 			if err != nil {
 				t.Fatalf("re-read member row: %v", err)
 			}

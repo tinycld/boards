@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"github.com/pocketbase/dbx"
@@ -12,7 +12,7 @@ const lastProjectOwnerMessage = "this is the board's last owner — make another
 // excludeRowID. The row about to change is excluded so it cannot keep itself
 // alive.
 func hasOtherProjectOwner(app core.App, projectID, excludeRowID string) (bool, error) {
-	n, err := app.CountRecords("cards_project_members",
+	n, err := app.CountRecords("boards_project_members",
 		dbx.HashExp{"project": projectID, "role": "owner"},
 		dbx.Not(dbx.HashExp{"id": excludeRowID}),
 	)
@@ -42,7 +42,7 @@ func hasOtherProjectOwner(app core.App, projectID, excludeRowID string) (bool, e
 // single-org paths alike (see register.go's note correcting the older
 // "a tenant runs no feature Go" claim).
 func registerMemberLastOwnerGuard(app core.App) {
-	app.OnRecordUpdateRequest("cards_project_members").BindFunc(func(e *core.RecordRequestEvent) error {
+	app.OnRecordUpdateRequest("boards_project_members").BindFunc(func(e *core.RecordRequestEvent) error {
 		original := e.Record.Original()
 		if original.GetString("role") != "owner" || e.Record.GetString("role") == "owner" {
 			return e.Next()
@@ -61,7 +61,7 @@ func registerMemberLastOwnerGuard(app core.App) {
 		return e.Next()
 	})
 
-	app.OnRecordDeleteRequest("cards_project_members").BindFunc(func(e *core.RecordRequestEvent) error {
+	app.OnRecordDeleteRequest("boards_project_members").BindFunc(func(e *core.RecordRequestEvent) error {
 		if e.Record.GetString("role") != "owner" {
 			return e.Next()
 		}

@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"context"
@@ -18,8 +18,8 @@ import (
 //
 // This is the WRITE path. Reading a shared board needs none of it — the token
 // satisfies the access rules directly (pb-migrations/1980000003). But an
-// anonymous visitor cannot write anything: cards_comments.author,
-// cards_cards.created_by and cards_attachments.uploaded_by are required
+// anonymous visitor cannot write anything: boards_comments.author,
+// boards_cards.created_by and boards_attachments.uploaded_by are required
 // relations to `users`, and the create rules pin them to @request.auth.id. So
 // contributing means becoming someone, and this is where that happens.
 //
@@ -30,7 +30,7 @@ import (
 // of the rule disjunct authorizes them.
 //
 // The account machinery lives in tinycld.org/core/guestauth; what stays here is
-// the part that is cards': which link roles need an account at all, and what a
+// the part that is boards': which link roles need an account at all, and what a
 // redemption grants.
 
 type otpRequestBody struct {
@@ -87,7 +87,7 @@ func resolveLiveLink(app core.App, token string) (*core.Record, *core.Record, in
 		return nil, nil, http.StatusNotFound, "share link not found"
 	}
 	link, err := app.FindFirstRecordByFilter(
-		"cards_share_links", "token = {:t}", dbx.Params{"t": token})
+		"boards_share_links", "token = {:t}", dbx.Params{"t": token})
 	if err != nil || link == nil {
 		return nil, nil, http.StatusNotFound, "share link not found"
 	}
@@ -98,7 +98,7 @@ func resolveLiveLink(app core.App, token string) (*core.Record, *core.Record, in
 	if !expiresAt.IsZero() && expiresAt.Time().Before(nowUTC()) {
 		return nil, nil, http.StatusGone, "this link has expired"
 	}
-	project, err := app.FindRecordById("cards_projects", link.GetString("project"))
+	project, err := app.FindRecordById("boards_projects", link.GetString("project"))
 	if err != nil || project == nil {
 		return nil, nil, http.StatusNotFound, "board not found"
 	}
@@ -107,7 +107,7 @@ func resolveLiveLink(app core.App, token string) (*core.Record, *core.Record, in
 
 // handleShareLinkMetadata tells a visitor what their own link offers.
 //
-// Public, because the alternative does not work: cards_share_links is
+// Public, because the alternative does not work: boards_share_links is
 // owner-only by rule, so a visitor reads no row and the client cannot tell an
 // editor link from a viewer one. Without this the board renders but never
 // offers the sign-in that would let someone contribute — the affordance would
@@ -300,7 +300,7 @@ func handleShareOTPVerify(app core.App, re *core.RequestEvent) error {
 // a viewer, and a viewer link must not demote an editor. An existing row is
 // returned untouched.
 //
-// The role can never be owner — cards_share_links.role's enum has no such
+// The role can never be owner — boards_share_links.role's enum has no such
 // value, and the guard below is belt-and-braces against a future caller. That
 // also keeps this clear of the last-owner guard, which binds OnRecord*Request
 // events that app.Save inside a transaction does not fire.
@@ -310,7 +310,7 @@ func findOrCreateProjectMembership(app core.App, projectID, userID, role string)
 	}
 
 	existing, _ := app.FindFirstRecordByFilter(
-		"cards_project_members",
+		"boards_project_members",
 		"project = {:p} && user = {:u}",
 		dbx.Params{"p": projectID, "u": userID},
 	)
@@ -318,7 +318,7 @@ func findOrCreateProjectMembership(app core.App, projectID, userID, role string)
 		return nil
 	}
 
-	col, err := app.FindCollectionByNameOrId("cards_project_members")
+	col, err := app.FindCollectionByNameOrId("boards_project_members")
 	if err != nil {
 		return fmt.Errorf("members collection: %w", err)
 	}
@@ -330,7 +330,7 @@ func findOrCreateProjectMembership(app core.App, projectID, userID, role string)
 		// Race: a concurrent verify created it. The unique index on
 		// (project, user) is the backstop.
 		if again, _ := app.FindFirstRecordByFilter(
-			"cards_project_members",
+			"boards_project_members",
 			"project = {:p} && user = {:u}",
 			dbx.Params{"p": projectID, "u": userID},
 		); again != nil {

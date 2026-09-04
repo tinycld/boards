@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { BoardProject } from '../tinycld/cards/types'
+import type { BoardProject } from '../tinycld/boards/types'
 
 const h = vi.hoisted(() => ({
     focusedParam: '' as string,
@@ -27,12 +27,12 @@ vi.mock('@tinycld/core/lib/org-routes', async importOriginal => {
 })
 
 const openCard = vi.fn()
-vi.mock('~/tinycld/cards/stores/cards-ui-store', () => ({
-    useCardsUIStore: (selector: (s: Record<string, unknown>) => unknown) =>
+vi.mock('~/tinycld/boards/stores/boards-ui-store', () => ({
+    useBoardsUIStore: (selector: (s: Record<string, unknown>) => unknown) =>
         selector({ openCardId: h.openCardId, openCard }),
 }))
 
-import { usePeekUrl } from '@tinycld/cards/hooks/usePeekUrl'
+import { usePeekUrl } from '@tinycld/boards/hooks/usePeekUrl'
 
 function board(overrides: Partial<BoardProject> = {}): BoardProject {
     return {
@@ -120,7 +120,7 @@ describe('usePeekUrl', () => {
         h.openCardId = 'c2'
         renderHook(() => usePeekUrl(board()))
         expect(replace).toHaveBeenCalledWith({
-            pathname: '/a/cards',
+            pathname: '/a/boards',
             params: { focused: 'HOME-2' },
         })
     })
@@ -137,7 +137,7 @@ describe('usePeekUrl', () => {
 
         h.openCardId = null
         rerender()
-        expect(replace).toHaveBeenCalledWith('/a/cards')
+        expect(replace).toHaveBeenCalledWith('/a/boards')
     })
 
     // THE CLOSE REGRESSION. Closing is not one render: the store clears first
@@ -159,7 +159,7 @@ describe('usePeekUrl', () => {
         rerender()
 
         expect(openCard).not.toHaveBeenCalled()
-        expect(replace).toHaveBeenCalledWith('/a/cards')
+        expect(replace).toHaveBeenCalledWith('/a/boards')
     })
 
     // The two directions must not fight: when they already agree, neither the
@@ -229,7 +229,7 @@ describe('usePeekUrl', () => {
         h.openCardId = 'c2'
         rerender()
         expect(replace).toHaveBeenCalledWith({
-            pathname: '/a/cards',
+            pathname: '/a/boards',
             params: { focused: 'HOME-2' },
         })
     })
@@ -251,7 +251,7 @@ describe('usePeekUrl', () => {
         })
         renderHook(() => usePeekUrl(noSlug))
         expect(replace).toHaveBeenCalledWith({
-            pathname: '/a/cards',
+            pathname: '/a/boards',
             params: { focused: 'c1' },
         })
     })
@@ -275,7 +275,7 @@ describe('usePeekUrl', () => {
         h.focusedParam = 'HOME-99'
         h.openCardId = null
         renderHook(() => usePeekUrl(board()))
-        expect(replace).toHaveBeenCalledWith('/a/cards')
+        expect(replace).toHaveBeenCalledWith('/a/boards')
     })
 
     it('does nothing at all before the board has loaded', () => {

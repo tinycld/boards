@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"fmt"
@@ -38,13 +38,13 @@ import (
 const maxParentDepth = 1
 
 func registerCardParentGuard(app core.App) {
-	app.OnRecordCreate("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordCreate("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		if err := checkParent(e.App, e.Record); err != nil {
 			return err
 		}
 		return e.Next()
 	})
-	app.OnRecordUpdate("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordUpdate("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		if err := checkParent(e.App, e.Record); err != nil {
 			return err
 		}
@@ -81,7 +81,7 @@ func checkParent(app core.App, card *core.Record) error {
 		return fmt.Errorf("a card cannot be its own sub-task")
 	}
 
-	parent, err := app.FindRecordById("cards_cards", parentID)
+	parent, err := app.FindRecordById("boards_cards", parentID)
 	if err != nil {
 		return nil
 	}
@@ -102,7 +102,7 @@ func checkParent(app core.App, card *core.Record) error {
 			return nil
 		}
 		seen[next] = true
-		current, err = app.FindRecordById("cards_cards", next)
+		current, err = app.FindRecordById("boards_cards", next)
 		if err != nil {
 			return nil
 		}
@@ -121,11 +121,11 @@ func checkParent(app core.App, card *core.Record) error {
 // Cards are not cascade-deleted by their parent (the relation is
 // cascadeDelete: false, deliberately), so this fires once per card.
 func registerCardParentRollup(app core.App) {
-	app.OnRecordAfterCreateSuccess("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordAfterCreateSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		recountParent(e.App, e.Record.GetString("parent"))
 		return e.Next()
 	})
-	app.OnRecordAfterUpdateSuccess("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordAfterUpdateSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		// Both families: the one this card left, and the one it joined. When
 		// the parent did not change these are the same id and the second call
 		// exits at the unchanged check.
@@ -133,7 +133,7 @@ func registerCardParentRollup(app core.App) {
 		recountParent(e.App, e.Record.GetString("parent"))
 		return e.Next()
 	})
-	app.OnRecordAfterDeleteSuccess("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordAfterDeleteSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		recountParent(e.App, e.Record.GetString("parent"))
 		return e.Next()
 	})
@@ -153,12 +153,12 @@ func recountParent(app core.App, parentID string) {
 		return
 	}
 
-	parent, err := app.FindRecordById("cards_cards", parentID)
+	parent, err := app.FindRecordById("boards_cards", parentID)
 	if err != nil {
 		return
 	}
 
-	total, err := countRows(app, "cards_cards", dbx.HashExp{"parent": parentID})
+	total, err := countRows(app, "boards_cards", dbx.HashExp{"parent": parentID})
 	if err != nil {
 		app.Logger().Warn("cards: subtask recount failed", "card", parentID, "error", err)
 		return
@@ -208,11 +208,11 @@ func recountParent(app core.App, parentID string) {
 // mark work complete.
 func countClosedChildren(app core.App, parentID string) (int, error) {
 	var total int
-	err := app.RecordQuery("cards_cards").
+	err := app.RecordQuery("boards_cards").
 		Select("COUNT(*)").
 		AndWhere(dbx.HashExp{"parent": parentID}).
 		AndWhere(dbx.NewExp(
-			"list IN (SELECT id FROM cards_lists WHERE category IN ('done', 'canceled'))",
+			"list IN (SELECT id FROM boards_lists WHERE category IN ('done', 'canceled'))",
 		)).
 		Row(&total)
 	return total, err

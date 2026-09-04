@@ -31,7 +31,7 @@ neighbours, it lands between them in the board's order and stays there when the
 filter is cleared. If the card you have open is hidden by a filter, the panel
 closes — clear the filter to get it back.
 
-You can also narrow the board to one or more [epics](help://cards:epics), or to
+You can also narrow the board to one or more [epics](help://boards:epics), or to
 the cards nobody has filed under one yet.
 
 ## Sorting a list

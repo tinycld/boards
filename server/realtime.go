@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"log/slog"
@@ -11,12 +11,12 @@ import (
 	"tinycld.org/core/yjsdoc"
 )
 
-// roomKindCards is the realtime room kind cards owns. One room per BOARD:
-// roomID is a cards_projects id, and which card a peer is looking at travels in
+// roomKindBoards is the realtime room kind boards owns. One room per BOARD:
+// roomID is a boards_projects id, and which card a peer is looking at travels in
 // their awareness slot rather than in the room identity.
 //
 // Per-card rooms were the alternative and are worse here on every axis: they
-// would open and close a WebSocket on every peek, need a cards_cards → project
+// would open and close a WebSocket on every peek, need a boards_cards → project
 // hop before the membership check below, and still give no board-level view
 // without a second room. Calc reached the same conclusion — it keeps sheetId in
 // the slot, not the room id.
@@ -28,9 +28,9 @@ import (
 // cost one connection per person, not one per card.
 //
 // Must match the roomKind string in hooks/useBoardPresence.ts.
-const roomKindCards = "cards-board"
+const roomKindBoards = "boards"
 
-// registerRealtime wires /api/realtime/cards-board/<projectID> and returns
+// registerRealtime wires /api/realtime/boards/<projectID> and returns
 // the handles the cross-board move endpoint needs to flush a source room and
 // seed a target one (endpoints_move_card.go).
 func registerRealtime(app core.App) *boardRealtime {
@@ -42,9 +42,9 @@ func registerRealtime(app core.App) *boardRealtime {
 
 	journal := realtime.NewPocketBaseJournal(app)
 	saveCoordinator := realtime.NewSaveCoordinator(makeFlush(app, state))
-	saveCoordinator.SetJournal(roomKindCards, journal)
+	saveCoordinator.SetJournal(roomKindBoards, journal)
 
-	realtime.RegisterRoomKindWith(roomKindCards, realtime.RoomKindOptions{
+	realtime.RegisterRoomKindWith(roomKindBoards, realtime.RoomKindOptions{
 		Authorize:              makeAuthorize(app),
 		RuntimeProvider:        runtime,
 		Journal:                journal,
@@ -77,8 +77,8 @@ func registerRealtime(app core.App) *boardRealtime {
 
 	// A deleted board leaves its write-ahead log behind; nothing reads those
 	// rows again, but they are dead weight in a hot collection.
-	app.OnRecordAfterDeleteSuccess("cards_projects").BindFunc(func(e *core.RecordEvent) error {
-		if err := journal.Truncate(roomKindCards, e.Record.Id, math.MaxInt64); err != nil {
+	app.OnRecordAfterDeleteSuccess("boards_projects").BindFunc(func(e *core.RecordEvent) error {
+		if err := journal.Truncate(roomKindBoards, e.Record.Id, math.MaxInt64); err != nil {
 			slog.Warn("cards: could not truncate the journal for a deleted board",
 				"projectID", e.Record.Id, "err", err)
 		}
@@ -102,7 +102,7 @@ func makeAuthorize(app core.App) realtime.AuthorizeFn {
 		if auth.GetBool("disabled") {
 			return realtime.ErrUnauthorized
 		}
-		n, err := app.CountRecords("cards_project_members",
+		n, err := app.CountRecords("boards_project_members",
 			dbx.HashExp{"project": roomID, "user": auth.Id},
 		)
 		if err != nil {

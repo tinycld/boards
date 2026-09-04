@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"testing"
@@ -32,12 +32,12 @@ func triggerMemberUpdate(
 	mutate func(*core.Record),
 ) error {
 	t.Helper()
-	fresh, err := app.FindRecordById("cards_project_members", rowID)
+	fresh, err := app.FindRecordById("boards_project_members", rowID)
 	if err != nil {
 		t.Fatalf("reload row: %v", err)
 	}
 	mutate(fresh)
-	col, err := app.FindCollectionByNameOrId("cards_project_members")
+	col, err := app.FindCollectionByNameOrId("boards_project_members")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func triggerMemberUpdate(
 		Record:       fresh,
 	}
 	e.Collection = col
-	return app.OnRecordUpdateRequest("cards_project_members").
+	return app.OnRecordUpdateRequest("boards_project_members").
 		Trigger(e, func(_ *core.RecordRequestEvent) error {
 			return app.Save(fresh)
 		})
@@ -59,11 +59,11 @@ func triggerMemberDelete(
 	rowID string,
 ) error {
 	t.Helper()
-	fresh, err := app.FindRecordById("cards_project_members", rowID)
+	fresh, err := app.FindRecordById("boards_project_members", rowID)
 	if err != nil {
 		t.Fatalf("reload row: %v", err)
 	}
-	col, err := app.FindCollectionByNameOrId("cards_project_members")
+	col, err := app.FindCollectionByNameOrId("boards_project_members")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func triggerMemberDelete(
 		Record:       fresh,
 	}
 	e.Collection = col
-	return app.OnRecordDeleteRequest("cards_project_members").
+	return app.OnRecordDeleteRequest("boards_project_members").
 		Trigger(e, func(_ *core.RecordRequestEvent) error {
 			return app.Delete(fresh)
 		})
@@ -81,7 +81,7 @@ func triggerMemberDelete(
 func memberRowOf(t *testing.T, env *cardsEnv, user *core.Record) *core.Record {
 	t.Helper()
 	row, err := env.app.FindFirstRecordByFilter(
-		"cards_project_members",
+		"boards_project_members",
 		"project = {:p} && user = {:u}",
 		map[string]any{"p": env.project.Id, "u": user.Id},
 	)
@@ -117,7 +117,7 @@ func TestMemberGuard_BlocksSelfDemotionOfLastOwner(t *testing.T) {
 		t.Fatal("demoting the board's last owner should be rejected")
 	}
 
-	fresh, _ := env.app.FindRecordById("cards_project_members", row.Id)
+	fresh, _ := env.app.FindRecordById("boards_project_members", row.Id)
 	if fresh.GetString("role") != "owner" {
 		t.Errorf("role should still be owner, got %q", fresh.GetString("role"))
 	}
@@ -130,7 +130,7 @@ func TestMemberGuard_BlocksDeletingLastOwnerRow(t *testing.T) {
 	if err := triggerMemberDelete(t, env.app, env.owner, row.Id); err == nil {
 		t.Fatal("deleting the board's last owner row should be rejected")
 	}
-	if _, err := env.app.FindRecordById("cards_project_members", row.Id); err != nil {
+	if _, err := env.app.FindRecordById("boards_project_members", row.Id); err != nil {
 		t.Fatalf("owner row should still exist: %v", err)
 	}
 }

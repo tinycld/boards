@@ -11,7 +11,7 @@ import { addCard, boardCard, cardsInColumn, createBoard, dragCardToColumn } from
 // spine does accept a drop, so no change was needed in BoardColumn.
 //
 // Note when running these from a git worktree: playwright's testDir resolves
-// through node_modules/@tinycld/cards, which symlinks to the main checkout — so
+// through node_modules/@tinycld/boards, which symlinks to the main checkout — so
 // a run launched from a worktree exercises that checkout, not the worktree.
 
 let run = 0
@@ -28,10 +28,10 @@ async function collapseList(page: import('@playwright/test').Page, name: string)
     await expect(page.getByLabel(`Expand ${name} list`)).toBeVisible()
 }
 
-test.describe('Cards — collapsed columns and card density', () => {
+test.describe('Boards — collapsed columns and card density', () => {
     test.beforeEach(async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
     })
 
     test('collapses a list, hides its cards, and expands again', async ({ page }) => {
@@ -110,7 +110,7 @@ test.describe('Cards — collapsed columns and card density', () => {
         await freshBoard(page, 'density')
         await addCard(page, 0, 'dense me')
 
-        const toggle = page.getByTestId('cards-density-toggle')
+        const toggle = page.getByTestId('boards-density-toggle')
         await expect(toggle).toHaveAttribute('aria-label', 'Hide card details')
 
         await toggle.click()
@@ -124,16 +124,16 @@ test.describe('Cards — collapsed columns and card density', () => {
         // same by tearing down the whole SPA — the hard navigation this suite
         // forbids.
         await navigateToPackage(page, 'settings')
-        await navigateToPackage(page, 'cards')
-        await expect(page.getByTestId('cards-density-toggle')).toHaveAttribute(
+        await navigateToPackage(page, 'boards')
+        await expect(page.getByTestId('boards-density-toggle')).toHaveAttribute(
             'aria-label',
             'Show card details'
         )
 
         // Restore, so a persisted preference does not leak into later specs
         // sharing this browser profile.
-        await page.getByTestId('cards-density-toggle').click()
-        await expect(page.getByTestId('cards-density-toggle')).toHaveAttribute(
+        await page.getByTestId('boards-density-toggle').click()
+        await expect(page.getByTestId('boards-density-toggle')).toHaveAttribute(
             'aria-label',
             'Hide card details'
         )
@@ -147,7 +147,7 @@ test.describe('Cards — collapsed columns and card density', () => {
         // Same round trip as above: the collapsed state has to come back from
         // storage, not from the screen that set it.
         await navigateToPackage(page, 'settings')
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
 
         await expect(page.getByLabel('Expand To do list')).toBeVisible()
         await expect(boardCard(page, 'still hidden')).not.toBeAttached()

@@ -23,7 +23,7 @@ async function freshBoard(page: Page, label: string): Promise<string> {
 }
 
 function descriptionEditor(page: Page) {
-    return page.getByTestId('cards-description-editor').locator('.ProseMirror')
+    return page.getByTestId('boards-description-editor').locator('.ProseMirror')
 }
 
 /**
@@ -67,10 +67,10 @@ async function typeDescription(page: Page, text: string) {
     await expect(editor).toContainText(text.replace(/^#+ /, ''))
 }
 
-test.describe('Cards — markdown descriptions', () => {
+test.describe('Boards — markdown descriptions', () => {
     test.beforeEach(async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
     })
 
     test('formats markdown as you type', async ({ page }) => {
@@ -115,7 +115,7 @@ test.describe('Cards — markdown descriptions', () => {
         // enough to get the press target back.
         await closeCardPeek(page)
         await openCard(page, CARD_TITLE)
-        const readView = page.getByTestId('cards-description-read')
+        const readView = page.getByTestId('boards-description-read')
         await expect(readView).toBeVisible()
 
         // Click the FIRST line. Typing immediately afterwards is the assertion:
@@ -147,7 +147,7 @@ test.describe('Cards — markdown descriptions', () => {
         await openCard(page, CARD_TITLE)
 
         const editor = descriptionEditor(page)
-        const read = page.getByTestId('cards-description-read')
+        const read = page.getByTestId('boards-description-read')
 
         await openDescription(page)
         await editor.click()
@@ -162,7 +162,7 @@ test.describe('Cards — markdown descriptions', () => {
         await page.keyboard.press('Escape')
         await expect(editor).toHaveCount(0)
         // The card is still open — the first Escape was consumed by the editor.
-        await expect(page.getByTestId('cards-card-peek')).toHaveCount(1)
+        await expect(page.getByTestId('boards-card-peek')).toHaveCount(1)
 
         await read.click()
         await expect(editor).toBeVisible()
@@ -173,7 +173,7 @@ test.describe('Cards — markdown descriptions', () => {
     test('keeps a typed ⌘ glyph verbatim', async ({ page }) => {
         // Help topics are authored once with Mac glyphs and translated per
         // platform; a DESCRIPTION is user prose, so the same substitution would
-        // silently rewrite what someone typed. Cards opts out — this is the
+        // silently rewrite what someone typed. Boards opts out — this is the
         // assertion that keeps it opted out.
         await freshBoard(page, 'glyph')
         await addCard(page, 0, CARD_TITLE)
@@ -200,7 +200,7 @@ test.describe('Cards — markdown descriptions', () => {
         // the same by tearing down the whole SPA — the hard navigation this suite
         // forbids (it cancels in-flight chunk loads and is a CI flake source).
         await navigateToPackage(page, 'settings')
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         await openBoard(page, boardName, CARD_TITLE)
         await openCard(page, CARD_TITLE)
 

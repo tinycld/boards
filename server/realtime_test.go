@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"testing"
@@ -10,7 +10,7 @@ import (
 // passes through the collection rules — so unlike the *_rls_test.go suites
 // these bind the real registration and call the handler it registered.
 //
-// The room is board-scoped: roomID is a cards_projects id. Every case below is
+// The room is board-scoped: roomID is a boards_projects id. Every case below is
 // therefore "may this user join THIS board's room", which must line up with the
 // `viaMember` fragment the collections use to decide who can read the board.
 
@@ -25,9 +25,9 @@ func authorizeCardsRoom(t *testing.T, env *cardsEnv) realtime.AuthorizeFn {
 
 	registerRealtime(env.app)
 
-	opts, ok := realtime.LookupOptionsForTest(roomKindCards)
+	opts, ok := realtime.LookupOptionsForTest(roomKindBoards)
 	if !ok {
-		t.Fatalf("registerRealtime did not register room kind %q", roomKindCards)
+		t.Fatalf("registerRealtime did not register room kind %q", roomKindBoards)
 	}
 	if opts.Authorize == nil {
 		t.Fatal("room kind registered with a nil Authorize")

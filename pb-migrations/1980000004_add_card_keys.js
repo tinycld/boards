@@ -16,7 +16,7 @@
 //
 // THREE COLUMNS, and the third is the one people miss:
 //
-// 1. cards_projects.slug — the OTTER half. GLOBALLY unique, not per-owner: a
+// 1. boards_projects.slug — the OTTER half. GLOBALLY unique, not per-owner: a
 //    key pasted into a chat has no board context to disambiguate it, so two
 //    boards sharing a slug would make OTTER-7 name two different cards. The
 //    unique index is the enforcement; the New board dialog surfaces the
@@ -34,7 +34,7 @@
 //    client, or by a caller that omitted the field, has to do. Requiring it
 //    would turn every such insert into a 400 with no recovery path.
 //
-// 2. cards_cards.number — the 123 half. Assigned by server/card_number.go's
+// 2. boards_cards.number — the 123 half. Assigned by server/card_number.go's
 //    OnRecordCreate hook, which overwrites whatever the request body carried
 //    rather than trusting it: no access rule pins this field (it is a scalar,
 //    not a relation), so a member can put anything there.
@@ -44,7 +44,7 @@
 //    let the database refuse it. But `required` is evaluated by the VALIDATOR,
 //    which runs on every path including ones where the hook is not bound: the
 //    *_rls_test.go suites bind no hooks by design, and any deployment that
-//    somehow reached PocketBase without cards' Go registered would reject
+//    somehow reached PocketBase without boards' Go registered would reject
 //    every card create with "number: Cannot be blank" — a failure mode that
 //    points at the wrong thing entirely.
 //
@@ -54,7 +54,7 @@
 //    worse-worded rejection on paths the hook already covers, while making the
 //    schema silently depend on hook wiring.
 //
-// 3. cards_projects.next_number — the ALLOCATOR's state, and the reason this
+// 3. boards_projects.next_number — the ALLOCATOR's state, and the reason this
 //    is not MAX(number)+1.
 //
 //    Numbers must never be reused. MAX-based allocation re-issues the top
@@ -73,12 +73,12 @@
 // key.
 migrate(
     app => {
-        const projects = app.findCollectionByNameOrId('cards_projects')
+        const projects = app.findCollectionByNameOrId('boards_projects')
 
         projects.fields.addAt(
             projects.fields.length,
             new Field({
-                id: 'cards_projects_slug',
+                id: 'boards_projects_slug',
                 name: 'slug',
                 type: 'text',
                 required: false,
@@ -93,7 +93,7 @@ migrate(
         projects.fields.addAt(
             projects.fields.length,
             new Field({
-                id: 'cards_projects_next_number',
+                id: 'boards_projects_next_number',
                 name: 'next_number',
                 type: 'number',
                 required: false,
@@ -108,17 +108,17 @@ migrate(
         // as calendar's idx_cal_events_ical_uid and contacts' vcard_uid index.
         projects.indexes = [
             ...projects.indexes,
-            "CREATE UNIQUE INDEX `idx_cards_projects_slug` ON `cards_projects` (`slug`) WHERE `slug` != ''",
+            "CREATE UNIQUE INDEX `idx_boards_projects_slug` ON `boards_projects` (`slug`) WHERE `slug` != ''",
         ]
 
         app.save(projects)
 
-        const cards = app.findCollectionByNameOrId('cards_cards')
+        const cards = app.findCollectionByNameOrId('boards_cards')
 
         cards.fields.addAt(
             cards.fields.length,
             new Field({
-                id: 'cards_cards_number',
+                id: 'boards_cards_number',
                 name: 'number',
                 type: 'number',
                 required: false,
@@ -134,24 +134,24 @@ migrate(
         // two REAL numbers collide.
         cards.indexes = [
             ...cards.indexes,
-            'CREATE UNIQUE INDEX `idx_cards_cards_project_number` ON `cards_cards` (`project`, `number`) WHERE `number` > 0',
+            'CREATE UNIQUE INDEX `idx_boards_cards_project_number` ON `boards_cards` (`project`, `number`) WHERE `number` > 0',
         ]
 
         app.save(cards)
     },
     app => {
-        const cards = app.findCollectionByNameOrId('cards_cards')
-        cards.fields.removeById('cards_cards_number')
+        const cards = app.findCollectionByNameOrId('boards_cards')
+        cards.fields.removeById('boards_cards_number')
         cards.indexes = cards.indexes.filter(
-            idx => !idx.includes('idx_cards_cards_project_number')
+            idx => !idx.includes('idx_boards_cards_project_number')
         )
         app.save(cards)
 
-        const projects = app.findCollectionByNameOrId('cards_projects')
-        projects.fields.removeById('cards_projects_slug')
-        projects.fields.removeById('cards_projects_next_number')
+        const projects = app.findCollectionByNameOrId('boards_projects')
+        projects.fields.removeById('boards_projects_slug')
+        projects.fields.removeById('boards_projects_next_number')
         projects.indexes = projects.indexes.filter(
-            idx => !idx.includes('idx_cards_projects_slug')
+            idx => !idx.includes('idx_boards_projects_slug')
         )
         app.save(projects)
     }

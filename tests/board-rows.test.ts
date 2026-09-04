@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { flattenBoardRows } from '../tinycld/cards/lib/board-rows'
-import { MANUAL_SORT } from '../tinycld/cards/lib/board-sort'
-import type { BoardCardView, BoardProject } from '../tinycld/cards/types'
+import { flattenBoardRows } from '../tinycld/boards/lib/board-rows'
+import { MANUAL_SORT } from '../tinycld/boards/lib/board-sort'
+import type { BoardCardView, BoardProject } from '../tinycld/boards/types'
 
 function card(id: string, overrides: Partial<BoardCardView> = {}): BoardCardView {
     return {

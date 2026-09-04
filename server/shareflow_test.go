@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"net/http"
@@ -24,13 +24,13 @@ func TestShareLinks_MintedLinkOpensTheWholeBoard(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodPost,
-		url:     "/api/cards/share-link",
+		url:     "/api/boards/share-link",
 		token:   env.ownerToken,
 		body:    mintBody(env.project.Id, "viewer", 7),
 		want:    http.StatusOK,
 		content: []string{`"token":"`},
 		after: func(t testing.TB, app *tests.TestApp) {
-			link, err := app.FindFirstRecordByFilter("cards_share_links",
+			link, err := app.FindFirstRecordByFilter("boards_share_links",
 				"project = {:p}", dbx.Params{"p": env.project.Id})
 			if err != nil {
 				t.Fatalf("read minted link: %v", err)
@@ -58,9 +58,9 @@ func TestShareLinks_MintedLinkOpensTheWholeBoard(t *testing.T) {
 				t.Logf("%s readable anonymously ✓", collection)
 			}
 
-			check("cards_projects", env.project.Id)
-			check("cards_lists", env.list.Id)
-			check("cards_cards", env.card.Id)
+			check("boards_projects", env.project.Id)
+			check("boards_lists", env.list.Id)
+			check("boards_cards", env.card.Id)
 		},
 	}.run(t, env)
 }

@@ -18,7 +18,7 @@ import (
 	"tinycld.org/cli/client"
 )
 
-// fakeCards is an in-memory stand-in for the server: the cards_* collections
+// fakeCards is an in-memory stand-in for the server: the boards_* collections
 // the commands read and write, with filters parsed against the EXACT shapes
 // the CLI builds. An unrecognized filter fails the test rather than returning
 // everything — a silently-ignored filter is how a command appears to work
@@ -27,7 +27,7 @@ import (
 // WHAT THIS HARNESS CANNOT SEE, and it matters: it runs no access rules and no
 // OAuth scope middleware. So it proves the commands send the right requests,
 // never that a real server would allow them. The rules are proven by the Go
-// RLS suites in cards/server, and the scope classification by core's
+// RLS suites in boards/server, and the scope classification by core's
 // route_classification_test.go — that split is deliberate, and the reason the
 // scope table had to be widened before these commands could work at all.
 type fakeCards struct {
@@ -57,7 +57,7 @@ type fakeCards struct {
 	deletedProjects  []string
 	patchCount       int
 
-	// cardListCount counts LIST reads of cards_cards, so a test can prove the
+	// cardListCount counts LIST reads of boards_cards, so a test can prove the
 	// board view stays one request rather than one per column.
 	cardListCount int
 
@@ -112,7 +112,7 @@ var (
 	reCardByNumber = regexp.MustCompile(`^project = "((?:[^"\\]|\\.)*)" && number = (\d+)$`)
 
 	// The board view reads a whole board's cards at once rather than one
-	// request per column, so cards_cards accepts a project-scoped filter too
+	// request per column, so boards_cards accepts a project-scoped filter too
 	// (reProjectEq above, plus this archived-excluding variant).
 	reCardProjectActive = regexp.MustCompile(`^project = "((?:[^"\\]|\\.)*)" && archived = false$`)
 	reCardEq            = regexp.MustCompile(`^card = "((?:[^"\\]|\\.)*)"$`)
@@ -161,7 +161,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 	})
 
 	// --- projects -----------------------------------------------------------
-	mux.HandleFunc("GET /api/collections/cards_projects/records", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/collections/boards_projects/records", func(w http.ResponseWriter, r *http.Request) {
 		if filter := r.URL.Query().Get("filter"); filter != "" {
 			f.t.Errorf("projects must be listed unfiltered (the rules scope them): %q", filter)
 		}
@@ -172,7 +172,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 		listResponse(w, out)
 	})
-	mux.HandleFunc("PATCH /api/collections/cards_projects/records/{id}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("PATCH /api/collections/boards_projects/records/{id}", func(w http.ResponseWriter, r *http.Request) {
 		p, ok := f.projects[r.PathValue("id")]
 		if !ok {
 			notFound(w)
@@ -185,7 +185,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		}
 		json.NewEncoder(w).Encode(p)
 	})
-	mux.HandleFunc("DELETE /api/collections/cards_projects/records/{id}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("DELETE /api/collections/boards_projects/records/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		if _, ok := f.projects[id]; !ok {
 			notFound(w)
@@ -209,7 +209,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 	})
 
 	// --- lists --------------------------------------------------------------
-	mux.HandleFunc("GET /api/collections/cards_lists/records", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/collections/boards_lists/records", func(w http.ResponseWriter, r *http.Request) {
 		filter := r.URL.Query().Get("filter")
 		// `card view` resolves its one list by id so the table can print a
 		// name instead of a raw foreign key, so this collection is read both
@@ -231,7 +231,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		}
 		m := reProjectEq.FindStringSubmatch(filter)
 		if m == nil {
-			f.t.Errorf("unsupported cards_lists filter: %q", filter)
+			f.t.Errorf("unsupported boards_lists filter: %q", filter)
 			listResponse(w, []list{})
 			return
 		}
@@ -245,7 +245,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		sortByRank(out, func(l list) (string, string) { return l.Position, l.ID })
 		listResponse(w, out)
 	})
-	mux.HandleFunc("POST /api/collections/cards_lists/records", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/collections/boards_lists/records", func(w http.ResponseWriter, r *http.Request) {
 		body := decodeBody(r)
 		created := &list{
 			ID:       f.nextID("lst"),
@@ -257,7 +257,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		f.lists[created.ID] = created
 		json.NewEncoder(w).Encode(created)
 	})
-	mux.HandleFunc("PATCH /api/collections/cards_lists/records/{id}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("PATCH /api/collections/boards_lists/records/{id}", func(w http.ResponseWriter, r *http.Request) {
 		l, ok := f.lists[r.PathValue("id")]
 		if !ok {
 			notFound(w)
@@ -277,11 +277,11 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		}
 		json.NewEncoder(w).Encode(l)
 	})
-	mux.HandleFunc("DELETE /api/collections/cards_lists/records/{id}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("DELETE /api/collections/boards_lists/records/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		f.deletedLists = append(f.deletedLists, id)
 		delete(f.lists, id)
-		// cards_cards.list ships cascadeDelete: true, so the server removes
+		// boards_cards.list ships cascadeDelete: true, so the server removes
 		// the column's cards. Emulating it keeps a test that counts cards
 		// after a delete honest.
 		for cid, c := range f.cards {
@@ -293,7 +293,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 	})
 
 	// --- cards --------------------------------------------------------------
-	mux.HandleFunc("GET /api/collections/cards_cards/records", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/collections/boards_cards/records", func(w http.ResponseWriter, r *http.Request) {
 		filter := r.URL.Query().Get("filter")
 		f.cardListCount++
 		var (
@@ -316,7 +316,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		case reProjectEq.MatchString(filter):
 			projectID = unquote(reProjectEq.FindStringSubmatch(filter)[1])
 		default:
-			f.t.Errorf("unsupported cards_cards filter: %q", filter)
+			f.t.Errorf("unsupported boards_cards filter: %q", filter)
 			listResponse(w, []card{})
 			return
 		}
@@ -354,7 +354,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		}
 		listResponse(w, out)
 	})
-	mux.HandleFunc("GET /api/collections/cards_cards/records/{id}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/collections/boards_cards/records/{id}", func(w http.ResponseWriter, r *http.Request) {
 		c, ok := f.cards[r.PathValue("id")]
 		if !ok {
 			notFound(w)
@@ -362,7 +362,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		}
 		json.NewEncoder(w).Encode(c)
 	})
-	mux.HandleFunc("POST /api/collections/cards_cards/records", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/collections/boards_cards/records", func(w http.ResponseWriter, r *http.Request) {
 		body := decodeBody(r)
 		f.lastCardCreate = body
 		created := &card{
@@ -382,7 +382,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		f.cards[created.ID] = created
 		json.NewEncoder(w).Encode(created)
 	})
-	mux.HandleFunc("PATCH /api/collections/cards_cards/records/{id}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("PATCH /api/collections/boards_cards/records/{id}", func(w http.ResponseWriter, r *http.Request) {
 		c, ok := f.cards[r.PathValue("id")]
 		if !ok {
 			notFound(w)
@@ -423,7 +423,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		}
 		json.NewEncoder(w).Encode(c)
 	})
-	mux.HandleFunc("DELETE /api/collections/cards_cards/records/{id}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("DELETE /api/collections/boards_cards/records/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		f.deletedCards = append(f.deletedCards, id)
 		delete(f.cards, id)
@@ -433,7 +433,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 	// --- checklist, comments, labels, users ---------------------------------
 	// The cross-board move endpoint (server/endpoints_move_card.go). The fake
 	// repoints the card and echoes it back the way the server does.
-	mux.HandleFunc("POST /api/cards/cards/{id}/move", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/boards/cards/{id}/move", func(w http.ResponseWriter, r *http.Request) {
 		c, ok := f.cards[r.PathValue("id")]
 		if !ok {
 			notFound(w)
@@ -449,7 +449,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 			"card": c, "previous_key": "", "dropped_labels": []string{},
 		})
 	})
-	mux.HandleFunc("POST /api/collections/cards_checklist_items/records", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/collections/boards_checklist_items/records", func(w http.ResponseWriter, r *http.Request) {
 		body := decodeBody(r)
 		f.createdChecklist = append(f.createdChecklist, body)
 		created := &checklistItem{
@@ -462,7 +462,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		f.checklist[created.ID] = created
 		json.NewEncoder(w).Encode(created)
 	})
-	mux.HandleFunc("GET /api/collections/cards_checklist_items/records", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/collections/boards_checklist_items/records", func(w http.ResponseWriter, r *http.Request) {
 		m := reCardEq.FindStringSubmatch(r.URL.Query().Get("filter"))
 		if m == nil {
 			f.t.Errorf("unsupported checklist filter: %q", r.URL.Query().Get("filter"))
@@ -478,7 +478,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		sortByRank(out, func(i checklistItem) (string, string) { return i.Position, i.ID })
 		listResponse(w, out)
 	})
-	mux.HandleFunc("GET /api/collections/cards_comments/records", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/collections/boards_comments/records", func(w http.ResponseWriter, r *http.Request) {
 		m := reCardEq.FindStringSubmatch(r.URL.Query().Get("filter"))
 		if m == nil {
 			f.t.Errorf("unsupported comments filter: %q", r.URL.Query().Get("filter"))
@@ -494,7 +494,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		sort.Slice(out, func(i, j int) bool { return out[i].Created < out[j].Created })
 		listResponse(w, out)
 	})
-	mux.HandleFunc("GET /api/collections/cards_labels/records", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/collections/boards_labels/records", func(w http.ResponseWriter, r *http.Request) {
 		filter := r.URL.Query().Get("filter")
 		if !reIDList.MatchString(filter) {
 			f.t.Errorf("unsupported labels filter: %q", filter)
@@ -543,7 +543,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 	// table. Any request here is a bug in this package — fail loudly rather
 	// than answer, so a future `cards share` command cannot be built against
 	// a fake that permits what the real server refuses.
-	for _, path := range []string{"cards_project_members", "cards_share_links"} {
+	for _, path := range []string{"boards_project_members", "boards_share_links"} {
 		mux.HandleFunc("/api/collections/"+path+"/records", func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodGet {
 				f.t.Errorf("%s %s: the sharing surface is read-only for OAuth callers",

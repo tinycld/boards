@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { capabilitiesFor, memberRowActionsFor } from '../tinycld/cards/lib/permissions'
+import { capabilitiesFor, memberRowActionsFor } from '../tinycld/boards/lib/permissions'
 
 describe('capabilitiesFor', () => {
     // The full truth table, mirroring the migration's rule fragments:

@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"testing"
@@ -93,7 +93,7 @@ func TestSearchSourceTitlesAnEmptyCard(t *testing.T) {
 
 	// Match on the description column, since the title is empty.
 	if _, err := app.DB().NewQuery(
-		`UPDATE fts_cards SET description = 'budget notes'`,
+		`UPDATE fts_boards SET description = 'budget notes'`,
 	).Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -127,13 +127,13 @@ func TestSearchSourceDeclaresItsRegistration(t *testing.T) {
 	// The slug labels rows and the scope gates OAuth callers; a typo in either
 	// is invisible until an integration silently sees nothing.
 	src := searchSource()
-	if src.Slug != "cards" {
+	if src.Slug != "boards" {
 		t.Errorf("slug = %q", src.Slug)
 	}
 	if src.Search == nil {
 		t.Error("a source with no Search cannot produce rows")
 	}
-	if len(src.Scopes) != 1 || src.Scopes[0] != "cards:read" {
-		t.Errorf("scopes = %v, want [cards:read]", src.Scopes)
+	if len(src.Scopes) != 1 || src.Scopes[0] != "boards:read" {
+		t.Errorf("scopes = %v, want [boards:read]", src.Scopes)
 	}
 }

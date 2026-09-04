@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"testing"
@@ -26,7 +26,7 @@ func TestCardsCounters_RecountReflectsChecklistAndComments(t *testing.T) {
 
 	recountCard(env.app, env.card.Id)
 
-	fresh, err := env.app.FindRecordById("cards_cards", env.card.Id)
+	fresh, err := env.app.FindRecordById("boards_cards", env.card.Id)
 	if err != nil {
 		t.Fatalf("re-read card: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestCardsCounters_RecountReflectsAttachments(t *testing.T) {
 
 	recountCard(env.app, env.card.Id)
 
-	fresh, err := env.app.FindRecordById("cards_cards", env.card.Id)
+	fresh, err := env.app.FindRecordById("boards_cards", env.card.Id)
 	if err != nil {
 		t.Fatalf("re-read card: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestCardsCounters_RecountReflectsAttachments(t *testing.T) {
 	}
 	recountCard(env.app, env.card.Id)
 
-	fresh, err = env.app.FindRecordById("cards_cards", env.card.Id)
+	fresh, err = env.app.FindRecordById("boards_cards", env.card.Id)
 	if err != nil {
 		t.Fatalf("re-read card after delete: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestCardsCounters_RecountReflectsAttachments(t *testing.T) {
 func TestCardsCounters_RecountOverwritesClientSuppliedAttachmentCount(t *testing.T) {
 	env := setupCardsEnv(t)
 
-	card, err := env.app.FindRecordById("cards_cards", env.card.Id)
+	card, err := env.app.FindRecordById("boards_cards", env.card.Id)
 	if err != nil {
 		t.Fatalf("find card: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestCardsCounters_RecountOverwritesClientSuppliedAttachmentCount(t *testing
 
 	recountCard(env.app, env.card.Id)
 
-	fresh, err := env.app.FindRecordById("cards_cards", env.card.Id)
+	fresh, err := env.app.FindRecordById("boards_cards", env.card.Id)
 	if err != nil {
 		t.Fatalf("re-read card: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestCardsCounters_RecountFallsAfterDelete(t *testing.T) {
 	}
 	recountCard(env.app, env.card.Id)
 
-	fresh, err := env.app.FindRecordById("cards_cards", env.card.Id)
+	fresh, err := env.app.FindRecordById("boards_cards", env.card.Id)
 	if err != nil {
 		t.Fatalf("re-read card: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestCardsCounters_RecountOnMissingCardIsQuiet(t *testing.T) {
 func TestCardsCounters_RecountOverwritesClientSuppliedValues(t *testing.T) {
 	env := setupCardsEnv(t)
 
-	card, err := env.app.FindRecordById("cards_cards", env.card.Id)
+	card, err := env.app.FindRecordById("boards_cards", env.card.Id)
 	if err != nil {
 		t.Fatalf("find card: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestCardsCounters_RecountOverwritesClientSuppliedValues(t *testing.T) {
 
 	recountCard(env.app, env.card.Id)
 
-	fresh, err := env.app.FindRecordById("cards_cards", env.card.Id)
+	fresh, err := env.app.FindRecordById("boards_cards", env.card.Id)
 	if err != nil {
 		t.Fatalf("re-read card: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestCardsCounters_RecountOverwritesClientSuppliedValues(t *testing.T) {
 }
 
 // The wiring, not the arithmetic: an OnRecordAfterCreateSuccess on
-// cards_checklist_items must actually reach the card. Without this, every
+// boards_checklist_items must actually reach the card. Without this, every
 // assertion above could pass while the counters never updated in production,
 // because they all call recountCard by hand.
 //
@@ -170,14 +170,14 @@ func TestCardsCounters_RecountOverwritesClientSuppliedValues(t *testing.T) {
 func TestCardsCounters_CreateHookReachesTheCard(t *testing.T) {
 	env := setupCardsEnv(t)
 
-	env.app.OnRecordAfterCreateSuccess("cards_checklist_items").BindFunc(func(e *core.RecordEvent) error {
+	env.app.OnRecordAfterCreateSuccess("boards_checklist_items").BindFunc(func(e *core.RecordEvent) error {
 		recountCard(e.App, e.Record.GetString("card"))
 		return e.Next()
 	})
 
 	cardsChecklistItem(t, env.app, env.project, env.card, "one", "a0")
 
-	fresh, err := env.app.FindRecordById("cards_cards", env.card.Id)
+	fresh, err := env.app.FindRecordById("boards_cards", env.card.Id)
 	if err != nil {
 		t.Fatalf("re-read card: %v", err)
 	}

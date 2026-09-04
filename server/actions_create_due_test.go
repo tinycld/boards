@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"strings"
@@ -10,7 +10,7 @@ import (
 	"tinycld.org/core/automation"
 )
 
-// cards:create-card and cards:set-due-date — the two actions that need Go.
+// boards:create-card and boards:set-due-date — the two actions that need Go.
 // create-card because a record-op cannot derive `project` from the chosen
 // list, set-due-date for the date math.
 
@@ -279,7 +279,7 @@ func TestSetDueDate_RefusesBadInput(t *testing.T) {
 func cardsInList(t *testing.T, app core.App, listID, title string) *core.Record {
 	t.Helper()
 	rows, err := app.FindRecordsByFilter(
-		"cards_cards", "list = {:list} && title = {:title}", "", 0, 0,
+		"boards_cards", "list = {:list} && title = {:title}", "", 0, 0,
 		map[string]any{"list": listID, "title": title},
 	)
 	if err != nil {
@@ -296,7 +296,7 @@ func cardsInList(t *testing.T, app core.App, listID, title string) *core.Record 
 func cardsInListPrefix(t *testing.T, app core.App, listID, prefix string) *core.Record {
 	t.Helper()
 	rows, err := app.FindRecordsByFilter(
-		"cards_cards", "list = {:list} && title ~ {:prefix}", "", 0, 0,
+		"boards_cards", "list = {:list} && title ~ {:prefix}", "", 0, 0,
 		map[string]any{"list": listID, "prefix": prefix + "%"},
 	)
 	if err != nil {
@@ -314,7 +314,7 @@ func projectNextNumber(t *testing.T, app core.App, projectID string) int {
 	t.Helper()
 	var n int
 	err := app.DB().
-		NewQuery("SELECT COALESCE(next_number, 0) AS n FROM cards_projects WHERE id = {:id}").
+		NewQuery("SELECT COALESCE(next_number, 0) AS n FROM boards_projects WHERE id = {:id}").
 		Bind(dbx.Params{"id": projectID}).
 		Row(&n)
 	if err != nil {

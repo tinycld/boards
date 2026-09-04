@@ -22,11 +22,11 @@ async function freshBoard(page: Page): Promise<string> {
 }
 
 function peek(page: Page) {
-    return page.getByTestId('cards-card-peek')
+    return page.getByTestId('boards-card-peek')
 }
 
 function columnTotal(page: Page) {
-    return page.locator('[data-testid^="cards-column-estimate-"]').first()
+    return page.locator('[data-testid^="boards-column-estimate-"]').first()
 }
 
 async function openCard(page: Page, title: string) {
@@ -42,19 +42,19 @@ async function setEstimate(page: Page, title: string, points: string) {
 }
 
 async function openFilter(page: Page) {
-    await page.getByTestId('cards-filter-button').click()
-    await expect(page.getByTestId('cards-filter-panel')).toBeVisible()
+    await page.getByTestId('boards-filter-button').click()
+    await expect(page.getByTestId('boards-filter-panel')).toBeVisible()
 }
 
 async function closeFilter(page: Page) {
     await page.keyboard.press('Escape')
-    await expect(page.getByTestId('cards-filter-panel')).toHaveCount(0)
+    await expect(page.getByTestId('boards-filter-panel')).toHaveCount(0)
 }
 
-test.describe('Cards — estimates', () => {
+test.describe('Boards — estimates', () => {
     test.beforeEach(async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
     })
 
     test('sets an estimate, sums it in the column, records it, and clears it', async ({ page }) => {
@@ -64,7 +64,7 @@ test.describe('Cards — estimates', () => {
         const face = boardCard(page, ALPHA)
         // A new card has no estimate, and neither the face nor the column
         // header pretends otherwise.
-        await expect(face.getByTestId('cards-estimate-pill')).toHaveCount(0)
+        await expect(face.getByTestId('boards-estimate-pill')).toHaveCount(0)
         await expect(columnTotal(page)).toHaveCount(0)
 
         await openCard(page, ALPHA)
@@ -72,9 +72,9 @@ test.describe('Cards — estimates', () => {
         await page.getByRole('menuitem', { name: '5 pts', exact: true }).click()
 
         await expect(peek(page).getByRole('button', { name: /Estimate 5 pts/ })).toBeVisible()
-        await expect(face.getByTestId('cards-estimate-pill')).toHaveText('5 pts')
+        await expect(face.getByTestId('boards-estimate-pill')).toHaveText('5 pts')
         await expect(columnTotal(page)).toHaveText('5 pts')
-        await expect(peek(page).getByTestId('cards-activity-estimate')).toContainText(
+        await expect(peek(page).getByTestId('boards-activity-estimate')).toContainText(
             'set the estimate to 5 pts'
         )
         await closeCardPeek(page)
@@ -90,7 +90,7 @@ test.describe('Cards — estimates', () => {
             .click()
         await page.getByRole('menuitem', { name: 'Clear estimate' }).click()
         await expect(peek(page).getByRole('button', { name: 'Set estimate' })).toBeVisible()
-        await expect(face.getByTestId('cards-estimate-pill')).toHaveCount(0)
+        await expect(face.getByTestId('boards-estimate-pill')).toHaveCount(0)
         await expect(columnTotal(page)).toHaveText('3 pts')
     })
 
@@ -104,7 +104,7 @@ test.describe('Cards — estimates', () => {
 
         await openFilter(page)
         await page
-            .getByTestId('cards-filter-panel')
+            .getByTestId('boards-filter-panel')
             .getByRole('checkbox', { name: 'Unestimated' })
             .click()
         await closeFilter(page)
@@ -114,22 +114,22 @@ test.describe('Cards — estimates', () => {
         await expect(columnTotal(page)).toHaveCount(0)
 
         await page
-            .getByTestId('cards-filter-bar')
+            .getByTestId('boards-filter-bar')
             .getByRole('button', { name: 'Clear all' })
             .click()
         await expect(boardCard(page, BRAVO)).toBeVisible()
 
         // Ascending by estimate: the estimated card first, the unestimated last
         // — whichever direction, a card with nothing to sort by goes to the end.
-        await page.getByTestId('cards-sort-button').click()
-        await page.getByTestId('cards-sort-estimate').click()
+        await page.getByTestId('boards-sort-button').click()
+        await page.getByTestId('boards-sort-estimate').click()
         await expect.poll(() => cardsInColumn(page, 'To do')).toEqual([BRAVO, ALPHA])
 
-        await page.getByTestId('cards-view-list').click()
-        const row = page.getByTestId('cards-board-table').locator('[data-testid^="cards-row-"]', {
+        await page.getByTestId('boards-view-list').click()
+        const row = page.getByTestId('boards-table').locator('[data-testid^="boards-row-"]', {
             hasText: BRAVO,
         })
         await expect(row).toContainText('8 pts')
-        await page.getByTestId('cards-view-board').click()
+        await page.getByTestId('boards-view-board').click()
     })
 })

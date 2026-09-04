@@ -1,6 +1,6 @@
 /// <reference path="../../tinycld/server/pb_data/types.d.ts" />
 //
-// cards_cards.reporter — the person a question about the card goes to.
+// boards_cards.reporter — the person a question about the card goes to.
 //
 // Appended rather than edited into the create migration: that file is the
 // fixture M2a's Go suite applies, and PocketBase never re-runs an applied
@@ -43,7 +43,7 @@
 // as the empty state.
 //
 // NO CREATE-RULE PIN, and this is deliberate rather than an oversight. Sibling
-// collections pin their author field (cards_comments pins author to
+// collections pin their author field (boards_comments pins author to
 // @request.auth.id on create), so its absence here needs saying: a pin would
 // forbid the file-on-behalf case that justifies the field. The write is already
 // gated by the viaWriter clause — an owner/editor membership on the named
@@ -51,12 +51,12 @@
 // but a refusal.
 migrate(
     app => {
-        const cards = app.findCollectionByNameOrId('cards_cards')
+        const cards = app.findCollectionByNameOrId('boards_cards')
 
         cards.fields.addAt(
             cards.fields.length,
             new Field({
-                id: 'cards_cards_reporter',
+                id: 'boards_cards_reporter',
                 name: 'reporter',
                 type: 'relation',
                 required: false,
@@ -85,7 +85,7 @@ migrate(
         // an anonymous placeholder.
         app.db()
             .newQuery(
-                "UPDATE cards_cards SET reporter = created_by WHERE reporter = '' AND created_by != ''"
+                "UPDATE boards_cards SET reporter = created_by WHERE reporter = '' AND created_by != ''"
             )
             .execute()
     },
@@ -95,8 +95,8 @@ migrate(
         // to restore them to — core's 1940000000_backfill_and_require_users_role
         // documents the same convention. Dropping the column discards the
         // values regardless.
-        const cards = app.findCollectionByNameOrId('cards_cards')
-        cards.fields.removeById('cards_cards_reporter')
+        const cards = app.findCollectionByNameOrId('boards_cards')
+        cards.fields.removeById('boards_cards_reporter')
         app.save(cards)
     }
 )

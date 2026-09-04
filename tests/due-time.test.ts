@@ -7,7 +7,7 @@ import {
     parseDueValue,
     parseTimeText,
     timeOf,
-} from '../tinycld/cards/lib/due-time'
+} from '../tinycld/boards/lib/due-time'
 
 describe('parseDayValue', () => {
     it('rebuilds the stored day at local midnight in either spelling', () => {

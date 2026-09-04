@@ -1,11 +1,11 @@
-package cards
+package boards
 
 import (
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tools/types"
 )
 
-// registerCommentEditedAt owns cards_comments.edited_at — the timestamp the
+// registerCommentEditedAt owns boards_comments.edited_at — the timestamp the
 // "(edited)" marker renders from.
 //
 // The marker used to be inferred from `updated != created`, and that inference
@@ -34,7 +34,7 @@ import (
 // Bound against core.App rather than *pocketbase.PocketBase so the test suite
 // binds THIS function, not a restatement of it.
 func registerCommentEditedAt(app core.App) {
-	app.OnRecordUpdate("cards_comments").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordUpdate("boards_comments").BindFunc(func(e *core.RecordEvent) error {
 		prior := e.Record.Original().GetString("body")
 		if prior == "" {
 			return e.Next()

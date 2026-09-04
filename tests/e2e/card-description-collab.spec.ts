@@ -20,7 +20,7 @@ const CARD_TITLE = 'Ship the release'
 
 /** The description editor's typing surface. */
 function descriptionEditor(page: Page) {
-    return page.getByTestId('cards-description-editor').locator('.ProseMirror')
+    return page.getByTestId('boards-description-editor').locator('.ProseMirror')
 }
 
 /**
@@ -55,8 +55,8 @@ async function descriptionText(page: Page): Promise<string> {
         // edits it, and only then is there a .ProseMirror to read. A viewer
         // never sees an editor at all.
         const editor =
-            document.querySelector('[data-testid="cards-description-editor"] .ProseMirror') ??
-            document.querySelector('[data-testid="cards-description-read"]')
+            document.querySelector('[data-testid="boards-description-editor"] .ProseMirror') ??
+            document.querySelector('[data-testid="boards-description-read"]')
         if (!editor) return ''
         const clone = editor.cloneNode(true) as HTMLElement
         for (const caret of clone.querySelectorAll(
@@ -102,11 +102,11 @@ async function typeDescription(page: Page, text: string) {
     }).toPass({ timeout: 15_000 })
 }
 
-test.describe('Cards — collaborative descriptions', () => {
+test.describe('Boards — collaborative descriptions', () => {
     test('one person types and the other sees it, then it persists', async ({ page }) => {
         const boardName = `collab-${Date.now()}`
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
 
@@ -118,7 +118,7 @@ test.describe('Cards — collaborative descriptions', () => {
         // board exists.
         const { page: bobPage, close } = await signInAsCollaborator(page)
         try {
-            await navigateToPackage(bobPage, 'cards')
+            await navigateToPackage(bobPage, 'boards')
             await openBoard(bobPage, boardName, CARD_TITLE)
             await openCard(bobPage, CARD_TITLE)
             await openCard(page, CARD_TITLE)
@@ -151,7 +151,7 @@ test.describe('Cards — collaborative descriptions', () => {
             await navigateToPackage(bobPage, 'settings')
             await page.keyboard.press('Escape')
             await navigateToPackage(page, 'settings')
-            await navigateToPackage(page, 'cards')
+            await navigateToPackage(page, 'boards')
             await openBoard(page, boardName, CARD_TITLE)
             await openCard(page, CARD_TITLE)
             await expectDescriptionToContain(page, 'Shipping on Friday.', 20_000)
@@ -171,7 +171,7 @@ test.describe('Cards — collaborative descriptions', () => {
         // that matters here.
         const boardName = `carets-${Date.now()}`
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
 
@@ -181,7 +181,7 @@ test.describe('Cards — collaborative descriptions', () => {
         // Share BEFORE signing the collaborator in — see shareBoard's doc.
         const { page: bobPage, close } = await signInAsCollaborator(page)
         try {
-            await navigateToPackage(bobPage, 'cards')
+            await navigateToPackage(bobPage, 'boards')
             await openBoard(bobPage, boardName, CARD_TITLE)
             await openCard(bobPage, CARD_TITLE)
             await openCard(page, CARD_TITLE)
@@ -246,7 +246,7 @@ test.describe('Cards — collaborative descriptions', () => {
         // every existing spec (all peek-based) stayed green.
         const boardName = `collab-page-${Date.now()}`
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
 
@@ -259,7 +259,7 @@ test.describe('Cards — collaborative descriptions', () => {
             // Bob stays on the peek; the owner expands to the full page. One
             // of each proves the two surfaces share a document rather than
             // merely each working alone.
-            await navigateToPackage(bobPage, 'cards')
+            await navigateToPackage(bobPage, 'boards')
             await openBoard(bobPage, boardName, CARD_TITLE)
             await openCard(bobPage, CARD_TITLE)
 
@@ -270,7 +270,7 @@ test.describe('Cards — collaborative descriptions', () => {
             // Either spelling of a card route: expanding mints the KEY
             // (OTTER-1) when the board has one, and falls back to the record id
             // when it does not.
-            await expect(page).toHaveURL(/\/cards\/[A-Za-z0-9-]+/)
+            await expect(page).toHaveURL(/\/boards\/[A-Za-z0-9-]+/)
             await expect(page.getByRole('button', { name: 'Back to board' })).toBeVisible()
             // The collaborative editor is a ProseMirror surface; the fallback
             // path is a plain text input, so this is the load-bearing check.
@@ -283,7 +283,7 @@ test.describe('Cards — collaborative descriptions', () => {
             // behind the page with an editor of its own.
             await page.getByRole('button', { name: 'Edit description' }).first().click()
             const pageEditor = page
-                .getByTestId('cards-description-editor')
+                .getByTestId('boards-description-editor')
                 .locator('.ProseMirror:visible')
                 .first()
             await expect(pageEditor).toBeVisible()
@@ -308,7 +308,7 @@ test.describe('Cards — collaborative descriptions', () => {
         // and this checks the UI does not invite the attempt in the first place.
         const boardName = `collab-ro-${Date.now()}`
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
@@ -323,7 +323,7 @@ test.describe('Cards — collaborative descriptions', () => {
         // alive. This board's room was created before the description
         // existed, so a viewer joining an otherwise-idle room is handed a
         // fragment that never learned the prose — an empty editor, even
-        // though cards_cards.description holds the right text (verified
+        // though boards_cards.description holds the right text (verified
         // directly against the API). Keeping a writer in the document is
         // what makes the populated state deterministic, and a populated
         // description is the precondition this read-only gate needs.
@@ -335,7 +335,7 @@ test.describe('Cards — collaborative descriptions', () => {
         // Share BEFORE signing the collaborator in — see shareBoard's doc.
         const { page: bobPage, close } = await signInAsCollaborator(page)
         try {
-            await navigateToPackage(bobPage, 'cards')
+            await navigateToPackage(bobPage, 'boards')
             await openBoard(bobPage, boardName, CARD_TITLE)
             await openCard(bobPage, CARD_TITLE)
 
@@ -345,7 +345,7 @@ test.describe('Cards — collaborative descriptions', () => {
             // markdown until someone edits it, so for a viewer the assertion is
             // stronger than the old read-only editor: there is no editor at
             // all, and no affordance to open one.
-            await expect(bobPage.getByTestId('cards-description-read')).toBeVisible()
+            await expect(bobPage.getByTestId('boards-description-read')).toBeVisible()
             await expect(descriptionEditor(bobPage)).toHaveCount(0)
             await expect(bobPage.getByRole('button', { name: 'Edit description' })).toHaveCount(0)
         } finally {

@@ -42,15 +42,15 @@ async function openCard(page: Page, title: string) {
 }
 
 function composer(page: Page) {
-    return page.getByTestId('cards-comment-composer')
+    return page.getByTestId('boards-comment-composer')
 }
 
 function popover(page: Page) {
-    return page.getByTestId('cards-mention-popover')
+    return page.getByTestId('boards-mention-popover')
 }
 
 function descriptionEditor(page: Page) {
-    return page.getByTestId('cards-description-editor').locator('.ProseMirror')
+    return page.getByTestId('boards-description-editor').locator('.ProseMirror')
 }
 
 /**
@@ -122,7 +122,7 @@ async function addMemberToBoard(page: Page, boardName: string, email: string, ro
 test.describe('card mentions', () => {
     test('mentioning a member from a comment notifies them', async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
 
         const boardName = `mention-${Date.now()}`
         await createBoard(page, boardName)
@@ -137,7 +137,7 @@ test.describe('card mentions', () => {
         // remove — and the flow under test is the mention, not the invite.
         const { page: bobPage, close } = await signInAsCollaborator(page)
         try {
-            await navigateToPackage(bobPage, 'cards')
+            await navigateToPackage(bobPage, 'boards')
             await expect(bell(bobPage)).toBeVisible()
             // The account is shared across the run and accumulates
             // notifications, so the assertion below measures a CHANGE from
@@ -204,7 +204,7 @@ test.describe('card mentions', () => {
     // A mention in a DESCRIPTION has to survive the round trip through stored
     // markdown, and that is a genuinely separate path from the comment above: a
     // description is a collaborative Yjs document the server serializes back to
-    // `cards_cards.description`, so the mention only persists if the editor
+    // `boards_cards.description`, so the mention only persists if the editor
     // node serializes to the wire token. It did not — the node rendered the
     // name, contributed NOTHING to the markdown, and the mention silently
     // vanished on the next load while every other edit to the same description
@@ -212,7 +212,7 @@ test.describe('card mentions', () => {
     // token's own parsing, not what the editor writes.
     test('a mention in a description survives a reload', async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
 
         const boardName = `mentionpersist-${Date.now()}`
         await createBoard(page, boardName)
@@ -221,7 +221,7 @@ test.describe('card mentions', () => {
         const { user: bob, close } = await createInvitedUser(page, 'cardmentpersist')
         try {
             await login(page)
-            await navigateToPackage(page, 'cards')
+            await navigateToPackage(page, 'boards')
             await openBoard(page, boardName)
             await addMemberToBoard(page, boardName, bob.email, 'Editor')
 
@@ -273,7 +273,7 @@ test.describe('card mentions', () => {
             // Via settings, not another package: CI assembles cards alone, so
             // a mail rail link never exists there.
             await navigateToPackage(page, 'settings')
-            await navigateToPackage(page, 'cards')
+            await navigateToPackage(page, 'boards')
             await openBoard(page, boardName)
             await openCard(page, CARD_TITLE)
             // Reopened: a card shows markdown until edited, and this asserts on
@@ -299,7 +299,7 @@ test.describe('card mentions', () => {
     // ABSENT rather than disabled, matching the sharing spec's convention.
     test('a viewer gets no mention picker', async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
 
         const boardName = `mentionview-${Date.now()}`
         await createBoard(page, boardName)
@@ -312,14 +312,14 @@ test.describe('card mentions', () => {
         } = await createInvitedUser(page, 'cardmentview')
         try {
             await login(page)
-            await navigateToPackage(page, 'cards')
+            await navigateToPackage(page, 'boards')
             await openBoard(page, boardName)
 
             await addMemberToBoard(page, boardName, viewer.email, 'Viewer')
 
             // A viewer has no comment composer at all, so there is nowhere to
             // type `@` — the affordance is absent rather than gated.
-            await navigateToPackage(viewerPage, 'cards')
+            await navigateToPackage(viewerPage, 'boards')
             await expect(boardCard(viewerPage, CARD_TITLE)).toBeVisible()
             await boardCard(viewerPage, CARD_TITLE).click()
             await expect(composer(viewerPage)).toHaveCount(0)

@@ -3,7 +3,7 @@ import {
     buildCommentMentionRows,
     mentionedUserIds,
     renderMentionTokens,
-} from '../tinycld/cards/lib/mention-text'
+} from '../tinycld/boards/lib/mention-text'
 
 const NAMES = [
     { userId: 'u1', label: 'Ada Lovelace' },
@@ -163,9 +163,9 @@ describe('buildCommentMentionRows', () => {
     it('targets the card and leaves drive_item empty', () => {
         const [row] = buildCommentMentionRows({ ...base, body: '[[@u1]]' })
         expect(row).toMatchObject({
-            comment_collection: 'cards_comments',
+            comment_collection: 'boards_comments',
             comment_record: 'c1',
-            target_collection: 'cards_cards',
+            target_collection: 'boards_cards',
             target_record: 'card1',
             drive_item: '',
         })

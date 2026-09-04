@@ -7,12 +7,12 @@ import {
     type TriggerItem,
 } from '@tinycld/core/lib/editor/rich/triggers'
 import { describe, expect, it } from 'vitest'
-import { mentionedUserIds, renderMentionTokens } from '~/tinycld/cards/lib/mention-text'
+import { mentionedUserIds, renderMentionTokens } from '~/tinycld/boards/lib/mention-text'
 
 // The mention trigger's CONFIG is declarative — `allItems` + an
 // `insertTemplate` — so what it inserts can be asserted without mounting the
 // hook, an editor, or a WebView. That matters more than usual here: the native
-// picker cannot be reached by cards' e2e suite, which runs on web, so these
+// picker cannot be reached by boards' e2e suite, which runs on web, so these
 // assertions are what stand behind the token format on a phone.
 
 /** The template useMentionTrigger ships. Kept verbatim, trailing space and all. */
@@ -50,9 +50,9 @@ describe('the mention insert template', () => {
 })
 
 describe('the candidate filter', () => {
-    // Cards used to own this filter inline; it moved to core so the web hook
+    // Boards used to own this filter inline; it moved to core so the web hook
     // and the in-WebView page cannot rank differently. These pin the behaviour
-    // cards depends on.
+    // boards depends on.
     it('finds someone by the start of their name', () => {
         expect(filterTriggerItems(MEMBERS, 'ada', 6).map(m => m.id)).toEqual(['ada000000000001'])
     })

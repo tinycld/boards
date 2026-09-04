@@ -1,4 +1,4 @@
-module tinycld.org/packages/cards/cli
+module tinycld.org/packages/boards/cli
 
 go 1.26.3
 

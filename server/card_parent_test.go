@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"strings"
@@ -24,7 +24,7 @@ func setupParentEnv(t *testing.T) *cardsEnv {
 // find the family a card is leaving.
 func setParent(t *testing.T, env *cardsEnv, cardID, parentID string) error {
 	t.Helper()
-	card, err := env.app.FindRecordById("cards_cards", cardID)
+	card, err := env.app.FindRecordById("boards_cards", cardID)
 	if err != nil {
 		t.Fatalf("load card: %v", err)
 	}
@@ -34,7 +34,7 @@ func setParent(t *testing.T, env *cardsEnv, cardID, parentID string) error {
 
 func rollup(t *testing.T, env *cardsEnv, cardID string) (total, done int) {
 	t.Helper()
-	card, err := env.app.FindRecordById("cards_cards", cardID)
+	card, err := env.app.FindRecordById("boards_cards", cardID)
 	if err != nil {
 		t.Fatalf("load card: %v", err)
 	}
@@ -155,12 +155,12 @@ func TestCardParentGuard_AnOrphanStaysEditable(t *testing.T) {
 		t.Fatalf("parent: %v", err)
 	}
 
-	parent, _ := env.app.FindRecordById("cards_cards", env.card.Id)
+	parent, _ := env.app.FindRecordById("boards_cards", env.card.Id)
 	if err := env.app.Delete(parent); err != nil {
 		t.Fatalf("delete the parent: %v", err)
 	}
 
-	orphan, err := env.app.FindRecordById("cards_cards", child.Id)
+	orphan, err := env.app.FindRecordById("boards_cards", child.Id)
 	if err != nil {
 		t.Fatalf("reload the orphan: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestCardParentRollup_FollowsAChildIntoADoneList(t *testing.T) {
 		t.Fatalf("subtask_done = %d before the move, want 0", got)
 	}
 
-	fresh, _ := env.app.FindRecordById("cards_cards", child.Id)
+	fresh, _ := env.app.FindRecordById("boards_cards", child.Id)
 	fresh.Set("list", done.Id)
 	if err := env.app.Save(fresh); err != nil {
 		t.Fatalf("move the child: %v", err)
@@ -252,7 +252,7 @@ func TestCardParentRollup_FallsWhenAChildIsDeleted(t *testing.T) {
 		t.Fatalf("subtask_total = %d before the delete, want 1", total)
 	}
 
-	fresh, _ := env.app.FindRecordById("cards_cards", child.Id)
+	fresh, _ := env.app.FindRecordById("boards_cards", child.Id)
 	if err := env.app.Delete(fresh); err != nil {
 		t.Fatalf("delete the child: %v", err)
 	}
@@ -272,12 +272,12 @@ func TestCardParentRollup_DeletingAParentLeavesItsChildren(t *testing.T) {
 		t.Fatalf("parent: %v", err)
 	}
 
-	parent, _ := env.app.FindRecordById("cards_cards", env.card.Id)
+	parent, _ := env.app.FindRecordById("boards_cards", env.card.Id)
 	if err := env.app.Delete(parent); err != nil {
 		t.Fatalf("delete the parent: %v", err)
 	}
 
-	if _, err := env.app.FindRecordById("cards_cards", child.Id); err != nil {
+	if _, err := env.app.FindRecordById("boards_cards", child.Id); err != nil {
 		t.Fatalf("the child was destroyed with its parent: %v", err)
 	}
 }
@@ -288,7 +288,7 @@ func TestCardParentRollup_OverwritesAClientSuppliedCount(t *testing.T) {
 	env := setupParentEnv(t)
 	child := cardsCard(t, env.app, env.project, env.list, "child", "a1", env.owner)
 
-	card, _ := env.app.FindRecordById("cards_cards", env.card.Id)
+	card, _ := env.app.FindRecordById("boards_cards", env.card.Id)
 	card.Set("subtask_total", 99)
 	card.Set("parent", "")
 	if err := env.app.Save(card); err != nil {

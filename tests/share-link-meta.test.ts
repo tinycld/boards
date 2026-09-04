@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { toRejectionReason, toSignInRole } from '~/tinycld/cards/hooks/useShareLinkMeta'
+import { toRejectionReason, toSignInRole } from '~/tinycld/boards/hooks/useShareLinkMeta'
 
 // The two pure seams of useShareLinkMeta, where the metadata endpoint's answer
 // becomes what the visitor sees.
 //
-// These matter more than their size suggests. cards_share_links is owner-only
+// These matter more than their size suggests. boards_share_links is owner-only
 // by rule, so this endpoint is the ONLY thing that can tell a link-holder which
 // board they are looking at and what their link offers — a client-side query
 // resolves correctly only for people who already have access, which is nobody

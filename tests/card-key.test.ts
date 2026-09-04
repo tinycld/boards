@@ -4,7 +4,7 @@ import {
     formatCardKey,
     MAX_SLUG_LENGTH,
     parseCardKey,
-} from '../tinycld/cards/lib/card-key'
+} from '../tinycld/boards/lib/card-key'
 
 // The key grammar. cli/key.go implements the same one in Go with no shared
 // fixture between them, so a change here needs a matching change in

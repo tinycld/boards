@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"testing"
@@ -117,7 +117,7 @@ func setupMentionFlushEnv(t *testing.T) *mentionFlushEnv {
 
 	rlstest.Apply(t, app, rlstest.MigrationsDir(t, "../pb-migrations"))
 
-	// NotifyUser writes here; cards' own migrations do not create it (it is
+	// NotifyUser writes here; boards' own migrations do not create it (it is
 	// core's), so build the shape the notify path uses.
 	notifications := core.NewBaseCollection("notifications")
 	notifications.Fields.Add(&core.RelationField{
@@ -170,7 +170,7 @@ func TestDescriptionMentions_NotifiesNewlyMentionedMember(t *testing.T) {
 		t.Fatalf("expected 1 notification, got %d", len(got))
 	}
 	n := got[0]
-	if n.GetString("package") != "cards" {
+	if n.GetString("package") != "boards" {
 		t.Errorf("package = %q, want cards", n.GetString("package"))
 	}
 	if n.GetString("type") != descriptionMentionType {
@@ -180,7 +180,7 @@ func TestDescriptionMentions_NotifiesNewlyMentionedMember(t *testing.T) {
 	if n.GetString("body") != "Ship the thing" {
 		t.Errorf("body = %q, want the card title", n.GetString("body"))
 	}
-	if want := "/cards?focused=" + env.card.Id; !containsSub(n.GetString("url"), want) {
+	if want := "/boards?focused=" + env.card.Id; !containsSub(n.GetString("url"), want) {
 		t.Errorf("url = %q, want it to contain %q", n.GetString("url"), want)
 	}
 }

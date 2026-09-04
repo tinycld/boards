@@ -5,7 +5,7 @@ import {
     isListCategory,
     LIST_CATEGORIES,
     normalizeListCategory,
-} from '../tinycld/cards/lib/list-category'
+} from '../tinycld/boards/lib/list-category'
 
 describe('normalizeListCategory', () => {
     it('reads a stored value back', () => {

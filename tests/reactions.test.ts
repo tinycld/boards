@@ -5,7 +5,7 @@ import {
     REACTION_KEYS,
     REACTION_LABELS,
     REACTION_PALETTE,
-} from '../tinycld/cards/lib/reactions'
+} from '../tinycld/boards/lib/reactions'
 
 function row(id: string, comment: string, user: string, emoji: string) {
     return { id, comment, user, emoji }

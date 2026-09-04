@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { visibilityChanges } from '../tinycld/cards/lib/membership-visibility'
+import { visibilityChanges } from '../tinycld/boards/lib/membership-visibility'
 
 // The decision table behind useMembershipVisibilitySync: which projects to
 // pull in (granted) or drop out (revoked) when MY membership set changes. The

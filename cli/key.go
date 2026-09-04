@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// Card keys — the Go half of tinycld/cards/lib/card-key.ts.
+// Card keys — the Go half of tinycld/boards/lib/card-key.ts.
 //
 // Two implementations of one grammar, which is the same bargain rank.go makes
 // with lib/rank.ts, and it is worth taking here for the same reason: a CLI

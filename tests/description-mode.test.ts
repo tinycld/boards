@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { descriptionMode } from '../tinycld/cards/lib/description-mode'
+import { descriptionMode } from '../tinycld/boards/lib/description-mode'
 
 // Which write path a description uses latches forward: never collab back to
 // mutation. The rules are small but the failure they prevent is not — two live

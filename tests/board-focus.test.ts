@@ -4,8 +4,8 @@ import {
     composerTargetColumnId,
     scrollOffsetFor,
     targetColumnForMove,
-} from '../tinycld/cards/lib/board-focus'
-import type { BoardCardView, BoardProject } from '../tinycld/cards/types'
+} from '../tinycld/boards/lib/board-focus'
+import type { BoardCardView, BoardProject } from '../tinycld/boards/types'
 
 function card(id: string, listId: string, position: string): BoardCardView {
     return {

@@ -30,7 +30,7 @@ import { addCard, boardCard, createBoard, openBoard } from './helpers'
 const CARD_TITLE = 'Press release draft'
 
 function memberRow(page: Page, text: string) {
-    return page.getByTestId(/^cards-member-row-/).filter({ hasText: text })
+    return page.getByTestId(/^boards-member-row-/).filter({ hasText: text })
 }
 
 async function openShareDialog(page: Page, boardName: string) {
@@ -43,10 +43,10 @@ async function closeShareDialog(page: Page) {
     await expect(page.getByRole('button', { name: 'Done', exact: true })).toHaveCount(0)
 }
 
-test.describe('Cards — board sharing and role gates', () => {
+test.describe('Boards — board sharing and role gates', () => {
     test('viewer and commentor gates, and the last-owner lock', async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         const boardName = `share-${Date.now()}`
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
@@ -69,7 +69,7 @@ test.describe('Cards — board sharing and role gates', () => {
         // down — the hard navigation this suite forbids.
         await closeShareDialog(page)
         await navigateToPackage(page, 'settings')
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         await openBoard(page, boardName, CARD_TITLE)
         await openShareDialog(page, boardName)
         await expect(memberRow(page, TEST_COLLABORATOR_EMAIL).getByText('Viewer')).toBeVisible()
@@ -86,7 +86,7 @@ test.describe('Cards — board sharing and role gates', () => {
             // cards screen restores on entry is not necessarily this one —
             // landing on another spec's board would assert these gates against
             // the wrong roster.
-            await navigateToPackage(bobPage, 'cards')
+            await navigateToPackage(bobPage, 'boards')
             await openBoard(bobPage, boardName, CARD_TITLE)
             await expect(boardCard(bobPage, CARD_TITLE)).toBeVisible()
             await expect(bobPage.getByText('Add card', { exact: true })).toHaveCount(0)
@@ -95,8 +95,8 @@ test.describe('Cards — board sharing and role gates', () => {
             // The header names the read-only role — the positive signal beside
             // all the absent-affordance ones. The owner's own header (positive
             // control) never shows it.
-            await expect(bobPage.getByTestId('cards-role-chip')).toHaveText('Viewer')
-            await expect(page.getByTestId('cards-role-chip')).toHaveCount(0)
+            await expect(bobPage.getByTestId('boards-role-chip')).toHaveText('Viewer')
+            await expect(page.getByTestId('boards-role-chip')).toHaveCount(0)
 
             // Card density is a VIEW preference, not a mutation, so it is one
             // of the few controls a viewer keeps — and the one who most wants
@@ -104,7 +104,7 @@ test.describe('Cards — board sharing and role gates', () => {
             // this is the only place a real viewer session exists; a regression
             // that folded the toggle into the owner-only BoardMenu would pass
             // every other spec.
-            const bobDensity = bobPage.getByTestId('cards-density-toggle')
+            const bobDensity = bobPage.getByTestId('boards-density-toggle')
             await expect(bobDensity).toBeVisible()
             await bobDensity.click()
             await expect(bobDensity).toHaveAttribute('aria-label', 'Show card details')
@@ -123,14 +123,14 @@ test.describe('Cards — board sharing and role gates', () => {
             // is now unreachable: server/activity.go writes a `created` row
             // for every card, so the feed is never empty and the empty-state
             // branch cannot render. Assert the panel itself.
-            await expect(bobPage.getByTestId('cards-card-peek')).toBeVisible()
+            await expect(bobPage.getByTestId('boards-card-peek')).toBeVisible()
             await expect(
-                bobPage.getByTestId('cards-card-peek').getByText('Activity', { exact: true })
+                bobPage.getByTestId('boards-card-peek').getByText('Activity', { exact: true })
             ).toBeVisible()
             await expect(bobPage.getByRole('button', { name: 'Move to Doing' })).toHaveCount(0)
-            await expect(bobPage.getByTestId('cards-comment-composer')).toHaveCount(0)
+            await expect(bobPage.getByTestId('boards-comment-composer')).toHaveCount(0)
             await bobPage.keyboard.press('Escape')
-            await expect(bobPage.getByTestId('cards-card-peek')).toHaveCount(0)
+            await expect(bobPage.getByTestId('boards-card-peek')).toHaveCount(0)
 
             // The roster is readable for a non-guest member, but not manageable.
             await openShareDialog(bobPage, boardName)
@@ -153,17 +153,17 @@ test.describe('Cards — board sharing and role gates', () => {
             // Remount the board screen instead of leaning on realtime delivery
             // timing — same guarantee as a reload, without tearing down the SPA.
             await navigateToPackage(bobPage, 'settings')
-            await navigateToPackage(bobPage, 'cards')
+            await navigateToPackage(bobPage, 'boards')
             await openBoard(bobPage, boardName, CARD_TITLE)
             await expect(boardCard(bobPage, CARD_TITLE)).toBeVisible()
-            await expect(bobPage.getByTestId('cards-role-chip')).toHaveText('Commentor')
+            await expect(bobPage.getByTestId('boards-role-chip')).toHaveText('Commentor')
             await expect(bobPage.getByText('Add card', { exact: true })).toHaveCount(0)
 
             await boardCard(bobPage, CARD_TITLE).click()
             // The composer collapses until first use; the editor behind it is
             // a contenteditable, so the body is TYPED (fill would insert
             // literal text the markdown serializer escapes).
-            const composer = bobPage.getByTestId('cards-comment-composer')
+            const composer = bobPage.getByTestId('boards-comment-composer')
             await composer.getByRole('button', { name: 'Write a comment' }).click()
             const composerEditor = composer.locator('.ProseMirror')
             await expect(composerEditor).toBeVisible()
@@ -178,7 +178,7 @@ test.describe('Cards — board sharing and role gates', () => {
             }).toPass({ timeout: 15_000 })
             await bobPage.getByRole('button', { name: 'Send', exact: true }).click()
             await expect(
-                bobPage.getByTestId('cards-card-peek').getByText('Looks good — shipping it.')
+                bobPage.getByTestId('boards-card-peek').getByText('Looks good — shipping it.')
             ).toBeVisible()
             await expect(bobPage.getByRole('button', { name: 'Move to Doing' })).toHaveCount(0)
 

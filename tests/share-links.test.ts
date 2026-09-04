@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { ROLE_OPTIONS, SHARE_LINK_ROLE_OPTIONS } from '~/tinycld/cards/components/sharing/roles'
+import { ROLE_OPTIONS, SHARE_LINK_ROLE_OPTIONS } from '~/tinycld/boards/components/sharing/roles'
 import {
     DEFAULT_SHARE_LINK_EXPIRY_DAYS,
     isExpired,
     SHARE_LINK_EXPIRY_OPTIONS,
-} from '~/tinycld/cards/hooks/useShareLinks'
+} from '~/tinycld/boards/hooks/useShareLinks'
 
 describe('SHARE_LINK_ROLE_OPTIONS', () => {
     it('offers every role a link may grant', () => {
@@ -13,12 +13,12 @@ describe('SHARE_LINK_ROLE_OPTIONS', () => {
         // list omits commentor and both creation sites hardcode viewer — which
         // makes drive's entire email-OTP sign-in flow unreachable from drive's
         // own UI, since a viewer link is precisely the one that flow refuses.
-        // Cards must be able to mint all three.
+        // Boards must be able to mint all three.
         expect(SHARE_LINK_ROLE_OPTIONS.map(o => o.value)).toEqual(['editor', 'commentor', 'viewer'])
     })
 
     it('never offers owner', () => {
-        // cards_share_links.role's enum has no owner value: a link must never
+        // boards_share_links.role's enum has no owner value: a link must never
         // confer ownership of a board. The server rejects it too.
         expect(SHARE_LINK_ROLE_OPTIONS.some(o => o.value === 'owner')).toBe(false)
     })

@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"crypto/rand"
@@ -21,7 +21,7 @@ import (
 // owner-only gate on minting a credential that widens access.
 
 // Link roles. Deliberately NOT reusing core's sharelink.Claims helpers, whose
-// CanComment admits `viewer` by drive's product decision. Cards' shipped
+// CanComment admits `viewer` by drive's product decision. Boards' shipped
 // viaCommenter names owner|editor|commentor and excludes viewer BY OMISSION —
 // the same discipline lib/permissions.ts documents — so the two vocabularies
 // are genuinely different and unifying them would silently widen one.
@@ -33,7 +33,7 @@ const (
 
 // validShareRole reports whether a role may be minted onto a link.
 //
-// `owner` is absent from cards_share_links.role's enum on purpose: a link must
+// `owner` is absent from boards_share_links.role's enum on purpose: a link must
 // never confer ownership of a board. Rejected explicitly rather than coerced to
 // viewer — drive silently downgrades an unknown role, which is how a UI bug
 // ships as "the link works, just not the way you asked".
@@ -93,7 +93,7 @@ func isProjectOwner(app core.App, projectID, userID string) bool {
 	if projectID == "" || userID == "" {
 		return false
 	}
-	n, err := app.CountRecords("cards_project_members",
+	n, err := app.CountRecords("boards_project_members",
 		dbx.HashExp{"project": projectID, "user": userID, "role": "owner"})
 	return err == nil && n > 0
 }

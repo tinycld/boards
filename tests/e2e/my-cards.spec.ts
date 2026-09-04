@@ -20,7 +20,7 @@ async function freshBoard(page: Page): Promise<string> {
 }
 
 function peek(page: Page) {
-    return page.getByTestId('cards-card-peek')
+    return page.getByTestId('boards-card-peek')
 }
 
 async function assignSelf(page: Page, title: string) {
@@ -38,14 +38,14 @@ async function assignSelf(page: Page, title: string) {
 }
 
 async function openMyCards(page: Page) {
-    await page.getByTestId('cards-sidebar-my-cards').click()
-    await expect(page.getByTestId('cards-my-cards')).toBeVisible()
+    await page.getByTestId('boards-sidebar-my-cards').click()
+    await expect(page.getByTestId('boards-my-cards')).toBeVisible()
 }
 
-test.describe('Cards — My cards', () => {
+test.describe('Boards — My cards', () => {
     test.beforeEach(async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
     })
 
     test('lists assigned cards with their board and list, and searches', async ({ page }) => {
@@ -57,7 +57,7 @@ test.describe('Cards — My cards', () => {
         await openMyCards(page)
         // Scoped by board name: earlier runs leave boards carrying the same
         // card title, and a row shows its board.
-        const rows = page.locator('[data-testid^="cards-row-"]')
+        const rows = page.locator('[data-testid^="boards-row-"]')
         await expect(rows.filter({ hasText: MINE }).filter({ hasText: name })).toHaveCount(1)
         await expect(rows.filter({ hasText: OTHER })).toHaveCount(0)
         const row = rows.filter({ hasText: MINE }).filter({ hasText: name })
@@ -67,8 +67,8 @@ test.describe('Cards — My cards', () => {
         // All cards shows the unassigned one too. Searched first: All lists
         // every card on every board in the database and the list is
         // virtualized, so an unsearched row may not be in the DOM at all.
-        await page.getByTestId('cards-my-cards-mode-all').click()
-        await page.getByTestId('cards-my-cards-search').fill('someone else')
+        await page.getByTestId('boards-my-boards-mode-all').click()
+        await page.getByTestId('boards-my-boards-search').fill('someone else')
         await expect(rows.filter({ hasText: OTHER }).filter({ hasText: name })).toHaveCount(1)
         await expect(rows.filter({ hasText: MINE })).toHaveCount(0)
     })
@@ -80,7 +80,7 @@ test.describe('Cards — My cards', () => {
 
         await openMyCards(page)
         await page
-            .locator('[data-testid^="cards-row-"]')
+            .locator('[data-testid^="boards-row-"]')
             .filter({ hasText: MINE })
             .filter({ hasText: name })
             .click()

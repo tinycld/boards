@@ -12,21 +12,6 @@ import (
 	"tinycld.org/cli/ui"
 )
 
-func newBoardCmd(c *client.Client) *cobra.Command {
-	board := &cobra.Command{
-		Use:     "board",
-		Short:   "Boards: list, inspect, archive, remove",
-		Aliases: []string{"boards"},
-	}
-	board.AddCommand(
-		newBoardListCmd(c),
-		newBoardViewCmd(c),
-		newBoardArchiveCmd(c),
-		newBoardRemoveCmd(c),
-	)
-	return board
-}
-
 func newBoardArchiveCmd(c *client.Client) *cobra.Command {
 	var unset bool
 	cmd := &cobra.Command{
@@ -97,7 +82,7 @@ func newBoardRemoveCmd(c *client.Client) *cobra.Command {
 			}
 			question := fmt.Sprintf(
 				"PERMANENTLY delete %q with its %d list(s) and %d card(s), including every comment and attachment? "+
-					"(`cards board archive` hides it reversibly)", p.Name, len(lists), cardCount)
+					"(`boards archive` hides it reversibly)", p.Name, len(lists), cardCount)
 			ok, err := ui.Confirm(o, yes, cmd.InOrStdin(), cmd.ErrOrStderr(), question)
 			if err != nil {
 				return fmt.Errorf("%s: %w", question, err)
@@ -259,7 +244,7 @@ func checklistCell(cd card) string {
 // command needs. Kept here so the error message is identical everywhere.
 func requireProjectFlag(cmd *cobra.Command, c *client.Client, flag string) (project, error) {
 	if flag == "" {
-		return project{}, fmt.Errorf("--board is required (a board id or name; see `tinycld cards board list`)")
+		return project{}, fmt.Errorf("--board is required (a board id or name; see `tinycld boards list`)")
 	}
 	return resolveProject(cmd.Context(), c, flag)
 }

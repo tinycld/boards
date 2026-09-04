@@ -17,7 +17,7 @@ const h = vi.hoisted(() => ({
 vi.mock('@tinycld/core/lib/pocketbase', () => ({
     useStore: (...names: string[]) =>
         names.map(name =>
-            name === 'cards_cards'
+            name === 'boards_cards'
                 ? { __name: name, get: (id: string) => h.storedCards.get(id) }
                 : { __name: name }
         ),
@@ -26,7 +26,7 @@ vi.mock('@tinycld/core/lib/pocketbase', () => ({
 // A stand-in for the query builder: `from` records which collection was asked
 // for, and the stub returns that collection's rows. `where` is a no-op because
 // the assertions are about which id the hook picks, not about filtering.
-vi.mock('~/tinycld/cards/hooks/useBoardLiveQuery', () => ({
+vi.mock('~/tinycld/boards/hooks/useBoardLiveQuery', () => ({
     useBoardLiveQuery: (queryFn: (q: unknown) => unknown) => {
         let target = ''
         const builder = {
@@ -38,15 +38,15 @@ vi.mock('~/tinycld/cards/hooks/useBoardLiveQuery', () => ({
         }
         const result = queryFn(builder)
         if (result === null || result === undefined) return { data: [], isLoading: false }
-        if (target === 'cards_projects') return { data: h.projects, isLoading: false }
-        if (target === 'cards_cards') return { data: h.cards, isLoading: false }
+        if (target === 'boards_projects') return { data: h.projects, isLoading: false }
+        if (target === 'boards_cards') return { data: h.cards, isLoading: false }
         return { data: [], isLoading: false }
     },
 }))
 
 const setActiveProject = vi.fn()
-vi.mock('~/tinycld/cards/stores/cards-ui-store', () => ({
-    useCardsUIStore: Object.assign(
+vi.mock('~/tinycld/boards/stores/boards-ui-store', () => ({
+    useBoardsUIStore: Object.assign(
         (selector: (s: Record<string, unknown>) => unknown) =>
             selector({ activeProjectId: h.activeProjectId, setActiveProject }),
         { getState: () => ({ activeProjectId: h.activeProjectId, setActiveProject }) }
@@ -56,7 +56,7 @@ vi.mock('~/tinycld/cards/stores/cards-ui-store', () => ({
 // useBoardContent is the seam the whole design rests on: the route hands it a
 // project id instead of reading the active board. Recording every id it is
 // called with is how the cross-board cases below are asserted.
-vi.mock('~/tinycld/cards/hooks/useActiveBoard', () => ({
+vi.mock('~/tinycld/boards/hooks/useActiveBoard', () => ({
     useBoardContent: (projectId: string) => {
         h.boardContentCalledWith.push(projectId)
         return {
@@ -67,7 +67,7 @@ vi.mock('~/tinycld/cards/hooks/useActiveBoard', () => ({
     },
 }))
 
-import { useCardRoute } from '@tinycld/cards/hooks/useCardRoute'
+import { useCardRoute } from '@tinycld/boards/hooks/useCardRoute'
 
 describe('useCardRoute', () => {
     afterEach(() => {

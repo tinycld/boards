@@ -4,8 +4,8 @@ import {
     ATTACHMENTS_COLLECTION_ID,
     attachmentDisplayName,
     attachmentToSource,
-} from '~/tinycld/cards/lib/attachment-source'
-import type { BoardAttachment } from '~/tinycld/cards/types'
+} from '~/tinycld/boards/lib/attachment-source'
+import type { BoardAttachment } from '~/tinycld/boards/types'
 
 function attachment(patch: Partial<BoardAttachment> = {}): BoardAttachment {
     return {
@@ -33,13 +33,13 @@ describe('attachmentToSource', () => {
     })
 
     it('passes the real byte size through, unlike mail’s placeholder 0', () => {
-        // cards_attachments has a `size` column, so the strip can render
+        // boards_attachments has a `size` column, so the strip can render
         // "2.4 MB" instead of nothing.
         expect(attachmentToSource(attachment({ size: 2_500_000 })).size).toBe(2_500_000)
     })
 
     it('sets no thumbnailFileName, so images fall back to PocketBase thumbs', () => {
-        // Cards stores no server-rendered thumbnail; core handles the fallback.
+        // Boards stores no server-rendered thumbnail; core handles the fallback.
         expect(attachmentToSource(attachment()).thumbnailFileName).toBeUndefined()
     })
 

@@ -26,10 +26,10 @@ async function freshBoard(page: import('@playwright/test').Page, label: string):
     return name
 }
 
-test.describe('Cards — drag and drop', () => {
+test.describe('Boards — drag and drop', () => {
     test.beforeEach(async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
     })
 
     test('reorders a card within its column and persists', async ({ page }) => {
@@ -49,7 +49,7 @@ test.describe('Cards — drag and drop', () => {
         // page.reload() would prove the same by tearing down the whole SPA —
         // the hard navigation this suite forbids.
         await navigateToPackage(page, 'settings')
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         await expect(boardCard(page, 'first')).toBeVisible()
         await expect
             .poll(async () => cardsInColumn(page, 'To do'))
@@ -81,7 +81,7 @@ test.describe('Cards — drag and drop', () => {
         await addCard(page, 1, 'res-a')
         await addCard(page, 1, 'res-b')
 
-        const receiving = page.getByTestId('cards-column-receiving')
+        const receiving = page.getByTestId('boards-column-receiving')
         const shiftOf = async (title: string, resting: { y: number }) => {
             const now = await boardCard(page, title).boundingBox()
             return now ? now.y - resting.y : 0
@@ -139,7 +139,7 @@ test.describe('Cards — drag and drop', () => {
                 lastError = error
                 await travelTo(page, park, start)
                 await page.mouse.up().catch(() => {})
-                await expect(page.getByTestId('cards-drag-active')).toHaveCount(0)
+                await expect(page.getByTestId('boards-drag-active')).toHaveCount(0)
             }
         }
         if (!held) throw lastError
@@ -184,7 +184,7 @@ test.describe('Cards — drag and drop', () => {
         // Only the column under the pointer mounts this, and a foreign card is
         // what makes it "receiving" — so while the drag is over Doing, this is
         // Doing's marker.
-        const doingReceiving = page.getByTestId('cards-column-receiving')
+        const doingReceiving = page.getByTestId('boards-column-receiving')
         // Gated on Doing REGISTERING the hover rather than on 200ms elapsing:
         // that marker is the transfer this test needs to have started, and
         // waiting for it directly is both faster and immune to a slow frame.
@@ -306,7 +306,7 @@ test.describe('Cards — drag and drop', () => {
         // The live-drag signal is SortableList's floating hover COPY: while a
         // row is held it is rendered twice, so a duplicated `Edit <label>`
         // means the drag is real. (Card and column drags poll
-        // `cards-drag-active` through activateDrag, but that marker is mounted
+        // `boards-drag-active` through activateDrag, but that marker is mounted
         // by BoardCanvas and does not cover this list.)
         // Restricted to the three checklist labels. The card's own editable
         // TITLE is also an `Edit <title>` row in the same peek, so an unfiltered

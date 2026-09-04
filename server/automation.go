@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"fmt"
@@ -11,8 +11,8 @@ import (
 	"tinycld.org/core/automation"
 )
 
-// registerAutomation installs cards' automation surface: the owner resolver
-// shared by every cards trigger, the trigger filters that split one record
+// registerAutomation installs boards' automation surface: the owner resolver
+// shared by every boards trigger, the trigger filters that split one record
 // event into its named cases, and the native action handlers with the
 // relation authorizers the engine requires before it will run them. Called
 // from registerShared before hooks load.
@@ -21,67 +21,67 @@ func registerAutomation() {
 	// its comments — belongs to the same people, the members of the card's
 	// board. cardOwnerResolver reads `project`, which every row here carries.
 	for _, ref := range []string{
-		"cards:card-created",
-		"cards:card-moved",
-		"cards:card-completed",
-		"cards:card-canceled",
-		"cards:card-assigned",
-		"cards:card-priority-changed",
-		"cards:card-estimate-changed",
-		"cards:card-rescheduled",
-		"cards:card-overdue",
-		"cards:card-due-soon",
-		"cards:card-archived",
-		"cards:card-parented",
-		"cards:comment-reacted",
+		"boards:card-created",
+		"boards:card-moved",
+		"boards:card-completed",
+		"boards:card-canceled",
+		"boards:card-assigned",
+		"boards:card-priority-changed",
+		"boards:card-estimate-changed",
+		"boards:card-rescheduled",
+		"boards:card-overdue",
+		"boards:card-due-soon",
+		"boards:card-archived",
+		"boards:card-parented",
+		"boards:comment-reacted",
 	} {
 		automation.RegisterOwnerResolver(ref, cardOwnerResolver)
 	}
 
-	automation.RegisterTriggerFilter("cards:card-completed", cardMovedToDoneList)
-	automation.RegisterTriggerFilter("cards:card-canceled", cardMovedToCanceledList)
+	automation.RegisterTriggerFilter("boards:card-completed", cardMovedToDoneList)
+	automation.RegisterTriggerFilter("boards:card-canceled", cardMovedToCanceledList)
 	// `archived` flips both ways; only the archive is the event. A restore is
 	// visible in history and to watchers, but "a card is archived" firing on
 	// a restore would be the wrong surprise.
-	automation.RegisterTriggerFilter("cards:card-archived", cardIsArchived)
+	automation.RegisterTriggerFilter("boards:card-archived", cardIsArchived)
 	// Both deadline triggers watch a stamp column, which moves in BOTH
 	// directions: the sweep sets it, and rescheduling a card clears it
 	// (registerDueNotices). Only the set is the event.
-	automation.RegisterTriggerFilter("cards:card-overdue", cardBecameOverdue)
-	automation.RegisterTriggerFilter("cards:card-due-soon", cardBecameDueSoon)
+	automation.RegisterTriggerFilter("boards:card-overdue", cardBecameOverdue)
+	automation.RegisterTriggerFilter("boards:card-due-soon", cardBecameDueSoon)
 
 	// move-card declares a relation param, and the engine refuses to run an
 	// action whose relation param has no registered authorizer — without this
 	// the action is greyed out in the catalog and fails at execution.
-	automation.RegisterRelationAuthorizer("cards:move-card", "list", moveDestinationAuthorizer)
+	automation.RegisterRelationAuthorizer("boards:move-card", "list", moveDestinationAuthorizer)
 	// set-parent is a record-op like move-card — a single-valued relation, so
 	// `set` is the right verb — and needs an authorizer for the same reason.
-	automation.RegisterRelationAuthorizer("cards:set-parent", "parent", parentAuthorizer)
+	automation.RegisterRelationAuthorizer("boards:set-parent", "parent", parentAuthorizer)
 
-	automation.RegisterAction("cards:add-assignee", addAssignee)
-	automation.RegisterRelationAuthorizer("cards:add-assignee", "user", assigneeAuthorizer)
+	automation.RegisterAction("boards:add-assignee", addAssignee)
+	automation.RegisterRelationAuthorizer("boards:add-assignee", "user", assigneeAuthorizer)
 
-	automation.RegisterAction("cards:add-label", addLabel)
-	automation.RegisterRelationAuthorizer("cards:add-label", "label", labelAuthorizer)
+	automation.RegisterAction("boards:add-label", addLabel)
+	automation.RegisterRelationAuthorizer("boards:add-label", "label", labelAuthorizer)
 
 	// create-card must be native: a record-op `create` cannot derive `project`
 	// from the chosen list, and the two disagreeing makes the card invisible.
-	automation.RegisterAction("cards:create-card", createCard)
-	automation.RegisterRelationAuthorizer("cards:create-card", "list", createCardListAuthorizer)
+	automation.RegisterAction("boards:create-card", createCard)
+	automation.RegisterRelationAuthorizer("boards:create-card", "list", createCardListAuthorizer)
 
 	// set-due-date must be native for the date math; it declares no relation
 	// param, so it needs no authorizer — it checks board write itself.
-	automation.RegisterAction("cards:set-due-date", setDueDate)
+	automation.RegisterAction("boards:set-due-date", setDueDate)
 }
 
-// maxDueShiftDays bounds cards:set-due-date. A rule that re-fires on its own
+// maxDueShiftDays bounds boards:set-due-date. A rule that re-fires on its own
 // write is already stopped by the chain-depth cap, so this is not a loop
 // guard: it is what keeps a typo'd offset from parking a card centuries out,
 // where every date reader (the sweep's filter, the timeline axis) still has to
 // cope with it. Ten years is far past any real deadline and far short of that.
 const maxDueShiftDays = 3650
 
-// cardTitleRuneLimit is cards_cards.title's own `max` (migration 1980000000).
+// cardTitleRuneLimit is boards_cards.title's own `max` (migration 1980000000).
 // Truncating to it rather than letting the save fail is what makes a rule's
 // title safe as a TEMPLATE: {{description}} can expand well past anything
 // anyone typed into the action, and a rule that dies in run history on a long
@@ -92,19 +92,19 @@ const maxDueShiftDays = 3650
 // somewhere earlier.
 const cardTitleRuneLimit = 500
 
-// maxRelationValues mirrors the maxSelect on cards_cards' `assignees` and
+// maxRelationValues mirrors the maxSelect on boards_cards' `assignees` and
 // `labels` (both 20, migration 1980000000). Checked in the handlers so an
 // over-cap append fails with a message naming the cap, rather than as
 // PocketBase's opaque validation error in run history.
 const maxRelationValues = 20
 
-// assigneeAuthorizer answers the which-record question for cards:add-assignee's
+// assigneeAuthorizer answers the which-record question for boards:add-assignee's
 // `user` param.
 //
-// This action has the weakest engine-supplied guarantees of cards' set, because
+// This action has the weakest engine-supplied guarantees of boards' set, because
 // its relation target is `users`: EVERY authenticated user passes the users view
 // rule, so the engine's floor establishes nothing here. Compare move-card, whose
-// cards_lists target means the floor has already proven board visibility. All of
+// boards_lists target means the floor has already proven board visibility. All of
 // the authorization below is therefore ours to do.
 //
 // Two DIFFERENT questions, which is why this does not just call checkBoardWrite
@@ -128,7 +128,7 @@ func assigneeAuthorizer(app core.App, req automation.ActionRequest, userID strin
 	// has no trigger record. A builder-reachable misconfiguration, not an
 	// impossible state — so it gets a message that reads as one in run history.
 	if req.Record == nil {
-		return fmt.Errorf("cards:add-assignee needs a card to assign — attach it to a card trigger, not a schedule")
+		return fmt.Errorf("boards:add-assignee needs a card to assign — attach it to a card trigger, not a schedule")
 	}
 	projectID := req.Record.GetString("project")
 	if projectID == "" {
@@ -149,7 +149,7 @@ func checkBoardMembership(app core.App, userID, projectID string) error {
 		return fmt.Errorf("no user to assign")
 	}
 	members, err := app.FindRecordsByFilter(
-		"cards_project_members",
+		"boards_project_members",
 		"project = {:project} && user = {:user}",
 		"", 1, 0,
 		map[string]any{"project": projectID, "user": userID},
@@ -163,24 +163,24 @@ func checkBoardMembership(app core.App, userID, projectID string) error {
 	return nil
 }
 
-// labelAuthorizer answers the which-record question for cards:add-label's
+// labelAuthorizer answers the which-record question for boards:add-label's
 // `label` param.
 //
-// Simpler than assigneeAuthorizer in one respect: cards_labels rows are
-// board-scoped (cards_labels.project), so the engine's view-rule floor already
+// Simpler than assigneeAuthorizer in one respect: boards_labels rows are
+// board-scoped (boards_labels.project), so the engine's view-rule floor already
 // carries real information, and asserting the label belongs to the card's own
 // board subsumes the separate "is it a member" question that a users target
 // required. A label from another board is the same cross-board leak
 // moveDestinationAuthorizer refuses for lists.
 func labelAuthorizer(app core.App, req automation.ActionRequest, labelID string) error {
 	if req.Record == nil {
-		return fmt.Errorf("cards:add-label needs a card to label — attach it to a card trigger, not a schedule")
+		return fmt.Errorf("boards:add-label needs a card to label — attach it to a card trigger, not a schedule")
 	}
 	projectID := req.Record.GetString("project")
 	if projectID == "" {
 		return fmt.Errorf("card %s has no board", req.Record.Id)
 	}
-	label, err := app.FindRecordById("cards_labels", labelID)
+	label, err := app.FindRecordById("boards_labels", labelID)
 	if err != nil {
 		return fmt.Errorf("label %s: %w", labelID, err)
 	}
@@ -196,13 +196,13 @@ func labelAuthorizer(app core.App, req automation.ActionRequest, labelID string)
 // — the engine refuses the action outright if that authorizer is unregistered,
 // so this handler validates only that the write itself is coherent.
 func addAssignee(app core.App, req automation.ActionRequest) error {
-	return appendRelation(app, req, "cards:add-assignee", "assignees", req.Params["user"])
+	return appendRelation(app, req, "boards:add-assignee", "assignees", req.Params["user"])
 }
 
 // addLabel appends one label to the trigger card's labels. Authorization lives
 // in labelAuthorizer; see addAssignee.
 func addLabel(app core.App, req automation.ActionRequest) error {
-	return appendRelation(app, req, "cards:add-label", "labels", req.Params["label"])
+	return appendRelation(app, req, "boards:add-label", "labels", req.Params["label"])
 }
 
 // appendRelation adds one id to a multi-value relation on the trigger card.
@@ -219,7 +219,7 @@ func appendRelation(app core.App, req automation.ActionRequest, ref, field, id s
 		return fmt.Errorf("%s: nothing to add", ref)
 	}
 
-	card, err := app.FindRecordById("cards_cards", req.Record.Id)
+	card, err := app.FindRecordById("boards_cards", req.Record.Id)
 	if err != nil {
 		return fmt.Errorf("load card %s: %w", req.Record.Id, err)
 	}
@@ -237,7 +237,7 @@ func appendRelation(app core.App, req automation.ActionRequest, ref, field, id s
 
 	card.Set(field, append(current, id))
 
-	// cards:card-assigned watches `assignees`, so this write re-enters the
+	// boards:card-assigned watches `assignees`, so this write re-enters the
 	// engine. Unstamped it would arrive as an ordinary user edit at depth 0 —
 	// the depth cap only ever sees the stamp, so without this the chain never
 	// terminates. `labels` is watched by no trigger today, but stamping is
@@ -249,7 +249,7 @@ func appendRelation(app core.App, req automation.ActionRequest, ref, field, id s
 }
 
 // createCardListAuthorizer answers the which-record question for
-// cards:create-card's `list` param.
+// boards:create-card's `list` param.
 //
 // Unlike every other authorizer here, this one does NOT compare against the
 // trigger card's board: the whole point of the action is to create a card
@@ -264,7 +264,7 @@ func appendRelation(app core.App, req automation.ActionRequest, ref, field, id s
 //
 // Fails closed on anything unresolvable, per moveDestinationAuthorizer.
 func createCardListAuthorizer(app core.App, req automation.ActionRequest, listID string) error {
-	list, err := app.FindRecordById("cards_lists", listID)
+	list, err := app.FindRecordById("boards_lists", listID)
 	if err != nil {
 		return fmt.Errorf("destination list %s: %w", listID, err)
 	}
@@ -287,28 +287,28 @@ func createCardListAuthorizer(app core.App, req automation.ActionRequest, listID
 func createCard(app core.App, req automation.ActionRequest) error {
 	listID := req.Params["list"]
 	if listID == "" {
-		return fmt.Errorf("cards:create-card: no destination list")
+		return fmt.Errorf("boards:create-card: no destination list")
 	}
 	title := strings.TrimSpace(req.Params["title"])
 	if title == "" {
-		return fmt.Errorf("cards:create-card: a card needs a title")
+		return fmt.Errorf("boards:create-card: a card needs a title")
 	}
 	// -1 leaves room for the ellipsis truncateRunes appends: at exactly the
 	// column's max it would return max+1 runes and the save would fail
 	// validation, which is the outcome truncating exists to avoid.
 	title = truncateRunes(title, cardTitleRuneLimit-1)
 
-	list, err := app.FindRecordById("cards_lists", listID)
+	list, err := app.FindRecordById("boards_lists", listID)
 	if err != nil {
 		return fmt.Errorf("destination list %s: %w", listID, err)
 	}
-	col, err := app.FindCollectionByNameOrId("cards_cards")
+	col, err := app.FindCollectionByNameOrId("boards_cards")
 	if err != nil {
-		return fmt.Errorf("cards_cards: %w", err)
+		return fmt.Errorf("boards_cards: %w", err)
 	}
 	position, err := rankAppendToList(app, listID)
 	if err != nil {
-		return fmt.Errorf("cards:create-card: rank for list %s: %w", listID, err)
+		return fmt.Errorf("boards:create-card: rank for list %s: %w", listID, err)
 	}
 
 	card := core.NewRecord(col)
@@ -321,7 +321,7 @@ func createCard(app core.App, req automation.ActionRequest) error {
 	// write, and history reads created_by.
 	card.Set("created_by", req.OwnerID)
 
-	// cards:card-created is a trigger, so this create re-enters the engine.
+	// boards:card-created is a trigger, so this create re-enters the engine.
 	// Unstamped it would arrive as an ordinary user create at depth 0 and a
 	// create-on-create rule would never terminate — see appendRelation.
 	return automation.MarkEngineWrite(req, card.Id, func() error {
@@ -343,22 +343,22 @@ func createCard(app core.App, req automation.ActionRequest) error {
 // real cost, taken over a time that is quietly wrong in every zone but one.
 func setDueDate(app core.App, req automation.ActionRequest) error {
 	if req.Record == nil {
-		return fmt.Errorf("cards:set-due-date needs a card — attach it to a card trigger, not a schedule")
+		return fmt.Errorf("boards:set-due-date needs a card — attach it to a card trigger, not a schedule")
 	}
 	raw := strings.TrimSpace(req.Params["days"])
 	if raw == "" {
-		return fmt.Errorf("cards:set-due-date: no day offset given")
+		return fmt.Errorf("boards:set-due-date: no day offset given")
 	}
 	days, err := strconv.Atoi(raw)
 	if err != nil {
-		return fmt.Errorf("cards:set-due-date: %q is not a whole number of days", raw)
+		return fmt.Errorf("boards:set-due-date: %q is not a whole number of days", raw)
 	}
 	if days < -maxDueShiftDays || days > maxDueShiftDays {
 		return fmt.Errorf(
-			"cards:set-due-date: %d days is beyond the %d-day limit", days, maxDueShiftDays)
+			"boards:set-due-date: %d days is beyond the %d-day limit", days, maxDueShiftDays)
 	}
 
-	card, err := app.FindRecordById("cards_cards", req.Record.Id)
+	card, err := app.FindRecordById("boards_cards", req.Record.Id)
 	if err != nil {
 		return fmt.Errorf("load card %s: %w", req.Record.Id, err)
 	}
@@ -385,7 +385,7 @@ func setDueDate(app core.App, req automation.ActionRequest) error {
 	card.Set("due_soon_notified_at", "")
 	card.Set("overdue_notified_at", "")
 
-	// `due` is watched by cards:card-rescheduled (and the stamps by the two
+	// `due` is watched by boards:card-rescheduled (and the stamps by the two
 	// deadline triggers), so this write re-enters the engine — stamp it or a
 	// reschedule-on-reschedule rule never terminates.
 	return automation.MarkEngineWrite(req, card.Id, func() error {
@@ -394,7 +394,7 @@ func setDueDate(app core.App, req automation.ActionRequest) error {
 }
 
 // moveDestinationAuthorizer answers the which-record question for
-// cards:move-card's `list` param: the destination must be a list on the SAME
+// boards:move-card's `list` param: the destination must be a list on the SAME
 // board as the card, and the rule owner must be able to write that board.
 //
 // The engine's floor has already proven the owner can VIEW the destination
@@ -415,9 +415,9 @@ func setDueDate(app core.App, req automation.ActionRequest) error {
 // unreadable membership is not evidence of permission.
 func moveDestinationAuthorizer(app core.App, req automation.ActionRequest, destID string) error {
 	if req.Record == nil {
-		return fmt.Errorf("cards:move-card: no trigger card to move")
+		return fmt.Errorf("boards:move-card: no trigger card to move")
 	}
-	dest, err := app.FindRecordById("cards_lists", destID)
+	dest, err := app.FindRecordById("boards_lists", destID)
 	if err != nil {
 		return fmt.Errorf("destination list %s: %w", destID, err)
 	}
@@ -429,9 +429,9 @@ func moveDestinationAuthorizer(app core.App, req automation.ActionRequest, destI
 	return checkBoardWrite(app, req.OwnerID, projectID)
 }
 
-// parentAuthorizer answers the which-record question for cards:set-parent's
-// `parent` param. moveDestinationAuthorizer's shape, reading cards_cards
-// instead of cards_lists, and for the same two reasons — visibility is not
+// parentAuthorizer answers the which-record question for boards:set-parent's
+// `parent` param. moveDestinationAuthorizer's shape, reading boards_cards
+// instead of boards_lists, and for the same two reasons — visibility is not
 // writability, and any card the owner can see would otherwise do.
 //
 // The third check has no analogue there and is the one this feature turns on:
@@ -445,12 +445,12 @@ func moveDestinationAuthorizer(app core.App, req automation.ActionRequest, destI
 // Fails closed on anything unresolvable.
 func parentAuthorizer(app core.App, req automation.ActionRequest, parentID string) error {
 	if req.Record == nil {
-		return fmt.Errorf("cards:set-parent: no trigger card to re-parent")
+		return fmt.Errorf("boards:set-parent: no trigger card to re-parent")
 	}
 	if parentID == req.Record.Id {
 		return fmt.Errorf("a card cannot be its own sub-task")
 	}
-	parent, err := app.FindRecordById("cards_cards", parentID)
+	parent, err := app.FindRecordById("boards_cards", parentID)
 	if err != nil {
 		return fmt.Errorf("parent card %s: %w", parentID, err)
 	}
@@ -465,14 +465,14 @@ func parentAuthorizer(app core.App, req automation.ActionRequest, parentID strin
 }
 
 // checkBoardWrite reports whether a user may write this board's cards. The
-// roles mirror cards_cards' own updateRule (`viaWriter`, 1980000000) and
+// roles mirror boards_cards' own updateRule (`viaWriter`, 1980000000) and
 // lib/permissions.ts: owner and editor write; commentor and viewer do not.
 func checkBoardWrite(app core.App, userID, projectID string) error {
 	if userID == "" {
 		return fmt.Errorf("no rule owner to authorize the move as")
 	}
 	members, err := app.FindRecordsByFilter(
-		"cards_project_members",
+		"boards_project_members",
 		"project = {:project} && user = {:user}",
 		"", 1, 0,
 		map[string]any{"project": projectID, "user": userID},
@@ -489,10 +489,10 @@ func checkBoardWrite(app core.App, userID, projectID string) error {
 	return nil
 }
 
-// cardOwnerResolver maps a cards_cards row to the users the card belongs to:
+// cardOwnerResolver maps a boards_cards row to the users the card belongs to:
 // every member of its board.
 //
-// cards_cards has created_by, but auto-detection does not look for it — and
+// boards_cards has created_by, but auto-detection does not look for it — and
 // declaring it as an ownerField would be wrong anyway. It scopes a personal
 // rule to whoever created the card, so a colleague moving your card would
 // never fire your rule. Membership is the honest answer.
@@ -511,7 +511,7 @@ func cardOwnerResolver(app core.App, record *core.Record) []string {
 	}
 
 	members, err := app.FindRecordsByFilter(
-		"cards_project_members",
+		"boards_project_members",
 		"project = {:project}",
 		"",
 		0,
@@ -555,18 +555,18 @@ func cardListCategory(app core.App, record *core.Record) (category string, ok bo
 	if listID == "" {
 		return "", false
 	}
-	list, err := app.FindRecordById("cards_lists", listID)
+	list, err := app.FindRecordById("boards_lists", listID)
 	if err != nil {
 		return "", false
 	}
 	return listCategory(list), true
 }
 
-// cardMovedToDoneList is the TriggerFilter for "cards:card-completed".
+// cardMovedToDoneList is the TriggerFilter for "boards:card-completed".
 //
 // card-completed and card-moved fire on the same event — a change to the
 // card's `list`. What separates them is the DESTINATION list's category,
-// which lives on cards_lists rather than on the card, so a rule condition
+// which lives on boards_lists rather than on the card, so a rule condition
 // cannot express it: conditions see only the trigger collection's own
 // columns. Hence a filter. Only `done` counts: a canceled list is closed, but
 // it is not a completion — that is cardMovedToCanceledList's event.
@@ -575,13 +575,13 @@ func cardMovedToDoneList(app core.App, record *core.Record) bool {
 	return ok && category == "done"
 }
 
-// cardMovedToCanceledList is the TriggerFilter for "cards:card-canceled".
+// cardMovedToCanceledList is the TriggerFilter for "boards:card-canceled".
 func cardMovedToCanceledList(app core.App, record *core.Record) bool {
 	category, ok := cardListCategory(app, record)
 	return ok && category == "canceled"
 }
 
-// cardIsArchived is the TriggerFilter for "cards:card-archived": the watched
+// cardIsArchived is the TriggerFilter for "boards:card-archived": the watched
 // column flipped, and it flipped TO archived. The auto-archive sweep's saves
 // pass through here at depth 0 like any other, which is intended — a rule
 // that says "when a card is archived, tell the team" should hear about the
@@ -610,7 +610,7 @@ func stampJustSet(record *core.Record, field string) bool {
 	return record.Original().GetDateTime(field).IsZero()
 }
 
-// cardBecameOverdue is the TriggerFilter for "cards:card-overdue".
+// cardBecameOverdue is the TriggerFilter for "boards:card-overdue".
 //
 // The closed-list re-check is not redundant with the sweep's own: a rule fires
 // off whatever save reaches the hook, and a card can be moved to a done list in
@@ -620,7 +620,7 @@ func cardBecameOverdue(app core.App, record *core.Record) bool {
 	return stampJustSet(record, "overdue_notified_at") && !cardInClosedList(app, record)
 }
 
-// cardBecameDueSoon is the TriggerFilter for "cards:card-due-soon".
+// cardBecameDueSoon is the TriggerFilter for "boards:card-due-soon".
 //
 // The sweep stamps due_soon_notified_at even when it sends no "soon" notice —
 // a card first seen already overdue gets the overdue notice only, and the soon

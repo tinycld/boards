@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"context"
@@ -13,13 +13,13 @@ import (
 	"tinycld.org/core/yjsdoc"
 )
 
-// descriptionRuneLimit mirrors the max on cards_cards.description. The client
+// descriptionRuneLimit mirrors the max on boards_cards.description. The client
 // stops typing before this; the server clamps as a last resort so an oversize
 // document cannot make a board's flush fail forever.
 const descriptionRuneLimit = 5000
 
 // makeFlush returns the SaveCoordinator hook that writes a board's live
-// document back to its cards' description fields.
+// document back to its boards' description fields.
 //
 // One flush covers a whole board, because the room and its journal do. The walk
 // is therefore over every card fragment, with a baseline comparison deciding
@@ -78,7 +78,7 @@ func makeFlush(app core.App, state *boardDocState) realtime.FlushFn {
 }
 
 func saveDescription(app core.App, state *boardDocState, projectID, cardID, text string) error {
-	record, err := app.FindRecordById("cards_cards", cardID)
+	record, err := app.FindRecordById("boards_cards", cardID)
 	if err != nil {
 		// The card was deleted while the room was open. Its fragment lingers
 		// in the document until the room closes, which is bounded and

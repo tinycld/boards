@@ -16,8 +16,8 @@ vi.mock('@tinycld/core/lib/pocketbase', () => ({
 
 const setActiveProject = vi.fn()
 const openCard = vi.fn()
-vi.mock('~/tinycld/cards/stores/cards-ui-store', () => ({
-    useCardsUIStore: { getState: () => ({ setActiveProject, openCard }) },
+vi.mock('~/tinycld/boards/stores/boards-ui-store', () => ({
+    useBoardsUIStore: { getState: () => ({ setActiveProject, openCard }) },
 }))
 
 const addToast = vi.fn()
@@ -25,7 +25,7 @@ vi.mock('@tinycld/core/lib/stores/toast-store', () => ({
     useToastStore: { getState: () => ({ addToast }) },
 }))
 
-import { useSearchActions } from '@tinycld/cards/search-adapter'
+import { useSearchActions } from '@tinycld/boards/search-adapter'
 
 // Regression guard (I1): a card whose project hasn't finished syncing used to
 // make onSelect silently return — pressing Enter on it looked identical to a
@@ -42,7 +42,7 @@ describe('cards useSearchActions', () => {
     it('surfaces a toast and does not navigate when the card has not synced', () => {
         h.card = undefined
         const { result } = renderHook(() => useSearchActions())
-        result.current.onSelect({ slug: 'cards', id: 'unsynced', title: 'Ship the budget' })
+        result.current.onSelect({ slug: 'boards', id: 'unsynced', title: 'Ship the budget' })
 
         expect(replace).not.toHaveBeenCalled()
         expect(setActiveProject).not.toHaveBeenCalled()
@@ -53,7 +53,7 @@ describe('cards useSearchActions', () => {
     it('opens the card once its project has synced', () => {
         h.card = { id: 'c1', project: 'p1' }
         const { result } = renderHook(() => useSearchActions())
-        result.current.onSelect({ slug: 'cards', id: 'c1', title: 'Ship the budget' })
+        result.current.onSelect({ slug: 'boards', id: 'c1', title: 'Ship the budget' })
 
         expect(setActiveProject).toHaveBeenCalledWith('p1')
         expect(openCard).toHaveBeenCalledWith('c1')

@@ -1,20 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { type BoardFilter, EMPTY_FILTER } from '../tinycld/cards/lib/board-filter'
-import { buildBoardProject, toBoardCard, toBoardMember } from '../tinycld/cards/lib/board-project'
-import { type BoardSort, MANUAL_SORT } from '../tinycld/cards/lib/board-sort'
+import { type BoardFilter, EMPTY_FILTER } from '../tinycld/boards/lib/board-filter'
+import { buildBoardProject, toBoardCard, toBoardMember } from '../tinycld/boards/lib/board-project'
+import { type BoardSort, MANUAL_SORT } from '../tinycld/boards/lib/board-sort'
 import type {
     BoardLabel,
     BoardMember,
-    CardsCards,
-    CardsLists,
-    CardsProjects,
-} from '../tinycld/cards/types'
+    BoardsCards,
+    BoardsLists,
+    BoardsProjects,
+} from '../tinycld/boards/types'
 
 function user(id: string, name: string, email = `${id}@test.local`) {
     return { id, name, email }
 }
 
-function project(overrides: Partial<CardsProjects> = {}): CardsProjects {
+function project(overrides: Partial<BoardsProjects> = {}): BoardsProjects {
     return {
         id: 'p1',
         name: 'Board',
@@ -31,7 +31,7 @@ function project(overrides: Partial<CardsProjects> = {}): CardsProjects {
     }
 }
 
-function list(id: string, position: string, overrides: Partial<CardsLists> = {}): CardsLists {
+function list(id: string, position: string, overrides: Partial<BoardsLists> = {}): BoardsLists {
     return {
         id,
         project: 'p1',
@@ -48,8 +48,8 @@ function card(
     id: string,
     listId: string,
     position: string,
-    overrides: Partial<CardsCards> = {}
-): CardsCards {
+    overrides: Partial<BoardsCards> = {}
+): BoardsCards {
     return {
         id,
         project: 'p1',
@@ -255,7 +255,7 @@ describe('toBoardCard', () => {
     })
 
     it('falls back to created_by when no reporter is set', () => {
-        // The field was added long after cards_cards shipped. Every row written
+        // The field was added long after boards_cards shipped. Every row written
         // before it — and any written since by a caller that omitted it — has
         // reporter '', and showing an empty row on all of them would make the
         // feature look broken on arrival. The creator is the honest default.

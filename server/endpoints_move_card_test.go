@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"net/http"
@@ -47,7 +47,7 @@ func TestMoveCard_EditorOnBothMovesEverything(t *testing.T) {
 	bug := cardsLabel(t, env.app, env.project, "Bug", "#f00")
 	only := cardsLabel(t, env.app, env.project, "Source only", "#0f0")
 	targetBug := cardsLabel(t, env.app, env.target, "bug", "#00f")
-	card, _ := env.app.FindRecordById("cards_cards", env.card.Id)
+	card, _ := env.app.FindRecordById("boards_cards", env.card.Id)
 	card.Set("labels", []string{bug.Id, only.Id})
 	// The commentor is not on the target; the editor is.
 	card.Set("assignees", []string{env.commentor.Id, env.editor.Id})
@@ -60,14 +60,14 @@ func TestMoveCard_EditorOnBothMovesEverything(t *testing.T) {
 
 	req{
 		method:  http.MethodPost,
-		url:     "/api/cards/cards/" + env.card.Id + "/move",
+		url:     "/api/boards/cards/" + env.card.Id + "/move",
 		token:   env.editorToken,
 		body:    moveBody(env),
 		want:    http.StatusOK,
 		content: []string{`"dropped_labels":["Source only"]`},
 		before:  mountCardRoutes,
 		after: func(t testing.TB, app *tests.TestApp) {
-			moved, err := app.FindRecordById("cards_cards", env.card.Id)
+			moved, err := app.FindRecordById("boards_cards", env.card.Id)
 			if err != nil {
 				t.Fatalf("reload card: %v", err)
 			}
@@ -84,7 +84,7 @@ func TestMoveCard_EditorOnBothMovesEverything(t *testing.T) {
 				t.Fatalf("reporter kept although not a target member")
 			}
 			for _, child := range []struct{ collection, id string }{
-				{"cards_checklist_items", item.Id}, {"cards_comments", comment.Id},
+				{"boards_checklist_items", item.Id}, {"boards_comments", comment.Id},
 			} {
 				row, err := app.FindRecordById(child.collection, child.id)
 				if err != nil {
@@ -94,7 +94,7 @@ func TestMoveCard_EditorOnBothMovesEverything(t *testing.T) {
 					t.Fatalf("%s still names the source project", child.collection)
 				}
 			}
-			n, _ := app.CountRecords("cards_activity", dbx.HashExp{"card": env.card.Id, "kind": "moved_board"})
+			n, _ := app.CountRecords("boards_activity", dbx.HashExp{"card": env.card.Id, "kind": "moved_board"})
 			if n != 1 {
 				t.Fatalf("moved_board activity rows = %d, want 1", n)
 			}
@@ -109,14 +109,14 @@ func TestMoveCard_ReissuesTheNumber(t *testing.T) {
 	other := cardsCard(t, env.app, env.target, env.targetList, "first", "a0", env.owner)
 	req{
 		method:  http.MethodPost,
-		url:     "/api/cards/cards/" + env.card.Id + "/move",
+		url:     "/api/boards/cards/" + env.card.Id + "/move",
 		token:   env.ownerToken,
 		body:    moveBody(env),
 		want:    http.StatusOK,
 		content: []string{`"previous_key"`},
 		before:  mountCardRoutes,
 		after: func(t testing.TB, app *tests.TestApp) {
-			moved, _ := app.FindRecordById("cards_cards", env.card.Id)
+			moved, _ := app.FindRecordById("boards_cards", env.card.Id)
 			if moved.GetInt("number") <= other.GetInt("number") {
 				t.Fatalf("number = %d, want one allocated after %d on the target", moved.GetInt("number"), other.GetInt("number"))
 			}
@@ -129,7 +129,7 @@ func TestMoveCard_ViewerOnTargetIsForbidden(t *testing.T) {
 	// The viewer is a viewer on BOTH boards: readable, never writable.
 	req{
 		method: http.MethodPost,
-		url:    "/api/cards/cards/" + env.card.Id + "/move",
+		url:    "/api/boards/cards/" + env.card.Id + "/move",
 		token:  env.viewerToken,
 		body:   moveBody(env),
 		want:   http.StatusForbidden,
@@ -142,7 +142,7 @@ func TestMoveCard_WriterOnSourceOnlyIsForbidden(t *testing.T) {
 	env := setupMoveEnv(t)
 	// The commentor cannot write anywhere; make them an editor on the SOURCE
 	// only, so the target check is what refuses.
-	rows, _ := env.app.FindRecordsByFilter("cards_project_members",
+	rows, _ := env.app.FindRecordsByFilter("boards_project_members",
 		"project = {:p} && user = {:u}", "", 0, 0,
 		dbx.Params{"p": env.project.Id, "u": env.commentor.Id})
 	rows[0].Set("role", "editor")
@@ -151,7 +151,7 @@ func TestMoveCard_WriterOnSourceOnlyIsForbidden(t *testing.T) {
 	}
 	req{
 		method: http.MethodPost,
-		url:    "/api/cards/cards/" + env.card.Id + "/move",
+		url:    "/api/boards/cards/" + env.card.Id + "/move",
 		token:  env.commentorToken,
 		body:   moveBody(env),
 		want:   http.StatusForbidden,
@@ -164,7 +164,7 @@ func TestMoveCard_OutsiderGets404(t *testing.T) {
 	env := setupMoveEnv(t)
 	req{
 		method: http.MethodPost,
-		url:    "/api/cards/cards/" + env.card.Id + "/move",
+		url:    "/api/boards/cards/" + env.card.Id + "/move",
 		token:  env.outsiderToken,
 		body:   moveBody(env),
 		want:   http.StatusNotFound,
@@ -176,7 +176,7 @@ func TestMoveCard_ListMustBeOnTheTarget(t *testing.T) {
 	env := setupMoveEnv(t)
 	req{
 		method: http.MethodPost,
-		url:    "/api/cards/cards/" + env.card.Id + "/move",
+		url:    "/api/boards/cards/" + env.card.Id + "/move",
 		token:  env.ownerToken,
 		body:   `{"project_id":"` + env.target.Id + `","list_id":"` + env.list2.Id + `","position":"a0"}`,
 		want:   http.StatusBadRequest,
@@ -189,7 +189,7 @@ func TestMoveCard_SameBoardIsRefused(t *testing.T) {
 	env := setupMoveEnv(t)
 	req{
 		method: http.MethodPost,
-		url:    "/api/cards/cards/" + env.card.Id + "/move",
+		url:    "/api/boards/cards/" + env.card.Id + "/move",
 		token:  env.ownerToken,
 		body:   `{"project_id":"` + env.project.Id + `","list_id":"` + env.list2.Id + `","position":"a0"}`,
 		want:   http.StatusBadRequest,
@@ -201,7 +201,7 @@ func TestMoveCard_RequiresAuth(t *testing.T) {
 	env := setupMoveEnv(t)
 	req{
 		method: http.MethodPost,
-		url:    "/api/cards/cards/" + env.card.Id + "/move",
+		url:    "/api/boards/cards/" + env.card.Id + "/move",
 		body:   moveBody(env),
 		want:   http.StatusUnauthorized,
 		before: mountCardRoutes,
@@ -236,13 +236,13 @@ func TestMoveCard_FamilyAnswerIsRequired(t *testing.T) {
 
 	req{
 		method: http.MethodPost,
-		url:    "/api/cards/cards/" + env.card.Id + "/move",
+		url:    "/api/boards/cards/" + env.card.Id + "/move",
 		token:  env.editorToken,
 		body:   moveBody(env),
 		want:   http.StatusBadRequest,
 		before: mountCardRoutes,
 		after: func(t testing.TB, app *tests.TestApp) {
-			moved, err := app.FindRecordById("cards_cards", env.card.Id)
+			moved, err := app.FindRecordById("boards_cards", env.card.Id)
 			if err != nil {
 				t.Fatalf("reload card: %v", err)
 			}
@@ -259,7 +259,7 @@ func TestMoveCard_NoFamilyNeedsNoAnswer(t *testing.T) {
 
 	req{
 		method:  http.MethodPost,
-		url:     "/api/cards/cards/" + env.card.Id + "/move",
+		url:     "/api/boards/cards/" + env.card.Id + "/move",
 		token:   env.editorToken,
 		body:    moveBody(env),
 		want:    http.StatusOK,
@@ -274,14 +274,14 @@ func TestMoveCard_FamilyMoveCarriesTheChildren(t *testing.T) {
 
 	req{
 		method:  http.MethodPost,
-		url:     "/api/cards/cards/" + env.card.Id + "/move",
+		url:     "/api/boards/cards/" + env.card.Id + "/move",
 		token:   env.editorToken,
 		body:    moveFamilyBody(env, "move"),
 		want:    http.StatusOK,
 		content: []string{`"moved_children":1`},
 		before:  mountCardRoutes,
 		after: func(t testing.TB, app *tests.TestApp) {
-			moved, err := app.FindRecordById("cards_cards", child.Id)
+			moved, err := app.FindRecordById("boards_cards", child.Id)
 			if err != nil {
 				t.Fatalf("reload child: %v", err)
 			}
@@ -308,14 +308,14 @@ func TestMoveCard_FamilyUnlinkOrphansTheChildren(t *testing.T) {
 
 	req{
 		method:  http.MethodPost,
-		url:     "/api/cards/cards/" + env.card.Id + "/move",
+		url:     "/api/boards/cards/" + env.card.Id + "/move",
 		token:   env.editorToken,
 		body:    moveFamilyBody(env, "unlink"),
 		want:    http.StatusOK,
 		content: []string{`"orphaned_children":1`},
 		before:  mountCardRoutes,
 		after: func(t testing.TB, app *tests.TestApp) {
-			left, err := app.FindRecordById("cards_cards", child.Id)
+			left, err := app.FindRecordById("boards_cards", child.Id)
 			if err != nil {
 				t.Fatalf("the child was destroyed: %v", err)
 			}
@@ -325,7 +325,7 @@ func TestMoveCard_FamilyUnlinkOrphansTheChildren(t *testing.T) {
 			if left.GetString("parent") != "" {
 				t.Fatal("an unlinked child kept its parent")
 			}
-			n, _ := app.CountRecords("cards_activity",
+			n, _ := app.CountRecords("boards_activity",
 				dbx.HashExp{"card": child.Id, "kind": "parent"})
 			if n != 1 {
 				t.Fatalf("parent activity rows on the orphan = %d, want 1", n)
@@ -339,7 +339,7 @@ func TestMoveCard_FamilyUnlinkOrphansTheChildren(t *testing.T) {
 func TestMoveCard_TheCardsOwnParentIsCleared(t *testing.T) {
 	env := setupMoveEnv(t)
 	parent := cardsCard(t, env.app, env.project, env.list, "parent", "a1", env.owner)
-	card, _ := env.app.FindRecordById("cards_cards", env.card.Id)
+	card, _ := env.app.FindRecordById("boards_cards", env.card.Id)
 	card.Set("parent", parent.Id)
 	if err := env.app.Save(card); err != nil {
 		t.Fatalf("seed parent: %v", err)
@@ -347,7 +347,7 @@ func TestMoveCard_TheCardsOwnParentIsCleared(t *testing.T) {
 
 	req{
 		method:  http.MethodPost,
-		url:     "/api/cards/cards/" + env.card.Id + "/move",
+		url:     "/api/boards/cards/" + env.card.Id + "/move",
 		token:   env.editorToken,
 		body:    moveFamilyBody(env, "unlink"),
 		want:    http.StatusOK,
@@ -364,7 +364,7 @@ func TestMoveCard_CarriesCommentReactions(t *testing.T) {
 	env := setupMoveEnv(t)
 	comment := cardsComment(t, env.app, env.project, env.card, env.editor, "note")
 
-	col, err := env.app.FindCollectionByNameOrId("cards_comment_reactions")
+	col, err := env.app.FindCollectionByNameOrId("boards_comment_reactions")
 	if err != nil {
 		t.Fatalf("find reactions: %v", err)
 	}
@@ -380,14 +380,14 @@ func TestMoveCard_CarriesCommentReactions(t *testing.T) {
 
 	req{
 		method:  http.MethodPost,
-		url:     "/api/cards/cards/" + env.card.Id + "/move",
+		url:     "/api/boards/cards/" + env.card.Id + "/move",
 		token:   env.editorToken,
 		body:    moveBody(env),
 		want:    http.StatusOK,
 		content: []string{`"previous_key"`},
 		before:  mountCardRoutes,
 		after: func(t testing.TB, app *tests.TestApp) {
-			row, err := app.FindRecordById("cards_comment_reactions", reaction.Id)
+			row, err := app.FindRecordById("boards_comment_reactions", reaction.Id)
 			if err != nil {
 				t.Fatalf("reload reaction: %v", err)
 			}
@@ -427,13 +427,13 @@ func TestMoveCard_EpicAnswerIsRequired(t *testing.T) {
 
 	req{
 		method: http.MethodPost,
-		url:    "/api/cards/cards/" + env.card.Id + "/move",
+		url:    "/api/boards/cards/" + env.card.Id + "/move",
 		token:  env.editorToken,
 		body:   moveBody(env),
 		want:   http.StatusBadRequest,
 		before: mountCardRoutes,
 		after: func(t testing.TB, app *tests.TestApp) {
-			moved, err := app.FindRecordById("cards_cards", env.card.Id)
+			moved, err := app.FindRecordById("boards_cards", env.card.Id)
 			if err != nil {
 				t.Fatalf("reload card: %v", err)
 			}
@@ -450,7 +450,7 @@ func TestMoveCard_NoEpicNeedsNoAnswer(t *testing.T) {
 
 	req{
 		method:  http.MethodPost,
-		url:     "/api/cards/cards/" + env.card.Id + "/move",
+		url:     "/api/boards/cards/" + env.card.Id + "/move",
 		token:   env.editorToken,
 		body:    moveBody(env),
 		want:    http.StatusOK,
@@ -467,21 +467,21 @@ func TestMoveCard_EpicUnlinkLeavesTheCardUnfiled(t *testing.T) {
 
 	req{
 		method:  http.MethodPost,
-		url:     "/api/cards/cards/" + env.card.Id + "/move",
+		url:     "/api/boards/cards/" + env.card.Id + "/move",
 		token:   env.editorToken,
 		body:    moveEpicBody(env, "unlink"),
 		want:    http.StatusOK,
 		content: []string{`"cleared_epic":true`},
 		before:  mountCardRoutes,
 		after: func(t testing.TB, app *tests.TestApp) {
-			moved, err := app.FindRecordById("cards_cards", env.card.Id)
+			moved, err := app.FindRecordById("boards_cards", env.card.Id)
 			if err != nil {
 				t.Fatalf("reload card: %v", err)
 			}
 			if got := moved.GetString("epic"); got != "" {
 				t.Fatalf("card epic = %q, want empty", got)
 			}
-			if _, err := app.FindRecordById("cards_epics", epic.Id); err != nil {
+			if _, err := app.FindRecordById("boards_epics", epic.Id); err != nil {
 				t.Fatal("the source board's epic must survive an unlink")
 			}
 		},
@@ -497,14 +497,14 @@ func TestMoveCard_EpicMoveCreatesItOnTheTarget(t *testing.T) {
 
 	req{
 		method:  http.MethodPost,
-		url:     "/api/cards/cards/" + env.card.Id + "/move",
+		url:     "/api/boards/cards/" + env.card.Id + "/move",
 		token:   env.editorToken,
 		body:    moveEpicBody(env, "move"),
 		want:    http.StatusOK,
 		content: []string{`"created_epic":true`},
 		before:  mountCardRoutes,
 		after: func(t testing.TB, app *tests.TestApp) {
-			moved, err := app.FindRecordById("cards_cards", env.card.Id)
+			moved, err := app.FindRecordById("boards_cards", env.card.Id)
 			if err != nil {
 				t.Fatalf("reload card: %v", err)
 			}
@@ -512,7 +512,7 @@ func TestMoveCard_EpicMoveCreatesItOnTheTarget(t *testing.T) {
 			if filed == "" {
 				t.Fatal("the card must be filed under an epic on the target")
 			}
-			made, err := app.FindRecordById("cards_epics", filed)
+			made, err := app.FindRecordById("boards_epics", filed)
 			if err != nil {
 				t.Fatalf("load the created epic: %v", err)
 			}
@@ -535,14 +535,14 @@ func TestMoveCard_EpicMoveReusesAMatchingEpic(t *testing.T) {
 
 	req{
 		method:  http.MethodPost,
-		url:     "/api/cards/cards/" + env.card.Id + "/move",
+		url:     "/api/boards/cards/" + env.card.Id + "/move",
 		token:   env.editorToken,
 		body:    moveEpicBody(env, "move"),
 		want:    http.StatusOK,
 		content: []string{`"created_epic":false`},
 		before:  mountCardRoutes,
 		after: func(t testing.TB, app *tests.TestApp) {
-			moved, err := app.FindRecordById("cards_cards", env.card.Id)
+			moved, err := app.FindRecordById("boards_cards", env.card.Id)
 			if err != nil {
 				t.Fatalf("reload card: %v", err)
 			}
@@ -550,7 +550,7 @@ func TestMoveCard_EpicMoveReusesAMatchingEpic(t *testing.T) {
 				t.Fatalf("card epic = %q, want the existing target epic %q", got, existing.Id)
 			}
 			rows, err := app.FindRecordsByFilter(
-				"cards_epics", "project = {:p}", "", 0, 0,
+				"boards_epics", "project = {:p}", "", 0, 0,
 				map[string]any{"p": env.target.Id},
 			)
 			if err != nil {

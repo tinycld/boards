@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"roci.dev/fracdex"
@@ -10,7 +10,7 @@ import (
 // Fractional ranks, server side.
 //
 // This is the THIRD implementation of the same key space — the app uses npm
-// `fractional-indexing` (tinycld/cards/lib/rank.ts), the CLI uses
+// `fractional-indexing` (tinycld/boards/lib/rank.ts), the CLI uses
 // `roci.dev/fracdex` (cli/rank.go), and this uses that same Go port. The
 // library choice is not incidental: a rank is computed by whoever inserts the
 // row, and now three callers insert cards. If any two disagreed, a card
@@ -44,7 +44,7 @@ import (
 func rankAppendToList(app core.App, listID string) (string, error) {
 	var last string
 	err := app.DB().
-		NewQuery("SELECT COALESCE(MAX(position), '') AS p FROM cards_cards WHERE list = {:list}").
+		NewQuery("SELECT COALESCE(MAX(position), '') AS p FROM boards_cards WHERE list = {:list}").
 		Bind(dbx.Params{"list": listID}).
 		Row(&last)
 	if err != nil {

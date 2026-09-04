@@ -7,8 +7,8 @@ import {
     parentCandidates,
     parentOf,
     subtasksComplete,
-} from '../tinycld/cards/lib/subtasks'
-import type { BoardCardView } from '../tinycld/cards/types'
+} from '../tinycld/boards/lib/subtasks'
+import type { BoardCardView } from '../tinycld/boards/types'
 
 function card(id: string, overrides: Partial<BoardCardView> = {}): BoardCardView {
     return {

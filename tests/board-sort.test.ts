@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { compareCards, MANUAL_SORT, toggleSort } from '../tinycld/cards/lib/board-sort'
-import type { BoardCardView } from '../tinycld/cards/types'
+import { compareCards, MANUAL_SORT, toggleSort } from '../tinycld/boards/lib/board-sort'
+import type { BoardCardView } from '../tinycld/boards/types'
 
 function card(id: string, overrides: Partial<BoardCardView> = {}): BoardCardView {
     return {

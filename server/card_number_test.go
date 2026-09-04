@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"sync"
@@ -24,7 +24,7 @@ import (
 // hook, so it has to opt in explicitly.
 func bindNumbers(t *testing.T, env *cardsEnv) {
 	t.Helper()
-	env.app.OnRecordCreate("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	env.app.OnRecordCreate("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		n, err := allocateNumber(e.App, e.Record.GetString("project"))
 		if err != nil {
 			return err
@@ -36,9 +36,9 @@ func bindNumbers(t *testing.T, env *cardsEnv) {
 
 func newNumberedCard(t *testing.T, env *cardsEnv, title, position string) *core.Record {
 	t.Helper()
-	col, err := env.app.FindCollectionByNameOrId("cards_cards")
+	col, err := env.app.FindCollectionByNameOrId("boards_cards")
 	if err != nil {
-		t.Fatalf("find cards_cards: %v", err)
+		t.Fatalf("find boards_cards: %v", err)
 	}
 	r := core.NewRecord(col)
 	r.Set("project", env.project.Id)
@@ -126,7 +126,7 @@ func TestCardsNumbers_CreateHookAssignsANumber(t *testing.T) {
 
 	card := newNumberedCard(t, env, "hooked", "a0")
 
-	fresh, err := env.app.FindRecordById("cards_cards", card.Id)
+	fresh, err := env.app.FindRecordById("boards_cards", card.Id)
 	if err != nil {
 		t.Fatalf("re-read card: %v", err)
 	}
@@ -142,9 +142,9 @@ func TestCardsNumbers_ClientSuppliedNumberIsIgnored(t *testing.T) {
 	env := setupCardsEnv(t)
 	bindNumbers(t, env)
 
-	col, err := env.app.FindCollectionByNameOrId("cards_cards")
+	col, err := env.app.FindCollectionByNameOrId("boards_cards")
 	if err != nil {
-		t.Fatalf("find cards_cards: %v", err)
+		t.Fatalf("find boards_cards: %v", err)
 	}
 	r := core.NewRecord(col)
 	r.Set("project", env.project.Id)
@@ -186,7 +186,7 @@ func TestCardsNumbers_ProjectChangeAllocatesOnTheDestination(t *testing.T) {
 	bindNumbers(t, env)
 
 	var sawOriginal string
-	env.app.OnRecordUpdate("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	env.app.OnRecordUpdate("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		next := e.Record.GetString("project")
 		prior := e.Record.Original().GetString("project")
 		sawOriginal = prior
@@ -212,7 +212,7 @@ func TestCardsNumbers_ProjectChangeAllocatesOnTheDestination(t *testing.T) {
 	cardsMember(t, env.app, other, env.owner, "owner")
 	otherList := cardsList(t, env.app, other, "To do", "a0")
 	for _, title := range []string{"o1", "o2"} {
-		r := core.NewRecord(mustCollection(t, env.app, "cards_cards"))
+		r := core.NewRecord(mustCollection(t, env.app, "boards_cards"))
 		r.Set("project", other.Id)
 		r.Set("list", otherList.Id)
 		r.Set("title", title)
@@ -229,7 +229,7 @@ func TestCardsNumbers_ProjectChangeAllocatesOnTheDestination(t *testing.T) {
 	// coreserver/users_guard_test.go's updateAsAuthenticated. Every real update
 	// path loads the record fresh first, so this is the honest simulation, not
 	// a workaround.
-	card, err := env.app.FindRecordById("cards_cards", card.Id)
+	card, err := env.app.FindRecordById("boards_cards", card.Id)
 	if err != nil {
 		t.Fatalf("reload card: %v", err)
 	}
@@ -262,7 +262,7 @@ func TestCardsNumbers_SameBoardUpdateKeepsTheNumber(t *testing.T) {
 
 	// Reloaded for the same reason as the move test above: Original() only
 	// reflects persisted state on a freshly fetched record.
-	card, err := env.app.FindRecordById("cards_cards", created.Id)
+	card, err := env.app.FindRecordById("boards_cards", created.Id)
 	if err != nil {
 		t.Fatalf("reload card: %v", err)
 	}
@@ -279,7 +279,7 @@ func TestCardsNumbers_SameBoardUpdateKeepsTheNumber(t *testing.T) {
 
 func registerCardNumbersUpdateOnly(t *testing.T, env *cardsEnv) {
 	t.Helper()
-	env.app.OnRecordUpdate("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	env.app.OnRecordUpdate("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		next := e.Record.GetString("project")
 		prior := e.Record.Original().GetString("project")
 		if next == "" || prior == "" || next == prior {

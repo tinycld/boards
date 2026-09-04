@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"net/http"
@@ -8,7 +8,7 @@ import (
 	"github.com/pocketbase/pocketbase/tests"
 )
 
-// cards_card_links access — the cross-board collection.
+// boards_card_links access — the cross-board collection.
 //
 // Every other suite in this package tests a rule that resolves ONE project.
 // These rules resolve two, on two independent join paths, so the cases below
@@ -17,7 +17,7 @@ import (
 //   - create: writer on the SOURCE, member of the TARGET (asymmetric on
 //     purpose — see the migration).
 //   - read: EITHER end, so a link is visible to both boards' members. The far
-//     CARD stays governed by cards_cards' own rule, which is what makes the
+//     CARD stays governed by boards_cards' own rule, which is what makes the
 //     client's redacted chip safe rather than a leak — proved below by
 //     asserting the far title never reaches the wire.
 //   - delete: writer on the source only.
@@ -72,9 +72,9 @@ func linkBody(source, target, linkType string) string {
 // rule on purpose, so a read case cannot silently depend on a write passing.
 func seedLink(t *testing.T, env *linkEnv, source, target, linkType string) *core.Record {
 	t.Helper()
-	col, err := env.app.FindCollectionByNameOrId("cards_card_links")
+	col, err := env.app.FindCollectionByNameOrId("boards_card_links")
 	if err != nil {
-		t.Fatalf("find cards_card_links: %v", err)
+		t.Fatalf("find boards_card_links: %v", err)
 	}
 	row := core.NewRecord(col)
 	row.Set("source", source)
@@ -94,7 +94,7 @@ func TestCardLinksRLS_EditorLinksWithinTheirBoard(t *testing.T) {
 
 	req{
 		method:  http.MethodPost,
-		url:     "/api/collections/cards_card_links/records",
+		url:     "/api/collections/boards_card_links/records",
 		token:   env.editorToken,
 		body:    linkBody(env.card.Id, other.Id, "blocks"),
 		want:    http.StatusOK,
@@ -110,7 +110,7 @@ func TestCardLinksRLS_MembershipOnTheTargetIsEnough(t *testing.T) {
 
 	req{
 		method:  http.MethodPost,
-		url:     "/api/collections/cards_card_links/records",
+		url:     "/api/collections/boards_card_links/records",
 		token:   env.editorToken,
 		body:    linkBody(env.card.Id, env.sharedCard.Id, "blocks"),
 		want:    http.StatusOK,
@@ -124,7 +124,7 @@ func TestCardLinksRLS_CannotLinkToABoardYouAreNotOn(t *testing.T) {
 
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_card_links/records",
+		url:    "/api/collections/boards_card_links/records",
 		token:  env.editorToken,
 		body:   linkBody(env.card.Id, env.farCard.Id, "blocks"),
 		want:   http.StatusBadRequest,
@@ -139,7 +139,7 @@ func TestCardLinksRLS_CommentorCannotLink(t *testing.T) {
 
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_card_links/records",
+		url:    "/api/collections/boards_card_links/records",
 		token:  env.commentorToken,
 		body:   linkBody(env.card.Id, other.Id, "blocks"),
 		want:   http.StatusBadRequest,
@@ -152,7 +152,7 @@ func TestCardLinksRLS_ViewerCannotLink(t *testing.T) {
 
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_card_links/records",
+		url:    "/api/collections/boards_card_links/records",
 		token:  env.viewerToken,
 		body:   linkBody(env.card.Id, other.Id, "blocks"),
 		want:   http.StatusBadRequest,
@@ -167,7 +167,7 @@ func TestCardLinksRLS_MembershipOnTheSourceIsNotEnough(t *testing.T) {
 
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_card_links/records",
+		url:    "/api/collections/boards_card_links/records",
 		token:  env.editorToken,
 		body:   linkBody(env.sharedCard.Id, env.card.Id, "blocks"),
 		want:   http.StatusBadRequest,
@@ -184,7 +184,7 @@ func TestCardLinksRLS_VisibleFromTheNearEndAlone(t *testing.T) {
 
 	req{
 		method:  http.MethodGet,
-		url:     "/api/collections/cards_card_links/records",
+		url:     "/api/collections/boards_card_links/records",
 		token:   env.editorToken,
 		want:    http.StatusOK,
 		content: []string{`"totalItems":1`, crossing.Id},
@@ -199,7 +199,7 @@ func TestCardLinksRLS_VisibleFromTheFarEndAlone(t *testing.T) {
 
 	req{
 		method:  http.MethodGet,
-		url:     "/api/collections/cards_card_links/records",
+		url:     "/api/collections/boards_card_links/records",
 		token:   env.outsiderToken,
 		want:    http.StatusOK,
 		content: []string{`"totalItems":1`, crossing.Id},
@@ -216,7 +216,7 @@ func TestCardLinksRLS_LinkBetweenTwoUnseenBoardsIsHidden(t *testing.T) {
 
 	req{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_card_links/records",
+		url:        "/api/collections/boards_card_links/records",
 		token:      env.editorToken,
 		want:       http.StatusOK,
 		content:    []string{`"totalItems":0`},
@@ -231,7 +231,7 @@ func TestCardLinksRLS_LinkBetweenTwoUnseenBoardsIsHidden(t *testing.T) {
 // a payload that already carried the secret.
 func TestCardLinksRLS_ReadNeverCarriesTheFarCardsTitle(t *testing.T) {
 	env := setupLinkEnv(t)
-	secret, err := env.app.FindRecordById("cards_cards", env.farCard.Id)
+	secret, err := env.app.FindRecordById("boards_cards", env.farCard.Id)
 	if err != nil {
 		t.Fatalf("load far card: %v", err)
 	}
@@ -243,7 +243,7 @@ func TestCardLinksRLS_ReadNeverCarriesTheFarCardsTitle(t *testing.T) {
 
 	req{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_card_links/records",
+		url:        "/api/collections/boards_card_links/records",
 		token:      env.editorToken,
 		want:       http.StatusOK,
 		content:    []string{crossing.Id, env.farCard.Id},
@@ -254,7 +254,7 @@ func TestCardLinksRLS_ReadNeverCarriesTheFarCardsTitle(t *testing.T) {
 // `expand` must not become the back door the rule closed.
 func TestCardLinksRLS_ExpandDoesNotLeakTheFarCard(t *testing.T) {
 	env := setupLinkEnv(t)
-	secret, err := env.app.FindRecordById("cards_cards", env.farCard.Id)
+	secret, err := env.app.FindRecordById("boards_cards", env.farCard.Id)
 	if err != nil {
 		t.Fatalf("load far card: %v", err)
 	}
@@ -266,7 +266,7 @@ func TestCardLinksRLS_ExpandDoesNotLeakTheFarCard(t *testing.T) {
 
 	req{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_card_links/records?expand=target",
+		url:        "/api/collections/boards_card_links/records?expand=target",
 		token:      env.editorToken,
 		want:       http.StatusOK,
 		content:    []string{crossing.Id},
@@ -275,14 +275,14 @@ func TestCardLinksRLS_ExpandDoesNotLeakTheFarCard(t *testing.T) {
 }
 
 // The other half of the same guarantee: holding the far card's ID is not a key
-// to the card. cards_cards' own rule still refuses it.
+// to the card. boards_cards' own rule still refuses it.
 func TestCardLinksRLS_TheFarCardItselfStaysUnreadable(t *testing.T) {
 	env := setupLinkEnv(t)
 	seedLink(t, env, env.card.Id, env.farCard.Id, "blocks")
 
 	req{
 		method: http.MethodGet,
-		url:    "/api/collections/cards_cards/records/" + env.farCard.Id,
+		url:    "/api/collections/boards_cards/records/" + env.farCard.Id,
 		token:  env.editorToken,
 		want:   http.StatusNotFound,
 	}.run(t, env.cardsEnv)
@@ -294,14 +294,14 @@ func TestCardLinksRLS_TheFarCardItselfStaysUnreadable(t *testing.T) {
 //
 // 403 rather than the 404 a filtered rule gives, and the difference is the
 // point: a nil rule is superuser-only, so the request is refused before any
-// record resolution happens. cards_activity's suite asserts the same shape.
+// record resolution happens. boards_activity's suite asserts the same shape.
 func TestCardLinksRLS_NobodyCanEditALink(t *testing.T) {
 	env := setupLinkEnv(t)
 	link := seedLink(t, env, env.card.Id, env.sharedCard.Id, "blocks")
 
 	req{
 		method: http.MethodPatch,
-		url:    "/api/collections/cards_card_links/records/" + link.Id,
+		url:    "/api/collections/boards_card_links/records/" + link.Id,
 		token:  env.ownerToken,
 		body:   `{"type":"related"}`,
 		want:   http.StatusForbidden,
@@ -315,7 +315,7 @@ func TestCardLinksRLS_SourceWriterCanUnlink(t *testing.T) {
 
 	req{
 		method: http.MethodDelete,
-		url:    "/api/collections/cards_card_links/records/" + link.Id,
+		url:    "/api/collections/boards_card_links/records/" + link.Id,
 		token:  env.editorToken,
 		want:   http.StatusNoContent,
 	}.run(t, env.cardsEnv)
@@ -330,7 +330,7 @@ func TestCardLinksRLS_TargetSideCannotUnlink(t *testing.T) {
 
 	req{
 		method: http.MethodDelete,
-		url:    "/api/collections/cards_card_links/records/" + link.Id,
+		url:    "/api/collections/boards_card_links/records/" + link.Id,
 		token:  env.outsiderToken,
 		want:   http.StatusNotFound,
 		after:  requireLinkExists(link.Id),
@@ -339,7 +339,7 @@ func TestCardLinksRLS_TargetSideCannotUnlink(t *testing.T) {
 
 func requireLinkType(linkID, want string) func(t testing.TB, app *tests.TestApp) {
 	return func(t testing.TB, app *tests.TestApp) {
-		row, err := app.FindRecordById("cards_card_links", linkID)
+		row, err := app.FindRecordById("boards_card_links", linkID)
 		if err != nil {
 			t.Fatalf("reload link: %v", err)
 		}
@@ -351,7 +351,7 @@ func requireLinkType(linkID, want string) func(t testing.TB, app *tests.TestApp)
 
 func requireLinkExists(linkID string) func(t testing.TB, app *tests.TestApp) {
 	return func(t testing.TB, app *tests.TestApp) {
-		if _, err := app.FindRecordById("cards_card_links", linkID); err != nil {
+		if _, err := app.FindRecordById("boards_card_links", linkID); err != nil {
 			t.Fatalf("link was deleted by a caller that should not have been able to: %v", err)
 		}
 	}

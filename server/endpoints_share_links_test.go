@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"encoding/json"
@@ -61,7 +61,7 @@ func mintBody(projectID, role string, days int) string {
 // countLinks is the "nothing was written" check every refusal needs: a status
 // assertion alone would pass even if the row had landed before the error.
 func countLinks(t testing.TB, app *tests.TestApp, projectID string) int {
-	n, err := app.CountRecords("cards_share_links", dbx.HashExp{"project": projectID})
+	n, err := app.CountRecords("boards_share_links", dbx.HashExp{"project": projectID})
 	if err != nil {
 		t.Fatalf("count links: %v", err)
 	}
@@ -84,13 +84,13 @@ func TestShareLinks_OwnerMintsAViewerLink(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodPost,
-		url:     "/api/cards/share-link",
+		url:     "/api/boards/share-link",
 		token:   env.ownerToken,
 		body:    mintBody(env.project.Id, "viewer", 7),
 		want:    http.StatusOK,
 		content: []string{`"token":"`, `"role":"viewer"`, `"is_active":true`},
 		after: func(t testing.TB, app *tests.TestApp) {
-			links, err := app.FindRecordsByFilter("cards_share_links",
+			links, err := app.FindRecordsByFilter("boards_share_links",
 				"project = {:p}", "", 0, 0, dbx.Params{"p": env.project.Id})
 			if err != nil || len(links) != 1 {
 				t.Fatalf("expected exactly one link, got %d (err %v)", len(links), err)
@@ -122,7 +122,7 @@ func TestShareLinks_EachMintGetsADistinctToken(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodPost,
-		url:     "/api/cards/share-link",
+		url:     "/api/boards/share-link",
 		token:   env.ownerToken,
 		body:    mintBody(env.project.Id, "editor", 0),
 		want:    http.StatusOK,
@@ -130,7 +130,7 @@ func TestShareLinks_EachMintGetsADistinctToken(t *testing.T) {
 		after: func(t testing.TB, app *tests.TestApp) {
 			// Mint the second one directly; a Test function may drive only one
 			// ApiScenario, and what matters here is the pair, not the route.
-			first, err := app.FindFirstRecordByFilter("cards_share_links",
+			first, err := app.FindFirstRecordByFilter("boards_share_links",
 				"project = {:p}", dbx.Params{"p": env.project.Id})
 			if err != nil {
 				t.Fatalf("read first link: %v", err)
@@ -159,7 +159,7 @@ func TestShareLinks_EditorCannotMint(t *testing.T) {
 
 	mintReq{
 		method: http.MethodPost,
-		url:    "/api/cards/share-link",
+		url:    "/api/boards/share-link",
 		token:  env.editorToken,
 		body:   mintBody(env.project.Id, "viewer", 7),
 		want:   http.StatusForbidden,
@@ -172,7 +172,7 @@ func TestShareLinks_CommentorCannotMint(t *testing.T) {
 
 	mintReq{
 		method: http.MethodPost,
-		url:    "/api/cards/share-link",
+		url:    "/api/boards/share-link",
 		token:  env.commentorToken,
 		body:   mintBody(env.project.Id, "viewer", 7),
 		want:   http.StatusForbidden,
@@ -185,7 +185,7 @@ func TestShareLinks_ViewerCannotMint(t *testing.T) {
 
 	mintReq{
 		method: http.MethodPost,
-		url:    "/api/cards/share-link",
+		url:    "/api/boards/share-link",
 		token:  env.viewerToken,
 		body:   mintBody(env.project.Id, "viewer", 7),
 		want:   http.StatusForbidden,
@@ -198,7 +198,7 @@ func TestShareLinks_NonMemberCannotMint(t *testing.T) {
 
 	mintReq{
 		method: http.MethodPost,
-		url:    "/api/cards/share-link",
+		url:    "/api/boards/share-link",
 		token:  env.outsiderToken,
 		body:   mintBody(env.project.Id, "viewer", 7),
 		want:   http.StatusForbidden,
@@ -211,7 +211,7 @@ func TestShareLinks_AnonymousCannotMint(t *testing.T) {
 
 	req{
 		method: http.MethodPost,
-		url:    "/api/cards/share-link",
+		url:    "/api/boards/share-link",
 		body:   mintBody(env.project.Id, "viewer", 7),
 		want:   http.StatusUnauthorized,
 		after:  requireNoLinks(env.project.Id),
@@ -226,7 +226,7 @@ func TestShareLinks_UnknownRoleIsRefused(t *testing.T) {
 
 	mintReq{
 		method: http.MethodPost,
-		url:    "/api/cards/share-link",
+		url:    "/api/boards/share-link",
 		token:  env.ownerToken,
 		body:   mintBody(env.project.Id, "admin", 7),
 		want:   http.StatusBadRequest,
@@ -241,7 +241,7 @@ func TestShareLinks_OwnerRoleIsNotMintable(t *testing.T) {
 
 	mintReq{
 		method: http.MethodPost,
-		url:    "/api/cards/share-link",
+		url:    "/api/boards/share-link",
 		token:  env.ownerToken,
 		body:   mintBody(env.project.Id, "owner", 7),
 		want:   http.StatusBadRequest,
@@ -256,7 +256,7 @@ func TestShareLinks_UnsupportedExpiryIsRefused(t *testing.T) {
 
 	mintReq{
 		method: http.MethodPost,
-		url:    "/api/cards/share-link",
+		url:    "/api/boards/share-link",
 		token:  env.ownerToken,
 		body:   mintBody(env.project.Id, "viewer", 3650),
 		want:   http.StatusBadRequest,
@@ -273,7 +273,7 @@ func TestShareLinks_OwnerListsTheirBoardsLinks(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodGet,
-		url:     "/api/cards/share-links?project_id=" + env.project.Id,
+		url:     "/api/boards/share-links?project_id=" + env.project.Id,
 		token:   env.ownerToken,
 		want:    http.StatusOK,
 		content: []string{tok},
@@ -288,7 +288,7 @@ func TestShareLinks_EditorCannotListLinks(t *testing.T) {
 	// reading a credential they cannot mint.
 	mintReq{
 		method:     http.MethodGet,
-		url:        "/api/cards/share-links?project_id=" + env.project.Id,
+		url:        "/api/boards/share-links?project_id=" + env.project.Id,
 		token:      env.editorToken,
 		want:       http.StatusForbidden,
 		notContent: []string{tok},
@@ -301,7 +301,7 @@ func TestShareLinks_EditorCannotListLinks(t *testing.T) {
 func TestShareLinks_OwnerRevokes(t *testing.T) {
 	env := setupCardsEnv(t)
 	shareLink(t, env, env.project.Id, tok64("revokeme"), "viewer", true, "")
-	link, err := env.app.FindFirstRecordByFilter("cards_share_links",
+	link, err := env.app.FindFirstRecordByFilter("boards_share_links",
 		"project = {:p}", dbx.Params{"p": env.project.Id})
 	if err != nil {
 		t.Fatalf("find link: %v", err)
@@ -309,12 +309,12 @@ func TestShareLinks_OwnerRevokes(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodDelete,
-		url:     "/api/cards/share-link/" + link.Id,
+		url:     "/api/boards/share-link/" + link.Id,
 		token:   env.ownerToken,
 		want:    http.StatusOK,
 		content: []string{`"is_active":false`},
 		after: func(t testing.TB, app *tests.TestApp) {
-			fresh, err := app.FindRecordById("cards_share_links", link.Id)
+			fresh, err := app.FindRecordById("boards_share_links", link.Id)
 			if err != nil {
 				t.Fatalf("re-read link: %v", err)
 			}
@@ -333,7 +333,7 @@ func TestShareLinks_OwnerRevokes(t *testing.T) {
 func TestShareLinks_EditorCannotRevoke(t *testing.T) {
 	env := setupCardsEnv(t)
 	shareLink(t, env, env.project.Id, tok64("keepme"), "viewer", true, "")
-	link, err := env.app.FindFirstRecordByFilter("cards_share_links",
+	link, err := env.app.FindFirstRecordByFilter("boards_share_links",
 		"project = {:p}", dbx.Params{"p": env.project.Id})
 	if err != nil {
 		t.Fatalf("find link: %v", err)
@@ -341,11 +341,11 @@ func TestShareLinks_EditorCannotRevoke(t *testing.T) {
 
 	mintReq{
 		method: http.MethodDelete,
-		url:    "/api/cards/share-link/" + link.Id,
+		url:    "/api/boards/share-link/" + link.Id,
 		token:  env.editorToken,
 		want:   http.StatusNotFound,
 		after: func(t testing.TB, app *tests.TestApp) {
-			fresh, err := app.FindRecordById("cards_share_links", link.Id)
+			fresh, err := app.FindRecordById("boards_share_links", link.Id)
 			if err != nil {
 				t.Fatalf("re-read link: %v", err)
 			}
@@ -364,13 +364,13 @@ func TestShareLinks_MintingFlipsVisibilityToLink(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodPost,
-		url:     "/api/cards/share-link",
+		url:     "/api/boards/share-link",
 		token:   env.ownerToken,
 		body:    mintBody(env.project.Id, "viewer", 30),
 		want:    http.StatusOK,
 		content: []string{`"is_active":true`},
 		after: func(t testing.TB, app *tests.TestApp) {
-			p, err := app.FindRecordById("cards_projects", env.project.Id)
+			p, err := app.FindRecordById("boards_projects", env.project.Id)
 			if err != nil {
 				t.Fatalf("re-read project: %v", err)
 			}
@@ -385,7 +385,7 @@ func TestShareLinks_RevokingTheLastLinkRestoresPrivate(t *testing.T) {
 	env := setupCardsEnv(t)
 	shareLink(t, env, env.project.Id, tok64("solo"), "viewer", true, "")
 	syncProjectVisibility(env.app, env.project.Id)
-	link, err := env.app.FindFirstRecordByFilter("cards_share_links",
+	link, err := env.app.FindFirstRecordByFilter("boards_share_links",
 		"project = {:p}", dbx.Params{"p": env.project.Id})
 	if err != nil {
 		t.Fatalf("find link: %v", err)
@@ -393,12 +393,12 @@ func TestShareLinks_RevokingTheLastLinkRestoresPrivate(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodDelete,
-		url:     "/api/cards/share-link/" + link.Id,
+		url:     "/api/boards/share-link/" + link.Id,
 		token:   env.ownerToken,
 		want:    http.StatusOK,
 		content: []string{`"is_active":false`},
 		after: func(t testing.TB, app *tests.TestApp) {
-			p, err := app.FindRecordById("cards_projects", env.project.Id)
+			p, err := app.FindRecordById("boards_projects", env.project.Id)
 			if err != nil {
 				t.Fatalf("re-read project: %v", err)
 			}
@@ -421,13 +421,13 @@ func TestShareLinks_AMintedTokenReadsTheBoard(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodPost,
-		url:     "/api/cards/share-link",
+		url:     "/api/boards/share-link",
 		token:   env.ownerToken,
 		body:    mintBody(env.project.Id, "viewer", 7),
 		want:    http.StatusOK,
 		content: []string{`"token":"`},
 		after: func(t testing.TB, app *tests.TestApp) {
-			link, err := app.FindFirstRecordByFilter("cards_share_links",
+			link, err := app.FindFirstRecordByFilter("boards_share_links",
 				"project = {:p}", dbx.Params{"p": env.project.Id})
 			if err != nil {
 				t.Fatalf("read minted link: %v", err)
@@ -457,14 +457,14 @@ func TestShareLinks_ResponseCarriesTheToken(t *testing.T) {
 
 	req{
 		method:  http.MethodPost,
-		url:     "/api/cards/share-link",
+		url:     "/api/boards/share-link",
 		token:   env.ownerToken,
 		body:    mintBody(env.project.Id, "commentor", 90),
 		want:    http.StatusOK,
 		content: []string{`"role":"commentor"`},
 		before:  bindShareLinkRoutes,
 		after: func(t testing.TB, app *tests.TestApp) {
-			link, err := app.FindFirstRecordByFilter("cards_share_links",
+			link, err := app.FindFirstRecordByFilter("boards_share_links",
 				"project = {:p}", dbx.Params{"p": env.project.Id})
 			if err != nil {
 				t.Fatalf("read link: %v", err)

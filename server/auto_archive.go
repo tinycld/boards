@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"time"
@@ -10,8 +10,8 @@ import (
 // Auto-archive: cards that have sat in a done or canceled list for longer
 // than the board allows are archived by the server.
 //
-// A per-board setting (cards_projects.auto_archive_days, 0 = off) and a
-// per-card clock (cards_cards.list_changed_at, stamped by list_changed_at.go)
+// A per-board setting (boards_projects.auto_archive_days, 0 = off) and a
+// per-card clock (boards_cards.list_changed_at, stamped by list_changed_at.go)
 // are all the sweep reads. It runs on its own ticker rather than inside the
 // due-notice minute sweep because the two have nothing in common but the
 // shape, and a quarter-hour cadence is plenty for a deadline measured in
@@ -20,7 +20,7 @@ import (
 // The archive is a plain Save with `archived = true`, and the existing hooks
 // do the rest: card_archived.go stamps archived_at, activity.go writes an
 // `archived` row with no actor (rendered "Automatically"), notifications.go
-// tells the watchers, and the `cards:card-archived` trigger fires at depth 0
+// tells the watchers, and the `boards:card-archived` trigger fires at depth 0
 // exactly as it would for a person's archive — so a rule that says "when a
 // card is archived, tell the team" hears about the sweep's archives too. No
 // engine write-marking is needed: no action archives a card, so the save
@@ -50,7 +50,7 @@ func sweepAutoArchive(app core.App, now time.Time) {
 		return
 	}
 	projects, err := app.FindRecordsByFilter(
-		"cards_projects",
+		"boards_projects",
 		"archived = false && auto_archive_days > 0",
 		"", 0, 0,
 	)
@@ -63,7 +63,7 @@ func sweepAutoArchive(app core.App, now time.Time) {
 		days := project.GetInt("auto_archive_days")
 		cutoff := now.Add(-time.Duration(days) * 24 * time.Hour).UTC()
 		cards, err := app.FindRecordsByFilter(
-			"cards_cards",
+			"boards_cards",
 			"project = {:project} && archived = false && list_changed_at != '' && list_changed_at < {:cutoff}"+
 				" && (list.category = 'done' || list.category = 'canceled')",
 			"", 0, 0,

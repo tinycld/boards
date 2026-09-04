@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"testing"
@@ -128,7 +128,7 @@ func TestAutoWatch_NonMembersAreNeverAdded(t *testing.T) {
 
 func loaded(t *testing.T, app core.App, cardID string) *core.Record {
 	t.Helper()
-	rec, err := app.FindRecordById("cards_cards", cardID)
+	rec, err := app.FindRecordById("boards_cards", cardID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ func TestNotify_MoveAndCompleteReachWatchersWithTheEvent(t *testing.T) {
 
 	viewerNotes := notificationsFor(t, env.app, env.viewer.Id)
 	if len(viewerNotes) != 1 || viewerNotes[0].GetString("type") != notifyTypeWatched {
-		t.Fatalf("viewer got %v, want one cards_watched", notificationTypes(t, env.app, env.viewer.Id))
+		t.Fatalf("viewer got %v, want one boards_watched", notificationTypes(t, env.app, env.viewer.Id))
 	}
 	if event := eventOf(t, viewerNotes[0]); event != "moved" {
 		t.Fatalf("event = %q, want moved", event)
@@ -209,7 +209,7 @@ func TestNotify_ReactionTellsTheCommentAuthorOnly(t *testing.T) {
 	notifyReaction(env.app, seedReaction(t, env, comment.Id, env.commentor.Id, "👍"))
 	editorNotes := notificationsFor(t, env.app, env.editor.Id)
 	if len(editorNotes) != 1 || editorNotes[0].GetString("type") != notifyTypeReaction {
-		t.Fatalf("author got %v, want one cards_reaction", notificationTypes(t, env.app, env.editor.Id))
+		t.Fatalf("author got %v, want one boards_reaction", notificationTypes(t, env.app, env.editor.Id))
 	}
 	if event := eventOf(t, editorNotes[0]); event != "reaction" {
 		t.Fatalf("event = %q, want reaction", event)

@@ -14,7 +14,7 @@ const SPAN = 'Spanning task'
 const UNDATED = 'Undated task'
 
 function peek(page: Page) {
-    return page.getByTestId('cards-card-peek')
+    return page.getByTestId('boards-card-peek')
 }
 
 async function openCard(page: Page, title: string) {
@@ -38,10 +38,10 @@ async function setStart(page: Page, title: string, preset: string) {
     await closeCardPeek(page)
 }
 
-test.describe('Cards — timeline view', () => {
+test.describe('Boards — timeline view', () => {
     test.beforeEach(async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
     })
 
     test('draws dated cards, walks them, opens one, and remembers the view', async ({ page }) => {
@@ -54,24 +54,24 @@ test.describe('Cards — timeline view', () => {
         await setStart(page, SPAN, 'Today')
         await setDue(page, SPAN, 'Next week')
 
-        await page.getByTestId('cards-view-timeline').click()
-        const timeline = page.getByTestId('cards-board-timeline')
+        await page.getByTestId('boards-view-timeline').click()
+        const timeline = page.getByTestId('boards-timeline')
         await expect(timeline).toBeVisible()
-        const rows = timeline.locator('[data-testid^="cards-timeline-row-"]')
+        const rows = timeline.locator('[data-testid^="boards-timeline-row-"]')
         await expect(rows).toHaveCount(2)
-        await expect(timeline.getByTestId('cards-timeline-bar')).toHaveCount(1)
-        await expect(timeline.getByTestId('cards-timeline-point')).toHaveCount(1)
-        await expect(timeline.getByTestId('cards-timeline-today')).toBeVisible()
+        await expect(timeline.getByTestId('boards-timeline-bar')).toHaveCount(1)
+        await expect(timeline.getByTestId('boards-timeline-point')).toHaveCount(1)
+        await expect(timeline.getByTestId('boards-timeline-today')).toBeVisible()
         await expect(timeline.getByText(UNDATED)).toHaveCount(0)
 
         // The view toggle still holds DOM focus, and Enter on a focused
         // button activates the button rather than the board shortcut — so
         // move focus onto the timeline first (the axis has no handler).
-        await timeline.getByTestId('cards-timeline-today').click()
+        await timeline.getByTestId('boards-timeline-today').click()
 
         // j adopts the first drawn row; Enter opens it.
         await page.keyboard.press('j')
-        await expect(timeline.locator('[data-testid^="cards-focused-"]')).toHaveCount(1)
+        await expect(timeline.locator('[data-testid^="boards-focused-"]')).toHaveCount(1)
         await page.keyboard.press('j')
         await page.keyboard.press('Enter')
         await expect(peek(page)).toBeVisible()
@@ -79,9 +79,9 @@ test.describe('Cards — timeline view', () => {
 
         // The view is remembered per board across in-app navigation.
         await navigateToPackage(page, 'settings')
-        await navigateToPackage(page, 'cards')
-        await expect(page.getByTestId('cards-board-timeline')).toBeVisible()
-        await page.getByTestId('cards-view-board').click()
+        await navigateToPackage(page, 'boards')
+        await expect(page.getByTestId('boards-timeline')).toBeVisible()
+        await page.getByTestId('boards-view-board').click()
         await expect(boardCard(page, UNDATED)).toBeVisible()
     })
 })

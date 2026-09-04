@@ -22,7 +22,7 @@ async function freshBoard(page: Page, label: string): Promise<string> {
 }
 
 function composer(page: Page) {
-    return page.getByTestId('cards-comment-composer')
+    return page.getByTestId('boards-comment-composer')
 }
 
 function composerEditor(page: Page) {
@@ -91,10 +91,10 @@ async function activityText(page: Page): Promise<string> {
     })
 }
 
-test.describe('Cards — markdown comments', () => {
+test.describe('Boards — markdown comments', () => {
     test.beforeEach(async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
     })
 
     test('renders a posted comment as markdown', async ({ page }) => {
@@ -142,7 +142,7 @@ test.describe('Cards — markdown comments', () => {
         // the same by tearing down the whole SPA — the hard navigation this suite
         // forbids (it cancels in-flight chunk loads and is a CI flake source).
         await navigateToPackage(page, 'settings')
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         await openCard(page, CARD_TITLE)
 
         const body = await activityText(page)

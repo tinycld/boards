@@ -90,7 +90,7 @@ stay as a no-op on web for compatibility, or be removed in a follow-up sweep.
 
 ### The second bug is genuinely separate — confirmed
 
-Cards' TODO defers shortcuts `d` / `l` / `a` / `p` / `f` on "a core `Menu` bug:
+Boards' TODO defers shortcuts `d` / `l` / `a` / `p` / `f` on "a core `Menu` bug:
 a keyboard-opened menu never measures its trigger."
 
 That is a DIFFERENT defect, and the two should not be bundled:
@@ -113,7 +113,7 @@ it has an acceptance test already written.
 
 ### Tests
 
-**The acceptance test already exists.** `cards/tests/e2e/list-status.spec.ts`
+**The acceptance test already exists.** `boards/tests/e2e/list-status.spec.ts`
 is the ONLY spec in the ecosystem that clicks a submenu item, and it currently
 cannot: it uses `dispatchEvent('click')` to bypass hit-testing. Flipping that
 to a plain `.click()` and deleting the workaround comment IS the test.
@@ -153,29 +153,29 @@ collection an OAuth caller may touch; anything absent returns `nil` — denied
 
 | Collection | Wanted | Why |
 |---|---|---|
-| `cards_card_links` | read + write | `card link` / `card unlink` commands |
-| `cards_comment_reactions` | read + write | the deferred reaction commands |
-| `cards_activity` | **read only** | server-written history; no client ever writes it (its create/update/delete rules are all `null`) |
-| `cards_card_watchers` | read + write | `card watch` / `card unwatch` |
+| `boards_card_links` | read + write | `card link` / `card unlink` commands |
+| `boards_comment_reactions` | read + write | the deferred reaction commands |
+| `boards_activity` | **read only** | server-written history; no client ever writes it (its create/update/delete rules are all `null`) |
+| `boards_card_watchers` | read + write | `card watch` / `card unwatch` |
 
-`cards_activity` being read-only is not caution — it is the schema. Granting
+`boards_activity` being read-only is not caution — it is the schema. Granting
 write would name a capability that does not exist.
 
 ### Why this is safe, and where the line is
 
 The existing comment (`:112-117`) states the doctrine: every content collection
 carries `project`, the access rules resolve membership through
-`cards_project_members`, so a scope grant "widens WHICH ROWS a token may touch
+`boards_project_members`, so a scope grant "widens WHICH ROWS a token may touch
 not at all. It only decides whether an OAuth caller may use the collection at
 all, on top of the membership the rules already demand."
 
 That holds for all four. The **sharing surface** stays read-only
-(`cards_project_members`, `cards_share_links`, `:139-140`) because a write
+(`boards_project_members`, `boards_share_links`, `:139-140`) because a write
 there grants other people access — categorically larger than "change my cards",
-which is what `cards:write` says on the consent screen. Nothing here touches
+which is what `boards:write` says on the consent screen. Nothing here touches
 that line.
 
-`cards_card_links` deserves one moment of thought since it is the first
+`boards_card_links` deserves one moment of thought since it is the first
 cross-board collection: its create rule already demands write on the source
 board and membership on the target, so a token cannot link boards its holder
 could not link through the UI.
@@ -185,7 +185,7 @@ could not link through the UI.
 `core/server/oauth/route_classification_test.go` already pins both halves —
 `TestCardsContentCollectionsAreReadWrite:167` and the sharing-surface test at
 `:198-206`. Extend the first with the three read+write additions, and add a
-case asserting `cards_activity` is read-only for the reason above.
+case asserting `boards_activity` is read-only for the reason above.
 
 ### Follow-up in cards, once this lands
 
@@ -193,8 +193,8 @@ case asserting `cards_activity` is read-only for the reason above.
   `card unlink`, plus a Links section in `card view` (which already reads
   checklist and comments — `cli/ids.go:207-208`).
 - The reaction commands the TODO defers.
-- `manifest.ts` needs no change: cards already declares `cards:read` and
-  `cards:write` (`manifest.ts:73`).
+- `manifest.ts` needs no change: cards already declares `boards:read` and
+  `boards:write` (`manifest.ts:73`).
 
 ---
 
@@ -204,7 +204,7 @@ case asserting `cards_activity` is read-only for the reason above.
 
 ### What is missing
 
-`cards_card_links` crosses boards by design — the schema, the rules and the
+`boards_card_links` crosses boards by design — the schema, the rules and the
 redacted-far-card UI all support it. Only the picker does not: `LinkPicker`
 offers `projectCards`, which is the open board's cards.
 

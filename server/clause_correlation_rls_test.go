@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"net/http"
@@ -13,9 +13,9 @@ import (
 // `viaWriter` asks two questions of the SAME back-relation in two separate `?=`
 // clauses:
 //
-//	project.cards_project_members_via_project.user ?= @request.auth.id
-//	&& ( project.cards_project_members_via_project.role ?= "owner"
-//	  || project.cards_project_members_via_project.role ?= "editor" )
+//	project.boards_project_members_via_project.user ?= @request.auth.id
+//	&& ( project.boards_project_members_via_project.role ?= "owner"
+//	  || project.boards_project_members_via_project.role ?= "editor" )
 //
 // If PocketBase evaluated those independently, they would be satisfiable by two
 // DIFFERENT member rows: the first by the caller's own viewer row, the second by
@@ -87,9 +87,9 @@ func setupCorrelation(t *testing.T, viewerRole, writerRole string) *correlationE
 // something — against an empty collection it would pass trivially.
 func seedShareLink(t *testing.T, env *cardsEnv, projectID string, createdBy *core.Record) {
 	t.Helper()
-	col, err := env.app.FindCollectionByNameOrId("cards_share_links")
+	col, err := env.app.FindCollectionByNameOrId("boards_share_links")
 	if err != nil {
-		t.Fatalf("find cards_share_links: %v", err)
+		t.Fatalf("find boards_share_links: %v", err)
 	}
 	r := core.NewRecord(col)
 	r.Set("project", projectID)
@@ -109,7 +109,7 @@ func TestCardsCorrelation_ViewerAlongsideEditorCannotCreateCard(t *testing.T) {
 
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_cards/records",
+		url:    "/api/collections/boards_cards/records",
 		token:  c.xToken,
 		body: `{"project":"` + c.pProject + `","list":"` + c.pList +
 			`","title":"by-viewer","position":"a5","created_by":"` + c.x.Id + `"}`,
@@ -125,7 +125,7 @@ func TestCardsCorrelation_ViewerAlongsideEditorCannotUpdateCard(t *testing.T) {
 
 	req{
 		method: http.MethodPatch,
-		url:    "/api/collections/cards_cards/records/" + c.pCard,
+		url:    "/api/collections/boards_cards/records/" + c.pCard,
 		token:  c.xToken,
 		body:   `{"title":"renamed-by-viewer"}`,
 		want:   http.StatusNotFound,
@@ -140,7 +140,7 @@ func TestCardsCorrelation_ViewerAlongsideOwnerCannotUpdateCard(t *testing.T) {
 
 	req{
 		method: http.MethodPatch,
-		url:    "/api/collections/cards_cards/records/" + c.pCard,
+		url:    "/api/collections/boards_cards/records/" + c.pCard,
 		token:  c.xToken,
 		body:   `{"title":"renamed-by-viewer"}`,
 		want:   http.StatusNotFound,
@@ -159,7 +159,7 @@ func TestCardsCorrelation_EditorOnTheSameBoardStillCan(t *testing.T) {
 
 	req{
 		method:  http.MethodPatch,
-		url:     "/api/collections/cards_cards/records/" + c.pCard,
+		url:     "/api/collections/boards_cards/records/" + c.pCard,
 		token:   c.yToken,
 		body:    `{"title":"renamed-by-editor"}`,
 		want:    http.StatusOK,
@@ -174,7 +174,7 @@ func TestCardsCorrelation_ViewerAlongsideCommentorCannotComment(t *testing.T) {
 
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_comments/records",
+		url:    "/api/collections/boards_comments/records",
 		token:  c.xToken,
 		body: `{"project":"` + c.pProject + `","card":"` + c.pCard +
 			`","body":"comment-by-viewer"}`,
@@ -190,7 +190,7 @@ func TestCardsCorrelation_ViewerAlongsideOwnerCannotReadShareLinks(t *testing.T)
 
 	req{
 		method:  http.MethodGet,
-		url:     "/api/collections/cards_share_links/records",
+		url:     "/api/collections/boards_share_links/records",
 		token:   c.xToken,
 		want:    http.StatusOK,
 		content: []string{`"totalItems":0`},

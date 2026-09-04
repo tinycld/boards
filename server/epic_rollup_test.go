@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"sync"
@@ -43,7 +43,7 @@ func fileCard(t *testing.T, env *cardsEnv, epic, list *core.Record, title, rank 
 // Original() to find the epic a card is leaving. setParent's note, same trap.
 func refile(t *testing.T, env *cardsEnv, cardID, epicID string) {
 	t.Helper()
-	card, err := env.app.FindRecordById("cards_cards", cardID)
+	card, err := env.app.FindRecordById("boards_cards", cardID)
 	if err != nil {
 		t.Fatalf("load card: %v", err)
 	}
@@ -57,7 +57,7 @@ func refile(t *testing.T, env *cardsEnv, cardID, epicID string) {
 // same reason refile does.
 func editCard(t *testing.T, env *cardsEnv, cardID string, apply func(*core.Record)) {
 	t.Helper()
-	card, err := env.app.FindRecordById("cards_cards", cardID)
+	card, err := env.app.FindRecordById("boards_cards", cardID)
 	if err != nil {
 		t.Fatalf("load card: %v", err)
 	}
@@ -69,7 +69,7 @@ func editCard(t *testing.T, env *cardsEnv, cardID string, apply func(*core.Recor
 
 func epicPoints(t *testing.T, env *cardsEnv, epicID string) (total, done int) {
 	t.Helper()
-	epic, err := env.app.FindRecordById("cards_epics", epicID)
+	epic, err := env.app.FindRecordById("boards_epics", epicID)
 	if err != nil {
 		t.Fatalf("reload epic: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestEpicRollup_DeletingACardRecountsItsEpic(t *testing.T) {
 	fileCard(t, env, epic, env.list, "stays", "a1", 3)
 	going := fileCard(t, env, epic, env.list, "goes", "a2", 5)
 
-	fresh, err := env.app.FindRecordById("cards_cards", going.Id)
+	fresh, err := env.app.FindRecordById("boards_cards", going.Id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +247,7 @@ func TestEpicRollup_ConcurrentFilesAreAllCounted(t *testing.T) {
 			t, env.app, env.project, env.list, "bulk", string(rune('a'+i)), env.owner,
 		).Id
 		editCard(t, env, id, func(c *core.Record) { c.Set("estimate", 2) })
-		loaded, err := env.app.FindRecordById("cards_cards", id)
+		loaded, err := env.app.FindRecordById("boards_cards", id)
 		if err != nil {
 			t.Fatal(err)
 		}

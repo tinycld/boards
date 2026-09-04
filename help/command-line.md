@@ -1,11 +1,11 @@
 ---
-title: Cards from the command line
+title: Boards from the command line
 summary: List boards, add and move cards, and script your kanban from a terminal with the tinycld CLI.
 tags: [cli, terminal, automation, board, card, list]
 order: 130
 ---
 
-The `tinycld` command line tool includes a `cards` command group when the Cards
+The `tinycld` command line tool includes a `boards` command group when the Boards
 package is installed. To download the tool and log in, see
 [Command line tool](help://core:command-line). Everything below assumes you are
 logged in.
@@ -16,8 +16,8 @@ A **board** and a **list** can be named either by their id or by their name, so
 you rarely need to look an id up:
 
 ```
-tinycld cards board view "Product launch"
-tinycld cards list show --board "Product launch"
+tinycld boards view "Product launch"
+tinycld boards column show --board "Product launch"
 ```
 
 Names are matched ignoring case. If two boards share a name, the command stops
@@ -35,21 +35,21 @@ on a different card after someone renamed it.
 ## Looking at a board
 
 ```
-tinycld cards board list                    # the boards you are a member of
-tinycld cards board view "Product launch"   # every column, with its cards
-tinycld cards card view OTTER-12            # one card, in full
+tinycld boards list                   # the boards you are a member of
+tinycld boards view "Product launch"  # every column, with its cards
+tinycld boards card view OTTER-12     # one card, in full
 ```
 
-`board list` and `board view` hide archived boards and cards; add `--all` to
+`list` and `view` hide archived boards and cards; add `--all` to
 include them. `card view` shows the description, checklist and comments that
 the board view leaves out.
 
 ## Archiving and deleting a board
 
 ```
-tinycld cards board archive "Product launch"            # out of the way, reversibly
-tinycld cards board archive "Product launch" --unset    # bring it back
-tinycld cards board remove "Product launch" --yes       # delete it for good
+tinycld boards archive "Product launch"            # out of the way, reversibly
+tinycld boards archive "Product launch" --unset    # bring it back
+tinycld boards remove "Product launch" --yes       # delete it for good
 ```
 
 `remove` deletes every list, card, comment and attachment on the board along
@@ -59,10 +59,10 @@ with its members and share links, and tells you how many before it asks for
 ## Adding and editing cards
 
 ```
-tinycld cards card add "Write the press release" \
+tinycld boards card add "Write the press release" \
     --board "Product launch" --list "To do"
 
-tinycld cards card add "Book the venue" \
+tinycld boards card add "Book the venue" \
     --board "Product launch" --list "To do" --due 2026-09-01 --index 0
 ```
 
@@ -70,18 +70,18 @@ New cards go to the bottom of the column. `--index 0` puts one at the top, and
 any other number places it at that position, counting from zero.
 
 ```
-tinycld cards card edit <card> --title "Write the launch post"
-tinycld cards card edit <card> --due 2026-09-15
-tinycld cards card edit <card> --due "2026-09-15 14:30"
-tinycld cards card edit <card> --clear-due
-tinycld cards card edit <card> --start 2026-09-10
-tinycld cards card edit <card> --clear-start
-tinycld cards card edit <card> --reporter <user id>
-tinycld cards card edit <card> --clear-reporter
-tinycld cards card edit <card> --priority high
-tinycld cards card edit <card> --estimate 5
-tinycld cards card edit <card> --parent OTTER-4
-tinycld cards card edit <card> --clear-parent
+tinycld boards card edit <card> --title "Write the launch post"
+tinycld boards card edit <card> --due 2026-09-15
+tinycld boards card edit <card> --due "2026-09-15 14:30"
+tinycld boards card edit <card> --clear-due
+tinycld boards card edit <card> --start 2026-09-10
+tinycld boards card edit <card> --clear-start
+tinycld boards card edit <card> --reporter <user id>
+tinycld boards card edit <card> --clear-reporter
+tinycld boards card edit <card> --priority high
+tinycld boards card edit <card> --estimate 5
+tinycld boards card edit <card> --parent OTTER-4
+tinycld boards card edit <card> --clear-parent
 ```
 
 `edit` only changes what you name. Editing the title leaves the description
@@ -108,20 +108,20 @@ created the card. Both flags take a **user id**, not an email address.
 ## Moving cards
 
 ```
-tinycld cards card move <card> --list Doing        # to another column
-tinycld cards card move <card> --index 0           # to the top of its column
-tinycld cards card move <card> --list Done --index 0
+tinycld boards card move <card> --list Doing        # to another column
+tinycld boards card move <card> --index 0           # to the top of its column
+tinycld boards card move <card> --list Done --index 0
 ```
 
 Moving to another column with no `--index` puts the card at the bottom, which
 is where a dragged card lands when you do not aim at a particular slot.
 
 ```
-tinycld cards card move <card> --board "Roadmap"               # to another board's first list
-tinycld cards card move <card> --board "Roadmap" --list Backlog
-tinycld cards card move <card> --board "Roadmap" --family move # bring sub-tasks
-tinycld cards card copy <card>                                 # "Copy of …", same list
-tinycld cards card copy <card> --title "Second attempt"
+tinycld boards card move <card> --board "Roadmap"               # to another board's first list
+tinycld boards card move <card> --board "Roadmap" --list Backlog
+tinycld boards card move <card> --board "Roadmap" --family move # bring sub-tasks
+tinycld boards card copy <card>                                 # "Copy of …", same list
+tinycld boards card copy <card> --title "Second attempt"
 ```
 
 A move to another board keeps the checklist, comments and attachments,
@@ -138,9 +138,9 @@ itself a sub-task always stops being one when it moves.
 ## Archiving and deleting
 
 ```
-tinycld cards card archive <card>            # hide it, reversibly
-tinycld cards card archive <card> --unset    # bring it back
-tinycld cards card remove <card> --yes       # delete it for good
+tinycld boards card archive <card>            # hide it, reversibly
+tinycld boards card archive <card> --unset    # bring it back
+tinycld boards card remove <card> --yes       # delete it for good
 ```
 
 Archiving is the reversible option and is almost always what you want.
@@ -150,24 +150,24 @@ and asks for `--yes` before doing so.
 ## Columns
 
 ```
-tinycld cards list show --board "Product launch"
-tinycld cards list add Blocked --board "Product launch"
-tinycld cards list rename "To do" Backlog --board "Product launch"
-tinycld cards list move Blocked 1 --board "Product launch"
-tinycld cards list category Blocked in_progress --board "Product launch"
-tinycld cards list done Shipped --board "Product launch"
+tinycld boards column show --board "Product launch"
+tinycld boards column add Blocked --board "Product launch"
+tinycld boards column rename "To do" Backlog --board "Product launch"
+tinycld boards column move Blocked 1 --board "Product launch"
+tinycld boards column category Blocked in_progress --board "Product launch"
+tinycld boards column done Shipped --board "Product launch"
 ```
 
-`list move` takes the position the column should end up in, counting from zero.
-`list category` sets what a column means: `backlog`, `todo`, `in_progress`,
+`column move` takes the position the column should end up in, counting from zero.
+`column category` sets what a column means: `backlog`, `todo`, `in_progress`,
 `done` or `canceled`. Cards in a done or canceled column show as finished and
-get no reminders. `list done` is shorthand for `category done`; add `--unset`
+get no reminders. `column done` is shorthand for `category done`; add `--unset`
 to make it an ordinary `todo` column again.
 
 Deleting a column **also deletes every card in it**, which cannot be undone:
 
 ```
-tinycld cards list remove Blocked --board "Product launch"
+tinycld boards column remove Blocked --board "Product launch"
 ```
 
 The command refuses and tells you how many cards would go with it. Re-run with
@@ -180,7 +180,7 @@ There are no commands for adding people to a board or creating share links.
 The command line tool is authorized to read and change your cards, but not to
 give other people access to them — so sharing is done in the app, where the
 Share dialog shows exactly who gains access. See
-[Sharing boards](help://cards:sharing-boards).
+[Sharing boards](help://boards:sharing-boards).
 
 ## Scripting
 
@@ -188,16 +188,16 @@ Every command accepts `--json` for stable, machine-readable output. Status
 messages go to the error stream, so what you pipe stays clean:
 
 ```
-tinycld cards board list --json | jq '.[].name'
-tinycld cards board view "Product launch" --json | jq '.[].cards[].title'
+tinycld boards list --json | jq '.[].name'
+tinycld boards view "Product launch" --json | jq '.[].cards[].title'
 ```
 
 `--output csv` is there too, for a spreadsheet or `cut`. Commands that change
 something print the row they wrote, so you can capture a new card's id:
 
 ```
-tinycld cards board list --output csv > boards.csv
-tinycld cards card add "Ship it" --board "Product launch" --list "To do" --output csv
+tinycld boards list --output csv > boards.csv
+tinycld boards card add "Ship it" --board "Product launch" --list "To do" --output csv
 ```
 
 Positions count from zero and are never negative — a negative index is refused

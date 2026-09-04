@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"context"
@@ -12,14 +12,14 @@ import (
 
 // A board's document is one namespace shared by everyone on the board, and the
 // write gate is board-level. The validator is what stops a member from writing
-// anywhere except their cards' editors — data parked under another root would
+// anywhere except their boards' editors — data parked under another root would
 // be invisible in the UI but replicated to every peer, journaled, and reloaded
 // forever.
 
 // updateWriting builds a real Yjs update that seeds the named fragment, which
 // is what a client's first edit to that card looks like on the wire.
 //
-// The document is minted through a Runtime rather than y-crdt directly: cards'
+// The document is minted through a Runtime rather than y-crdt directly: boards'
 // module deliberately carries no external dependencies, so every Yjs operation
 // it performs — including in tests — has to go through core.
 func updateWriting(t *testing.T, fragment string) []byte {
@@ -65,7 +65,7 @@ func TestValidateUpdate_RejectsForeignRoots(t *testing.T) {
 		"card:",         // the prefix with no id
 		"card:has space",
 		"card:UPPERCASE",
-		"cards:abc123",
+		"boards:abc123",
 	} {
 		t.Run(fragment, func(t *testing.T) {
 			err := validateUpdate("board", updateWriting(t, fragment))

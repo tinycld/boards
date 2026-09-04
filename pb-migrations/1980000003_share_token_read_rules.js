@@ -50,7 +50,7 @@
 //    four clauses land on the SAME joined row. An expired link cannot borrow
 //    `is_active` from a live one.
 //
-// 5. WHY cards_share_links' OWNER-ONLY listRule DOES NOT BLOCK THIS.
+// 5. WHY boards_share_links' OWNER-ONLY listRule DOES NOT BLOCK THIS.
 //    A @collection join normally gets the joined collection's own listRule
 //    AND-ed in (record_field_resolver.go:409-421 + :160-194) — which, being
 //    owner-only, would make this disjunct permanently false for an anon. It
@@ -67,8 +67,8 @@
 // ---------------------------------------------------------------------------
 // READ-ONLY, STRUCTURALLY — not by client courtesy. Only list/view gain the
 // disjunct. An anonymous caller cannot write regardless of the link's `role`,
-// for three independent reasons: cards_comments.author,
-// cards_attachments.uploaded_by and cards_cards.created_by are REQUIRED
+// for three independent reasons: boards_comments.author,
+// boards_attachments.uploaded_by and boards_cards.created_by are REQUIRED
 // relations to users and an anon has no id to put in them; the create rules pin
 // those fields to @request.auth.id, which is NULL; and no create/update/delete
 // rule gains a disjunct here.
@@ -79,11 +79,11 @@
 // reading it wrong.
 //
 // DELIBERATELY NOT TOUCHED:
-//   - cards_project_members. The roster is the org's member names and emails;
+//   - boards_project_members. The roster is the org's member names and emails;
 //     rosterRule (`viaMember && notGuest`) and core's
 //     1870000000_exclude_guests_from_org_rls exist precisely to keep a
 //     share-link visitor out of it. A disjunct here would reopen both.
-//   - cards_share_links. A token must never be able to enumerate tokens.
+//   - boards_share_links. A token must never be able to enumerate tokens.
 //   - Every create/update/delete rule, on every collection. That is what keeps
 //     notGuest, pinProject/pinCard and bootstrapFirstOwner unreachable from
 //     this change — each of them lives only on a rule that gains nothing here.
@@ -101,37 +101,37 @@ migrate(
         // expression if the base ever differed, and shipped_rules_test.go
         // asserts on literal clauses.
         const enabled = '@request.auth.disabled != true'
-        const isMember = 'cards_project_members_via_project.user ?= @request.auth.id'
-        const viaMember = 'project.cards_project_members_via_project.user ?= @request.auth.id'
+        const isMember = 'boards_project_members_via_project.user ?= @request.auth.id'
+        const viaMember = 'project.boards_project_members_via_project.user ?= @request.auth.id'
 
         const tokenMatch =
-            '@collection.cards_share_links.token ?= @request.headers.x_share_token'
+            '@collection.boards_share_links.token ?= @request.headers.x_share_token'
         const tokenLive =
-            '@collection.cards_share_links.is_active ?= true' +
-            ' && (@collection.cards_share_links.expires_at ?= ""' +
-            ' || @collection.cards_share_links.expires_at ?> @now)'
+            '@collection.boards_share_links.is_active ?= true' +
+            ' && (@collection.boards_share_links.expires_at ?= ""' +
+            ' || @collection.boards_share_links.expires_at ?> @now)'
 
         // `ref` names the project from the row being accessed: `project` on a
-        // content row, `id` on cards_projects itself. See mechanic 3.
+        // content row, `id` on boards_projects itself. See mechanic 3.
         const viaTokenOn = ref =>
             `(${tokenMatch} && ${tokenLive}` +
-            ` && @collection.cards_share_links.project ?= ${ref})`
+            ` && @collection.boards_share_links.project ?= ${ref})`
 
         const readableBy = (memberClause, ref) =>
             `(${enabled} && ${memberClause}) || ${viaTokenOn(ref)}`
 
-        const projectsCol = app.findCollectionByNameOrId('cards_projects')
+        const projectsCol = app.findCollectionByNameOrId('boards_projects')
         projectsCol.listRule = readableBy(isMember, 'id')
         projectsCol.viewRule = readableBy(isMember, 'id')
         app.save(projectsCol)
 
         for (const name of [
-            'cards_lists',
-            'cards_cards',
-            'cards_labels',
-            'cards_checklist_items',
-            'cards_comments',
-            'cards_attachments',
+            'boards_lists',
+            'boards_cards',
+            'boards_labels',
+            'boards_checklist_items',
+            'boards_comments',
+            'boards_attachments',
         ]) {
             const collection = app.findCollectionByNameOrId(name)
             collection.listRule = readableBy(viaMember, 'project')
@@ -143,21 +143,21 @@ migrate(
         // Restores 1980000000's list/view rules verbatim. Written out rather
         // than derived by stripping a suffix, for the same reason the up does.
         const enabled = '@request.auth.disabled != true'
-        const isMember = 'cards_project_members_via_project.user ?= @request.auth.id'
-        const viaMember = 'project.cards_project_members_via_project.user ?= @request.auth.id'
+        const isMember = 'boards_project_members_via_project.user ?= @request.auth.id'
+        const viaMember = 'project.boards_project_members_via_project.user ?= @request.auth.id'
 
-        const projectsCol = app.findCollectionByNameOrId('cards_projects')
+        const projectsCol = app.findCollectionByNameOrId('boards_projects')
         projectsCol.listRule = `${enabled} && ${isMember}`
         projectsCol.viewRule = `${enabled} && ${isMember}`
         app.save(projectsCol)
 
         for (const name of [
-            'cards_lists',
-            'cards_cards',
-            'cards_labels',
-            'cards_checklist_items',
-            'cards_comments',
-            'cards_attachments',
+            'boards_lists',
+            'boards_cards',
+            'boards_labels',
+            'boards_checklist_items',
+            'boards_comments',
+            'boards_attachments',
         ]) {
             const collection = app.findCollectionByNameOrId(name)
             collection.listRule = `${enabled} && ${viaMember}`

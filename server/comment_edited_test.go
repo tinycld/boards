@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	"github.com/pocketbase/pocketbase/tools/types"
 )
 
-// cards_comments.edited_at — the server-owned stamp behind the "(edited)"
+// boards_comments.edited_at — the server-owned stamp behind the "(edited)"
 // marker. These bind registerCommentEditedAt itself (it takes core.App for
 // exactly this reason), so the assertions cover the shipped hook rather than a
 // paraphrase of it.
@@ -27,7 +27,7 @@ func TestCommentEditedAt_BodyChangeStampsEvenInsideOneMillisecond(t *testing.T) 
 
 	// Immediately — the whole point is that no wall-clock separation from the
 	// create is required for the stamp to appear.
-	fresh, err := env.app.FindRecordById("cards_comments", comment.Id)
+	fresh, err := env.app.FindRecordById("boards_comments", comment.Id)
 	if err != nil {
 		t.Fatalf("reload comment: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestCommentEditedAt_UnchangedBodyCannotInventOrErase(t *testing.T) {
 	comment := cardsComment(t, env.app, env.project, env.card, env.commentor, "steady")
 
 	// Invent: same body, a forged stamp.
-	fresh, err := env.app.FindRecordById("cards_comments", comment.Id)
+	fresh, err := env.app.FindRecordById("boards_comments", comment.Id)
 	if err != nil {
 		t.Fatalf("reload comment: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestCommentEditedAt_UnchangedBodyCannotInventOrErase(t *testing.T) {
 	}
 
 	// Erase: a real edit first, then an unchanged-body save carrying ''.
-	fresh, err = env.app.FindRecordById("cards_comments", comment.Id)
+	fresh, err = env.app.FindRecordById("boards_comments", comment.Id)
 	if err != nil {
 		t.Fatalf("reload comment: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestCommentEditedAt_UnchangedBodyCannotInventOrErase(t *testing.T) {
 		t.Fatalf("edited_at zero after a real edit")
 	}
 
-	fresh, err = env.app.FindRecordById("cards_comments", comment.Id)
+	fresh, err = env.app.FindRecordById("boards_comments", comment.Id)
 	if err != nil {
 		t.Fatalf("reload comment: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestCommentEditedAt_SecondEditRestamps(t *testing.T) {
 
 	comment := cardsComment(t, env.app, env.project, env.card, env.commentor, "v1")
 
-	fresh, err := env.app.FindRecordById("cards_comments", comment.Id)
+	fresh, err := env.app.FindRecordById("boards_comments", comment.Id)
 	if err != nil {
 		t.Fatalf("reload comment: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestCommentEditedAt_SecondEditRestamps(t *testing.T) {
 	}
 	first := fresh.GetDateTime("edited_at")
 
-	fresh, err = env.app.FindRecordById("cards_comments", comment.Id)
+	fresh, err = env.app.FindRecordById("boards_comments", comment.Id)
 	if err != nil {
 		t.Fatalf("reload comment: %v", err)
 	}

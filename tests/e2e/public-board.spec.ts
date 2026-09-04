@@ -49,7 +49,7 @@ async function mintShareLink(page: Page, boardName: string, role: string): Promi
     }
     await page.getByRole('button', { name: 'Create share link' }).click()
 
-    const url = page.getByText(/\/p\/cards\/board\//)
+    const url = page.getByText(/\/p\/boards\//)
     await expect(url).toBeVisible()
     const text = (await url.textContent())?.trim()
     if (!text) throw new Error('the dialog rendered no share URL')
@@ -81,13 +81,13 @@ async function visitAsStranger(page: Page, url: string): Promise<Page> {
     return visitor
 }
 
-test.describe('Cards — a board opened by share link', () => {
+test.describe('Boards — a board opened by share link', () => {
     test('an owner mints a viewer link and a stranger can read the board', async ({
         page,
         browser,
     }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         const board = `Launch plan ${Date.now()}`
         await createBoard(page, board)
         await addCard(page, 0, CARD_TITLE)
@@ -120,7 +120,7 @@ test.describe('Cards — a board opened by share link', () => {
 
     test('the roster stays hidden from a link visitor', async ({ page, browser }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         const board = `Private roster ${Date.now()}`
         await createBoard(page, board)
         await addCard(page, 0, CARD_TITLE)
@@ -134,7 +134,7 @@ test.describe('Cards — a board opened by share link', () => {
         // no disjunct to it, so a visitor reads no member rows at all. This is
         // the leak the whole design is arranged to prevent — a link must not
         // hand out the org's names and email addresses.
-        await expect(visitor.getByTestId(/^cards-member-row-/)).toHaveCount(0)
+        await expect(visitor.getByTestId(/^boards-member-row-/)).toHaveCount(0)
         await expect(visitor.getByText('@', { exact: false })).toHaveCount(0)
 
         await visitor.context().close()
@@ -142,7 +142,7 @@ test.describe('Cards — a board opened by share link', () => {
 
     test('an editor link offers a sign-in, a viewer link does not', async ({ page, browser }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         const board = `Contributors welcome ${Date.now()}`
         await createBoard(page, board)
         await addCard(page, 0, CARD_TITLE)
@@ -173,7 +173,7 @@ test.describe('Cards — a board opened by share link', () => {
         // The caller every other spec in this file structurally cannot reach.
         // Their visitor is a fresh anonymous context, and anonymity is what
         // made the old board resolution right by accident: the access rules
-        // scope cards_projects to exactly the shared board, so "the first
+        // scope boards_projects to exactly the shared board, so "the first
         // project I can read" could only ever BE the shared board.
         //
         // A signed-in non-member reads their OWN boards from that collection
@@ -184,7 +184,7 @@ test.describe('Cards — a board opened by share link', () => {
         // board and renders it under a Read only badge — someone else's link
         // silently showing you your own work.
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         // Per-run names: the stranger is a SHARED account that keeps whatever
         // boards earlier runs left it, so a fixed "Stranger own board" would
         // collide and the "not my own board" assertion below would be reading
@@ -203,7 +203,7 @@ test.describe('Cards — a board opened by share link', () => {
         // A real second account, signed in, holding a board of its own and no
         // membership on the shared one.
         const stranger = await signInAsCollaborator(page)
-        await navigateToPackage(stranger.page, 'cards')
+        await navigateToPackage(stranger.page, 'boards')
         await createBoard(stranger.page, strangerBoard)
 
         // While it is still live, the link resolves to the SHARED board — not
@@ -222,7 +222,7 @@ test.describe('Cards — a board opened by share link', () => {
 
         // Now kill it. The owner's page is still on its board, but the share
         // dialog was closed when the link was minted — reopen it.
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         await openShareDialog(page, ownerBoard)
         await page.getByRole('button', { name: 'Revoke share link' }).click()
         await expect(page.getByText('Restricted', { exact: false })).toBeVisible()
@@ -245,7 +245,7 @@ test.describe('Cards — a board opened by share link', () => {
 
     test('revoking a link closes it immediately', async ({ page, browser }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         const board = `Short lived ${Date.now()}`
         await createBoard(page, board)
         await addCard(page, 0, CARD_TITLE)

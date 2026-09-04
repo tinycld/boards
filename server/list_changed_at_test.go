@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	"github.com/pocketbase/pocketbase/tools/types"
 )
 
-// cards_cards.list_changed_at — the server-owned clock the auto-archive sweep
+// boards_cards.list_changed_at — the server-owned clock the auto-archive sweep
 // counts from. These bind registerListChangedAt itself, the
 // card_archived_test.go shape.
 
@@ -20,7 +20,7 @@ func TestListChangedAt_StampedOnCreateAndOnEveryMove(t *testing.T) {
 	card := cardsCard(t, env.app, env.project, todo, "fresh", "z0", env.owner)
 	// Re-read: the in-memory stamp carries nanoseconds, the stored one
 	// milliseconds, and the comparisons below are against what is stored.
-	stored, err := env.app.FindRecordById("cards_cards", card.Id)
+	stored, err := env.app.FindRecordById("boards_cards", card.Id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func TestListChangedAt_StampedOnCreateAndOnEveryMove(t *testing.T) {
 
 	// A move re-stamps; the old value is what the sweep would have counted from.
 	backdated := types.NowDateTime().Add(-48 * time.Hour)
-	fresh, err := env.app.FindRecordById("cards_cards", card.Id)
+	fresh, err := env.app.FindRecordById("boards_cards", card.Id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestListChangedAt_StampedOnCreateAndOnEveryMove(t *testing.T) {
 		t.Fatalf("a title edit changed list_changed_at to %v, want %v kept (forged clock survived)", got, created)
 	}
 
-	fresh, err = env.app.FindRecordById("cards_cards", card.Id)
+	fresh, err = env.app.FindRecordById("boards_cards", card.Id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestListChangedAt_ClientCannotErase(t *testing.T) {
 	todo := cardsList(t, env.app, env.project, "To do", "a8")
 
 	card := cardsCard(t, env.app, env.project, todo, "fresh", "z0", env.owner)
-	fresh, err := env.app.FindRecordById("cards_cards", card.Id)
+	fresh, err := env.app.FindRecordById("boards_cards", card.Id)
 	if err != nil {
 		t.Fatal(err)
 	}

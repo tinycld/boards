@@ -14,7 +14,7 @@ link that opens the card.
 The list offers the people on that board and nobody else, so a mention always
 reaches someone who can actually open the card. If the person you want is not
 there, add them to the board first — see
-[Sharing boards](help://cards:sharing-boards).
+[Sharing boards](help://boards:sharing-boards).
 
 You will not find yourself in the list. Mentioning yourself would only notify
 you about something you just wrote.
@@ -64,4 +64,4 @@ can filter without losing your place.
 
 Mentions are one kind of card notification. For assignments, replies, watched
 cards and due-date reminders — and how to turn any of them off — see
-[Notifications and watching cards](help://cards:notifications).
+[Notifications and watching cards](help://boards:notifications).

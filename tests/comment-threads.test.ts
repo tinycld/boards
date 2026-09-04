@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { buildCommentThreads } from '../tinycld/cards/lib/comment-threads'
-import type { BoardComment } from '../tinycld/cards/types'
+import { buildCommentThreads } from '../tinycld/boards/lib/comment-threads'
+import type { BoardComment } from '../tinycld/boards/types'
 
 function comment(id: string, parent = '', body = id): BoardComment {
     return {

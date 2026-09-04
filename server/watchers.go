@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"github.com/pocketbase/dbx"
@@ -8,7 +8,7 @@ import (
 // Card watchers: who is told when a card they follow changes.
 //
 // People become watchers two ways. Explicitly, through the Watch button —
-// a cards_card_watchers row the client inserts for itself. And AUTOMATICALLY,
+// a boards_card_watchers row the client inserts for itself. And AUTOMATICALLY,
 // here, on the actions that make someone a party to a card: creating it,
 // being set as its reporter, being assigned, commenting on it. That is the
 // Jira convention, and it is what makes the notification story hold without
@@ -22,7 +22,7 @@ import (
 // ensureWatcher is idempotent on the unique (card, user) index.
 
 func registerAutoWatch(app core.App) {
-	app.OnRecordAfterCreateSuccess("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordAfterCreateSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		card := e.Record
 		ensureWatcher(app, card.GetString("project"), card.Id, card.GetString("created_by"))
 		ensureWatcher(app, card.GetString("project"), card.Id, card.GetString("reporter"))
@@ -31,7 +31,7 @@ func registerAutoWatch(app core.App) {
 		}
 		return e.Next()
 	})
-	app.OnRecordAfterUpdateSuccess("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordAfterUpdateSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		card := e.Record
 		original := card.Original()
 		if original.GetString("project") == "" {
@@ -46,7 +46,7 @@ func registerAutoWatch(app core.App) {
 		}
 		return e.Next()
 	})
-	app.OnRecordAfterCreateSuccess("cards_comments").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordAfterCreateSuccess("boards_comments").BindFunc(func(e *core.RecordEvent) error {
 		comment := e.Record
 		ensureWatcher(app, comment.GetString("project"), comment.GetString("card"), comment.GetString("author"))
 		return e.Next()
@@ -61,17 +61,17 @@ func ensureWatcher(app core.App, projectID, cardID, userID string) {
 	}
 	// Only members watch: a card assigned to someone who since left the board
 	// must not keep paging them.
-	member, err := app.CountRecords("cards_project_members",
+	member, err := app.CountRecords("boards_project_members",
 		dbx.HashExp{"project": projectID, "user": userID})
 	if err != nil || member == 0 {
 		return
 	}
-	existing, err := app.CountRecords("cards_card_watchers",
+	existing, err := app.CountRecords("boards_card_watchers",
 		dbx.HashExp{"card": cardID, "user": userID})
 	if err != nil || existing > 0 {
 		return
 	}
-	col, err := app.FindCollectionByNameOrId("cards_card_watchers")
+	col, err := app.FindCollectionByNameOrId("boards_card_watchers")
 	if err != nil {
 		return
 	}
@@ -86,7 +86,7 @@ func ensureWatcher(app core.App, projectID, cardID, userID string) {
 
 // watcherIDs returns the users following a card.
 func watcherIDs(app core.App, cardID string) []string {
-	rows, err := app.FindRecordsByFilter("cards_card_watchers", "card = {:card}", "", 0, 0,
+	rows, err := app.FindRecordsByFilter("boards_card_watchers", "card = {:card}", "", 0, 0,
 		dbx.Params{"card": cardID})
 	if err != nil {
 		return nil

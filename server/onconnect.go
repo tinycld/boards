@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"encoding/json"
@@ -23,7 +23,7 @@ type boardHello struct {
 }
 
 // makeOnConnect resolves the joining member's role and tells them what they may
-// do. Roles come from cards_project_members and mirror lib/permissions.ts:
+// do. Roles come from boards_project_members and mirror lib/permissions.ts:
 // owner and editor may write; commentor and viewer may not.
 //
 // Commentors are read-only HERE specifically because comments are ordinary
@@ -41,7 +41,7 @@ func isReadOnly(app core.App, projectID, authID string) bool {
 		return true
 	}
 	records, err := app.FindRecordsByFilter(
-		"cards_project_members",
+		"boards_project_members",
 		"project = {:project} && user = {:user}",
 		"", 1, 0,
 		dbx.Params{"project": projectID, "user": authID},

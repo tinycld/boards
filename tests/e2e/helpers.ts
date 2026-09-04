@@ -60,7 +60,7 @@ export async function openCard(page: Page, title: string) {
  */
 export async function closeCardPeek(page: Page) {
     await page.getByRole('button', { name: 'Close' }).click()
-    await expect(page.getByTestId('cards-card-peek')).toHaveCount(0)
+    await expect(page.getByTestId('boards-card-peek')).toHaveCount(0)
 }
 
 /**
@@ -74,7 +74,7 @@ export async function closeCardPeek(page: Page) {
  * behind it, so returning with it half-open wedges the caller's next click.
  *
  * ORDER MATTERS: share FIRST, sign the collaborator in AFTER. Granting a
- * membership makes an EXISTING cards_projects row newly visible, and
+ * membership makes an EXISTING boards_projects row newly visible, and
  * PocketBase realtime only emits events for records that change — the project
  * row didn't — so a session whose cards screen synced before the grant is
  * never told the board exists. Locally that session's cards screen usually
@@ -168,7 +168,7 @@ export async function addCard(page: Page, columnIndex: number, title: string) {
  * a one-shot dragTo() is silently dropped. Under CPU contention a whole
  * press→move burst can be starved, so if the live-drag marker hasn't
  * mounted we fully release and re-press (what a user does when a grab
- * doesn't take). `cards-drag-active` is the deterministic "drag is live"
+ * doesn't take). `boards-drag-active` is the deterministic "drag is live"
  * signal (mounted by BoardCanvas for card AND column drags).
  *
  * No dwell between the press and the slop moves. There used to be a 60ms
@@ -177,7 +177,7 @@ export async function addCard(page: Page, columnIndex: number, title: string) {
  * --repeat-each=3 without it.
  */
 export async function activateDrag(page: Page, start: { x: number; y: number }) {
-    const active = page.getByTestId('cards-drag-active')
+    const active = page.getByTestId('boards-drag-active')
     await expect(async () => {
         if ((await active.count()) === 0) {
             await page.mouse.up().catch(() => {})
@@ -269,12 +269,12 @@ async function cancelDrag(
 ) {
     await travelTo(page, from, home)
     await page.mouse.up().catch(() => {})
-    await expect(page.getByTestId('cards-drag-active')).toHaveCount(0)
+    await expect(page.getByTestId('boards-drag-active')).toHaveCount(0)
 }
 
 /**
  * Drag a card onto another column, releasing only after that column
- * reports receiving (`cards-column-receiving` mounts while a foreign card
+ * reports receiving (`boards-column-receiving` mounts while a foreign card
  * hovers it — releasing earlier is the drop-misses flake).
  *
  * The whole gesture retries when receiving never registers, for the same
@@ -288,7 +288,7 @@ export async function dragCardToColumn(
     columnName: string,
     options?: { below?: Locator }
 ) {
-    const receiving = page.getByTestId('cards-column-receiving')
+    const receiving = page.getByTestId('boards-column-receiving')
     let lastError: unknown = new Error('dragCardToColumn: no attempt ran')
     for (let attempt = 0; attempt < 3; attempt++) {
         const headerBox = await stableBoxOf(columnHeader(page, columnName))
@@ -370,7 +370,7 @@ export async function dragCardToColumn(
  * dragging downward past the target is what makes the target itself shift.
  */
 export async function dragCardBelow(page: Page, card: Locator, targetCard: Locator) {
-    const active = page.getByTestId('cards-drag-active')
+    const active = page.getByTestId('boards-drag-active')
     let lastError: unknown = new Error('dragCardBelow: no attempt ran')
     for (let attempt = 0; attempt < 3; attempt++) {
         const box = await stableBoxOf(targetCard)
@@ -434,7 +434,7 @@ export async function dragColumn(
     await activateDrag(page, start)
     await travelTo(page, start, end)
 
-    const bar = page.getByTestId('cards-column-insertion-bar')
+    const bar = page.getByTestId('boards-column-insertion-bar')
     await expect(async () => {
         await page.mouse.move(end.x, end.y + 30)
         await page.mouse.move(end.x, end.y)
@@ -479,9 +479,9 @@ export async function cardsInColumn(page: Page, name: string): Promise<string[]>
             .map(({ card }) => {
                 // The title alone: a face also carries its key, and pills
                 // (due, estimate) whose text would otherwise run into the name.
-                const title = card.querySelector('[data-testid="cards-card-title"]')
+                const title = card.querySelector('[data-testid="boards-card-title"]')
                 if (title?.textContent) return title.textContent.trim()
-                const key = card.querySelector('[data-testid="cards-card-key"]')
+                const key = card.querySelector('[data-testid="boards-card-key"]')
                 const text = card.textContent ?? ''
                 const keyText = key?.textContent ?? ''
                 return (

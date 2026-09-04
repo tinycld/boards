@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"sort"
@@ -9,7 +9,7 @@ import (
 	"github.com/pocketbase/pocketbase/tests"
 )
 
-// cards_activity — the server-written card history. These bind
+// boards_activity — the server-written card history. These bind
 // registerActorCapture and registerCardActivity themselves, so they measure
 // the shipped hooks; the RLS half lives in activity_rls_test.go.
 
@@ -25,12 +25,12 @@ func setupActivityEnv(t *testing.T) *cardsEnv {
 // API does, so the actor is captured (the member_owner_guard_test.go shape).
 func updateCardAs(t *testing.T, app *tests.TestApp, caller *core.Record, cardID string, mutate func(*core.Record)) {
 	t.Helper()
-	fresh, err := app.FindRecordById("cards_cards", cardID)
+	fresh, err := app.FindRecordById("boards_cards", cardID)
 	if err != nil {
 		t.Fatalf("reload card: %v", err)
 	}
 	mutate(fresh)
-	col, err := app.FindCollectionByNameOrId("cards_cards")
+	col, err := app.FindCollectionByNameOrId("boards_cards")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func updateCardAs(t *testing.T, app *tests.TestApp, caller *core.Record, cardID 
 		Record:       fresh,
 	}
 	e.Collection = col
-	err = app.OnRecordUpdateRequest("cards_cards").Trigger(e, func(_ *core.RecordRequestEvent) error {
+	err = app.OnRecordUpdateRequest("boards_cards").Trigger(e, func(_ *core.RecordRequestEvent) error {
 		return app.Save(fresh)
 	})
 	if err != nil {
@@ -49,7 +49,7 @@ func updateCardAs(t *testing.T, app *tests.TestApp, caller *core.Record, cardID 
 
 func activityRows(t *testing.T, app core.App, cardID string) []*core.Record {
 	t.Helper()
-	rows, err := app.FindRecordsByFilter("cards_activity", "card = {:card}", "created,id", 0, 0,
+	rows, err := app.FindRecordsByFilter("boards_activity", "card = {:card}", "created,id", 0, 0,
 		dbx.Params{"card": cardID})
 	if err != nil {
 		t.Fatalf("list activity: %v", err)
@@ -225,7 +225,7 @@ func rowsFromTo(rows []*core.Record) []string {
 func TestActivity_ChecklistCompletionAndAttachment(t *testing.T) {
 	env := setupActivityEnv(t)
 	item := cardsChecklistItem(t, env.app, env.project, env.card, "Ship it", "a0")
-	fresh, err := env.app.FindRecordById("cards_checklist_items", item.Id)
+	fresh, err := env.app.FindRecordById("boards_checklist_items", item.Id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +251,7 @@ func TestActivity_ChecklistCompletionAndAttachment(t *testing.T) {
 // request and therefore no actor.
 func TestActivity_ServerWriteHasNoActor(t *testing.T) {
 	env := setupActivityEnv(t)
-	fresh, err := env.app.FindRecordById("cards_cards", env.card.Id)
+	fresh, err := env.app.FindRecordById("boards_cards", env.card.Id)
 	if err != nil {
 		t.Fatal(err)
 	}

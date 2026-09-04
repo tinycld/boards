@@ -3,7 +3,7 @@
     "compilerOptions": {
         "baseUrl": ".",
         "paths": {
-            "~/tinycld/cards/*": ["./tinycld/cards/*"]
+            "~/tinycld/boards/*": ["./tinycld/boards/*"]
         }
     },
     "include": ["tinycld/**/*.ts", "tinycld/**/*.tsx"],

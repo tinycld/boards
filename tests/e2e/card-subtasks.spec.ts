@@ -24,7 +24,7 @@ async function freshBoard(page: Page): Promise<string> {
 }
 
 function peek(page: Page) {
-    return page.getByTestId('cards-card-peek')
+    return page.getByTestId('boards-card-peek')
 }
 
 async function openCard(page: Page, title: string) {
@@ -39,19 +39,19 @@ async function addSubtask(page: Page, parentTitle: string, title: string) {
     await page.keyboard.press('Enter')
     // The row is what proves the card exists, not the composer clearing.
     await expect(
-        peek(page).getByTestId('cards-subtask-row').filter({ hasText: title })
+        peek(page).getByTestId('boards-subtask-row').filter({ hasText: title })
     ).toBeVisible()
     await closeCardPeek(page)
 }
 
 /** The parent's rollup pill, read off its face on the board. */
 function rollup(page: Page, parentTitle: string) {
-    return boardCard(page, parentTitle).getByTestId('cards-subtask-pill')
+    return boardCard(page, parentTitle).getByTestId('boards-subtask-pill')
 }
 
 test.beforeEach(async ({ page }) => {
     await login(page)
-    await navigateToPackage(page, 'cards')
+    await navigateToPackage(page, 'boards')
 })
 
 test('a sub-task is a real card carrying its parent’s key', async ({ page }) => {
@@ -63,9 +63,9 @@ test('a sub-task is a real card carrying its parent’s key', async ({ page }) =
     // that is the whole design, not an implementation detail.
     await expect(boardCard(page, CHILD)).toBeVisible()
     // And it says what it belongs to.
-    await expect(boardCard(page, CHILD).getByTestId('cards-parent-chip')).toBeVisible()
+    await expect(boardCard(page, CHILD).getByTestId('boards-parent-chip')).toBeVisible()
     // The parent, meanwhile, is not itself a sub-task.
-    await expect(boardCard(page, PARENT).getByTestId('cards-parent-chip')).toHaveCount(0)
+    await expect(boardCard(page, PARENT).getByTestId('boards-parent-chip')).toHaveCount(0)
 })
 
 test('the parent’s face counts its sub-tasks', async ({ page }) => {
@@ -125,5 +125,5 @@ test('deleting a parent leaves its sub-tasks on the board', async ({ page }) => 
     await expect(boardCard(page, PARENT)).toHaveCount(0)
     // The sub-task survives, and stops claiming a parent it no longer has.
     await expect(boardCard(page, CHILD)).toBeVisible()
-    await expect(boardCard(page, CHILD).getByTestId('cards-parent-chip')).toHaveCount(0)
+    await expect(boardCard(page, CHILD).getByTestId('boards-parent-chip')).toHaveCount(0)
 })
