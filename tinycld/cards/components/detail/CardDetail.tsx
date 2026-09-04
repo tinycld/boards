@@ -7,6 +7,7 @@ import { useAttachmentMutations } from '../../hooks/useAttachmentMutations'
 import { useCardDetail } from '../../hooks/useCardDetail'
 import { useUpdateCard } from '../../hooks/useCardMutations'
 import { useCommentMutations } from '../../hooks/useCommentMutations'
+import { useCommentReactions } from '../../hooks/useCommentReactions'
 import { useProjectRole } from '../../hooks/useProjectRole'
 import { type DescriptionMode, descriptionMode } from '../../lib/description-mode'
 import type { BoardAttachment, BoardCardView, BoardLabel, BoardMember } from '../../types'
@@ -116,6 +117,8 @@ export function CardDetail({
     const { user } = useAuth({ throwIfAnon: false })
     const { uploadFiles } = useAttachmentMutations(card.id, projectId, user?.id ?? '')
     const { createComment, updateComment, deleteComment } = useCommentMutations(card.id, projectId)
+    // Its own query, not a fifth join in useCardDetail — see the hook.
+    const { reactionsFor, toggleReaction } = useCommentReactions(projectId, card.id)
     // Which comment the composer is replying to. Local because it is transient
     // UI state that dies with the open card, and it lives HERE rather than in
     // the composer because the activity list is what sets it.
@@ -237,6 +240,8 @@ export function CardDetail({
                             activityContext={activityContext}
                             canComment={canCommentNow}
                             canModerate={isOwner}
+                            reactionsFor={reactionsFor}
+                            onToggleReaction={toggleReaction}
                             cardId={card.id}
                             projectId={projectId}
                             attachments={attachments}

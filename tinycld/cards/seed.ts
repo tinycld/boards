@@ -2,6 +2,7 @@ import type PocketBase from 'pocketbase'
 import type { ListCategory } from './lib/list-category'
 import type { CardPriority } from './lib/priority'
 import { initialRanks } from './lib/rank'
+import type { ReactionEmoji } from './lib/reactions'
 
 function log(...args: unknown[]) {
     process.stdout.write(`[seed:cards] ${args.join(' ')}\n`)
@@ -43,6 +44,8 @@ interface CommentSeed {
      */
     editedBody?: string
     replies?: { author: Who; body: string }[]
+    /** Who reacted with what; two people on one emoji is what makes a count. */
+    reactions?: { by: Who; emoji: ReactionEmoji }[]
 }
 
 interface CardSeed {
@@ -255,6 +258,11 @@ const BOARDS: BoardSeed[] = [
                                 author: 'me',
                                 body: 'Landed — moves are a single-line update now.',
                                 editedBody: 'Landed — moves are a single-row update now.',
+                                reactions: [
+                                    { by: 'teammate', emoji: '🎉' },
+                                    { by: 'me', emoji: '🎉' },
+                                    { by: 'teammate', emoji: '🚀' },
+                                ],
                             },
                         ],
                     },
@@ -442,29 +450,7 @@ async function seedBoard(
                 }
             }
 
-            for (const comment of card.comments ?? []) {
-                const top = await pb.collection('cards_comments').create({
-                    card: cardRecord.id,
-                    project: project.id,
-                    author: who(comment.author),
-                    body: comment.body,
-                    parent: '',
-                })
-                if (comment.editedBody) {
-                    await pb.collection('cards_comments').update(top.id, {
-                        body: comment.editedBody,
-                    })
-                }
-                for (const reply of comment.replies ?? []) {
-                    await pb.collection('cards_comments').create({
-                        card: cardRecord.id,
-                        project: project.id,
-                        author: who(reply.author),
-                        body: reply.body,
-                        parent: top.id,
-                    })
-                }
-            }
+            await seedComments(pb, project.id, cardRecord.id, card.comments ?? [], who)
         }
     }
 }
@@ -492,4 +478,44 @@ export default async function seed(pb: PocketBase, { user, companion }: SeedCont
         await seedBoard(pb, board, user.id, teammates)
     }
     log(`Created ${boards.length} boards`)
+}
+
+/** One card's comment threads: each top-level comment, its edit, its reactions, its replies. */
+async function seedComments(
+    pb: PocketBase,
+    projectId: string,
+    cardId: string,
+    comments: CommentSeed[],
+    who: (w: Who) => string
+) {
+    for (const comment of comments) {
+        const top = await pb.collection('cards_comments').create({
+            card: cardId,
+            project: projectId,
+            author: who(comment.author),
+            body: comment.body,
+            parent: '',
+        })
+        if (comment.editedBody) {
+            await pb.collection('cards_comments').update(top.id, { body: comment.editedBody })
+        }
+        for (const reaction of comment.reactions ?? []) {
+            await pb.collection('cards_comment_reactions').create({
+                project: projectId,
+                card: cardId,
+                comment: top.id,
+                user: who(reaction.by),
+                emoji: reaction.emoji,
+            })
+        }
+        for (const reply of comment.replies ?? []) {
+            await pb.collection('cards_comments').create({
+                card: cardId,
+                project: projectId,
+                author: who(reply.author),
+                body: reply.body,
+                parent: top.id,
+            })
+        }
+    }
 }

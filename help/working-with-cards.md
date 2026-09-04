@@ -222,6 +222,12 @@ Press ⌘↩ or the Send button to post. Plain Enter starts a new line, so a
 longer comment does not send itself half-written. Reply to a comment to keep a
 thread together.
 
+To react to a comment without writing one, click the smiley under it and pick
+an emoji — a thumbs up, a heart, a laugh, a party, eyes, or a rocket. The
+reaction appears as a chip with a count; click a chip to add yours to it or
+take yours back. Anyone who can comment can react, and anyone who can see the
+card, including people reading a shared board by link, sees the reactions.
+
 To fix or expand one of your own comments, click it — it opens for editing
 with the same formatting buttons. Save (⌘↩, or clicking elsewhere) keeps the
 change; Esc closes without keeping it. Comments changed after posting show a
