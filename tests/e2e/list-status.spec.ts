@@ -56,16 +56,16 @@ test.describe('Cards — list status', () => {
         // keeps it closed but changes the glyph.
         await addCard(page, 2, ALPHA)
         const face = boardCard(page, ALPHA)
-        await expect(face.locator('[data-testid^="board-card-closed-"]')).toBeVisible()
+        await expect(face.locator('[data-testid^="cards-card-closed-"]')).toBeVisible()
 
         await setListStatus(page, 'Done', 'canceled')
         await expect(glyph(page, 'Done', 'canceled')).toBeVisible()
-        await expect(face.locator('[data-testid^="board-card-closed-"]')).toBeVisible()
+        await expect(face.locator('[data-testid^="cards-card-closed-"]')).toBeVisible()
 
         // Back to an open status: the card gets its ordinary face again.
         await setListStatus(page, 'Done', 'todo')
         await expect(glyph(page, 'Done', 'todo')).toBeVisible()
-        await expect(face.locator('[data-testid^="board-card-closed-"]')).toHaveCount(0)
+        await expect(face.locator('[data-testid^="cards-card-closed-"]')).toHaveCount(0)
     })
 
     test('the status facet narrows the board by list', async ({ page }) => {

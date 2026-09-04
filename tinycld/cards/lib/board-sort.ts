@@ -11,7 +11,15 @@ import { byCreatedThenId } from './created-order'
 import { compareEstimate } from './estimate'
 import { comparePriority } from './priority'
 
-export type SortField = 'manual' | 'due' | 'created' | 'title' | 'key' | 'priority' | 'estimate'
+export type SortField =
+    | 'manual'
+    | 'due'
+    | 'start'
+    | 'created'
+    | 'title'
+    | 'key'
+    | 'priority'
+    | 'estimate'
 export type SortDirection = 'asc' | 'desc'
 
 export interface BoardSort {
@@ -25,6 +33,7 @@ export const MANUAL_SORT: BoardSort = Object.freeze({ field: 'manual', direction
 export const SORT_FIELD_LABELS: Record<SortField, string> = {
     manual: 'Manual order',
     due: 'Due date',
+    start: 'Start date',
     created: 'Created',
     title: 'Title',
     key: 'Key',
@@ -69,6 +78,8 @@ function isMissing(field: Exclude<SortField, 'manual'>, card: BoardCardView): bo
     switch (field) {
         case 'due':
             return card.due === undefined
+        case 'start':
+            return card.start === undefined
         case 'key':
             return keyNumber(card.key) === null
         case 'created':
@@ -88,6 +99,10 @@ function byRank(a: BoardCardView, b: BoardCardView): number {
 /** Both dated — compareCards has already sent the undated to the end. */
 function byDue(a: BoardCardView, b: BoardCardView): number {
     return (a.due?.getTime() ?? 0) - (b.due?.getTime() ?? 0)
+}
+
+function byStart(a: BoardCardView, b: BoardCardView): number {
+    return (a.start?.getTime() ?? 0) - (b.start?.getTime() ?? 0)
 }
 
 function byTitle(a: BoardCardView, b: BoardCardView): number {
@@ -110,6 +125,7 @@ function keyNumber(key: string): number | null {
 
 const PRIMARY: Record<Exclude<SortField, 'manual'>, Comparator> = {
     due: byDue,
+    start: byStart,
     created: byCreatedThenId,
     title: byTitle,
     key: byKey,

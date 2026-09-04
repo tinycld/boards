@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -232,17 +233,19 @@ func newBoardViewCmd(c *client.Client) *cobra.Command {
 	return cmd
 }
 
-// dueCell renders a card's due date. PocketBase stores a date as a full
-// timestamp string, but cards are day-granular (lib/dates is day-granular for
-// exactly this reason), so only the date half is shown.
+// dueCell renders a card's due date. A day-only deadline shows the date half
+// of the stored midnight; a timed one is an instant, shown in THIS machine's
+// local zone, which is what a terminal user means by "when".
 func dueCell(cd card) string {
 	if cd.Due == "" {
 		return "-"
 	}
-	if len(cd.Due) >= 10 {
-		return cd.Due[:10]
+	if cd.DueHasTime {
+		if at, err := time.Parse(pbDateFormat, cd.Due); err == nil {
+			return at.Local().Format("2006-01-02 15:04")
+		}
 	}
-	return cd.Due
+	return dayCell(cd.Due)
 }
 
 func checklistCell(cd card) string {

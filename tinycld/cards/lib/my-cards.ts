@@ -155,7 +155,7 @@ export function sortMyCards(rows: MyCardRow[], now: Date = new Date()): MyCardRo
 function dueRank(card: BoardCardView, now: Date): number {
     if (isClosedCategory(card.listCategory)) return 3
     if (!card.due) return 2
-    return dueStateFor(card.due, now) === 'overdue' ? 0 : 1
+    return dueStateFor(card.due, now, card.dueHasTime) === 'overdue' ? 0 : 1
 }
 
 const DUE_BUCKETS = {
@@ -216,7 +216,7 @@ export function groupMyCards(
 function dueBucketFor(card: BoardCardView, now: Date): DueBucket {
     if (isClosedCategory(card.listCategory)) return 'closed'
     if (!card.due) return 'none'
-    const state = dueStateFor(card.due, now)
+    const state = dueStateFor(card.due, now, card.dueHasTime)
     if (state === 'overdue') return 'overdue'
     if (state === 'upcoming') return 'later'
     const isToday =

@@ -58,6 +58,8 @@ function card(
         title: id,
         description: '',
         due: '',
+        due_has_time: false,
+        start: '',
         assignees: [],
         labels: [],
         created_by: 'u1',
@@ -345,6 +347,24 @@ describe('toBoardCard', () => {
         expect(
             toBoardCard(card('c1', 'l1', 'a0'), labels, users, 'OTTER', 'in_progress').listCategory
         ).toBe('in_progress')
+    })
+
+    it('reads a timed due date as an instant and a start as a day', () => {
+        const instant = new Date(2026, 8, 12, 14, 30)
+        const view = toBoardCard(
+            card('c1', 'l1', 'a0', {
+                due: instant.toISOString(),
+                due_has_time: true,
+                start: '2026-09-10 00:00:00.000Z',
+            }),
+            labels,
+            users,
+            'OTTER',
+            'todo'
+        )
+        expect(view.due?.getTime()).toBe(instant.getTime())
+        expect(view.dueHasTime).toBe(true)
+        expect(view.start && [view.start.getMonth(), view.start.getDate()]).toEqual([8, 10])
     })
 
     it('reads the stored zero as no estimate', () => {

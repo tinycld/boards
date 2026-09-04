@@ -133,9 +133,9 @@ function matchesDue(card: BoardCardView, due: DueFilter, now?: Date): boolean {
         case 'has':
             return card.due !== undefined
         case 'overdue':
-            return isOpenDue(card) && dueStateFor(card.due, now) === 'overdue'
+            return isOpenDue(card) && dueStateFor(card.due, now, card.dueHasTime) === 'overdue'
         case 'soon':
-            return isOpenDue(card) && dueStateFor(card.due, now) === 'soon'
+            return isOpenDue(card) && dueStateFor(card.due, now, card.dueHasTime) === 'soon'
     }
 }
 

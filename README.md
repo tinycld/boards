@@ -14,7 +14,7 @@ engine, so a rule can fire on board activity:
 
 - **`cards:card-created`** — "A card is created". A `cards_cards` create.
   Condition fields: `title`, `description`, `list`, `project` (labelled
-  "Board"), `due`, `assignees`, `labels`, `priority`, `estimate`.
+  "Board"), `due`, `start`, `assignees`, `labels`, `priority`, `estimate`.
 - **`cards:card-moved`** — "A card moves to another list". An update watching
   `list` only (not `position`), so drag-reordering within a column does not
   fire it.

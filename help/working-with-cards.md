@@ -94,6 +94,15 @@ the description, attachments, checklist, and comments. A due date turns amber
 when it's less than two days away and red once it has passed — the same colors
 the board shows on the card itself.
 
+A card can also carry a **start date**, and its due date can name a **time**.
+Click **Set start date** to pick a day; the face then reads "Sep 3 → Sep 10".
+In the due-date picker, the **Time** row offers a few common times and a box
+to type one — `14:30`, `2:30 pm` and `9` all work. A timed deadline is late
+the minute it passes rather than the next morning, and it lands on the
+calendar at its time rather than as an all-day item. **Clear time** turns it
+back into a plain day. Both dates appear in the card's history and in the
+[timeline view](help://cards:filtering-and-sorting).
+
 To add a file, see [Attaching files to cards](help://cards:attaching-files).
 
 ## Card priority

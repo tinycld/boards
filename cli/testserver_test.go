@@ -373,6 +373,8 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 			Title:       str(body["title"]),
 			Description: str(body["description"]),
 			Due:         str(body["due"]),
+			DueHasTime:  body["due_has_time"] == true,
+			Start:       str(body["start"]),
 			CreatedBy:   str(body["created_by"]),
 			Reporter:    str(body["reporter"]),
 			Estimate:    num(body["estimate"]),
@@ -397,6 +399,12 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		}
 		if v, ok := body["due"].(string); ok {
 			c.Due = v
+		}
+		if v, ok := body["due_has_time"].(bool); ok {
+			c.DueHasTime = v
+		}
+		if v, ok := body["start"].(string); ok {
+			c.Start = v
 		}
 		if _, ok := body["estimate"]; ok {
 			c.Estimate = num(body["estimate"])

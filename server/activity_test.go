@@ -145,6 +145,7 @@ func TestActivity_ScalarChangesAndArchiveFlip(t *testing.T) {
 	updateCardAs(t, env.app, env.owner, env.card.Id, func(r *core.Record) {
 		r.Set("title", "renamed")
 		r.Set("due", "2026-09-12 00:00:00.000Z")
+		r.Set("start", "2026-09-10 00:00:00.000Z")
 		r.Set("priority", "high")
 		r.Set("estimate", 5)
 		r.Set("archived", true)
@@ -153,13 +154,40 @@ func TestActivity_ScalarChangesAndArchiveFlip(t *testing.T) {
 		r.Set("archived", false)
 	})
 	rows := activityRows(t, env.app, env.card.Id)
-	requireKinds(t, rows, "due", "title", "priority", "estimate", "archived", "restored")
+	requireKinds(t, rows, "due", "start", "title", "priority", "estimate", "archived", "restored")
 	if got := rowOfKind(t, rows, "title").GetString("from"); got != "seeded-card" {
 		t.Fatalf("title row from = %q, want the old title", got)
 	}
 	if got := rowOfKind(t, rows, "estimate").GetString("to"); got != "5" {
 		t.Fatalf("estimate row to = %q, want 5", got)
 	}
+	// Day values are written as bare days, so the renderer needs no flag.
+	if got := rowOfKind(t, rows, "due").GetString("to"); got != "2026-09-12" {
+		t.Fatalf("due row to = %q, want the bare day", got)
+	}
+	if got := rowOfKind(t, rows, "start").GetString("to"); got != "2026-09-10" {
+		t.Fatalf("start row to = %q, want the bare day", got)
+	}
+}
+
+// A timed deadline is written as the instant, so the row says 2:30 PM rather
+// than the day alone — and flipping the flag on the same day is a change.
+func TestActivity_TimedDueWritesTheInstant(t *testing.T) {
+	env := setupActivityEnv(t)
+	updateCardAs(t, env.app, env.owner, env.card.Id, func(r *core.Record) {
+		r.Set("due", "2026-09-12 14:30:00.000Z")
+		r.Set("due_has_time", true)
+	})
+	rows := activityRows(t, env.app, env.card.Id)
+	requireKinds(t, rows, "due")
+	if got := rows[0].GetString("to"); got != "2026-09-12T14:30:00Z" {
+		t.Fatalf("timed due row to = %q, want the RFC 3339 instant", got)
+	}
+	updateCardAs(t, env.app, env.owner, env.card.Id, func(r *core.Record) {
+		r.Set("due_has_time", false)
+	})
+	rows = activityRows(t, env.app, env.card.Id)
+	requireKinds(t, rows, "due", "due")
 }
 
 func TestActivity_ClearingAnEstimateWritesAnEmptyTo(t *testing.T) {

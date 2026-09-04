@@ -14,7 +14,8 @@ import {
 import { Pressable, Text, View } from 'react-native'
 import type { RemoteCardsPresence } from '../hooks/useBoardPresence'
 import { useCardFileDrop } from '../hooks/useCardFileDrop'
-import { dueStateFor, formatDueDate } from '../lib/due-state'
+import { dueStateFor } from '../lib/due-state'
+import { formatSchedule } from '../lib/due-time'
 import { formatEstimate } from '../lib/estimate'
 import { isClosedCategory, type ListCategory } from '../lib/list-category'
 import type { CardPriority } from '../lib/priority'
@@ -149,7 +150,7 @@ function CardFace({ card, isCompact }: { card: BoardCardView; isCompact: boolean
                 >
                     {card.title}
                 </Text>
-                <CompactDueIcon due={card.due} />
+                <CompactDueIcon due={card.due} dueHasTime={card.dueHasTime} />
                 <CardAssignees assignees={card.assignees} />
             </>
         )
@@ -284,18 +285,18 @@ function CompactLabelDots({ labels }: { labels: BoardLabel[] }) {
  * for overdue, warning for soon, muted otherwise — because losing the date
  * text must not also lose the fact that something is late.
  */
-function CompactDueIcon({ due }: { due?: Date }) {
+function CompactDueIcon({ due, dueHasTime }: { due?: Date; dueHasTime: boolean }) {
     const warningColor = useThemeColor('warning')
     const dangerColor = useThemeColor('danger')
     const mutedColor = useThemeColor('muted')
     if (!due) return null
 
-    const state = dueStateFor(due)
+    const state = dueStateFor(due, undefined, dueHasTime)
     const isOverdue = state === 'overdue'
     const Icon = isOverdue ? Clock : CalendarDays
     const color = isOverdue ? dangerColor : state === 'soon' ? warningColor : mutedColor
     return (
-        <View accessibilityLabel={`Due ${formatDueDate(due)}`}>
+        <View accessibilityLabel={`Due ${formatSchedule(undefined, due, dueHasTime)}`}>
             <Icon size={12} color={color} strokeWidth={2.2} />
         </View>
     )
@@ -344,7 +345,7 @@ function ClosedCard({
         >
             <FocusMarker isFocused={isFocused} cardId={cardId} />
             <View className="flex-row items-start gap-2">
-                <View className="mt-px" testID={`board-card-closed-${cardId}`}>
+                <View className="mt-px" testID={`cards-card-closed-${cardId}`}>
                     <Icon size={14} color={iconColor} strokeWidth={2.4} />
                 </View>
                 <Text
@@ -382,6 +383,7 @@ function CardMeta({ card }: { card: BoardCardView }) {
     const watchers = useCardPresence(card.id)
     const hasPills =
         card.due ||
+        card.start ||
         card.checklistTotal > 0 ||
         card.commentCount > 0 ||
         card.attachmentCount > 0 ||
@@ -392,7 +394,7 @@ function CardMeta({ card }: { card: BoardCardView }) {
 
     return (
         <View className="flex-row items-center gap-2.5 min-h-[20px]">
-            <DuePill due={card.due} />
+            <SchedulePill start={card.start} due={card.due} dueHasTime={card.dueHasTime} />
             <ChecklistPill done={card.checklistDone} total={card.checklistTotal} />
             <CommentsPill count={card.commentCount} />
             <AttachmentsPill count={card.attachmentCount} />
@@ -438,14 +440,26 @@ function CardWatchers({ watchers, cardId }: { watchers: RemoteCardsPresence[]; c
     )
 }
 
-function DuePill({ due }: { due?: Date }) {
+/**
+ * The schedule on the face: "Sep 10", "Sep 3 → Sep 10", "Sep 10, 2:30 PM"
+ * — coloured by the due state, or muted when only a start is set.
+ */
+function SchedulePill({
+    start,
+    due,
+    dueHasTime,
+}: {
+    start?: Date
+    due?: Date
+    dueHasTime: boolean
+}) {
     const warningColor = useThemeColor('warning')
     const dangerColor = useThemeColor('danger')
     const mutedColor = useThemeColor('muted')
-    if (!due) return null
+    if (!due && !start) return null
 
-    const state = dueStateFor(due)
-    const label = formatDueDate(due)
+    const state = due ? dueStateFor(due, undefined, dueHasTime) : 'upcoming'
+    const label = formatSchedule(start, due, dueHasTime)
     if (state === 'upcoming') {
         return (
             <View className="flex-row items-center gap-1">

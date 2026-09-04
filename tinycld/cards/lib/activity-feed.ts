@@ -8,6 +8,7 @@ import type { BoardActivity, BoardLabel, BoardMember } from '../types'
 import type { CommentThread } from './comment-threads'
 import { byCreatedThenId } from './created-order'
 import { formatDueDate } from './due-state'
+import { formatDueTime, parseDayValue } from './due-time'
 import { formatEstimate } from './estimate'
 import { type CardPriority, normalizePriority, priorityLabel } from './priority'
 
@@ -64,13 +65,17 @@ export function describeActivity(item: BoardActivity, ctx: ActivityContext): Act
         const member = ctx.members.find(m => m.id === id)
         return member ? `${member.firstName} ${member.lastName}`.trim() : 'someone'
     }
-    const dueText = (value: string) => {
-        if (!value) return 'no due date'
+    // Rows carry a self-describing value (server/activity.go dueText): a bare
+    // day — or the raw midnight the rows predating the flag stored — reads as
+    // a day; anything else is a timed instant and shows its time.
+    const dateText = (value: string) => {
+        if (/^\d{4}-\d{2}-\d{2}( 00:00:00\.000Z)?$/.test(value)) {
+            const day = parseDayValue(value)
+            return day ? formatDueDate(day) : value
+        }
         const parsed = new Date(value)
         if (Number.isNaN(parsed.getTime())) return value
-        return formatDueDate(
-            new Date(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate())
-        )
+        return `${formatDueDate(parsed)}, ${formatDueTime(parsed)}`
     }
 
     // The row stores the integer as text; a value the parser cannot read is
@@ -104,7 +109,10 @@ export function describeActivity(item: BoardActivity, ctx: ActivityContext): Act
             text = `removed the label ${labelName(item.from)}`
             break
         case 'due':
-            text = item.to ? `set the due date to ${dueText(item.to)}` : 'cleared the due date'
+            text = item.to ? `set the due date to ${dateText(item.to)}` : 'cleared the due date'
+            break
+        case 'start':
+            text = item.to ? `set the start date to ${dateText(item.to)}` : 'cleared the start date'
             break
         case 'title':
             text = `renamed this from “${item.from}”`

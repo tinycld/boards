@@ -20,6 +20,7 @@ import type {
 import { type BoardFilter, cardMatchesFilter } from './board-filter'
 import { type BoardSort, compareCards } from './board-sort'
 import { formatCardKey } from './card-key'
+import { parseDayValue, parseDueValue } from './due-time'
 import { normalizeEstimate } from './estimate'
 import { type ListCategory, normalizeListCategory } from './list-category'
 import { normalizePriority } from './priority'
@@ -89,9 +90,10 @@ export function toBoardCard(
         position: card.position,
         title: card.title,
         description: card.description,
-        // PocketBase returns '' for an unset date, and new Date('') is an
-        // Invalid Date that formats as "Invalid Date" rather than throwing.
-        due: toDueDate(card.due),
+        // Two parse paths, chosen by the flag — see lib/due-time.ts.
+        due: parseDueValue(card.due, card.due_has_time),
+        dueHasTime: card.due_has_time,
+        start: parseDayValue(card.start),
         labels: card.labels.flatMap(id => {
             const label = labelsById.get(id)
             return label ? [label] : []
@@ -150,28 +152,6 @@ function toReporter(
     const id = card.reporter || card.created_by
     if (id === '') return undefined
     return usersById.get(id) ?? anonymousMember(id)
-}
-
-/**
- * A stored due value → the LOCAL calendar day it names, or undefined.
- *
- * `due` is a day, not an instant: the picker writes `toDateString(date)` — a
- * bare `YYYY-MM-DD` — and PocketBase stores it in a `date` field, handing it
- * back as `YYYY-MM-DD 00:00:00Z`. That midnight is UTC, so `new Date(...)` on
- * it lands on the PREVIOUS day for every user west of Greenwich: picking
- * "Tomorrow" in US Central saved fine and read back as today, and a date set
- * for today read back as yesterday · overdue.
- *
- * Taking the UTC parts (never the local getters, which have already been
- * shifted) and rebuilding at local midnight recovers the day the user picked.
- * The result is what `dueStateFor` compares against `new Date()`, so it has to
- * sit in the same local frame as "now" for overdue/soon to mean anything.
- */
-function toDueDate(due: string): Date | undefined {
-    if (due === '') return undefined
-    const parsed = new Date(due)
-    if (Number.isNaN(parsed.getTime())) return undefined
-    return new Date(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate())
 }
 
 /**
@@ -346,6 +326,8 @@ function sameCard(a: BoardCardView, b: BoardCardView): boolean {
         a.title === b.title &&
         a.description === b.description &&
         (a.due?.getTime() ?? null) === (b.due?.getTime() ?? null) &&
+        a.dueHasTime === b.dueHasTime &&
+        (a.start?.getTime() ?? null) === (b.start?.getTime() ?? null) &&
         a.priority === b.priority &&
         a.estimate === b.estimate &&
         a.listCategory === b.listCategory &&

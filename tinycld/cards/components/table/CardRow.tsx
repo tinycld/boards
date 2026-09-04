@@ -4,6 +4,7 @@ import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { CalendarDays, Clock, Gauge } from 'lucide-react-native'
 import { Pressable, Text, View } from 'react-native'
 import { dueStateFor, formatDueDate } from '../../lib/due-state'
+import { formatSchedule } from '../../lib/due-time'
 import { formatEstimate } from '../../lib/estimate'
 import type { ListCategory } from '../../lib/list-category'
 import { priorityLabel } from '../../lib/priority'
@@ -36,7 +37,8 @@ export const TABLE_COLUMNS = {
     list: 1.2,
     assignees: 96,
     labels: 1.6,
-    due: 104,
+    start: 96,
+    due: 120,
     priority: 96,
     estimate: 80,
 } as const
@@ -80,7 +82,7 @@ export function CardRow({
                     <BoardTile board={board} />
                     <CategoryGlyph category={listCategory} size={11} />
                     <Meta text={[card.key, listName].filter(Boolean).join(' · ')} />
-                    <DueCell due={card.due} />
+                    <DueCell start={card.start} due={card.due} dueHasTime={card.dueHasTime} />
                     <EstimateCell estimate={card.estimate} />
                     <Labels card={card} />
                 </View>
@@ -126,8 +128,11 @@ export function CardRow({
             <View style={{ flex: TABLE_COLUMNS.labels }} className="pr-2">
                 <Labels card={card} />
             </View>
+            <View style={{ width: TABLE_COLUMNS.start }}>
+                <StartCell start={card.start} />
+            </View>
             <View style={{ width: TABLE_COLUMNS.due }}>
-                <DueCell due={card.due} />
+                <DueCell due={card.due} dueHasTime={card.dueHasTime} />
             </View>
             <View
                 style={{ width: TABLE_COLUMNS.priority }}
@@ -225,12 +230,29 @@ function EstimateCell({ estimate }: { estimate?: number }) {
     )
 }
 
-function DueCell({ due }: { due?: Date }) {
+function StartCell({ start }: { start?: Date }) {
+    const mutedColor = useThemeColor('muted')
+    if (!start) return null
+    return (
+        <View className="flex-row items-center gap-1">
+            <CalendarDays size={11} color={mutedColor} strokeWidth={2.2} />
+            <Text className="text-[12px] font-medium" style={{ color: mutedColor }}>
+                {formatDueDate(start)}
+            </Text>
+        </View>
+    )
+}
+
+/**
+ * The due date, coloured by state. The stacked row passes `start` too, so a
+ * phone reads "Sep 3 → Sep 10" in one cell; the table has a Start column.
+ */
+function DueCell({ start, due, dueHasTime }: { start?: Date; due?: Date; dueHasTime: boolean }) {
     const warningColor = useThemeColor('warning')
     const dangerColor = useThemeColor('danger')
     const mutedColor = useThemeColor('muted')
-    if (!due) return null
-    const state = dueStateFor(due)
+    if (!due && !start) return null
+    const state = due ? dueStateFor(due, undefined, dueHasTime) : 'upcoming'
     const isOverdue = state === 'overdue'
     const Icon = isOverdue ? Clock : CalendarDays
     const color = isOverdue ? dangerColor : state === 'soon' ? warningColor : mutedColor
@@ -238,7 +260,7 @@ function DueCell({ due }: { due?: Date }) {
         <View className="flex-row items-center gap-1">
             <Icon size={11} color={color} strokeWidth={2.2} />
             <Text className="text-[12px] font-medium" style={{ color }}>
-                {formatDueDate(due)}
+                {formatSchedule(start, due, dueHasTime)}
             </Text>
         </View>
     )

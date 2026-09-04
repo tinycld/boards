@@ -94,8 +94,12 @@ func logCardChanges(app core.App, card *core.Record, actor string) {
 	for _, id := range removed {
 		writeActivity(app, card, actor, "label_removed", id, "")
 	}
-	if from, to := original.GetString("due"), card.GetString("due"); from != to {
-		writeActivity(app, card, actor, "due", from, to)
+	if original.GetString("due") != card.GetString("due") ||
+		original.GetBool("due_has_time") != card.GetBool("due_has_time") {
+		writeActivity(app, card, actor, "due", dueText(original), dueText(card))
+	}
+	if from, to := original.GetString("start"), card.GetString("start"); from != to {
+		writeActivity(app, card, actor, "start", dayText(from), dayText(to))
 	}
 	if from, to := original.GetString("title"), card.GetString("title"); from != to {
 		writeActivity(app, card, actor, "title", from, to)
@@ -120,6 +124,30 @@ func logCardChanges(app core.App, card *core.Record, actor string) {
 			writeActivity(app, card, actor, "restored", "", "")
 		}
 	}
+}
+
+// dueText renders a card's due date for a history row in a SELF-DESCRIBING
+// form: the bare day for a day-only deadline, the RFC 3339 instant for a
+// timed one. The renderer tells them apart by shape, so a row never needs
+// the flag it was written under — and rows from before the flag existed,
+// which stored the raw '…T00:00:00.000Z', still read as days.
+func dueText(rec *core.Record) string {
+	due := rec.GetDateTime("due")
+	if due.IsZero() {
+		return ""
+	}
+	if rec.GetBool("due_has_time") {
+		return due.Time().UTC().Format(time.RFC3339)
+	}
+	return dayText(rec.GetString("due"))
+}
+
+// dayText keeps the day half of a stored date.
+func dayText(value string) string {
+	if len(value) >= 10 {
+		return value[:10]
+	}
+	return value
 }
 
 // estimateText renders points for a history row: "" for the stored 0 that

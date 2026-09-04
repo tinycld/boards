@@ -49,6 +49,8 @@ function card(id: string, projectId: string, overrides: Partial<CardsCards> = {}
         title: id,
         description: '',
         due: '',
+        due_has_time: false,
+        start: '',
         assignees: [],
         labels: [],
         created_by: 'u1',

@@ -1,3 +1,4 @@
+import { toDateString } from '@tinycld/core/lib/dates'
 import type PocketBase from 'pocketbase'
 import type { ListCategory } from './lib/list-category'
 import type { CardPriority } from './lib/priority'
@@ -17,13 +18,22 @@ interface SeedContext {
     companion?: { id: string; email: string; name: string }
 }
 
-// Day-granular due dates as offsets from local midnight today (calendar's
-// convention). Data rows store these as THUNKS so the module-level tables can
-// be consts while the dates still resolve at run time, not import time.
+// Day-granular dates as offsets from today, written as the bare local day
+// the picker writes (a `toISOString()` of local midnight reads back as the
+// previous day east of UTC). Data rows store these as THUNKS so the
+// module-level tables can be consts while the dates still resolve at run
+// time, not import time.
 function dueAt(dayOffset: number) {
     const d = new Date()
-    d.setHours(0, 0, 0, 0)
     d.setDate(d.getDate() + dayOffset)
+    return toDateString(d)
+}
+
+/** A timed deadline: the instant at `hours` local on the offset day. */
+function dueAtTime(dayOffset: number, hours: number) {
+    const d = new Date()
+    d.setDate(d.getDate() + dayOffset)
+    d.setHours(hours, 0, 0, 0)
     return d.toISOString()
 }
 
@@ -52,6 +62,9 @@ interface CardSeed {
     title: string
     description?: string
     due?: () => string
+    /** When set, `due` is an instant (dueAtTime) rather than a day. */
+    dueHasTime?: boolean
+    start?: () => string
     /** Label NAMES, resolved against the board's own labels. */
     labels?: string[]
     assignees?: Who[]
@@ -173,6 +186,7 @@ const BOARDS: BoardSeed[] = [
                         title: 'Draft the launch announcement',
                         priority: 'medium',
                         estimate: 5,
+                        start: () => dueAt(-2),
                         due: () => dueAt(3),
                         labels: ['Feature'],
                         assignees: ['me'],
@@ -186,7 +200,8 @@ const BOARDS: BoardSeed[] = [
                         title: 'Fix duplicate label colors in picker',
                         priority: 'high',
                         estimate: 2,
-                        due: () => dueAt(1),
+                        due: () => dueAtTime(1, 14),
+                        dueHasTime: true,
                         labels: ['Bug'],
                         // A bug someone else hit and filed: the reporter is who
                         // to ask about it, and it differs from created_by on
@@ -281,7 +296,7 @@ const BOARDS: BoardSeed[] = [
             {
                 name: 'To do',
                 cards: [
-                    { title: 'Fix the gate latch', due: () => dueAt(7) },
+                    { title: 'Fix the gate latch', start: () => dueAt(2), due: () => dueAt(7) },
                     { title: 'Plant fall garlic', due: () => dueAt(14) },
                 ],
             },
@@ -426,6 +441,8 @@ async function seedBoard(
                 title: card.title,
                 description: card.description ?? '',
                 due: card.due ? card.due() : '',
+                due_has_time: card.dueHasTime ?? false,
+                start: card.start ? card.start() : '',
                 assignees: [...new Set((card.assignees ?? []).map(who))],
                 labels: (card.labels ?? [])
                     .map(name => labelIds[name])

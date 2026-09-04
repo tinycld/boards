@@ -72,7 +72,10 @@ any other number places it at that position, counting from zero.
 ```
 tinycld cards card edit <card> --title "Write the launch post"
 tinycld cards card edit <card> --due 2026-09-15
+tinycld cards card edit <card> --due "2026-09-15 14:30"
 tinycld cards card edit <card> --clear-due
+tinycld cards card edit <card> --start 2026-09-10
+tinycld cards card edit <card> --clear-start
 tinycld cards card edit <card> --reporter <user id>
 tinycld cards card edit <card> --clear-reporter
 tinycld cards card edit <card> --priority high
@@ -80,8 +83,9 @@ tinycld cards card edit <card> --estimate 5
 ```
 
 `edit` only changes what you name. Editing the title leaves the description
-alone, so you cannot blank a field by not mentioning it. Due dates are whole
-days, written as `YYYY-MM-DD`.
+alone, so you cannot blank a field by not mentioning it. Dates are written as
+`YYYY-MM-DD`; a due date may add a time as `"YYYY-MM-DD HH:MM"`, read in your
+terminal's local time zone. `--start` takes a day only.
 
 `--priority` takes `urgent`, `high`, `medium`, `low` or `none`, on `add` as
 well as `edit`. A new card has no priority; `--priority none` clears one.

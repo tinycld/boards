@@ -12,6 +12,7 @@ function card(id: string, overrides: Partial<BoardCardView> = {}): BoardCardView
         title: id,
         description: '',
         due: undefined,
+        dueHasTime: false,
         labels: [],
         assignees: [],
         reporter: undefined,

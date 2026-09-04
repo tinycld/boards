@@ -207,8 +207,12 @@ export interface BoardCardView {
     title: string
     /** Markdown source. '' when unset. */
     description: string
-    /** undefined when no due date is set. */
+    /** undefined when no due date is set. A local day, or an instant when `dueHasTime`. */
     due?: Date
+    /** Whether `due` names a time as well as a day — see lib/due-time.ts. */
+    dueHasTime: boolean
+    /** undefined when no start date is set. Always a local day. */
+    start?: Date
     labels: BoardLabel[]
     assignees: BoardMember[]
     /**

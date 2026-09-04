@@ -11,6 +11,7 @@ function card(id: string, overrides: Partial<BoardCardView> = {}): BoardCardView
         title: id,
         description: '',
         due: undefined,
+        dueHasTime: false,
         labels: [],
         assignees: [],
         reporter: undefined,
@@ -54,6 +55,24 @@ describe('compareCards', () => {
             'none',
         ])
         expect(ids([...cards].sort(compareCards({ field: 'due', direction: 'desc' })))).toEqual([
+            'late',
+            'early',
+            'none',
+        ])
+    })
+
+    it('orders by start date with unstarted cards last', () => {
+        const cards = [
+            card('none'),
+            card('late', { start: new Date(2026, 5, 1) }),
+            card('early', { start: new Date(2026, 0, 1) }),
+        ]
+        expect(ids([...cards].sort(compareCards({ field: 'start', direction: 'asc' })))).toEqual([
+            'early',
+            'late',
+            'none',
+        ])
+        expect(ids([...cards].sort(compareCards({ field: 'start', direction: 'desc' })))).toEqual([
             'late',
             'early',
             'none',

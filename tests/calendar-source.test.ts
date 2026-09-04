@@ -11,7 +11,14 @@ const orgHref = (path: string, extra?: Record<string, string>): Href =>
 describe('buildDueItems', () => {
     it('maps a due card to a local all-day item with a card href', () => {
         const items = buildDueItems(
-            [{ id: 'r8f3k2m9x1p7q4w', title: 'Ship the release', due: '2026-08-04 00:00:00.000Z' }],
+            [
+                {
+                    id: 'r8f3k2m9x1p7q4w',
+                    title: 'Ship the release',
+                    due: '2026-08-04 00:00:00.000Z',
+                    due_has_time: false,
+                },
+            ],
             orgHref
         )
         expect(items).toHaveLength(1)
@@ -38,9 +45,12 @@ describe('buildDueItems', () => {
     it('handles the bare day string an optimistic local row carries', () => {
         // The picker writes 'YYYY-MM-DD'; PocketBase normalizes it later. Both
         // spellings must land on the same local day.
-        const [bare] = buildDueItems([{ id: 'a', title: 'T', due: '2026-08-04' }], orgHref)
+        const [bare] = buildDueItems(
+            [{ id: 'a', title: 'T', due: '2026-08-04', due_has_time: false }],
+            orgHref
+        )
         const [normalized] = buildDueItems(
-            [{ id: 'a', title: 'T', due: '2026-08-04 00:00:00.000Z' }],
+            [{ id: 'a', title: 'T', due: '2026-08-04 00:00:00.000Z', due_has_time: false }],
             orgHref
         )
         expect(bare.start).toBe(normalized.start)
@@ -50,20 +60,41 @@ describe('buildDueItems', () => {
     it('drops rows with empty or unparseable due values', () => {
         const items = buildDueItems(
             [
-                { id: 'a', title: 'No due', due: '' },
-                { id: 'b', title: 'Garbage', due: 'not-a-date' },
-                { id: 'c', title: 'Real', due: '2026-08-04' },
+                { id: 'a', title: 'No due', due: '', due_has_time: false },
+                { id: 'b', title: 'Garbage', due: 'not-a-date', due_has_time: false },
+                { id: 'c', title: 'Real', due: '2026-08-04', due_has_time: false },
             ],
             orgHref
         )
         expect(items.map(i => i.id)).toEqual(['c'])
     })
 
+    it('lands a timed due date at its instant as a short timed item', () => {
+        const instant = new Date(2026, 7, 4, 14, 30)
+        const [item] = buildDueItems(
+            [{ id: 'a', title: 'T', due: instant.toISOString(), due_has_time: true }],
+            orgHref
+        )
+        expect(item.allDay).toBe(false)
+        expect(new Date(item.start).getTime()).toBe(instant.getTime())
+        expect(new Date(item.end).getTime() - instant.getTime()).toBe(30 * 60 * 1000)
+    })
+
+    it('keeps a timed due date near midnight on its local day', () => {
+        const lateInstant = new Date(2026, 7, 4, 23, 30)
+        const [item] = buildDueItems(
+            [{ id: 'a', title: 'T', due: lateInstant.toISOString(), due_has_time: true }],
+            orgHref
+        )
+        const start = new Date(item.start)
+        expect([start.getDate(), start.getHours(), start.getMinutes()]).toEqual([4, 23, 30])
+    })
+
     it('preserves row order', () => {
         const items = buildDueItems(
             [
-                { id: 'later', title: 'B', due: '2026-08-06' },
-                { id: 'earlier', title: 'A', due: '2026-08-02' },
+                { id: 'later', title: 'B', due: '2026-08-06', due_has_time: false },
+                { id: 'earlier', title: 'A', due: '2026-08-02', due_has_time: false },
             ],
             orgHref
         )

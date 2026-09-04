@@ -53,12 +53,17 @@ type card struct {
 	// server/card_number.go — read-only here, exactly like the counters below.
 	// The CLI must never write one: the hook overwrites whatever a body
 	// carries, so a written value is discarded.
-	Number    int      `json:"number"`
-	Due       string   `json:"due"`
-	Assignees []string `json:"assignees"`
-	Labels    []string `json:"labels"`
-	Archived  bool     `json:"archived"`
-	CreatedBy string   `json:"created_by"`
+	Number int    `json:"number"`
+	Due    string `json:"due"`
+	// Whether Due names a time as well as a day. A day-only due is a bare
+	// YYYY-MM-DD the server stores at midnight UTC; a timed one is an
+	// instant. See lib/due-time.ts for why one column carries both.
+	DueHasTime bool     `json:"due_has_time"`
+	Start      string   `json:"start"`
+	Assignees  []string `json:"assignees"`
+	Labels     []string `json:"labels"`
+	Archived   bool     `json:"archived"`
+	CreatedBy  string   `json:"created_by"`
 	// Who to ask about the card, as opposed to who inserted it (CreatedBy).
 	// Writable, unlike Number above: it defaults to the creator but exists
 	// precisely so it can be pointed at someone else.

@@ -106,9 +106,9 @@ interface CardsUIState {
     isFilterPanelOpen: boolean
     setFilterPanelOpen: (isOpen: boolean) => void
     /**
-     * Board or list, per board. PERSISTED: a stale board id here is inert (a
-     * missing key reads as "board"), and a view is exactly the kind of thing
-     * someone sets once and expects to keep.
+     * Board, list or timeline, per board. PERSISTED: a stale board id here is
+     * inert (a missing key reads as "board"), and a view is exactly the kind
+     * of thing someone sets once and expects to keep.
      */
     viewModeByProject: Record<string, ViewMode>
     setViewMode: (projectId: string, mode: ViewMode) => void
@@ -121,7 +121,7 @@ interface CardsUIState {
     toggleMyCardsShowClosed: () => void
 }
 
-export type ViewMode = 'board' | 'list'
+export type ViewMode = 'board' | 'list' | 'timeline'
 
 export function selectViewMode(state: CardsUIState, projectId: string): ViewMode {
     return state.viewModeByProject[projectId] ?? 'board'

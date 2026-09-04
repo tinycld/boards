@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 )
 
@@ -1207,6 +1208,59 @@ func TestCardAddAndEditEstimate(t *testing.T) {
 	}
 	if v, sent := f.lastCardPatch["estimate"]; !sent || num(v) != 0 {
 		t.Fatalf("--estimate 0 must send 0: %v", f.lastCardPatch)
+	}
+}
+
+func TestCardStartAndTimedDue(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	_, _, err := runCmd(t, c, "cards", "card", "add", "Plan it", "--board", "prjA", "--list", "To do",
+		"--start", "2026-09-03", "--due", "2026-09-10 14:30")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := str(f.lastCardCreate["start"]); got != "2026-09-03 00:00:00.000Z" {
+		t.Fatalf("start = %q, want the stored midnight", got)
+	}
+	if got := f.lastCardCreate["due_has_time"]; got != true {
+		t.Fatalf("due_has_time = %v, want true for a timed --due", got)
+	}
+	// The instant round-trips through the local zone the flag was typed in.
+	at, err := time.Parse(pbDateFormat, str(f.lastCardCreate["due"]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if local := at.Local(); local.Hour() != 14 || local.Minute() != 30 || local.Day() != 10 {
+		t.Fatalf("due = %v, want 2026-09-10 14:30 local", local)
+	}
+
+	// A bare day keeps the flag off.
+	_, _, err = runCmd(t, c, "cards", "card", "edit", "crdCopy", "--due", "2026-09-11")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := f.lastCardPatch["due_has_time"]; got != false {
+		t.Fatalf("day-only --due must clear the flag: %v", f.lastCardPatch)
+	}
+	// Clearing clears both halves.
+	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--clear-due"); err != nil {
+		t.Fatal(err)
+	}
+	if f.lastCardPatch["due"] != "" || f.lastCardPatch["due_has_time"] != false {
+		t.Fatalf("--clear-due must clear the flag too: %v", f.lastCardPatch)
+	}
+	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--clear-start"); err != nil {
+		t.Fatal(err)
+	}
+	if got, sent := f.lastCardPatch["start"]; !sent || got != "" {
+		t.Fatalf("--clear-start must send an empty start: %v", f.lastCardPatch)
+	}
+	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--start", "2026-09-01", "--clear-start"); err == nil {
+		t.Error("--start together with --clear-start was accepted")
+	}
+	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--due", "2026-09-10 25:00"); err == nil {
+		t.Error("a bad time was accepted")
 	}
 }
 

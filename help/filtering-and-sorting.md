@@ -34,8 +34,9 @@ closes — clear the filter to get it back.
 ## Sorting a list
 
 The sort icon next to the filter orders every list by **priority**, **due
-date**, **estimate**, **created**, **title** or **key**, ascending or
-descending. Cards without a due date or an estimate always sort last. **Manual order** is the default: the
+date**, **start date**, **estimate**, **created**, **title** or **key**,
+ascending or descending. Cards without a date or an estimate always sort
+last. **Manual order** is the default: the
 order you arranged by dragging.
 
 While a sort is on, dragging a card up or down within its list does nothing —
@@ -45,10 +46,22 @@ it takes its sorted place. Clearing the sort brings back your arrangement.
 ## List view
 
 The view toggle beside the filter switches the board from columns to a table:
-one row per card, with its key, title, list, assignees, labels, due date,
-priority and estimate. Click a column heading to sort by it; click again to reverse. The
+one row per card, with its key, title, list, assignees, labels, start and due
+dates, priority and estimate. Click a column heading to sort by it; click again to reverse. The
 same filter applies in both views, and the choice is remembered per board.
 
 There is no dragging in the list — to move a card, open it and use the list
 stepper or the card menu. The `j` and `k` keys walk the rows, and `Enter`
 opens the highlighted card.
+
+## Timeline view
+
+The third view lays the board out against a calendar: one row per card that
+has a start or due date, grouped by list, with a bar from start to due — or a
+dot on the one date a card has. Bars take the due date's colour, so late work
+reads red at a glance, and today is marked on the axis. Scroll sideways to
+move through time; the card names stay pinned at the left.
+
+Cards with no dates are left out, and the same filter and sort apply as in
+the other views. Click a row to open the card, or walk the rows with `j` and
+`k` and press `Enter`. Dates are changed on the card, not by dragging a bar.

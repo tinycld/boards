@@ -1,10 +1,10 @@
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
-import { Columns3, List } from 'lucide-react-native'
+import { ChartGantt, Columns3, List } from 'lucide-react-native'
 import { Pressable, View } from 'react-native'
 import { selectViewMode, useCardsUIStore, type ViewMode } from '../../stores/cards-ui-store'
 
 /**
- * Board ⇄ list, drive's ViewToggle shape. A per-board preference that
+ * Board, list or timeline, drive's ViewToggle shape. A per-board preference that
  * persists (a stale board id is inert), unlike the filter beside it.
  */
 export function ViewToggle({ projectId }: { projectId: string }) {
@@ -33,6 +33,14 @@ export function ViewToggle({ projectId }: { projectId: string }) {
                 icon={List}
                 isActive={viewMode === 'list'}
                 onPress={() => setViewMode(projectId, 'list')}
+                colors={{ muted: mutedColor, active: activeColor }}
+            />
+            <Segment
+                mode="timeline"
+                label="Timeline"
+                icon={ChartGantt}
+                isActive={viewMode === 'timeline'}
+                onPress={() => setViewMode(projectId, 'timeline')}
                 colors={{ muted: mutedColor, active: activeColor }}
             />
         </View>

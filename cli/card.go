@@ -137,6 +137,10 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 			if reporterID := cd.reporterID(); reporterID != "" {
 				rows = append(rows, []string{"Reporter", names([]string{reporterID}, users)})
 			}
+			// Appended, and only when set, as Priority is.
+			if cd.Start != "" {
+				rows = append(rows, []string{"Start", dayCell(cd.Start)})
+			}
 			// Appended, and only when set, for the same reason: a card with
 			// no priority shows nothing on the board face either.
 			if p := priorityCell(cd); p != "-" {
@@ -170,7 +174,7 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 }
 
 func newCardAddCmd(c *client.Client) *cobra.Command {
-	var boardRef, listRef, description, due, reporter, priority string
+	var boardRef, listRef, description, due, start, reporter, priority string
 	var index, estimate int
 	cmd := &cobra.Command{
 		Use:   "add <title>",
@@ -201,7 +205,11 @@ func newCardAddCmd(c *client.Client) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			dueValue, err := parseDue(due)
+			dueValue, dueHasTime, err := parseDueFlag(due)
+			if err != nil {
+				return err
+			}
+			startValue, err := parseDay("--start", start)
 			if err != nil {
 				return err
 			}
@@ -229,17 +237,19 @@ func newCardAddCmd(c *client.Client) *cobra.Command {
 			// resolve membership without a two-hop back-relation, and the
 			// create rule reads it. A card without it is refused.
 			body := map[string]any{
-				"project":     p.ID,
-				"list":        l.ID,
-				"position":    position,
-				"title":       args[0],
-				"description": description,
-				"due":         dueValue,
-				"created_by":  userID,
-				"reporter":    reporterID,
-				"priority":    priority,
-				"estimate":    estimate,
-				"archived":    false,
+				"project":      p.ID,
+				"list":         l.ID,
+				"position":     position,
+				"title":        args[0],
+				"description":  description,
+				"due":          dueValue,
+				"due_has_time": dueHasTime,
+				"start":        startValue,
+				"created_by":   userID,
+				"reporter":     reporterID,
+				"priority":     priority,
+				"estimate":     estimate,
+				"archived":     false,
 			}
 			created, err := client.CreateRecord[card](ctx, c, cardsCollection, body)
 			if err != nil {
@@ -252,7 +262,8 @@ func newCardAddCmd(c *client.Client) *cobra.Command {
 	addBoardFlag(cmd, &boardRef)
 	cmd.Flags().StringVarP(&listRef, "list", "l", "", "list id or name (required)")
 	cmd.Flags().StringVar(&description, "description", "", "markdown description")
-	cmd.Flags().StringVar(&due, "due", "", "due date as YYYY-MM-DD")
+	cmd.Flags().StringVar(&due, "due", "", "due date as YYYY-MM-DD, or \"YYYY-MM-DD HH:MM\" (local time)")
+	cmd.Flags().StringVar(&start, "start", "", "start date as YYYY-MM-DD")
 	cmd.Flags().IntVar(&index, "index", 0, "insert at this position (default: append)")
 	// A user id, not an email or a name: there is no by-email user lookup in
 	// this CLI (usersByID is id-only), and inventing one here would be a
@@ -265,12 +276,12 @@ func newCardAddCmd(c *client.Client) *cobra.Command {
 }
 
 func newCardEditCmd(c *client.Client) *cobra.Command {
-	var title, description, due, reporter, priority string
+	var title, description, due, start, reporter, priority string
 	var estimate int
-	var clearDue, clearReporter bool
+	var clearDue, clearStart, clearReporter bool
 	cmd := &cobra.Command{
 		Use:   "edit <id>",
-		Short: "Change a card's title, description, due date, reporter, priority, or estimate",
+		Short: "Change a card's title, description, dates, reporter, priority, or estimate",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o, _, err := output.FromCommand(cmd)
@@ -297,12 +308,26 @@ func newCardEditCmd(c *client.Client) *cobra.Command {
 				return fmt.Errorf("--due and --clear-due contradict each other")
 			case clearDue:
 				body["due"] = ""
+				body["due_has_time"] = false
 			case cmd.Flags().Changed("due"):
-				v, err := parseDue(due)
+				v, hasTime, err := parseDueFlag(due)
 				if err != nil {
 					return err
 				}
 				body["due"] = v
+				body["due_has_time"] = hasTime
+			}
+			switch {
+			case clearStart && cmd.Flags().Changed("start"):
+				return fmt.Errorf("--start and --clear-start contradict each other")
+			case clearStart:
+				body["start"] = ""
+			case cmd.Flags().Changed("start"):
+				v, err := parseDay("--start", start)
+				if err != nil {
+					return err
+				}
+				body["start"] = v
 			}
 			// Same shape as --due/--clear-due, and for the same reason: an
 			// empty --reporter is indistinguishable from not passing it, so
@@ -337,7 +362,7 @@ func newCardEditCmd(c *client.Client) *cobra.Command {
 				body["estimate"] = estimate
 			}
 			if len(body) == 0 {
-				return fmt.Errorf("nothing to change — pass --title, --description, --due, --clear-due, --reporter, --clear-reporter, --priority, or --estimate")
+				return fmt.Errorf("nothing to change — pass --title, --description, --due, --clear-due, --start, --clear-start, --reporter, --clear-reporter, --priority, or --estimate")
 			}
 			// Through getCard so a card key (OTTER-12) works here exactly as it
 			// does in `card view`/`card move` — the id is what the API needs.
@@ -355,8 +380,10 @@ func newCardEditCmd(c *client.Client) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&title, "title", "", "new title")
 	cmd.Flags().StringVar(&description, "description", "", "new markdown description")
-	cmd.Flags().StringVar(&due, "due", "", "due date as YYYY-MM-DD")
+	cmd.Flags().StringVar(&due, "due", "", "due date as YYYY-MM-DD, or \"YYYY-MM-DD HH:MM\" (local time)")
 	cmd.Flags().BoolVar(&clearDue, "clear-due", false, "remove the due date")
+	cmd.Flags().StringVar(&start, "start", "", "start date as YYYY-MM-DD")
+	cmd.Flags().BoolVar(&clearStart, "clear-start", false, "remove the start date")
 	cmd.Flags().StringVar(&reporter, "reporter", "", "user id to report to")
 	cmd.Flags().BoolVar(&clearReporter, "clear-reporter", false, "report to the card's creator again")
 	cmd.Flags().StringVar(&priority, "priority", "", "one of "+strings.Join(priorities, ", ")+" (none clears it)")
@@ -620,19 +647,21 @@ func newCardCopyCmd(c *client.Client) *cobra.Command {
 				reporter = userID
 			}
 			body := map[string]any{
-				"project":     cd.Project,
-				"list":        cd.List,
-				"position":    position,
-				"title":       newTitle,
-				"description": cd.Description,
-				"due":         cd.Due,
-				"assignees":   cd.Assignees,
-				"labels":      cd.Labels,
-				"created_by":  userID,
-				"reporter":    reporter,
-				"priority":    cd.Priority,
-				"estimate":    cd.Estimate,
-				"archived":    false,
+				"project":      cd.Project,
+				"list":         cd.List,
+				"position":     position,
+				"title":        newTitle,
+				"description":  cd.Description,
+				"due":          cd.Due,
+				"due_has_time": cd.DueHasTime,
+				"start":        cd.Start,
+				"assignees":    cd.Assignees,
+				"labels":       cd.Labels,
+				"created_by":   userID,
+				"reporter":     reporter,
+				"priority":     cd.Priority,
+				"estimate":     cd.Estimate,
+				"archived":     false,
 			}
 			created, err := client.CreateRecord[card](ctx, c, cardsCollection, body)
 			if err != nil {
@@ -685,22 +714,50 @@ func estimateCell(points int) string {
 	return strconv.Itoa(points) + " pts"
 }
 
-// parseDue accepts a day-granular YYYY-MM-DD and returns what PocketBase
-// stores. Cards are day-granular throughout (core's lib/dates is
-// LOCAL-TIME and day-granular expressly to avoid the toISOString() round trip
-// that shifts a date a day west of Greenwich), so a time-of-day would be
-// meaningless precision that renders differently per reader.
-func parseDue(v string) (string, error) {
+// parseDay accepts a day-granular YYYY-MM-DD and returns what PocketBase
+// stores for it. A day names a calendar day, the same for every reader
+// (core's lib/dates is LOCAL-TIME and day-granular expressly to avoid the
+// toISOString() round trip that shifts a date a day west of Greenwich), so
+// it is written as midnight UTC and the app reads the date half back.
+func parseDay(flag, v string) (string, error) {
 	v = strings.TrimSpace(v)
 	if v == "" {
 		return "", nil
 	}
 	if _, err := time.Parse("2006-01-02", v); err != nil {
-		return "", fmt.Errorf("--due %q is not a date (want YYYY-MM-DD)", v)
+		return "", fmt.Errorf("%s %q is not a date (want YYYY-MM-DD)", flag, v)
 	}
-	// PocketBase stores a date field as a full timestamp; the app writes
-	// midnight and reads the date half back.
 	return v + " 00:00:00.000Z", nil
+}
+
+// parseDueFlag accepts a day (YYYY-MM-DD) or a day with a time
+// ("YYYY-MM-DD HH:MM"). A time is read in THIS machine's local zone — a
+// deadline typed at a terminal means the terminal's afternoon — and stored
+// as the instant, with the flag that tells the app to read it as one.
+func parseDueFlag(v string) (value string, hasTime bool, err error) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "", false, nil
+	}
+	if at, err := time.ParseInLocation("2006-01-02 15:04", v, time.Local); err == nil {
+		return at.UTC().Format(pbDateFormat), true, nil
+	}
+	day, err := parseDay("--due", v)
+	if err != nil {
+		return "", false, fmt.Errorf("--due %q is not a date (want YYYY-MM-DD or \"YYYY-MM-DD HH:MM\")", v)
+	}
+	return day, false, nil
+}
+
+// pbDateFormat is how PocketBase renders a date field.
+const pbDateFormat = "2006-01-02 15:04:05.000Z"
+
+// dayCell keeps the day half of a stored date.
+func dayCell(v string) string {
+	if len(v) >= 10 {
+		return v[:10]
+	}
+	return v
 }
 
 func labelsByID(ctx context.Context, c *client.Client, ids []string) (map[string]label, error) {

@@ -42,6 +42,23 @@ describe('dueStateFor', () => {
     })
 })
 
+describe('dueStateFor with a time', () => {
+    // The timed branch is additive: only "overdue" reads the instant.
+    it('is overdue the minute the time has passed, on the same day', () => {
+        const now = localDay(2026, 8, 4, 15)
+        expect(dueStateFor(localDay(2026, 8, 4, 14), now, true)).toBe('overdue')
+        // The same instant WITHOUT the flag is still today, so still soon.
+        expect(dueStateFor(localDay(2026, 8, 4, 14), now, false)).toBe('soon')
+    })
+
+    it('is soon until then, and upcoming beyond the window as before', () => {
+        const now = localDay(2026, 8, 4, 9)
+        expect(dueStateFor(localDay(2026, 8, 4, 14), now, true)).toBe('soon')
+        expect(dueStateFor(localDay(2026, 8, 6, 8), now, true)).toBe('soon')
+        expect(dueStateFor(localDay(2026, 8, 9, 8), now, true)).toBe('upcoming')
+    })
+})
+
 describe('formatDueDate', () => {
     it('renders a short month and day', () => {
         expect(formatDueDate(localDay(2026, 8, 4), 'en-US')).toBe('Aug 4')

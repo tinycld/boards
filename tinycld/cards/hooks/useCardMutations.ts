@@ -26,9 +26,11 @@ export interface MoveCardInput {
  * The card fields a user edits directly. Every one is optional: a caller
  * changing only the title must not have to restate the description.
  *
- * `due` is an ISO date string, or '' to clear it — NOT undefined. PocketBase
- * stores an unset date as '', and `toBoardCard` maps that back to undefined for
- * the UI, so '' is the wire value that actually clears the field.
+ * `due` is a bare `YYYY-MM-DD`, or an ISO instant when `dueHasTime` is true
+ * (lib/due-time.ts encodes both), or '' to clear it — NOT undefined.
+ * PocketBase stores an unset date as '', and `toBoardCard` maps that back to
+ * undefined for the UI, so '' is the wire value that actually clears the
+ * field. `start` is always a bare day, same convention.
  *
  * `reporter` follows the same convention: a users id to set it, '' to clear it,
  * absent to leave it alone. Note that clearing is not the same as showing no
@@ -40,6 +42,8 @@ export interface UpdateCardInput {
     title?: string
     description?: string
     due?: string
+    dueHasTime?: boolean
+    start?: string
     reporter?: string
     /** `none` is a real value, not a clear — see pb-migrations/1980000006. */
     priority?: CardPriority
@@ -82,6 +86,8 @@ export function useCreateCard(projectId: string) {
                 title: input.title,
                 description: '',
                 due: '',
+                due_has_time: false,
+                start: '',
                 assignees: [],
                 labels: [],
                 created_by: user?.id ?? '',
@@ -148,7 +154,9 @@ export function useDuplicateCard(projectId: string) {
                 position,
                 title: `Copy of ${card.title}`,
                 description: card.description,
-                due: card.due ? toDateString(card.due) : '',
+                due: encodeStoredDue(card),
+                due_has_time: card.dueHasTime,
+                start: card.start ? toDateString(card.start) : '',
                 assignees: card.assignees.map(member => member.id),
                 labels: card.labels.map(label => label.id),
                 created_by: user?.id ?? '',
@@ -203,6 +211,8 @@ export function useUpdateCard() {
                 if (input.title !== undefined) draft.title = input.title
                 if (input.description !== undefined) draft.description = input.description
                 if (input.due !== undefined) draft.due = input.due
+                if (input.dueHasTime !== undefined) draft.due_has_time = input.dueHasTime
+                if (input.start !== undefined) draft.start = input.start
                 if (input.reporter !== undefined) draft.reporter = input.reporter
                 if (input.priority !== undefined) draft.priority = input.priority
                 if (input.estimate !== undefined) draft.estimate = input.estimate
@@ -307,4 +317,10 @@ export function useMoveCard() {
             })
         }),
     })
+}
+
+/** The stored form of a card view's due date, for a copy: a day, or the instant. */
+function encodeStoredDue(card: BoardCardView): string {
+    if (!card.due) return ''
+    return card.dueHasTime ? card.due.toISOString() : toDateString(card.due)
 }

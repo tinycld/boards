@@ -111,6 +111,16 @@ describe('describeActivity', () => {
         expect(describeActivity(activity('a', 'estimate', '', { to: '5' }), ctx).text).toBe(
             'set the estimate to 5 pts'
         )
+        expect(
+            describeActivity(activity('a', 'start', '', { to: '2026-09-10' }), ctx).text
+        ).toMatch(/^set the start date to Sep 10$/)
+        expect(describeActivity(activity('a', 'start', '', { from: '2026-09-10' }), ctx).text).toBe(
+            'cleared the start date'
+        )
+        const instant = new Date(2026, 8, 12, 14, 30).toISOString()
+        expect(describeActivity(activity('a', 'due', '', { to: instant }), ctx).text).toMatch(
+            /^set the due date to Sep 12, 2:30 PM$/
+        )
         expect(describeActivity(activity('a', 'estimate', '', { from: '5' }), ctx).text).toBe(
             'cleared the estimate'
         )

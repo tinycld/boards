@@ -24,6 +24,7 @@ function card(overrides: Partial<BoardCardView> = {}): BoardCardView {
         title: 'Ship the release',
         description: '',
         due: undefined,
+        dueHasTime: false,
         labels: [],
         assignees: [],
         reporter: maya,

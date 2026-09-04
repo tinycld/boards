@@ -17,6 +17,7 @@ const COLUMNS: { label: string; flex?: number; width?: number; sortField?: SortF
     { label: 'List', flex: TABLE_COLUMNS.list },
     { label: 'Assignees', width: TABLE_COLUMNS.assignees },
     { label: 'Labels', flex: TABLE_COLUMNS.labels },
+    { label: 'Start', width: TABLE_COLUMNS.start, sortField: 'start' },
     { label: 'Due', width: TABLE_COLUMNS.due, sortField: 'due' },
     { label: 'Priority', width: TABLE_COLUMNS.priority, sortField: 'priority' },
     { label: 'Estimate', width: TABLE_COLUMNS.estimate, sortField: 'estimate' },
