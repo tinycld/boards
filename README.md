@@ -9,7 +9,7 @@ not bundled), and the other feature packages.
 
 ## Automation rules
 
-The package publishes six triggers and four actions to the automation-rules
+The package publishes ten triggers and five actions to the automation-rules
 engine, so a rule can fire on board activity:
 
 - **`cards:card-created`** — "A card is created". A `cards_cards` create.
@@ -29,6 +29,16 @@ engine, so a rule can fire on board activity:
   `assignees`.
 - **`cards:card-priority-changed`** — "A card's priority changes". An update
   watching `priority`.
+- **`cards:card-estimate-changed`** — "A card's estimate changes". An update
+  watching `estimate`.
+- **`cards:card-rescheduled`** — "A card's dates change". An update watching
+  `due`, `due_has_time` and `start`.
+- **`cards:card-archived`** — "A card is archived". An update watching
+  `archived`, gated in Go to the archive (never the restore). The auto-archive
+  sweep's saves fire it too.
+- **`cards:comment-reacted`** — "Someone reacts to a comment". A
+  `cards_comment_reactions` create; condition fields `emoji`, `user`, `card`,
+  `comment`, `project`.
 - **`cards:move-card`** — "Move the card to a list". A `kind: 'record-op'`
   action: an update targeting the trigger record, with a `list` param.
 - **`cards:add-assignee`** — "Assign the card to someone". A `kind: 'native'`
@@ -173,3 +183,6 @@ exactly what a developer runs locally.
 - `tinycld/cards/` — the package's TypeScript surface (screens, collections, …)
 - `tinycld/cards/automation.ts` — the automation trigger + action catalog
 - `tests/` — vitest unit tests (and Playwright e2e specs — full preset only)
+
+- **`cards:set-estimate`** — "Set the card estimate". A `kind: 'record-op'`
+  update of the trigger record's `estimate` number; `0` clears it.

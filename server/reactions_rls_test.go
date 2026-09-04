@@ -114,7 +114,7 @@ func TestReactionsRLS_DuplicateIsRefused(t *testing.T) {
 func TestReactionsRLS_OwnerCannotRemoveAnothersReaction(t *testing.T) {
 	env := setupCardsEnv(t)
 	comment := cardsComment(t, env.app, env.project, env.card, env.editor, "hello")
-	id := seedReaction(t, env, comment.Id, env.commentor.Id, "👍")
+	id := seedReaction(t, env, comment.Id, env.commentor.Id, "👍").Id
 	req{
 		method: http.MethodDelete,
 		url:    "/api/collections/cards_comment_reactions/records/" + id,
@@ -126,7 +126,7 @@ func TestReactionsRLS_OwnerCannotRemoveAnothersReaction(t *testing.T) {
 func TestReactionsRLS_CanRemoveYourOwn(t *testing.T) {
 	env := setupCardsEnv(t)
 	comment := cardsComment(t, env.app, env.project, env.card, env.editor, "hello")
-	id := seedReaction(t, env, comment.Id, env.commentor.Id, "👍")
+	id := seedReaction(t, env, comment.Id, env.commentor.Id, "👍").Id
 	req{
 		method: http.MethodDelete,
 		url:    "/api/collections/cards_comment_reactions/records/" + id,
@@ -166,11 +166,7 @@ func TestReactionsRLS_OutsiderListsNothing(t *testing.T) {
 func TestReactionsRLS_ShareLinkReadsWhileLive(t *testing.T) {
 	env := setupCardsEnv(t)
 	comment := cardsComment(t, env.app, env.project, env.card, env.editor, "hello")
-	id := seedReaction(t, env, comment.Id, env.commentor.Id, "👍")
-	row, err := env.app.FindRecordById("cards_comment_reactions", id)
-	if err != nil {
-		t.Fatal(err)
-	}
+	row := seedReaction(t, env, comment.Id, env.commentor.Id, "👍")
 	live := shareLink(t, env, env.project.Id, tok64("live"), "viewer", true, "")
 	revoked := shareLink(t, env, env.project.Id, tok64("revoked"), "viewer", false, "")
 
@@ -185,7 +181,7 @@ func TestReactionsRLS_ShareLinkReadsWhileLive(t *testing.T) {
 	}
 }
 
-func seedReaction(t *testing.T, env *cardsEnv, commentID, userID, emoji string) string {
+func seedReaction(t *testing.T, env *cardsEnv, commentID, userID, emoji string) *core.Record {
 	t.Helper()
 	col, err := env.app.FindCollectionByNameOrId("cards_comment_reactions")
 	if err != nil {
@@ -200,5 +196,5 @@ func seedReaction(t *testing.T, env *cardsEnv, commentID, userID, emoji string) 
 	if err := env.app.Save(r); err != nil {
 		t.Fatalf("seed reaction: %v", err)
 	}
-	return r.Id
+	return r
 }

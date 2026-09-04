@@ -14,6 +14,10 @@ import type { CardsSchema } from './types'
 // REPLACES, so append needs a handler), and set-due-date (date math) — are
 // deliberately absent. add-assignee and add-label additionally want a
 // relation param, which the catalog cannot express for a native action.
+//
+// A reaction is a row on cards_comment_reactions rather than a change to a
+// card, so `comment-reacted` is declared against that collection; it carries
+// `project` for the same owner resolver every card trigger uses.
 const automation = {
     triggers: [
         {
@@ -119,6 +123,69 @@ const automation = {
                 { key: 'assignees', label: 'Assignees' },
             ],
         },
+        {
+            id: 'card-estimate-changed',
+            label: "A card's estimate changes",
+            collection: 'cards_cards',
+            on: 'update',
+            watch: ['estimate'],
+            fields: [
+                'title',
+                'estimate',
+                'priority',
+                { key: 'list', label: 'List' },
+                { key: 'project', label: 'Board' },
+                { key: 'assignees', label: 'Assignees' },
+            ],
+        },
+        {
+            // Any of the three date columns: a start set, a due date moved,
+            // a time added to or taken off a deadline.
+            id: 'card-rescheduled',
+            label: "A card's dates change",
+            collection: 'cards_cards',
+            on: 'update',
+            watch: ['due', 'due_has_time', 'start'],
+            fields: [
+                'title',
+                'due',
+                'start',
+                'priority',
+                { key: 'list', label: 'List' },
+                { key: 'project', label: 'Board' },
+                { key: 'assignees', label: 'Assignees' },
+            ],
+        },
+        {
+            // `archived` flips both ways; gated in Go to the archive only, so
+            // a restore never reads as "archived". Fires for the auto-archive
+            // sweep's archives as well as a person's.
+            id: 'card-archived',
+            label: 'A card is archived',
+            collection: 'cards_cards',
+            on: 'update',
+            watch: ['archived'],
+            fields: [
+                'title',
+                { key: 'list', label: 'List' },
+                { key: 'project', label: 'Board' },
+                { key: 'assignees', label: 'Assignees' },
+                'priority',
+            ],
+        },
+        {
+            id: 'comment-reacted',
+            label: 'Someone reacts to a comment',
+            collection: 'cards_comment_reactions',
+            on: 'create',
+            fields: [
+                'emoji',
+                { key: 'user', label: 'Who reacted' },
+                { key: 'card', label: 'Card' },
+                { key: 'comment', label: 'Comment' },
+                { key: 'project', label: 'Board' },
+            ],
+        },
     ],
     actions: [
         {
@@ -154,6 +221,21 @@ const automation = {
                 set: { priority: { param: 'priority' } },
             },
             params: [{ key: 'priority', field: 'priority', label: 'Priority' }],
+        },
+        {
+            // A record-op like set-priority: one number column, so `set` is
+            // the right verb. 0 is the stored form of "no estimate"
+            // (lib/estimate.ts), so a rule can clear one as well as size it.
+            id: 'set-estimate',
+            label: 'Set the card estimate',
+            kind: 'record-op',
+            collection: 'cards_cards',
+            op: {
+                type: 'update',
+                target: 'trigger-record',
+                set: { estimate: { param: 'estimate' } },
+            },
+            params: [{ key: 'estimate', field: 'estimate', label: 'Estimate (points, 0 clears)' }],
         },
         {
             // Native, not a record-op: `assignees` is a multi-value relation

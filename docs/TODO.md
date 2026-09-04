@@ -10,7 +10,9 @@ matching `feat/cards-notification-prefs` branch in `tinycld`). Tier 2 is in
 progress: 12 (estimates) shipped on `feat/tier2-estimates`, 13 (status
 categories + auto-archive) on `feat/tier2-status`, 8 (comment reactions) on
 `feat/tier2-reactions`, 10 (start date, due time, timeline) on
-`feat/tier2-timeline`. 9, 11 and 14–21 remain; Tier 3 is open.
+`feat/tier2-timeline`, and the follow-ups from those four — reaction
+notifications, `set-estimate`, and triggers for estimate, dates, archive and
+reactions — on `feat/tier2-events`. 9, 11 and 14–21 remain; Tier 3 is open.
 
 ## Tier 1 — table stakes in all three ✅ shipped
 

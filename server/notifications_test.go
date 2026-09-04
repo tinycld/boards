@@ -201,6 +201,31 @@ func TestNotify_MoveAndCompleteReachWatchersWithTheEvent(t *testing.T) {
 	}
 }
 
+func TestNotify_ReactionTellsTheCommentAuthorOnly(t *testing.T) {
+	env := setupNotifyEnv(t)
+	ensureWatcher(env.app, env.project.Id, env.card.Id, env.viewer.Id)
+	comment := cardsComment(t, env.app, env.project, env.card, env.editor, "hello")
+
+	notifyReaction(env.app, seedReaction(t, env, comment.Id, env.commentor.Id, "👍"))
+	editorNotes := notificationsFor(t, env.app, env.editor.Id)
+	if len(editorNotes) != 1 || editorNotes[0].GetString("type") != notifyTypeReaction {
+		t.Fatalf("author got %v, want one cards_reaction", notificationTypes(t, env.app, env.editor.Id))
+	}
+	if event := eventOf(t, editorNotes[0]); event != "reaction" {
+		t.Fatalf("event = %q, want reaction", event)
+	}
+	// A reaction is for the author alone: the watcher hears nothing, and so
+	// does the reactor.
+	requireTypes(t, notificationTypes(t, env.app, env.viewer.Id))
+	requireTypes(t, notificationTypes(t, env.app, env.commentor.Id))
+
+	// Reacting to your own comment tells nobody.
+	notifyReaction(env.app, seedReaction(t, env, comment.Id, env.editor.Id, "🎉"))
+	if got := len(notificationsFor(t, env.app, env.editor.Id)); got != 1 {
+		t.Fatalf("self-reaction notified: %d notifications", got)
+	}
+}
+
 func TestNotify_ServerWriteReachesEveryWatcher(t *testing.T) {
 	env := setupNotifyEnv(t)
 	ensureWatcher(env.app, env.project.Id, env.card.Id, env.viewer.Id)

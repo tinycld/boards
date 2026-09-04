@@ -50,6 +50,16 @@ async function postComment(page: Page, text: string) {
     await expect(page.getByText(text)).toBeVisible()
 }
 
+function bell(page: Page) {
+    return page.getByLabel(/^Notifications/)
+}
+
+async function unreadCount(page: Page): Promise<number> {
+    const label = (await bell(page).getAttribute('aria-label')) ?? ''
+    const match = label.match(/\((\d+) unread\)/)
+    return match ? Number(match[1]) : 0
+}
+
 /** The thumbs-up chip under whichever comment carries one. */
 function thumbsUp(page: Page) {
     return peek(page).locator('[data-testid^="cards-reaction-"][data-testid$="-thumbs_up"]')
@@ -100,6 +110,8 @@ test.describe('Cards — comment reactions', () => {
         await postComment(page, COMMENT)
         await react(page, 'thumbs_up')
         await expect(thumbsUp(page)).toContainText('1')
+        // Reacting to your own comment tells nobody, so this is the baseline.
+        const before = await unreadCount(page)
 
         const { page: bobPage, close } = await signInAsCollaborator(page)
         try {
@@ -111,6 +123,8 @@ test.describe('Cards — comment reactions', () => {
             await thumbsUp(bobPage).click()
             await expect(thumbsUp(bobPage)).toContainText('2')
             await expect(thumbsUp(page)).toContainText('2')
+            // The comment's author hears about it, once.
+            await expect.poll(() => unreadCount(page)).toBe(before + 1)
             await thumbsUp(bobPage).click()
             await expect(thumbsUp(bobPage)).toContainText('1')
         } finally {

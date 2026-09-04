@@ -12,6 +12,7 @@ desktop if you have push turned on — when:
 
 - someone assigns a card to you
 - someone replies to one of your comments
+- someone reacts to one of your comments
 - someone @mentions you on a card (see
   [Mentioning people](help://cards:mentioning-people))
 - a card you **watch** gains a comment, moves to another list, is completed

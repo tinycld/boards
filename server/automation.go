@@ -9,13 +9,14 @@ import (
 )
 
 // registerAutomation installs cards' automation surface: the owner resolver
-// shared by all six card triggers, the card-completed and card-canceled
-// trigger filters, and the native action handlers with the relation
-// authorizers the engine requires before it will run them. Called from
-// registerShared before hooks load.
+// shared by every cards trigger, the trigger filters that split one record
+// event into its named cases, and the native action handlers with the
+// relation authorizers the engine requires before it will run them. Called
+// from registerShared before hooks load.
 func registerAutomation() {
-	// One resolver, six triggers: every card event belongs to the same
-	// people — the members of the card's board.
+	// One resolver, every trigger: a card event — and a reaction on one of
+	// its comments — belongs to the same people, the members of the card's
+	// board. cardOwnerResolver reads `project`, which every row here carries.
 	for _, ref := range []string{
 		"cards:card-created",
 		"cards:card-moved",
@@ -23,12 +24,20 @@ func registerAutomation() {
 		"cards:card-canceled",
 		"cards:card-assigned",
 		"cards:card-priority-changed",
+		"cards:card-estimate-changed",
+		"cards:card-rescheduled",
+		"cards:card-archived",
+		"cards:comment-reacted",
 	} {
 		automation.RegisterOwnerResolver(ref, cardOwnerResolver)
 	}
 
 	automation.RegisterTriggerFilter("cards:card-completed", cardMovedToDoneList)
 	automation.RegisterTriggerFilter("cards:card-canceled", cardMovedToCanceledList)
+	// `archived` flips both ways; only the archive is the event. A restore is
+	// visible in history and to watchers, but "a card is archived" firing on
+	// a restore would be the wrong surprise.
+	automation.RegisterTriggerFilter("cards:card-archived", cardIsArchived)
 
 	// move-card declares a relation param, and the engine refuses to run an
 	// action whose relation param has no registered authorizer — without this
@@ -349,6 +358,15 @@ func cardMovedToDoneList(app core.App, record *core.Record) bool {
 func cardMovedToCanceledList(app core.App, record *core.Record) bool {
 	category, ok := cardListCategory(app, record)
 	return ok && category == "canceled"
+}
+
+// cardIsArchived is the TriggerFilter for "cards:card-archived": the watched
+// column flipped, and it flipped TO archived. The auto-archive sweep's saves
+// pass through here at depth 0 like any other, which is intended — a rule
+// that says "when a card is archived, tell the team" should hear about the
+// sweep's archives too.
+func cardIsArchived(_ core.App, record *core.Record) bool {
+	return record != nil && record.GetBool("archived")
 }
 
 // cardInClosedList: the card's work has stopped, one way or the other. What

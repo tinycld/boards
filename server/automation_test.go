@@ -155,6 +155,22 @@ func TestCardMovedToDoneList(t *testing.T) {
 	}
 }
 
+// The archive filter admits an archive and refuses a restore (and nothing).
+func TestCardIsArchived(t *testing.T) {
+	env := setupCardsAutomation(t)
+	card := cardsCard(t, env.app, env.project, env.todo, "card", "a", env.owner)
+	if cardIsArchived(env.app, card) {
+		t.Error("a live card must not be treated as archived")
+	}
+	card.Set("archived", true)
+	if !cardIsArchived(env.app, card) {
+		t.Error("an archived card must be admitted")
+	}
+	if cardIsArchived(env.app, nil) {
+		t.Error("a nil record must not be treated as archived")
+	}
+}
+
 // Closed is done OR canceled: what the reminders and the auto-archive sweep
 // ask. An unmarked list (” category) is an ordinary working list.
 func TestCardInClosedList(t *testing.T) {

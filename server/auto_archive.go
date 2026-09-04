@@ -20,11 +20,11 @@ import (
 // The archive is a plain Save with `archived = true`, and the existing hooks
 // do the rest: card_archived.go stamps archived_at, activity.go writes an
 // `archived` row with no actor (rendered "Automatically"), notifications.go
-// tells the watchers. No engine write-marking is needed today — no automation
-// trigger watches `archived`, so the save cannot re-enter a rule. If a
-// `card-archived` trigger is ever added, this sweep must mark its saves the
-// way due_notices.go's schedulerWrites does, or a rule that archives cards
-// will fire on its own output.
+// tells the watchers, and the `cards:card-archived` trigger fires at depth 0
+// exactly as it would for a person's archive — so a rule that says "when a
+// card is archived, tell the team" hears about the sweep's archives too. No
+// engine write-marking is needed: no action archives a card, so the save
+// cannot re-enter the rule that observed it.
 //
 // Never fails: a card that cannot be archived is logged and left for the
 // next sweep.
