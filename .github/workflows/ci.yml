@@ -28,19 +28,7 @@ env:
 jobs:
   check:
     name: Typecheck, Unit & Access Rules
-    # A LARGER RUNNER, cards only, and the reason is measurable rather than
-    # precautionary: the Go access-rule suite is 432 tests that each build a
-    # TestApp and replay every migration (~1s of fixed setup apiece), and on the
-    # standard 2-core runner that reached 9m40s on main — 20 seconds inside
-    # Go's 10-minute default, which the epics migration then crossed.
-    #
-    # The honest fix for the SETUP COST is to stop replaying 19 migrations 432
-    # times (share a migrated snapshot, or mark the independent tests
-    # t.Parallel()); this buys headroom while that is done, rather than raising
-    # -timeout, which would only move the line the suite is about to cross
-    # again. Larger runners bill per-minute — revert this if the cost is not
-    # worth it.
-    runs-on: ubuntu-latest-4-cores
+    runs-on: ubuntu-latest
     # Without an explicit cap a hung job rides GitHub's 6-hour default,
     # blocking the PR and burning a runner the whole time.
     timeout-minutes: 30
@@ -166,13 +154,7 @@ jobs:
 
   e2e:
     name: E2E
-    # Same larger runner, and it does more here than shorten the wall clock:
-    # Playwright's default worker count is 50% OF CPUS (not a CI special case —
-    # see resolveWorkers in its config.js), so the 2-core standard runner
-    # resolved to "Running 140 tests using 1 worker" and serialized the whole
-    # suite into 16.7 minutes. The same 140 tests run in 4.7 locally in
-    # parallel. Four cores means two workers with no config change at all.
-    runs-on: ubuntu-latest-4-cores
+    runs-on: ubuntu-latest
     # Without an explicit cap a hung job rides GitHub's 6-hour default,
     # blocking the PR and burning a runner the whole time.
     timeout-minutes: 30
