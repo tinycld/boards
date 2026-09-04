@@ -4,46 +4,58 @@ import { Menu } from '@tinycld/core/ui/menu'
 import { Plus } from 'lucide-react-native'
 import { useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
+import { useBoardContent, useMemberProjects } from '../../hooks/useActiveBoard'
 import { canLinkTo, LINK_LABELS, LINK_TYPES, type LinkType } from '../../lib/card-links'
-import type { BoardCardView } from '../../types'
+import type { BoardCardView, BoardsProjects } from '../../types'
 
 interface LinkPickerProps {
-    /** Candidates: this board's cards. */
+    /** The open board's cards — the default candidates, with no fetch needed. */
     cards: BoardCardView[]
     subject: BoardCardView
+    /** The board the subject is on, so the board step can default to it. */
+    projectId: string
     isPending: boolean
     onSelect: (targetCardId: string, type: LinkType) => void
 }
 
 /**
- * Two choices in one affordance: what kind of link, then which card.
+ * Three choices in one affordance: what kind of link, which board, then which
+ * card.
  *
  * TYPE FIRST, deliberately. The type changes what the card list MEANS — "which
  * card does this block" and "which card duplicates this" are different
  * questions — and picking the card first would make the second menu feel like
  * a correction rather than a continuation.
  *
- * Only this board's cards are offered. The schema and rules support linking
- * across boards (a link names two cards and no project), and the section
- * renders such links correctly when they exist — but CHOOSING a card on
- * another board needs a board picker first, which is filed rather than faked
- * here. A cross-board link can be made today through the API; the UI catches
- * up in its own change.
+ * BOARD SECOND, defaulted to the one you are on. Links may cross boards (a
+ * link names two cards and no project), and the section already renders such
+ * links correctly; this is the step that lets you FILE one. Defaulting keeps
+ * the common same-board case at two clicks — the board row is there to be
+ * changed, not to be answered.
  */
-export function LinkPicker({ cards, subject, isPending, onSelect }: LinkPickerProps) {
+export function LinkPicker({ cards, subject, projectId, isPending, onSelect }: LinkPickerProps) {
     const [pendingType, setPendingType] = useState<LinkType | null>(null)
+    const [boardId, setBoardId] = useState(projectId)
     const mutedColor = useThemeColor('muted')
-    const candidates = cards.filter(card => canLinkTo(card, subject))
+
+    const close = () => {
+        setPendingType(null)
+        setBoardId(projectId)
+    }
 
     if (pendingType) {
         return (
             <CardChoices
                 type={pendingType}
-                candidates={candidates}
-                onCancel={() => setPendingType(null)}
+                subject={subject}
+                homeCards={cards}
+                homeProjectId={projectId}
+                boardId={boardId}
+                onBoardChange={setBoardId}
+                onCancel={close}
                 onPick={cardId => {
                     onSelect(cardId, pendingType)
-                    setPendingType(null)
+                    close()
                 }}
             />
         )
@@ -79,8 +91,20 @@ export function LinkPicker({ cards, subject, isPending, onSelect }: LinkPickerPr
     )
 }
 
+interface CardChoicesProps {
+    type: LinkType
+    subject: BoardCardView
+    /** The open board's cards, already loaded — no fetch for the common case. */
+    homeCards: BoardCardView[]
+    homeProjectId: string
+    boardId: string
+    onBoardChange: (projectId: string) => void
+    onCancel: () => void
+    onPick: (cardId: string) => void
+}
+
 /**
- * Step two: which card.
+ * Steps two and three: which board, then which card on it.
  *
  * A plain list rather than a second Menu, because the card set is unbounded
  * where the type set is three — and a board with forty cards in a popover is
@@ -89,15 +113,28 @@ export function LinkPicker({ cards, subject, isPending, onSelect }: LinkPickerPr
  */
 function CardChoices({
     type,
-    candidates,
+    subject,
+    homeCards,
+    homeProjectId,
+    boardId,
+    onBoardChange,
     onCancel,
     onPick,
-}: {
-    type: LinkType
-    candidates: BoardCardView[]
-    onCancel: () => void
-    onPick: (cardId: string) => void
-}) {
+}: CardChoicesProps) {
+    // MEMBERSHIP, not write access. The create rule is
+    // `writerOf(source) && memberOf(target)`, so membership alone qualifies a
+    // board as a target — `useWritableProjects` would wrongly hide boards a
+    // viewer could legitimately link to. See useMemberProjects.
+    const boards = useMemberProjects()
+    const isHome = boardId === homeProjectId
+    // Only fetched when the chosen board is NOT the open one: the open board's
+    // cards are already in hand, and re-reading them would trade a render for
+    // a round-trip.
+    const { project: farBoard, isLoading } = useBoardContent(isHome ? '' : boardId)
+
+    const farCards = farBoard?.lists.flatMap(list => list.cards) ?? []
+    const candidates = (isHome ? homeCards : farCards).filter(card => canLinkTo(card, subject))
+
     return (
         <View
             className="border border-border rounded-[10px] p-1 mt-1"
@@ -111,29 +148,124 @@ function CardChoices({
                     <Text className="text-[11px] text-muted">Cancel</Text>
                 </Pressable>
             </View>
-            {candidates.length === 0 ? (
-                <Text className="px-2 py-2 text-[12px] text-muted">
-                    No other card on this board yet
-                </Text>
-            ) : (
-                candidates.map(card => (
+            <BoardRow boards={boards} boardId={boardId} onChange={onBoardChange} />
+            <CandidateList
+                candidates={candidates}
+                isHome={isHome}
+                isLoading={!isHome && isLoading}
+                onPick={onPick}
+            />
+        </View>
+    )
+}
+
+/**
+ * The board step, as one row that opens a menu — not a list.
+ *
+ * A row keeps the default visible and one click from being changed, where a
+ * second full list would bury the card choices below a board list that is
+ * usually answered already.
+ */
+function BoardRow({
+    boards,
+    boardId,
+    onChange,
+}: {
+    boards: BoardsProjects[]
+    boardId: string
+    onChange: (projectId: string) => void
+}) {
+    const current = boards.find(board => board.id === boardId)
+    return (
+        <View className="flex-row items-center gap-2 px-2 py-1">
+            <Text className="text-[11px] text-muted">on</Text>
+            <Menu>
+                <Menu.Trigger>
                     <Pressable
-                        key={card.id}
                         accessibilityRole="button"
-                        accessibilityLabel={card.title}
-                        testID="boards-link-candidate"
-                        onPress={() => onPick(card.id)}
-                        className="flex-row items-center gap-2 px-2 py-1.5 rounded hover:bg-foreground/5"
+                        accessibilityLabel={`Board: ${current?.name ?? 'this board'}. Change board`}
+                        testID="boards-link-board-trigger"
+                        className="flex-row items-center gap-1.5 px-1.5 py-0.5 rounded hover:bg-foreground/5"
                     >
-                        {card.key ? (
-                            <Text className="text-[11px] font-medium text-muted">{card.key}</Text>
+                        {current?.color ? (
+                            <View
+                                className="w-2 h-2 rounded-full"
+                                style={{ backgroundColor: current.color }}
+                            />
                         ) : null}
-                        <Text className="flex-1 text-[13px] text-foreground" numberOfLines={1}>
-                            {card.title}
+                        <Text className="text-[11px] font-medium text-foreground">
+                            {current?.name ?? 'this board'}
                         </Text>
                     </Pressable>
-                ))
-            )}
+                </Menu.Trigger>
+                <Menu.Portal>
+                    <Menu.Overlay />
+                    <Menu.Content presentation="popover" placement="bottom" align="start">
+                        {boards.map(board => (
+                            <MenuActionItem
+                                key={board.id}
+                                label={board.name}
+                                colorDot={board.color}
+                                isActive={board.id === boardId}
+                                onPress={() => onChange(board.id)}
+                            />
+                        ))}
+                    </Menu.Content>
+                </Menu.Portal>
+            </Menu>
         </View>
+    )
+}
+
+/**
+ * The cards on the chosen board.
+ *
+ * LOADING and EMPTY are separate states, and conflating them is the bug this
+ * spells out: a far board's cards arrive on demand, so an empty list during
+ * the fetch would read as "this board has no cards" — a wrong answer that
+ * corrects itself silently a moment later. The same three-state distinction
+ * `resolveFarCard` draws in lib/card-links.ts.
+ */
+function CandidateList({
+    candidates,
+    isHome,
+    isLoading,
+    onPick,
+}: {
+    candidates: BoardCardView[]
+    isHome: boolean
+    isLoading: boolean
+    onPick: (cardId: string) => void
+}) {
+    if (isLoading) {
+        return <Text className="px-2 py-2 text-[12px] text-muted">Loading cards…</Text>
+    }
+    if (candidates.length === 0) {
+        return (
+            <Text className="px-2 py-2 text-[12px] text-muted">
+                {isHome ? 'No other card on this board yet' : 'No cards on that board yet'}
+            </Text>
+        )
+    }
+    return (
+        <>
+            {candidates.map(card => (
+                <Pressable
+                    key={card.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={card.title}
+                    testID="boards-link-candidate"
+                    onPress={() => onPick(card.id)}
+                    className="flex-row items-center gap-2 px-2 py-1.5 rounded hover:bg-foreground/5"
+                >
+                    {card.key ? (
+                        <Text className="text-[11px] font-medium text-muted">{card.key}</Text>
+                    ) : null}
+                    <Text className="flex-1 text-[13px] text-foreground" numberOfLines={1}>
+                        {card.title}
+                    </Text>
+                </Pressable>
+            ))}
+        </>
     )
 }
