@@ -302,6 +302,7 @@ export function CardDetail({
                             // redacted row depends on.
                             isCardSetReady
                             pickerCards={projectCards}
+                            projectId={projectId}
                             canEdit={canEdit}
                         />
                     </View>

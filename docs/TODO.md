@@ -29,14 +29,15 @@ fixes which have since landed):
 | #59 | `feat/tier2-canvas-pickers` | `d`/`l`/`a`/`p`/`f` shortcuts |
 | #60 | `feat/tier2-link-cli` | `card link` / `card unlink` |
 | #61 | `feat/tier2-reaction-cli` | `card react` / `card unreact` |
-| — | `feat/tier2-cross-board-picker` | Debt 3: the cross-board link picker |
+| #62 | `feat/tier2-cross-board-picker` | Debt 3: the cross-board link picker |
 
 Open: 14, 16–21 and Tier 3. Next up is 19 (bulk operations) — the
 highest-value open item, and the only one needing no migration or server work.
 
-**Carried debt.** `docs/PLAN-debts.md`'s Debts 1 (core `Menu` overlay +
-measurement) and 2 (the CLI scope map) both SHIPPED in core; that file is
-stale on them. Debt 3 is the cross-board picker, in review above.
+**Carried debt — none left.** `docs/PLAN-debts.md`'s Debts 1 (core `Menu`
+overlay + measurement) and 2 (the CLI scope map) shipped in core; Debt 3 (the
+cross-board link picker) is PR #62 above. With Phase 0 merged, Tier 2 carries
+no outstanding debt.
 
 **One unreproduced e2e failure**, recorded so it is not rediscovered from
 scratch: a single full-suite run failed `archive-restore.spec.ts:77` (the
@@ -194,9 +195,12 @@ plain re-run.
     unlink` (direction-agnostic, removes every link between the pair), and a
     Links section in `card view` that renders a far card the caller cannot
     read AS REDACTED rather than omitting it.
-    Deferred: a cross-board card picker (the schema and rules support such
-    links, but the picker offers the open board's cards); link-aware board
-    filtering; a blocked glyph on the card face.
+    The cross-board picker landed too (Debt 3, the last of the three): the
+    picker gained a board step defaulting to the open board, and its board list
+    is filtered by MEMBERSHIP rather than write access — the create rule is
+    `writerOf(source) && memberOf(target)`, so `useWritableProjects` would have
+    wrongly hidden legitimate targets.
+    Deferred: link-aware board filtering; a blocked glyph on the card face.
 
 ### Open
 
