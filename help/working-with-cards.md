@@ -1,7 +1,7 @@
 ---
 title: Working with cards
 summary: Opening a card, editing its details, and moving it between lists
-tags: [cards, board, kanban, detail, shortcuts, formatting, "drag and drop", "sub-tasks", subtasks]
+tags: [cards, board, kanban, detail, shortcuts, formatting, "drag and drop", "sub-tasks", subtasks, links, blocks, dependencies]
 order: 20
 ---
 
@@ -109,6 +109,44 @@ a card and its sub-tasks always live on the same board.
 To un-link a sub-task, open it and clear its parent — the card stays exactly
 where it is and simply stops being part of the set. Deleting a parent never
 deletes its sub-tasks; they become ordinary cards.
+
+## Linking cards
+
+Sometimes two cards are related without one being part of the other. Open a
+card, then **Add link** in its Links section, choose what kind of link it is,
+and pick the card:
+
+- **Blocks** — this card has to be finished before the other one can be. The
+  other card shows the same link as **Blocked by**.
+- **Related to** — the two are connected, with neither waiting on the other.
+- **Duplicates** — this card covers the same work as the other. The other shows
+  it as **Duplicated by**.
+
+A link is stored once and shown on both cards, so you only file it from one
+side and removing it from either removes it everywhere. Click a linked card to
+open it.
+
+Two cards cannot block each other in both directions — that would be a
+contradiction rather than a pair — and a card cannot be linked to itself.
+**Related to** has no such restriction, because it says the same thing whichever
+card you file it from.
+
+Deleting a card removes its links along with it. The cards at the other end
+stay exactly where they are.
+
+### Links to other boards
+
+Unlike sub-tasks, a link can point at a card on a **different board** — useful
+when your work waits on another team's.
+
+If you can see both boards, the link shows the other card's key and title and
+opens it like any other. If you are not a member of the other board, the link
+still appears, but as **a card on another board** with no name — enough to tell
+you a dependency exists, without showing you work from a board you have not
+been given access to.
+
+The Add link menu offers cards from the board you are on. To link across
+boards, ask someone on both boards to file it.
 
 ## Moving a card that has sub-tasks
 

@@ -43,6 +43,13 @@ engine, so a rule can fire on board activity:
 - **`cards:comment-reacted`** — "Someone reacts to a comment". A
   `cards_comment_reactions` create; condition fields `emoji`, `user`, `card`,
   `comment`, `project`.
+
+There is deliberately NO trigger or action for `cards_card_links`. A link row
+carries no `project`, and `cardOwnerResolver` — which every cards trigger
+shares — resolves a rule's owner through exactly that field. A link trigger
+would need a resolver that unions two boards' members and then decides whose
+rule may fire on a dependency that spans them, which is a policy question
+rather than a wiring one. Filed rather than guessed at.
 - **`cards:move-card`** — "Move the card to a list". A `kind: 'record-op'`
   action: an update targeting the trigger record, with a `list` param.
 - **`cards:set-parent`** — "Make the card a sub-task". A `kind: 'record-op'`

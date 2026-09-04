@@ -87,6 +87,16 @@ interface CardSeed {
      * rule refuses anything else.
      */
     parentTitle?: string
+    /**
+     * Links to other cards, BY TITLE, resolved after every card exists — the
+     * same second-pass reason parentTitle needs one.
+     *
+     * Titles are matched within this board only. A cross-board link is
+     * perfectly legal (see pb-migrations/1980000016) but seeding one would
+     * need a board-qualified reference, and the demo reads better with the
+     * dependency visible on one screen.
+     */
+    links?: { type: 'blocks' | 'related' | 'duplicates'; to: string }[]
     checklist?: { title: string; done?: boolean }[]
     comments?: CommentSeed[]
 }
@@ -194,6 +204,7 @@ const BOARDS: BoardSeed[] = [
                 cards: [
                     {
                         title: 'Draft the launch announcement',
+                        links: [{ type: 'blocks', to: 'Press kit landing page' }],
                         priority: 'medium',
                         estimate: 5,
                         start: () => dueAt(-2),
@@ -208,6 +219,11 @@ const BOARDS: BoardSeed[] = [
                     },
                     {
                         title: 'Fix duplicate label colors in picker',
+                        // A dependency the board can show off: the announcement
+                        // cannot go out until the press kit is up. Reads
+                        // "Blocks" on one card and "Blocked by" on the other
+                        // from the SAME row.
+                        links: [{ type: 'related', to: 'Press kit landing page' }],
                         priority: 'high',
                         estimate: 2,
                         due: () => dueAtTime(1, 14),
@@ -507,6 +523,26 @@ async function seedBoard(
     }
 
     await seedSubtasks(pb, board, cardIdsByTitle)
+    await seedLinks(pb, board, cardIdsByTitle)
+}
+
+/** Link the seeded cards to each other. A second pass, like seedSubtasks. */
+async function seedLinks(pb: PocketBase, board: BoardSeed, cardIdsByTitle: Record<string, string>) {
+    for (const list of board.lists) {
+        for (const card of list.cards) {
+            const sourceId = cardIdsByTitle[card.title]
+            if (!sourceId) continue
+            for (const link of card.links ?? []) {
+                const targetId = cardIdsByTitle[link.to]
+                if (!targetId) continue
+                await pb.collection('cards_card_links').create({
+                    source: sourceId,
+                    target: targetId,
+                    type: link.type,
+                })
+            }
+        }
+    }
 }
 
 /**

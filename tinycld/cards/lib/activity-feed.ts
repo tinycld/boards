@@ -71,6 +71,16 @@ export function describeActivity(item: BoardActivity, ctx: ActivityContext): Act
     // Prefers the key ("OTTER-4") and falls back to the title, because a board
     // with no slug has no keys at all — and to a generic noun when the card is
     // gone, which un-parenting by DELETING the parent makes an ordinary case.
+    // The stored link type read as a phrase. An unknown value renders as
+    // "to" rather than as itself, so a type added later cannot produce a
+    // sentence that reads like a bug.
+    const linkVerb = (type: string) => {
+        if (type === 'blocks') return 'as blocking'
+        if (type === 'duplicates') return 'as a duplicate of'
+        if (type === 'related') return 'as related to'
+        return 'to'
+    }
+
     const cardName = (id: string) => {
         const card = ctx.cards.find(entry => entry.id === id)
         if (!card) return 'another card'
@@ -148,6 +158,14 @@ export function describeActivity(item: BoardActivity, ctx: ActivityContext): Act
             text = item.to
                 ? `made this a sub-task of ${cardName(item.to)}`
                 : `removed this from ${cardName(item.from)}`
+            break
+        // `from` carries the link type and `to` the OTHER card — see
+        // server/card_links.go, which writes one row on each end.
+        case 'link_added':
+            text = `linked this ${linkVerb(item.from)} ${cardName(item.to)}`
+            break
+        case 'link_removed':
+            text = `unlinked this from ${cardName(item.to)}`
             break
         case 'archived':
             text = 'archived this card'

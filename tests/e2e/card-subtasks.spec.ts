@@ -38,7 +38,9 @@ async function addSubtask(page: Page, parentTitle: string, title: string) {
     await peek(page).getByPlaceholder('What needs doing?').fill(title)
     await page.keyboard.press('Enter')
     // The row is what proves the card exists, not the composer clearing.
-    await expect(peek(page).getByTestId('cards-subtask-row').filter({ hasText: title })).toBeVisible()
+    await expect(
+        peek(page).getByTestId('cards-subtask-row').filter({ hasText: title })
+    ).toBeVisible()
     await closeCardPeek(page)
 }
 

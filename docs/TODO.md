@@ -10,8 +10,8 @@ four chosen items — 8, 10, 12, 13 — and their rule/notification follow-ups
 shipped as five stacked branches (`feat/tier2-estimates` → `-status` →
 `-reactions` → `-timeline` → `-events`, PRs #46–#50), with the matching
 notification preferences on `tinycld`'s `feat/cards-notification-prefs`
-(PR #229). Sub-tasks (9a) followed on `feat/tier2-subtasks`. Open: 9b, 11,
-14–21 and Tier 3.
+(PR #229). Sub-tasks (9a) followed on `feat/tier2-subtasks`, and card links
+(9b) on `feat/tier2-links`. Open: 11, 14–21 and Tier 3.
 
 ## Tier 1 — table stakes in all three ✅ shipped
 
@@ -100,13 +100,31 @@ notification preferences on `tinycld`'s `feat/cards-notification-prefs`
     endpoint's re-projection list, so a cross-board move left reaction rows
     naming the source board — unreadable to everyone on the target.
 
+9b. **Card links** — landed as `cards_card_links (source, target, type)` over
+    blocks / related / duplicates, stored ONCE and read from both ends
+    ("blocked by" is `blocks` seen from the target, not a fourth type).
+    Unlike sub-tasks these MAY CROSS BOARDS, which made it the first
+    collection in the package whose rules resolve two projects. No
+    denormalized `project` column: membership resolves through
+    `source.project` / `target.project`, which cannot desync and left
+    `endpoints_move_card.go` needing no change at all. Read is EITHER end,
+    with the far card REDACTED when unreadable — the anonymous-assignee
+    doctrine, so a blocked card never reads as unblocked to the people it
+    blocks. Write is asymmetric (writer on the source, member of the target),
+    delete follows the source alone. Share-link visitors read links via two
+    ALIASED token joins, each separately correlated; a single unaliased join
+    would have collapsed both ends onto one row and a missing correlation
+    would have leaked every board's links. Self-links and reversed `blocks`
+    pairs are a Go guard; `related`/`duplicates` are symmetric so their
+    mirrors are allowed. History writes onto BOTH cards.
+    Deferred: CLI commands (need `cards_card_links` in core's
+    `collectionScopes` first — the cross-repo step that also defers reaction
+    CLI commands); a cross-board card picker (the schema and rules support
+    such links, but the picker offers the open board's cards); link-aware
+    board filtering; a blocked glyph on the card face.
+
 ### Open
 
-9b. **Card relations.** `cards_card_links` (blocks / blocked by / related /
-    duplicate), reusing 9a's card picker. Needs the same-board pin on both
-    ends of the link, and `cards_card_links` added to core's
-    `collectionScopes` before any CLI command can write it — the cross-repo
-    step that also defers the reaction CLI commands.
 11. **Time-based automation and missing actions.** Core has `core:schedule`,
     which fires with no record, and every cards relation authorizer refuses
     that. Overdue / due-soon triggers are more naturally RECORD triggers the

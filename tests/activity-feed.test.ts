@@ -153,6 +153,28 @@ describe('describeActivity', () => {
         expect(describeActivity(activity('a', 'parent', '', { from: 'gone' }), ctx).text).toBe(
             'removed this from another card'
         )
+        // `from` is the link type and `to` the other card — the shape
+        // server/card_links.go writes onto BOTH ends.
+        expect(
+            describeActivity(activity('a', 'link_added', '', { from: 'blocks', to: 'cd1' }), ctx)
+                .text
+        ).toBe('linked this as blocking OTTER-4')
+        expect(
+            describeActivity(
+                activity('a', 'link_added', '', { from: 'duplicates', to: 'cd1' }),
+                ctx
+            ).text
+        ).toBe('linked this as a duplicate of OTTER-4')
+        expect(
+            describeActivity(activity('a', 'link_removed', '', { from: 'blocks', to: 'cd1' }), ctx)
+                .text
+        ).toBe('unlinked this from OTTER-4')
+        // A type this build does not know renders as a plain "to" rather than
+        // as itself, so a later addition cannot read like a bug.
+        expect(
+            describeActivity(activity('a', 'link_added', '', { from: 'mystery', to: 'cd1' }), ctx)
+                .text
+        ).toBe('linked this to OTTER-4')
         expect(describeActivity(activity('a', 'archived', ''), ctx).text).toBe('archived this card')
         expect(describeActivity(activity('a', 'restored', ''), ctx).text).toBe('restored this card')
         expect(describeActivity(activity('a', 'description', ''), ctx).text).toBe(

@@ -34,6 +34,7 @@
 import type {
     CardsActivity,
     CardsAttachments,
+    CardsCardLinks,
     CardsCards,
     CardsCardWatchers,
     CardsChecklistItems,
@@ -52,6 +53,7 @@ import type { CardPriority } from './lib/priority'
 export type {
     CardsActivity,
     CardsAttachments,
+    CardsCardLinks,
     CardsCards,
     CardsCardWatchers,
     CardsChecklistItems,

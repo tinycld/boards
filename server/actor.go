@@ -36,6 +36,10 @@ var actorCapturedCollections = []string{
 	"cards_attachments",
 	"cards_comments",
 	"cards_card_watchers",
+	// Creating a link is attributed; REMOVING one is not, because this list
+	// only feeds create/update request hooks and there is no delete capture.
+	// See registerCardLinkActivity.
+	"cards_card_links",
 }
 
 func registerActorCapture(app core.App) {

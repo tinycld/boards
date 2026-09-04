@@ -24,6 +24,7 @@ import {
 import { DetailActivity } from './DetailActivity'
 import { DetailAttachments, filesToPicked } from './DetailAttachments'
 import { DetailChecklist } from './DetailChecklist'
+import { DetailLinks } from './DetailLinks'
 import { DetailProperties } from './DetailProperties'
 import { DetailSubtasks } from './DetailSubtasks'
 import { EditableText, type EditableTextHandle } from './EditableText'
@@ -100,6 +101,13 @@ export function CardDetail({
     // Fetched here rather than threaded in as props, so the peek and the page
     // both get it without either container knowing about on-demand collections.
     const { checklist, comments, attachments, activity, isReady } = useCardDetail(card.id)
+    // The board's cards by id, for resolving a link's far end. Only THIS
+    // board's, which is the point: a cross-board link's far card is absent
+    // here and renders redacted (lib/card-links.ts).
+    const cardsById = useMemo(
+        () => new Map(projectCards.map(entry => [entry.id, entry])),
+        [projectCards]
+    )
     const activityContext = useMemo(
         () => ({
             lists: projectLists,
@@ -261,6 +269,29 @@ export function CardDetail({
                             card={card}
                             projectCards={projectCards}
                             projectId={projectId}
+                            canEdit={canEdit}
+                        />
+                    </View>
+                    <View className={`px-6 ${widthClass}`}>
+                        {/* Below TOOLBAR_INDEX, so the sticky header keeps its
+                            position. `cardsById` is this board's cards only:
+                            the far end of a CROSS-BOARD link is deliberately
+                            unresolvable here, which is what the redacted row
+                            renders. */}
+                        <DetailLinks
+                            card={card}
+                            cardsById={cardsById}
+                            // Always true here, by construction rather than by
+                            // luck: the peek renders nothing until it finds the
+                            // open card inside an already-built BoardProject,
+                            // and the full-page screen returns <LoadingState/>
+                            // while its query is in flight. Either way this
+                            // board's cards ARE loaded by the time we render,
+                            // so a far card still missing is genuinely
+                            // unreadable rather than late — the distinction the
+                            // redacted row depends on.
+                            isCardSetReady
+                            pickerCards={projectCards}
                             canEdit={canEdit}
                         />
                     </View>

@@ -118,6 +118,9 @@ func registerShared(app *pocketbase.PocketBase) {
 	// rule in 1980000015 cannot express, because a rule sees one row and
 	// cannot walk a chain. Fails the write, like registerCardNumbers.
 	registerCardParentGuard(app)
+	// Self-links and contradictory blocks-both-ways pairs: what the unique
+	// index and the rules cannot say. See card_links.go.
+	registerCardLinkGuard(app)
 	// edited_at on comments is server-owned the same way `number` is: the
 	// hook stamps it when the body actually changes and discards any
 	// client-supplied value when it does not. See comment_edited.go.
@@ -128,6 +131,9 @@ func registerShared(app *pocketbase.PocketBase) {
 	registerListChangedAt(app)
 	registerActorCapture(app)
 	registerCardActivity(app)
+	// Links write history onto BOTH cards, so this is separate from
+	// registerCardActivity's card-shaped diffs. See card_links.go.
+	registerCardLinkActivity(app)
 	registerAutoWatch(app)
 	registerCardNotifications(app)
 	registerDueNotices(app)
