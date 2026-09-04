@@ -3,6 +3,26 @@
 Three separate changes across two repos. Independent of each other: any one can
 ship alone, and two of the three are in `tinycld`, not `cards`.
 
+> **Status, 2026-09-04 — two of the three have SHIPPED.** Read the sections
+> below as history, not as work outstanding.
+>
+> - **Debt 1 (core `Menu`) — DONE, both halves.** The overlay half:
+>   `core/ui/menu/index.tsx` documents a document-level listener that replaces
+>   the full-screen `Menu.Overlay` Pressable, and `Overlay` is a web no-op. The
+>   boards-side follow-up landed too — `tests/e2e/list-status.spec.ts` uses a
+>   plain `.click()`, with the `dispatchEvent` workaround gone. The measurement
+>   half: a `useLayoutEffect` re-measures `triggerRef` whenever `isOpen` flips
+>   with no `triggerPosition`, so a keyboard-opened menu positions itself.
+>   (That fix is necessary but NOT sufficient for a menu with no trigger at
+>   all — see PR #59, where the canvas pickers supply a rect instead.)
+> - **Debt 2 (CLI scope map) — DONE.** All four collections are in
+>   `core/server/oauth/middleware.go`: `boards_card_links`,
+>   `boards_comment_reactions` and `boards_card_watchers` as read+write, and
+>   `boards_activity` read-only with the schema rationale this plan asked for.
+>   The commands it unblocked shipped as PRs #60 and #61.
+> - **Debt 3 (cross-board link picker) — the only one still open**, and the
+>   spec below is accurate. In review on `feat/tier2-cross-board-picker`.
+
 ---
 
 ## Debt 1 — core `Menu`: submenu items cannot be clicked on web
