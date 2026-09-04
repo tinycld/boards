@@ -14,6 +14,7 @@ import { dueStateFor } from './due-state'
 import type { CardPriority } from './priority'
 
 export type DueFilter = 'overdue' | 'soon' | 'has' | 'none'
+export type EstimateFilter = 'estimated' | 'unestimated'
 
 /** The current user, wherever an assignee or reporter id is expected. */
 export const ME = 'me'
@@ -29,6 +30,7 @@ export interface BoardFilter {
     reporterIds: string[]
     due: DueFilter | null
     priorities: CardPriority[]
+    estimate: EstimateFilter | null
     /** Case-insensitive substring over the title and the key. */
     text: string
 }
@@ -44,6 +46,7 @@ export const EMPTY_FILTER: BoardFilter = Object.freeze({
     reporterIds: [],
     due: null,
     priorities: [],
+    estimate: null,
     text: '',
 })
 
@@ -59,6 +62,7 @@ export function activeFacetCount(filter: BoardFilter): number {
     if (filter.reporterIds.length > 0) count += 1
     if (filter.due !== null) count += 1
     if (filter.priorities.length > 0) count += 1
+    if (filter.estimate !== null) count += 1
     if (filter.text.trim() !== '') count += 1
     return count
 }
@@ -89,6 +93,7 @@ export function cardMatchesFilter(
     }
     if (filter.due !== null && !matchesDue(card, filter.due, ctx.now)) return false
     if (filter.priorities.length > 0 && !filter.priorities.includes(card.priority)) return false
+    if (filter.estimate !== null && !matchesEstimate(card, filter.estimate)) return false
     if (!matchesKeyword(card, filter.text)) return false
     return true
 }
@@ -121,6 +126,10 @@ function matchesDue(card: BoardCardView, due: DueFilter, now?: Date): boolean {
         case 'soon':
             return card.due !== undefined && dueStateFor(card.due, now) === 'soon'
     }
+}
+
+function matchesEstimate(card: BoardCardView, estimate: EstimateFilter): boolean {
+    return estimate === 'estimated' ? card.estimate !== undefined : card.estimate === undefined
 }
 
 /**

@@ -142,6 +142,10 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 			if p := priorityCell(cd); p != "-" {
 				rows = append(rows, []string{"Priority", p})
 			}
+			// Appended, and only when set, as Priority is.
+			if cd.Estimate > 0 {
+				rows = append(rows, []string{"Estimate", estimateCell(cd.Estimate)})
+			}
 			if cd.Description != "" {
 				rows = append(rows, []string{"Description", firstLine(cd.Description)})
 			}
@@ -167,7 +171,7 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 
 func newCardAddCmd(c *client.Client) *cobra.Command {
 	var boardRef, listRef, description, due, reporter, priority string
-	var index int
+	var index, estimate int
 	cmd := &cobra.Command{
 		Use:   "add <title>",
 		Short: "Add a card to a column",
@@ -217,6 +221,9 @@ func newCardAddCmd(c *client.Client) *cobra.Command {
 			if !validPriority(priority) {
 				return fmt.Errorf("--priority %q is not one of %s", priority, strings.Join(priorities, ", "))
 			}
+			if estimate < 0 {
+				return fmt.Errorf("--estimate must be 0 or more (0 means no estimate)")
+			}
 			// `project` is written explicitly even though `list` implies it:
 			// the column is DENORMALIZED onto the card so the access rules can
 			// resolve membership without a two-hop back-relation, and the
@@ -231,6 +238,7 @@ func newCardAddCmd(c *client.Client) *cobra.Command {
 				"created_by":  userID,
 				"reporter":    reporterID,
 				"priority":    priority,
+				"estimate":    estimate,
 				"archived":    false,
 			}
 			created, err := client.CreateRecord[card](ctx, c, cardsCollection, body)
@@ -252,15 +260,17 @@ func newCardAddCmd(c *client.Client) *cobra.Command {
 	// limit rather than a surprise.
 	cmd.Flags().StringVar(&reporter, "reporter", "", "user id to report to (default: you)")
 	cmd.Flags().StringVar(&priority, "priority", "none", "one of "+strings.Join(priorities, ", "))
+	cmd.Flags().IntVar(&estimate, "estimate", 0, "points (0 = no estimate)")
 	return cmd
 }
 
 func newCardEditCmd(c *client.Client) *cobra.Command {
 	var title, description, due, reporter, priority string
+	var estimate int
 	var clearDue, clearReporter bool
 	cmd := &cobra.Command{
 		Use:   "edit <id>",
-		Short: "Change a card's title, description, due date, reporter, or priority",
+		Short: "Change a card's title, description, due date, reporter, priority, or estimate",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o, _, err := output.FromCommand(cmd)
@@ -318,8 +328,16 @@ func newCardEditCmd(c *client.Client) *cobra.Command {
 				}
 				body["priority"] = priority
 			}
+			// 0 is how an estimate is cleared — it is what the row stores for
+			// "none" — so there is no --clear-estimate to pair with it.
+			if cmd.Flags().Changed("estimate") {
+				if estimate < 0 {
+					return fmt.Errorf("--estimate must be 0 or more (0 clears it)")
+				}
+				body["estimate"] = estimate
+			}
 			if len(body) == 0 {
-				return fmt.Errorf("nothing to change — pass --title, --description, --due, --clear-due, --reporter, --clear-reporter, or --priority")
+				return fmt.Errorf("nothing to change — pass --title, --description, --due, --clear-due, --reporter, --clear-reporter, --priority, or --estimate")
 			}
 			// Through getCard so a card key (OTTER-12) works here exactly as it
 			// does in `card view`/`card move` — the id is what the API needs.
@@ -342,6 +360,7 @@ func newCardEditCmd(c *client.Client) *cobra.Command {
 	cmd.Flags().StringVar(&reporter, "reporter", "", "user id to report to")
 	cmd.Flags().BoolVar(&clearReporter, "clear-reporter", false, "report to the card's creator again")
 	cmd.Flags().StringVar(&priority, "priority", "", "one of "+strings.Join(priorities, ", ")+" (none clears it)")
+	cmd.Flags().IntVar(&estimate, "estimate", 0, "points (0 clears it)")
 	return cmd
 }
 
@@ -612,6 +631,7 @@ func newCardCopyCmd(c *client.Client) *cobra.Command {
 				"created_by":  userID,
 				"reporter":    reporter,
 				"priority":    cd.Priority,
+				"estimate":    cd.Estimate,
 				"archived":    false,
 			}
 			created, err := client.CreateRecord[card](ctx, c, cardsCollection, body)
@@ -656,6 +676,13 @@ func excludeCard(cards []card, id string) []card {
 		}
 	}
 	return out
+}
+
+func estimateCell(points int) string {
+	if points == 1 {
+		return "1 pt"
+	}
+	return strconv.Itoa(points) + " pts"
 }
 
 // parseDue accepts a day-granular YYYY-MM-DD and returns what PocketBase

@@ -8,9 +8,10 @@
 import type { BoardCardView } from '../types'
 import { parseCardKey } from './card-key'
 import { byCreatedThenId } from './created-order'
+import { compareEstimate } from './estimate'
 import { comparePriority } from './priority'
 
-export type SortField = 'manual' | 'due' | 'created' | 'title' | 'key' | 'priority'
+export type SortField = 'manual' | 'due' | 'created' | 'title' | 'key' | 'priority' | 'estimate'
 export type SortDirection = 'asc' | 'desc'
 
 export interface BoardSort {
@@ -28,6 +29,7 @@ export const SORT_FIELD_LABELS: Record<SortField, string> = {
     title: 'Title',
     key: 'Key',
     priority: 'Priority',
+    estimate: 'Estimate',
 }
 
 type Comparator = (a: BoardCardView, b: BoardCardView) => number
@@ -59,9 +61,9 @@ export function compareCards(sort: BoardSort): Comparator {
 
 /**
  * A card with nothing to sort by on this field. Undated, unkeyed (the
- * optimistic beat before the server assigns a number) and unstamped (same
- * beat, for `created`) cards all belong at the end whichever way the rest
- * are ordered.
+ * optimistic beat before the server assigns a number), unstamped (same
+ * beat, for `created`) and unestimated cards all belong at the end whichever
+ * way the rest are ordered.
  */
 function isMissing(field: Exclude<SortField, 'manual'>, card: BoardCardView): boolean {
     switch (field) {
@@ -71,6 +73,8 @@ function isMissing(field: Exclude<SortField, 'manual'>, card: BoardCardView): bo
             return keyNumber(card.key) === null
         case 'created':
             return card.created === ''
+        case 'estimate':
+            return card.estimate === undefined
         default:
             return false
     }
@@ -110,6 +114,7 @@ const PRIMARY: Record<Exclude<SortField, 'manual'>, Comparator> = {
     title: byTitle,
     key: byKey,
     priority: (a, b) => comparePriority(a.priority, b.priority),
+    estimate: (a, b) => compareEstimate(a.estimate, b.estimate),
 }
 
 /**

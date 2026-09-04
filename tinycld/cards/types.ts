@@ -220,6 +220,8 @@ export interface BoardCardView {
     reporter?: BoardMember
     /** Already normalized — never '' — see lib/priority.ts. */
     priority: CardPriority
+    /** Points. Undefined when unset (the row stores 0) — see lib/estimate.ts. */
+    estimate?: number
     /**
      * ISO timestamp from `created`, '' for an optimistic insert the server has
      * not echoed yet. What "sort by created" orders on; see lib/created-order.

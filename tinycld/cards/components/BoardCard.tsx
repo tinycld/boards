@@ -5,6 +5,7 @@ import {
     CalendarDays,
     CircleCheck,
     Clock,
+    Gauge,
     MessageSquare,
     Paperclip,
     SquareCheck,
@@ -13,6 +14,7 @@ import { Pressable, Text, View } from 'react-native'
 import type { RemoteCardsPresence } from '../hooks/useBoardPresence'
 import { useCardFileDrop } from '../hooks/useCardFileDrop'
 import { dueStateFor, formatDueDate } from '../lib/due-state'
+import { formatEstimate } from '../lib/estimate'
 import type { CardPriority } from '../lib/priority'
 import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardCardView, BoardLabel, BoardMember } from '../types'
@@ -137,6 +139,7 @@ function CardFace({ card, isCompact }: { card: BoardCardView; isCompact: boolean
                 <PriorityGlyph priority={card.priority} size={12} />
                 <CompactLabelDots labels={card.labels ?? []} />
                 <Text
+                    testID="cards-card-title"
                     className="flex-1 text-[13.5px] font-medium leading-[18px] text-foreground"
                     numberOfLines={1}
                 >
@@ -151,6 +154,7 @@ function CardFace({ card, isCompact }: { card: BoardCardView; isCompact: boolean
         <>
             <CardTopRow labels={card.labels ?? []} cardKey={card.key} priority={card.priority} />
             <Text
+                testID="cards-card-title"
                 className="text-[13.5px] font-medium leading-[18px] text-foreground"
                 numberOfLines={3}
             >
@@ -351,7 +355,11 @@ function CardMeta({ card }: { card: BoardCardView }) {
     // between re-render.
     const watchers = useCardPresence(card.id)
     const hasPills =
-        card.due || card.checklistTotal > 0 || card.commentCount > 0 || card.attachmentCount > 0
+        card.due ||
+        card.checklistTotal > 0 ||
+        card.commentCount > 0 ||
+        card.attachmentCount > 0 ||
+        card.estimate !== undefined
     // Someone viewing this card is reason enough to render the row, even on a
     // card that has no other metadata at all.
     if (!hasPills && card.assignees.length === 0 && watchers.length === 0) return null
@@ -362,6 +370,7 @@ function CardMeta({ card }: { card: BoardCardView }) {
             <ChecklistPill done={card.checklistDone} total={card.checklistTotal} />
             <CommentsPill count={card.commentCount} />
             <AttachmentsPill count={card.attachmentCount} />
+            <EstimatePill estimate={card.estimate} />
             <View className="flex-1" />
             <CardWatchers watchers={watchers} cardId={card.id} />
             <CardAssignees assignees={card.assignees} />
@@ -481,6 +490,18 @@ function AttachmentsPill({ count }: { count: number }) {
         <View className="flex-row items-center gap-1">
             <Paperclip size={12} color={mutedColor} strokeWidth={2.2} />
             <Text className="text-[11px] font-medium text-muted">{count}</Text>
+        </View>
+    )
+}
+
+function EstimatePill({ estimate }: { estimate?: number }) {
+    const mutedColor = useThemeColor('muted')
+    if (estimate === undefined) return null
+
+    return (
+        <View testID="cards-estimate-pill" className="flex-row items-center gap-1">
+            <Gauge size={12} color={mutedColor} strokeWidth={2.2} />
+            <Text className="text-[11px] font-medium text-muted">{formatEstimate(estimate)}</Text>
         </View>
     )
 }

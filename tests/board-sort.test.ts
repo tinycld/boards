@@ -59,6 +59,16 @@ describe('compareCards', () => {
         ])
     })
 
+    it('orders by estimate and puts unestimated cards last in both directions', () => {
+        const cards = [card('none'), card('big', { estimate: 8 }), card('small', { estimate: 2 })]
+        expect(ids([...cards].sort(compareCards({ field: 'estimate', direction: 'asc' })))).toEqual(
+            ['small', 'big', 'none']
+        )
+        expect(
+            ids([...cards].sort(compareCards({ field: 'estimate', direction: 'desc' })))
+        ).toEqual(['big', 'small', 'none'])
+    })
+
     it('breaks a tie on the chosen field by rank', () => {
         const cards = [
             card('second', { priority: 'high', position: 'a1' }),

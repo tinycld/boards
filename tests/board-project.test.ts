@@ -65,6 +65,7 @@ function card(
         // below need both halves of that to be exercisable.
         reporter: '',
         priority: 'none',
+        estimate: 0,
         archived: false,
         // 1 rather than 0: a card that reached the server has a number, and 0
         // is specifically the not-yet-assigned state the key tests below cover.
@@ -316,6 +317,13 @@ describe('toBoardCard', () => {
         ).toBe('high')
     })
 
+    it('reads the stored zero as no estimate', () => {
+        expect(toBoardCard(card('c1', 'l1', 'a0'), labels, users, 'OTTER').estimate).toBeUndefined()
+        expect(
+            toBoardCard(card('c1', 'l1', 'a0', { estimate: 5 }), labels, users, 'OTTER').estimate
+        ).toBe(5)
+    })
+
     it('formats the card key from the board slug and the card number', () => {
         const result = toBoardCard(
             card('c1', 'list1', 'a0', { number: 123 }),
@@ -523,6 +531,16 @@ describe('buildBoardProject with a view', () => {
         })
         const previous = buildBoardProject(input())
         expect(buildBoardProject(input(), previous)).toBe(previous)
+    })
+
+    it('replaces the card node when only the estimate changes', () => {
+        const previous = buildBoardProject({ ...base, cards: [card('a', 'l1', 'a0')] })
+        const result = buildBoardProject(
+            { ...base, cards: [card('a', 'l1', 'a0', { estimate: 3 })] },
+            previous
+        )
+        expect(result?.lists[0]?.cards[0]).not.toBe(previous?.lists[0]?.cards[0])
+        expect(result?.lists[0]?.cards[0]?.estimate).toBe(3)
     })
 
     it('replaces the list node when the filter changes what it shows', () => {

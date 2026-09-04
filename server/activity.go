@@ -1,6 +1,7 @@
 package cards
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/pocketbase/dbx"
@@ -109,6 +110,9 @@ func logCardChanges(app core.App, card *core.Record, actor string) {
 	if from, to := original.GetString("priority"), card.GetString("priority"); from != to {
 		writeActivity(app, card, actor, "priority", from, to)
 	}
+	if from, to := original.GetInt("estimate"), card.GetInt("estimate"); from != to {
+		writeActivity(app, card, actor, "estimate", estimateText(from), estimateText(to))
+	}
 	if was, now := original.GetBool("archived"), card.GetBool("archived"); was != now {
 		if now {
 			writeActivity(app, card, actor, "archived", "", "")
@@ -116,6 +120,16 @@ func logCardChanges(app core.App, card *core.Record, actor string) {
 			writeActivity(app, card, actor, "restored", "", "")
 		}
 	}
+}
+
+// estimateText renders points for a history row: "" for the stored 0 that
+// means "no estimate", so the renderer can say "cleared" without knowing the
+// convention, and a plain integer otherwise.
+func estimateText(points int) string {
+	if points <= 0 {
+		return ""
+	}
+	return strconv.Itoa(points)
 }
 
 // writeActivity inserts one row. Failure is logged, never returned: the

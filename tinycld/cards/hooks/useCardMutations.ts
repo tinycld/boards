@@ -43,6 +43,8 @@ export interface UpdateCardInput {
     reporter?: string
     /** `none` is a real value, not a clear — see pb-migrations/1980000006. */
     priority?: CardPriority
+    /** Points; 0 clears — the row stores 0 for "unset", see lib/estimate.ts. */
+    estimate?: number
 }
 
 /**
@@ -95,6 +97,8 @@ export function useCreateCard(projectId: string) {
                 // normalizePriority but leaves the row looking half-written to
                 // anyone reading the database directly.
                 priority: 'none',
+                // 0 is the stored form of "no estimate" (lib/estimate.ts).
+                estimate: 0,
                 archived: false,
                 // Counters are server-maintained (server/counters.go) and
                 // recomputed on every child write; these are the at-rest values
@@ -150,6 +154,7 @@ export function useDuplicateCard(projectId: string) {
                 created_by: user?.id ?? '',
                 reporter: card.reporter?.id ?? user?.id ?? '',
                 priority: card.priority,
+                estimate: card.estimate ?? 0,
                 archived: false,
                 checklist_total: 0,
                 checklist_done: 0,
@@ -200,6 +205,7 @@ export function useUpdateCard() {
                 if (input.due !== undefined) draft.due = input.due
                 if (input.reporter !== undefined) draft.reporter = input.reporter
                 if (input.priority !== undefined) draft.priority = input.priority
+                if (input.estimate !== undefined) draft.estimate = input.estimate
             })
         }),
     })

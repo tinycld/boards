@@ -8,6 +8,7 @@ import type { BoardActivity, BoardLabel, BoardMember } from '../types'
 import type { CommentThread } from './comment-threads'
 import { byCreatedThenId } from './created-order'
 import { formatDueDate } from './due-state'
+import { formatEstimate } from './estimate'
 import { type CardPriority, normalizePriority, priorityLabel } from './priority'
 
 export type FeedEntry =
@@ -72,6 +73,13 @@ export function describeActivity(item: BoardActivity, ctx: ActivityContext): Act
         )
     }
 
+    // The row stores the integer as text; a value the parser cannot read is
+    // shown as written rather than as "NaN pts".
+    const estimateText = (value: string) => {
+        const points = Number.parseInt(value, 10)
+        return Number.isNaN(points) ? value : formatEstimate(points)
+    }
+
     let text: string
     switch (item.kind) {
         case 'created':
@@ -109,6 +117,9 @@ export function describeActivity(item: BoardActivity, ctx: ActivityContext): Act
             break
         case 'priority':
             text = `set the priority to ${priorityLabel(normalizePriority(item.to) as CardPriority)}`
+            break
+        case 'estimate':
+            text = item.to ? `set the estimate to ${estimateText(item.to)}` : 'cleared the estimate'
             break
         case 'archived':
             text = 'archived this card'

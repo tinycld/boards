@@ -64,6 +64,9 @@ type card struct {
 	// existed — which the app reads as "none". The CLI writes it only when
 	// asked, and validates against the same list the schema enforces.
 	Priority string `json:"priority"`
+	// Points. 0 is the stored form of "no estimate" (the app normalizes it
+	// away), so there is no --clear-estimate: --estimate 0 is the clear.
+	Estimate int    `json:"estimate"`
 	Created  string `json:"created"`
 	Updated  string `json:"updated"`
 

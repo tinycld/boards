@@ -1,16 +1,18 @@
 import { LabelBadge } from '@tinycld/core/components/LabelBadge'
 import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
-import { CalendarDays, Clock } from 'lucide-react-native'
+import { CalendarDays, Clock, Gauge } from 'lucide-react-native'
 import { forwardRef, type ReactNode } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useToggleCardRelation, useUpdateCard } from '../../hooks/useCardMutations'
 import { dueStateFor, formatDueDate } from '../../lib/due-state'
+import { formatEstimate } from '../../lib/estimate'
 import { type CardPriority, priorityLabel } from '../../lib/priority'
 import type { BoardCardView, BoardLabel, BoardMember } from '../../types'
 import { PriorityGlyph } from '../PriorityGlyph'
 import { AssigneePicker } from './AssigneePicker'
 import { DuePicker } from './DuePicker'
+import { EstimatePicker } from './EstimatePicker'
 import { LabelPicker } from './LabelPicker'
 import { PriorityPicker } from './PriorityPicker'
 import { ReporterPicker } from './ReporterPicker'
@@ -60,6 +62,9 @@ export function DetailProperties({
                 </PropertyRow>
                 <PropertyRow name="Priority">
                     <PriorityValue priority={card.priority} />
+                </PropertyRow>
+                <PropertyRow name="Estimate">
+                    <EstimateValue estimate={card.estimate} />
                 </PropertyRow>
             </View>
         )
@@ -111,9 +116,56 @@ export function DetailProperties({
                     <PriorityValue priority={card.priority} />
                 </PriorityPicker>
             </PropertyRow>
+            <PropertyRow name="Estimate">
+                <EstimatePicker
+                    selected={card.estimate}
+                    onSelect={estimate => updateCard.mutate({ cardId: card.id, estimate })}
+                >
+                    <EstimateValue estimate={card.estimate} />
+                </EstimatePicker>
+            </PropertyRow>
         </View>
     )
 }
+
+/** The estimate chip, and the EstimatePicker's trigger — the PriorityValue shape. */
+const EstimateValue = forwardRef<View, { estimate?: number; onPress?: () => void }>(
+    function EstimateValue({ estimate, onPress }, ref) {
+        const mutedColor = useThemeColor('muted')
+        if (estimate === undefined) {
+            if (!onPress) return <EmptyValue />
+            return <GhostChip ref={ref} label="Set estimate" onPress={onPress} />
+        }
+
+        const label = formatEstimate(estimate)
+        const chipContent = (
+            <>
+                <Gauge size={12} color={mutedColor} strokeWidth={2.2} />
+                <Text className="text-[12.5px] font-medium text-foreground">{label}</Text>
+            </>
+        )
+
+        if (!onPress) {
+            return (
+                <View className="flex-row items-center gap-[5px] rounded-md px-2 py-[3px] bg-foreground/[0.06]">
+                    {chipContent}
+                </View>
+            )
+        }
+
+        return (
+            <Pressable
+                ref={ref}
+                accessibilityRole="button"
+                accessibilityLabel={`Estimate ${label}. Change estimate`}
+                onPress={onPress}
+                className="flex-row items-center gap-[5px] rounded-md px-2 py-[3px] bg-foreground/[0.06] web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+            >
+                {chipContent}
+            </Pressable>
+        )
+    }
+)
 
 /**
  * The priority chip, and the PriorityPicker's trigger — the DueValue shape:

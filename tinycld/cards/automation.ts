@@ -30,6 +30,7 @@ const automation = {
                 { key: 'assignees', label: 'Assignees' },
                 'labels',
                 'priority',
+                'estimate',
             ],
         },
         {
@@ -48,6 +49,7 @@ const automation = {
                 'due',
                 { key: 'assignees', label: 'Assignees' },
                 'priority',
+                'estimate',
             ],
         },
         {
@@ -81,6 +83,7 @@ const automation = {
                 { key: 'project', label: 'Board' },
                 'due',
                 'priority',
+                'estimate',
             ],
         },
         {

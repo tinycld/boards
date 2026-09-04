@@ -146,16 +146,52 @@ func TestActivity_ScalarChangesAndArchiveFlip(t *testing.T) {
 		r.Set("title", "renamed")
 		r.Set("due", "2026-09-12 00:00:00.000Z")
 		r.Set("priority", "high")
+		r.Set("estimate", 5)
 		r.Set("archived", true)
 	})
 	updateCardAs(t, env.app, env.owner, env.card.Id, func(r *core.Record) {
 		r.Set("archived", false)
 	})
 	rows := activityRows(t, env.app, env.card.Id)
-	requireKinds(t, rows, "due", "title", "priority", "archived", "restored")
+	requireKinds(t, rows, "due", "title", "priority", "estimate", "archived", "restored")
 	if got := rowOfKind(t, rows, "title").GetString("from"); got != "seeded-card" {
 		t.Fatalf("title row from = %q, want the old title", got)
 	}
+	if got := rowOfKind(t, rows, "estimate").GetString("to"); got != "5" {
+		t.Fatalf("estimate row to = %q, want 5", got)
+	}
+}
+
+func TestActivity_ClearingAnEstimateWritesAnEmptyTo(t *testing.T) {
+	env := setupActivityEnv(t)
+	updateCardAs(t, env.app, env.owner, env.card.Id, func(r *core.Record) {
+		r.Set("estimate", 8)
+	})
+	updateCardAs(t, env.app, env.owner, env.card.Id, func(r *core.Record) {
+		r.Set("estimate", 0)
+	})
+	rows := activityRows(t, env.app, env.card.Id)
+	requireKinds(t, rows, "estimate", "estimate")
+	// Matched by content rather than position: the two rows can share a
+	// `created` millisecond, and then their order is not promised (see
+	// requireKinds).
+	var sawSet, sawCleared bool
+	for _, row := range rows {
+		from, to := row.GetString("from"), row.GetString("to")
+		sawSet = sawSet || (from == "" && to == "8")
+		sawCleared = sawCleared || (from == "8" && to == "")
+	}
+	if !sawSet || !sawCleared {
+		t.Fatalf("estimate rows = %v, want one \"\"→8 and one 8→\"\"", rowsFromTo(rows))
+	}
+}
+
+func rowsFromTo(rows []*core.Record) []string {
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		out[i] = r.GetString("from") + "→" + r.GetString("to")
+	}
+	return out
 }
 
 func TestActivity_ChecklistCompletionAndAttachment(t *testing.T) {

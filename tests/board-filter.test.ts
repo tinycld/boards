@@ -137,6 +137,18 @@ describe('priority', () => {
     })
 })
 
+describe('estimate', () => {
+    it('splits estimated from unestimated', () => {
+        const sized = card({ estimate: 5 })
+        const unsized = card()
+        expect(cardMatchesFilter(sized, filter({ estimate: 'estimated' }), ctx)).toBe(true)
+        expect(cardMatchesFilter(unsized, filter({ estimate: 'estimated' }), ctx)).toBe(false)
+        expect(cardMatchesFilter(unsized, filter({ estimate: 'unestimated' }), ctx)).toBe(true)
+        expect(cardMatchesFilter(sized, filter({ estimate: 'unestimated' }), ctx)).toBe(false)
+        expect(activeFacetCount(filter({ estimate: 'estimated' }))).toBe(1)
+    })
+})
+
 describe('keyword', () => {
     it('matches the title and the key, ignoring case and outer whitespace', () => {
         expect(matchesKeyword(card(), '  SHIP ')).toBe(true)

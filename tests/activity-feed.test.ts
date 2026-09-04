@@ -108,6 +108,12 @@ describe('describeActivity', () => {
         expect(describeActivity(activity('a', 'priority', '', { to: 'high' }), ctx).text).toBe(
             'set the priority to High'
         )
+        expect(describeActivity(activity('a', 'estimate', '', { to: '5' }), ctx).text).toBe(
+            'set the estimate to 5 pts'
+        )
+        expect(describeActivity(activity('a', 'estimate', '', { from: '5' }), ctx).text).toBe(
+            'cleared the estimate'
+        )
         expect(describeActivity(activity('a', 'title', '', { from: 'Old' }), ctx).text).toBe(
             'renamed this from “Old”'
         )

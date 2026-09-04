@@ -9,6 +9,11 @@ import { selectBoardFilter, useCardsUIStore } from '../../stores/cards-ui-store'
 import type { BoardMember, BoardProject } from '../../types'
 import { PriorityGlyph } from '../PriorityGlyph'
 
+const ESTIMATE_LABELS = {
+    estimated: 'Estimated',
+    unestimated: 'Unestimated',
+} as const
+
 const DUE_LABELS = {
     overdue: 'Overdue',
     soon: 'Due soon',
@@ -87,6 +92,12 @@ export function FilterBar({ project }: { project: BoardProject }) {
                 <Chip
                     label={DUE_LABELS[filter.due]}
                     onDismiss={() => setBoardFilter(project.id, { due: null })}
+                />
+            ) : null}
+            {filter.estimate ? (
+                <Chip
+                    label={ESTIMATE_LABELS[filter.estimate]}
+                    onDismiss={() => setBoardFilter(project.id, { estimate: null })}
                 />
             ) : null}
             <Pressable

@@ -1152,6 +1152,61 @@ func TestCardAddAndEditPriority(t *testing.T) {
 	}
 }
 
+func TestCardAddAndEditEstimate(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	// Omitted → 0, written explicitly: 0 is the stored form of "no estimate".
+	_, _, err := runCmd(t, c, "cards", "card", "add", "Size me", "--board", "prjA", "--list", "To do")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := num(f.lastCardCreate["estimate"]); got != 0 {
+		t.Fatalf("estimate default = %d, want 0", got)
+	}
+
+	_, _, err = runCmd(t, c, "cards", "card", "add", "Big one", "--board", "prjA", "--list", "To do",
+		"--estimate", "8")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := num(f.lastCardCreate["estimate"]); got != 8 {
+		t.Fatalf("estimate = %d, want 8", got)
+	}
+
+	_, _, err = runCmd(t, c, "cards", "card", "edit", "crdCopy", "--estimate", "3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := num(f.lastCardPatch["estimate"]); got != 3 {
+		t.Fatalf("patched estimate = %d, want 3", got)
+	}
+	if _, sent := f.lastCardPatch["title"]; sent {
+		t.Fatalf("edit --estimate must not touch the title: %v", f.lastCardPatch)
+	}
+
+	// 0 IS the clear, and it must be sent rather than dropped as a zero value.
+	_, _, err = runCmd(t, c, "cards", "card", "edit", "crdCopy", "--estimate", "0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, sent := f.lastCardPatch["estimate"]; !sent || num(v) != 0 {
+		t.Fatalf("--estimate 0 must send 0: %v", f.lastCardPatch)
+	}
+}
+
+func TestCardEditRejectsNegativeEstimate(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+	_, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--estimate", "-1")
+	if err == nil {
+		t.Fatal("expected an error for a negative estimate")
+	}
+	if f.lastCardPatch != nil {
+		t.Fatalf("a rejected estimate must not reach the server: %v", f.lastCardPatch)
+	}
+}
+
 func TestCardEditRejectsUnknownPriority(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()

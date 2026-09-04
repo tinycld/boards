@@ -95,6 +95,22 @@ Priority is also available to [board rules](help://cards:rules): a rule can
 react when a card's priority changes, and can set a card's priority as its
 action.
 
+## Estimates
+
+An estimate says how big a card is, in points. To set one, open the card and
+click **Set estimate** (or the current estimate) in the details, then pick a
+size from the ladder — 1, 2, 3, 5, 8 or 13 points. Choose **Clear estimate** to
+remove it.
+
+An estimated card shows its points at the bottom of its face on the board, and
+each list's header adds up the points of the cards it is showing — so a filter
+that hides half a column also halves its total. Lists with nothing estimated
+show no total at all.
+
+You can sort a list by estimate and filter the board to estimated or
+unestimated cards; see [Filtering and sorting](help://cards:filtering-and-sorting).
+Setting or clearing an estimate is recorded in the card's history.
+
 ## Who to ask about a card
 
 The **reporter** is the person to go to with a question about the card — the

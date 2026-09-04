@@ -20,6 +20,7 @@ import type {
 import { type BoardFilter, cardMatchesFilter } from './board-filter'
 import { type BoardSort, compareCards } from './board-sort'
 import { formatCardKey } from './card-key'
+import { normalizeEstimate } from './estimate'
 import { normalizePriority } from './priority'
 
 /** The subset of a user row the board actually renders. */
@@ -107,6 +108,7 @@ export function toBoardCard(
         assignees: card.assignees.map(id => usersById.get(id) ?? anonymousMember(id)),
         reporter: toReporter(card, usersById),
         priority: normalizePriority(card.priority),
+        estimate: normalizeEstimate(card.estimate),
         created: card.created ?? '',
         checklistTotal: card.checklist_total,
         checklistDone: card.checklist_done,
@@ -329,6 +331,7 @@ function sameCard(a: BoardCardView, b: BoardCardView): boolean {
         a.description === b.description &&
         (a.due?.getTime() ?? null) === (b.due?.getTime() ?? null) &&
         a.priority === b.priority &&
+        a.estimate === b.estimate &&
         a.created === b.created &&
         a.checklistTotal === b.checklistTotal &&
         a.checklistDone === b.checklistDone &&

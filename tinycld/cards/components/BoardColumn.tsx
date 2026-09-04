@@ -16,6 +16,7 @@ import {
     isCardDragPayload,
     isColumnDragPayload,
 } from '../lib/dnd'
+import { formatEstimate, sumEstimates } from '../lib/estimate'
 import { rankForAppend, rankForReorder } from '../lib/move'
 import { selectBoardSort, useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardCardView, BoardListRank, BoardListView } from '../types'
@@ -588,7 +589,28 @@ function ColumnTitle({ list }: { list: BoardListView }) {
                     {countLabel(list)}
                 </Text>
             </View>
+            <EstimateTotal list={list} />
         </>
+    )
+}
+
+/**
+ * The points in the column, summed over the cards it SHOWS — so a filter
+ * narrows the total the same way it narrows the count beside it. Absent when
+ * nothing in the column is estimated, so an unestimated board looks as it did.
+ */
+function EstimateTotal({ list }: { list: BoardListView }) {
+    const total = sumEstimates(list.cards)
+    if (total === 0) return null
+    return (
+        <View className="bg-foreground/[0.06] rounded-full px-1.5 py-px shrink-0">
+            <Text
+                className="text-[11px] font-semibold text-muted"
+                testID={`cards-column-estimate-${list.id}`}
+            >
+                {formatEstimate(total)}
+            </Text>
+        </View>
     )
 }
 

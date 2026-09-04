@@ -375,6 +375,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 			Due:         str(body["due"]),
 			CreatedBy:   str(body["created_by"]),
 			Reporter:    str(body["reporter"]),
+			Estimate:    num(body["estimate"]),
 		}
 		f.cards[created.ID] = created
 		json.NewEncoder(w).Encode(created)
@@ -396,6 +397,9 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		}
 		if v, ok := body["due"].(string); ok {
 			c.Due = v
+		}
+		if _, ok := body["estimate"]; ok {
+			c.Estimate = num(body["estimate"])
 		}
 		if v, ok := body["reporter"].(string); ok {
 			c.Reporter = v
@@ -575,6 +579,12 @@ func (f *fakeCards) assertGroupedRankSort(r *http.Request) {
 func notFound(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNotFound)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Not found"})
+}
+
+// num reads a JSON number (decoded as float64) as the int the CLI sent.
+func num(v any) int {
+	f, _ := v.(float64)
+	return int(f)
 }
 
 func str(v any) string {

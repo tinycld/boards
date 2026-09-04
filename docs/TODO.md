@@ -6,8 +6,9 @@ priority order. Ranked by (1) how many of the three treat a feature as core,
 infrastructure it can reuse. Ties go to the cheaper item.
 
 Status as of 2026-09-03: Tier 1 shipped on `feat/tier1-parity` (with the
-matching `feat/cards-notification-prefs` branch in `tinycld`). Tiers 2 and 3
-are open.
+matching `feat/cards-notification-prefs` branch in `tinycld`). Tier 2 is in
+progress: 12 (estimates) shipped on `feat/tier2-estimates`; 13, 8 and 10 are
+next, in that order. Tier 3 is open.
 
 ## Tier 1 — table stakes in all three ✅ shipped
 
@@ -53,8 +54,7 @@ are open.
     list-view plumbing.
 11. **Time-based automation and missing actions.** Core has `core:schedule`
     but cards declares no scheduled trigger; add overdue / due-soon triggers,
-    `cards:create-card` and `cards:set-due-date`. Note the shipped core bug:
-    `core:send-email`'s loop cap fails open.
+    `cards:create-card` and `cards:set-due-date`.
 12. **Estimates / story points.** One numeric (or t-shirt select) column,
     rolled up per list. Prerequisite for reports.
 13. **Status categories beyond `is_done`.** backlog / todo / in_progress /

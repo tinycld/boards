@@ -7,6 +7,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native'
 import {
     type BoardFilter,
     type DueFilter,
+    type EstimateFilter,
     isFilterActive,
     ME,
     UNASSIGNED,
@@ -21,6 +22,11 @@ interface FilterPanelProps {
     onChange: (patch: Partial<BoardFilter>) => void
     onClear: () => void
 }
+
+const ESTIMATE_OPTIONS: { value: EstimateFilter; label: string }[] = [
+    { value: 'estimated', label: 'Estimated' },
+    { value: 'unestimated', label: 'Unestimated' },
+]
 
 const DUE_OPTIONS: { value: DueFilter; label: string }[] = [
     { value: 'overdue', label: 'Overdue' },
@@ -52,6 +58,8 @@ export function FilterPanel({ project, filter, onChange, onClear }: FilterPanelP
         })
     }
     const setDue = (due: DueFilter) => onChange({ due: filter.due === due ? null : due })
+    const setEstimate = (estimate: EstimateFilter) =>
+        onChange({ estimate: filter.estimate === estimate ? null : estimate })
 
     return (
         <View testID="cards-filter-panel" className="w-[280px]">
@@ -148,6 +156,16 @@ export function FilterPanel({ project, filter, onChange, onClear }: FilterPanelP
                             label={option.label}
                             isSelected={filter.due === option.value}
                             onPress={() => setDue(option.value)}
+                        />
+                    ))}
+                </Section>
+                <Section title="Estimate">
+                    {ESTIMATE_OPTIONS.map(option => (
+                        <OptionRow
+                            key={option.value}
+                            label={option.label}
+                            isSelected={filter.estimate === option.value}
+                            onPress={() => setEstimate(option.value)}
                         />
                     ))}
                 </Section>

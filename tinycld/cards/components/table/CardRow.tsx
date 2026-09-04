@@ -1,9 +1,10 @@
 import { LabelBadge } from '@tinycld/core/components/LabelBadge'
 import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
-import { CalendarDays, Clock } from 'lucide-react-native'
+import { CalendarDays, Clock, Gauge } from 'lucide-react-native'
 import { Pressable, Text, View } from 'react-native'
 import { dueStateFor, formatDueDate } from '../../lib/due-state'
+import { formatEstimate } from '../../lib/estimate'
 import { priorityLabel } from '../../lib/priority'
 import type { BoardCardView, BoardMember } from '../../types'
 import { PriorityGlyph } from '../PriorityGlyph'
@@ -34,6 +35,7 @@ export const TABLE_COLUMNS = {
     labels: 1.6,
     due: 104,
     priority: 96,
+    estimate: 80,
 } as const
 
 /**
@@ -74,6 +76,7 @@ export function CardRow({
                     <BoardTile board={board} />
                     <Meta text={[card.key, listName].filter(Boolean).join(' · ')} />
                     <DueCell due={card.due} />
+                    <EstimateCell estimate={card.estimate} />
                     <Labels card={card} />
                 </View>
             </Pressable>
@@ -125,6 +128,9 @@ export function CardRow({
                 {card.priority !== 'none' ? (
                     <Text className="text-[12.5px] text-muted">{priorityLabel(card.priority)}</Text>
                 ) : null}
+            </View>
+            <View style={{ width: TABLE_COLUMNS.estimate }}>
+                <EstimateCell estimate={card.estimate} />
             </View>
         </Pressable>
     )
@@ -195,6 +201,17 @@ function Labels({ card }: { card: BoardCardView }) {
                     +{card.labels.length - 3}
                 </Text>
             ) : null}
+        </View>
+    )
+}
+
+function EstimateCell({ estimate }: { estimate?: number }) {
+    const mutedColor = useThemeColor('muted')
+    if (estimate === undefined) return null
+    return (
+        <View className="flex-row items-center gap-1">
+            <Gauge size={11} color={mutedColor} strokeWidth={2.2} />
+            <Text className="text-[12px] font-medium text-muted">{formatEstimate(estimate)}</Text>
         </View>
     )
 }

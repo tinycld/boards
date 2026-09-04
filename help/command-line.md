@@ -76,6 +76,7 @@ tinycld cards card edit <card> --clear-due
 tinycld cards card edit <card> --reporter <user id>
 tinycld cards card edit <card> --clear-reporter
 tinycld cards card edit <card> --priority high
+tinycld cards card edit <card> --estimate 5
 ```
 
 `edit` only changes what you name. Editing the title leaves the description
@@ -84,6 +85,9 @@ days, written as `YYYY-MM-DD`.
 
 `--priority` takes `urgent`, `high`, `medium`, `low` or `none`, on `add` as
 well as `edit`. A new card has no priority; `--priority none` clears one.
+
+`--estimate` takes a whole number of points, on `add` as well as `edit`. A new
+card has no estimate; `--estimate 0` clears one.
 
 A new card reports to you. Pass `--reporter` on `add` or `edit` to point it at
 someone else — useful when a script or a shared account files cards that a real

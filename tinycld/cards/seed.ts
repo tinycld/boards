@@ -58,6 +58,8 @@ interface CardSeed {
      */
     reporter?: Who
     priority?: CardPriority
+    /** Points. Left unset on most cards so the demo shows both states. */
+    estimate?: number
     checklist?: { title: string; done?: boolean }[]
     comments?: CommentSeed[]
 }
@@ -118,6 +120,7 @@ const BOARDS: BoardSeed[] = [
                     {
                         title: 'Export boards to CSV',
                         priority: 'low',
+                        estimate: 3,
                         labels: ['Feature'],
                     },
                     {
@@ -159,6 +162,7 @@ const BOARDS: BoardSeed[] = [
                     {
                         title: 'Draft the launch announcement',
                         priority: 'medium',
+                        estimate: 5,
                         due: () => dueAt(3),
                         labels: ['Feature'],
                         assignees: ['me'],
@@ -171,6 +175,7 @@ const BOARDS: BoardSeed[] = [
                     {
                         title: 'Fix duplicate label colors in picker',
                         priority: 'high',
+                        estimate: 2,
                         due: () => dueAt(1),
                         labels: ['Bug'],
                         // A bug someone else hit and filed: the reporter is who
@@ -222,6 +227,7 @@ const BOARDS: BoardSeed[] = [
                     {
                         title: 'Payment provider webhook retries',
                         priority: 'urgent',
+                        estimate: 8,
                         due: () => dueAt(-2),
                         labels: ['Bug', 'Urgent'],
                         assignees: ['teammate'],
@@ -410,6 +416,7 @@ async function seedBoard(
                 created_by: ownerId,
                 reporter: card.reporter ? who(card.reporter) : ownerId,
                 priority: card.priority ?? 'none',
+                estimate: card.estimate ?? 0,
                 archived: false,
             })
 
