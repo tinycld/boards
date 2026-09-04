@@ -1,6 +1,8 @@
 package cards
 
 import (
+	"sync"
+
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
@@ -52,6 +54,24 @@ func registerBoardCounters(app *pocketbase.PocketBase) {
 	}
 }
 
+// recountLocks serializes recountCard per card.
+//
+// The recount is a read-modify-write: FindRecordById, COUNT(*), Save. Nothing
+// in that sequence is atomic, so two children created at the same instant can
+// BOTH count before either row is visible and both write the same stale total
+// — a lost update, and one that never heals, because the counter is only
+// recomputed by the next child write.
+//
+// Not hypothetical: useDuplicateCard yields its checklist inserts as an ARRAY,
+// which runs them in parallel, so duplicating a two-item card lands both
+// creates at once and the copy's face reads "0/1" permanently.
+//
+// Per CARD rather than one global lock: recounts for different cards touch
+// disjoint rows and should still run concurrently. The map only ever grows by
+// the number of cards written concurrently, and LoadOrStore keeps that
+// allocation-free on the common uncontended path.
+var recountLocks sync.Map // cardID → *sync.Mutex
+
 // recountCard recomputes every counter on one card from its children.
 //
 // A missing card is not an error: deleting a card cascades to its checklist
@@ -61,6 +81,11 @@ func recountCard(app core.App, cardID string) {
 	if cardID == "" {
 		return
 	}
+
+	gate, _ := recountLocks.LoadOrStore(cardID, &sync.Mutex{})
+	lock := gate.(*sync.Mutex)
+	lock.Lock()
+	defer lock.Unlock()
 
 	card, err := app.FindRecordById("cards_cards", cardID)
 	if err != nil {
