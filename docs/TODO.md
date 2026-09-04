@@ -5,14 +5,12 @@ priority order. Ranked by (1) how many of the three treat a feature as core,
 (2) how often it is touched in daily use, and (3) how much existing core
 infrastructure it can reuse. Ties go to the cheaper item.
 
-Status as of 2026-09-03: Tier 1 shipped on `feat/tier1-parity` (with the
-matching `feat/cards-notification-prefs` branch in `tinycld`). Tier 2 is in
-progress: 12 (estimates) shipped on `feat/tier2-estimates`, 13 (status
-categories + auto-archive) on `feat/tier2-status`, 8 (comment reactions) on
-`feat/tier2-reactions`, 10 (start date, due time, timeline) on
-`feat/tier2-timeline`, and the follow-ups from those four — reaction
-notifications, `set-estimate`, and triggers for estimate, dates, archive and
-reactions — on `feat/tier2-events`. 9, 11 and 14–21 remain; Tier 3 is open.
+Status as of 2026-09-03: Tier 1 shipped on `feat/tier1-parity`. Tier 2's
+four chosen items — 8, 10, 12, 13 — and their rule/notification follow-ups
+shipped as five stacked branches (`feat/tier2-estimates` → `-status` →
+`-reactions` → `-timeline` → `-events`, PRs #46–#50), with the matching
+notification preferences on `tinycld`'s `feat/cards-notification-prefs`
+(PR #229). Open: 9, 11, 14–21 and Tier 3.
 
 ## Tier 1 — table stakes in all three ✅ shipped
 
@@ -47,23 +45,58 @@ reactions — on `feat/tier2-events`. 9, 11 and 14–21 remain; Tier 3 is open.
 
 ## Tier 2 — expected by two of the three, or all three at low cost
 
-8. **Comment reactions.** All three. A `cards_comment_reactions (comment,
-   user, emoji)` junction with a unique index.
+### Shipped ✅
+
+8. **Comment reactions** — landed as the `cards_comment_reactions (comment,
+   user, emoji)` junction over a six-emoji select (so byte-variant sequences
+   cannot defeat the unique index), carrying `card` so the open card reads its
+   reactions in one query. Commentors and up react, anyone removes only their
+   own, members and live share links read. A reaction bar under each comment
+   sits outside the inline-edit swap; the author gets a `cards_reaction`
+   notification (own mute switch); the `comment-reacted` trigger fires for
+   rules. Deferred: CLI reaction commands (need the core scope map widened).
+10. **Start date, due time, timeline view** — landed as `cards_cards.start`
+    (a day) and a `due_has_time` flag that lets `due` carry an instant; day
+    values keep the calendar-day semantics everywhere, timed ones are
+    overdue from their instant (face, filter, reminder sweep) and land on
+    the calendar at their time. The due picker gained a time row, the face
+    reads "Sep 3 → Sep 10, 2:30 PM", the list view a Start column, sort by
+    start, history rows for both, `--start` / `--due "YYYY-MM-DD HH:MM"` on
+    the CLI, and the `card-rescheduled` trigger. The timeline is a third
+    view: a day axis, one row per dated card grouped by list, bars and dots,
+    today marked, `j`/`k`/`Enter`, persisted per board. Deferred:
+    drag-to-reschedule on the timeline; start→due spans on the calendar.
+12. **Estimates** — landed as an integer `estimate` column (0 = unset) with a
+    preset picker, a face pill, a list-view column, a sort field, an
+    estimated/unestimated facet, a per-column points total that follows the
+    filter, history rows, `--estimate` on the CLI, the
+    `card-estimate-changed` trigger and the `set-estimate` action.
+13. **Status categories and auto-archive** — `is_done` is gone; lists carry
+    backlog / todo / in_progress / done / canceled with a header glyph, a
+    status submenu and a filter facet. Done and canceled are closed: the
+    closed face (a cross and struck title for canceled), no reminders, never
+    overdue, hidden from My cards behind Show closed. `card-canceled` joins
+    `card-completed` as a trigger, and `card-archived` fires on an archive
+    (never a restore). Auto-archive is a per-board days setting (Board
+    settings…) and a server-owned `list_changed_at` stamp driving a
+    15-minute sweep. `list category` on the CLI, with `list done` as
+    shorthand.
+
+### Open
+
 9. **Sub-tasks and card relations.** Jira sub-tasks, Linear sub-issues and
    relations (blocks / blocked by / related / duplicate). Needs
-   `cards_cards.parent` with a face rollup and a `cards_card_links` collection;
-   pin `parent` to the same project as the anti-repoint rules do.
-10. **Start date, due time, timeline view.** `due` is a day only. A `start`
-    column and a time component are small; a timeline screen builds on the
-    list-view plumbing.
-11. **Time-based automation and missing actions.** Core has `core:schedule`
-    but cards declares no scheduled trigger; add overdue / due-soon triggers,
-    `cards:create-card` and `cards:set-due-date`.
-12. **Estimates / story points.** One numeric (or t-shirt select) column,
-    rolled up per list. Prerequisite for reports.
-13. **Status categories beyond `is_done`.** backlog / todo / in_progress /
-    done / canceled on `cards_lists`, plus auto-archive of completed cards
-    after N days.
+   `cards_cards.parent` with a face rollup (a `counters.go` counter) and a
+   `cards_card_links` collection; pin `parent` to the same project as the
+   anti-repoint rules do — a rule cannot cross-check it, so it is a Go guard
+   or a denormalized pin like the watchers'.
+11. **Time-based automation and missing actions.** Core has `core:schedule`,
+    which fires with no record, and every cards relation authorizer refuses
+    that. Overdue / due-soon triggers are more naturally RECORD triggers the
+    existing due-notice ticker enqueues, reusing the once-only stamps. Still
+    missing: `cards:create-card` (project from the list, `allocateNumber`)
+    and `cards:set-due-date` (date math). The event triggers that needed no
+    scheduling — estimate, dates, archive, reactions — shipped with Tier 2.
 14. **Cycles / sprints with a backlog.** `cards_cycles`, `cards_cards.cycle`,
     a backlog view, rollover. Large; only for software-team personas.
 15. **Epics / milestones.** A lightweight `cards_epics` collection offered as
@@ -80,8 +113,9 @@ reactions — on `feat/tier2-events`. 9, 11 and 14–21 remain; Tier 3 is open.
     batch mutation.
 20. **WIP limits and card aging.** `wip_limit` on lists with a warning header;
     aging as a face tint from `updated`.
-21. **Reports.** Burndown, velocity, cumulative flow. Depends on 12, 13 and
-    14; cumulative flow reads the activity table.
+21. **Reports.** Burndown, velocity, cumulative flow. 12 and 13 are in;
+    velocity still needs 14. Cumulative flow reads the activity table, and
+    the auto-archive sweep's rows count as system moves.
 
 ## Tier 3 — single-product differentiators
 
@@ -111,14 +145,18 @@ reactions — on `feat/tier2-events`. 9, 11 and 14–21 remain; Tier 3 is open.
   keyboard-opened menu never measures its trigger. Fix all five in one pass
   using `triggerPosition`.
 - Editing an existing comment to add a mention does not notify.
-- No responsive pass: fixed `COLUMN_WIDTH` / `PEEK_WIDTH`, no `useBreakpoint`
-  usage in cards.
+- No responsive pass: fixed `COLUMN_WIDTH` / `PEEK_WIDTH`. The list and
+  timeline views read `useBreakpoint`; the canvas and peek do not.
+- Reactions have no CLI commands; the core CLI scope map would need to grant
+  `cards_comment_reactions` first.
+- The timeline is read-only (no drag-to-reschedule), and the calendar source
+  shows the due date only — a start→due span is drawn nowhere but the
+  timeline.
 - Share links: no per-link use caps or access log; `visibility` goes stale
   when a link expires.
 
 ## Persona note
 
-This ranking targets parity with all three. For a **Trello-style** product,
-drop 12, 13's canceled state, 14, 21 and 24 to Tier 3 and pull 17, 18, 22 and
-30 up. For a **Linear-style** tracker, 12, 13, 14 and 24 move to the top of
-Tier 2.
+This ranking targets parity with all three. With 12 and 13 shipped, a
+**Trello-style** product would drop 14, 21 and 24 to Tier 3 and pull 17, 18,
+22 and 30 up. A **Linear-style** tracker would take 9 and 14 next, then 24.
