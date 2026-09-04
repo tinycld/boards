@@ -4,8 +4,8 @@ import {
     findCardEntry,
     flattenCards,
     neighborCardId,
-} from '../tinycld/cards/lib/board-cards'
-import type { BoardCardView, BoardProject } from '../tinycld/cards/types'
+} from '../tinycld/boards/lib/board-cards'
+import type { BoardCardView, BoardProject } from '../tinycld/boards/types'
 
 function card(id: string, listId: string, position: string): BoardCardView {
     return {

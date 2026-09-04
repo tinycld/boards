@@ -40,7 +40,7 @@ async function attachFile(
     file: { name: string; mimeType: string; buffer: Buffer }
 ): Promise<void> {
     const chooserPromise = page.waitForEvent('filechooser')
-    await page.getByTestId('cards-attach-file').click()
+    await page.getByTestId('boards-attach-file').click()
     const chooser = await chooserPromise
     await page.evaluate(() => window.dispatchEvent(new Event('blur')))
     await page.evaluate(() => window.dispatchEvent(new Event('focus')))
@@ -74,7 +74,7 @@ function pngFile(name: string) {
 test.describe('card attachments', () => {
     test.beforeEach(async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
     })
 
     test('attaches a file, lists it, and badges the card', async ({ page }) => {
@@ -182,7 +182,7 @@ test.describe('card attachments', () => {
         // the same by tearing down the whole SPA — the hard navigation this suite
         // forbids (it cancels in-flight chunk loads and is a CI flake source).
         await navigateToPackage(page, 'settings')
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         await openBoard(page, boardName, CARD_TITLE)
         await openCard(page, CARD_TITLE)
         await expect(page.getByText('release-notes.txt', { exact: true })).toBeVisible({
@@ -211,7 +211,7 @@ test.describe('card attachments', () => {
         // The hovered card highlights — the marker mounts only while a file
         // drag is over the face, so this pins the affordance, not just the
         // upload.
-        await expect(page.getByTestId(/^cards-card-dropping-/)).toHaveCount(1)
+        await expect(page.getByTestId(/^boards-card-dropping-/)).toHaveCount(1)
         await face.evaluate(el => {
             const file = new File([new Uint8Array([104, 105])], 'face-note.txt', {
                 type: 'text/plain',
@@ -222,7 +222,7 @@ test.describe('card attachments', () => {
                 new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer })
             )
         })
-        await expect(page.getByTestId(/^cards-card-dropping-/)).toHaveCount(0)
+        await expect(page.getByTestId(/^boards-card-dropping-/)).toHaveCount(0)
 
         // The card was never opened: the paperclip badge (server-recomputed
         // attachment_count) is the first visible proof the upload landed.
@@ -246,7 +246,7 @@ test.describe('card attachments', () => {
 
         // Positive control: the owner, who attached it, has both affordances.
         await openCard(page, CARD_TITLE)
-        await expect(page.getByTestId('cards-attach-file')).toBeVisible()
+        await expect(page.getByTestId('boards-attach-file')).toBeVisible()
         await expect(page.getByRole('button', { name: 'Delete shared.txt' })).toBeVisible()
         await expect(page.getByRole('button', { name: 'Rename shared.txt' })).toBeVisible()
 
@@ -255,7 +255,7 @@ test.describe('card attachments', () => {
         // board exists.
         const { page: bobPage, close } = await signInAsCollaborator(page)
         try {
-            await navigateToPackage(bobPage, 'cards')
+            await navigateToPackage(bobPage, 'boards')
             await openBoard(bobPage, boardName, CARD_TITLE)
             await boardCard(bobPage, CARD_TITLE).click()
 
@@ -266,7 +266,7 @@ test.describe('card attachments', () => {
             await expect(bobPage.getByText('shared.txt', { exact: true })).toBeVisible({
                 timeout: 15_000,
             })
-            await expect(bobPage.getByTestId('cards-attach-file')).toHaveCount(0)
+            await expect(bobPage.getByTestId('boards-attach-file')).toHaveCount(0)
             await expect(bobPage.getByRole('button', { name: 'Delete shared.txt' })).toHaveCount(0)
             await expect(bobPage.getByRole('button', { name: 'Rename shared.txt' })).toHaveCount(0)
         } finally {

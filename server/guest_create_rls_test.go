@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"net/http"
@@ -7,7 +7,7 @@ import (
 
 // Guests, and the three rules that have no precedent anywhere else in the tree.
 //
-// Cards INVERTS drive's guest policy. Drive blocks guest creates outright
+// Boards INVERTS drive's guest policy. Drive blocks guest creates outright
 // (`notGuest` on drive_items.create) because a drive item has no parent to
 // check against. Every cards content row names a `project`, so the create rule
 // can require an existing editor/owner membership on it — that parent check IS
@@ -25,7 +25,7 @@ func TestCardsGuestRLS_GuestWithEditorMembershipCanCreateCard(t *testing.T) {
 
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_cards/records",
+		url:    "/api/collections/boards_cards/records",
 		token:  env.guestToken,
 		body: `{"project":"` + env.project.Id + `","list":"` + env.list.Id +
 			`","title":"by-guest","position":"a9","created_by":"` + env.appGuest.Id + `"}`,
@@ -47,7 +47,7 @@ func TestCardsGuestRLS_GuestWithoutMembershipCannotCreateCard(t *testing.T) {
 
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_cards/records",
+		url:    "/api/collections/boards_cards/records",
 		token:  env.guestToken,
 		body: `{"project":"` + other.Id + `","list":"` + otherList.Id +
 			`","title":"by-guest-elsewhere","position":"a9","created_by":"` + env.appGuest.Id + `"}`,
@@ -55,14 +55,14 @@ func TestCardsGuestRLS_GuestWithoutMembershipCannotCreateCard(t *testing.T) {
 	}.run(t, env)
 }
 
-// `notGuest` on cards_projects.create is the only thing between a share-link
+// `notGuest` on boards_projects.create is the only thing between a share-link
 // visitor and a board of their own — there is no membership to check on a
 // project that does not exist yet.
 func TestCardsGuestRLS_GuestCannotCreateProject(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_projects/records",
+		url:    "/api/collections/boards_projects/records",
 		token:  env.guestToken,
 		body: `{"name":"guest-board","color":"#ef4444","visibility":"private",` +
 			`"created_by":"` + env.appGuest.Id + `"}`,
@@ -86,7 +86,7 @@ func TestCardsGuestRLS_GuestCannotListMemberRoster(t *testing.T) {
 
 	req{
 		method:  http.MethodGet,
-		url:     "/api/collections/cards_project_members/records",
+		url:     "/api/collections/boards_project_members/records",
 		token:   env.guestToken,
 		want:    http.StatusOK,
 		content: []string{`"totalItems":1`, `"user":"` + env.appGuest.Id + `"`},
@@ -103,7 +103,7 @@ func TestCardsGuestRLS_GuestCannotViewACoMemberRow(t *testing.T) {
 	cardsMember(t, env.app, env.project, env.appGuest, "editor")
 
 	ownerRow, err := env.app.FindFirstRecordByFilter(
-		"cards_project_members", "project = {:p} && user = {:u}",
+		"boards_project_members", "project = {:p} && user = {:u}",
 		map[string]any{"p": env.project.Id, "u": env.owner.Id},
 	)
 	if err != nil {
@@ -112,7 +112,7 @@ func TestCardsGuestRLS_GuestCannotViewACoMemberRow(t *testing.T) {
 
 	req{
 		method: http.MethodGet,
-		url:    "/api/collections/cards_project_members/records/" + ownerRow.Id,
+		url:    "/api/collections/boards_project_members/records/" + ownerRow.Id,
 		token:  env.guestToken,
 		want:   http.StatusNotFound,
 	}.run(t, env)
@@ -125,7 +125,7 @@ func TestCardsGuestRLS_NonGuestMemberCanListTheRoster(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method:  http.MethodGet,
-		url:     "/api/collections/cards_project_members/records",
+		url:     "/api/collections/boards_project_members/records",
 		token:   env.viewerToken,
 		want:    http.StatusOK,
 		content: []string{`"totalItems":4`, `"user":"` + env.owner.Id + `"`},
@@ -149,7 +149,7 @@ func TestCardsGuestRLS_DisabledUserCannotRead(t *testing.T) {
 
 	req{
 		method:  http.MethodGet,
-		url:     "/api/collections/cards_cards/records",
+		url:     "/api/collections/boards_cards/records",
 		token:   env.editorToken,
 		want:    http.StatusOK,
 		content: []string{`"totalItems":0`},
@@ -170,7 +170,7 @@ func TestCardsGuestRLS_DisabledUserCannotWrite(t *testing.T) {
 
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_cards/records",
+		url:    "/api/collections/boards_cards/records",
 		token:  env.editorToken,
 		body: `{"project":"` + env.project.Id + `","list":"` + env.list.Id +
 			`","title":"by-suspended","position":"a9","created_by":"` + env.editor.Id + `"}`,

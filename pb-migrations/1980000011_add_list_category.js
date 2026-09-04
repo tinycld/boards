@@ -1,6 +1,6 @@
 /// <reference path="../../tinycld/server/pb_data/types.d.ts" />
 //
-// cards_lists.category — what a list MEANS in the board's workflow, replacing
+// boards_lists.category — what a list MEANS in the board's workflow, replacing
 // the `is_done` flag from 1980000000.
 //
 // Five values: backlog, todo, in_progress, done, canceled. `done` is what
@@ -24,11 +24,11 @@
 // boundary (lib/list-category.ts, server/automation.go listCategory).
 migrate(
     app => {
-        const lists = app.findCollectionByNameOrId('cards_lists')
+        const lists = app.findCollectionByNameOrId('boards_lists')
         lists.fields.addAt(
             lists.fields.length,
             new Field({
-                id: 'cards_lists_category',
+                id: 'boards_lists_category',
                 name: 'category',
                 type: 'select',
                 required: false,
@@ -42,22 +42,22 @@ migrate(
         // BEFORE the flag is dropped — the CASE reads it.
         app.db()
             .newQuery(
-                "UPDATE cards_lists SET category = CASE WHEN is_done = 1 THEN 'done' ELSE 'todo' END WHERE category = ''"
+                "UPDATE boards_lists SET category = CASE WHEN is_done = 1 THEN 'done' ELSE 'todo' END WHERE category = ''"
             )
             .execute()
 
-        lists.fields.removeById('cards_lists_is_done')
+        lists.fields.removeById('boards_lists_is_done')
         app.save(lists)
     },
     app => {
-        const lists = app.findCollectionByNameOrId('cards_lists')
+        const lists = app.findCollectionByNameOrId('boards_lists')
         lists.fields.addAt(
             lists.fields.length,
-            new Field({ id: 'cards_lists_is_done', name: 'is_done', type: 'bool' })
+            new Field({ id: 'boards_lists_is_done', name: 'is_done', type: 'bool' })
         )
         app.save(lists)
-        app.db().newQuery("UPDATE cards_lists SET is_done = (category = 'done')").execute()
-        lists.fields.removeById('cards_lists_category')
+        app.db().newQuery("UPDATE boards_lists SET is_done = (category = 'done')").execute()
+        lists.fields.removeById('boards_lists_category')
         app.save(lists)
     }
 )

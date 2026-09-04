@@ -30,7 +30,7 @@ async function unreadCount(page: Page): Promise<number> {
 }
 
 function peek(page: Page) {
-    return page.getByTestId('cards-card-peek')
+    return page.getByTestId('boards-card-peek')
 }
 
 async function openCard(page: Page, title: string) {
@@ -61,7 +61,7 @@ async function assignCollaborator(page: Page) {
 }
 
 async function postComment(page: Page, text: string) {
-    const composer = page.getByTestId('cards-comment-composer')
+    const composer = page.getByTestId('boards-comment-composer')
     await composer.click()
     await composer.locator('.ProseMirror').click()
     await page.keyboard.type(text, { delay: 10 })
@@ -72,7 +72,7 @@ async function postComment(page: Page, text: string) {
 test.describe('card watching and notifications', () => {
     test('assignment, a watched comment, and stopping watching', async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
 
         const boardName = `watch-${Date.now()}`
         await createBoard(page, boardName)
@@ -81,7 +81,7 @@ test.describe('card watching and notifications', () => {
 
         const { page: bobPage, close } = await signInAsCollaborator(page)
         try {
-            await navigateToPackage(bobPage, 'cards')
+            await navigateToPackage(bobPage, 'boards')
             await expect(bell(bobPage)).toBeVisible()
             let baseline = await unreadCount(bobPage)
 
@@ -93,7 +93,7 @@ test.describe('card watching and notifications', () => {
                 .toBeGreaterThan(baseline)
             // The owner created the card and the collaborator was assigned:
             // two watchers.
-            await expect(peek(page).getByTestId('cards-watch-count')).toHaveText('2')
+            await expect(peek(page).getByTestId('boards-watch-count')).toHaveText('2')
 
             // --- A comment reaches the watcher ---
             baseline = await unreadCount(bobPage)
@@ -104,16 +104,16 @@ test.describe('card watching and notifications', () => {
 
             // --- Stop watching: a move goes unheard ---
             await navigateToPackage(bobPage, 'settings')
-            await navigateToPackage(bobPage, 'cards')
+            await navigateToPackage(bobPage, 'boards')
             await bobPage.getByText(boardName, { exact: true }).click()
             await openCard(bobPage, CARD_TITLE)
             await bobPage.getByRole('button', { name: 'Stop watching card' }).click()
             await expect(bobPage.getByRole('button', { name: 'Watch card' })).toBeVisible()
-            await expect(peek(page).getByTestId('cards-watch-count')).toHaveText('1')
+            await expect(peek(page).getByTestId('boards-watch-count')).toHaveText('1')
 
             baseline = await unreadCount(bobPage)
             await peek(page).getByRole('button', { name: 'Move to Doing' }).click()
-            await expect(peek(page).getByTestId('cards-activity-moved')).toBeVisible()
+            await expect(peek(page).getByTestId('boards-activity-moved')).toBeVisible()
             // Give the notify path time it would have needed, then assert
             // silence — a bell that never moves is the whole point.
             await page.waitForTimeout(3000)

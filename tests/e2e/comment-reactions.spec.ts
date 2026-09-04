@@ -20,7 +20,7 @@ const CARD_TITLE = 'Design the onboarding flow'
 const COMMENT = 'First pass is up for review'
 
 function peek(page: Page) {
-    return page.getByTestId('cards-card-peek')
+    return page.getByTestId('boards-card-peek')
 }
 
 async function openCard(page: Page, title: string) {
@@ -42,7 +42,7 @@ async function addMemberToBoard(page: Page, boardName: string, email: string, ro
 }
 
 async function postComment(page: Page, text: string) {
-    const composer = page.getByTestId('cards-comment-composer')
+    const composer = page.getByTestId('boards-comment-composer')
     await composer.click()
     await composer.locator('.ProseMirror').click()
     await page.keyboard.type(text, { delay: 10 })
@@ -62,18 +62,18 @@ async function unreadCount(page: Page): Promise<number> {
 
 /** The thumbs-up chip under whichever comment carries one. */
 function thumbsUp(page: Page) {
-    return peek(page).locator('[data-testid^="cards-reaction-"][data-testid$="-thumbs_up"]')
+    return peek(page).locator('[data-testid^="boards-reaction-"][data-testid$="-thumbs_up"]')
 }
 
 async function react(page: Page, key: string) {
-    await peek(page).getByTestId('cards-reaction-add').first().click()
-    await page.getByTestId(`cards-reaction-pick-${key}`).click()
+    await peek(page).getByTestId('boards-reaction-add').first().click()
+    await page.getByTestId(`boards-reaction-pick-${key}`).click()
 }
 
-test.describe('Cards — comment reactions', () => {
+test.describe('Boards — comment reactions', () => {
     test('a reaction is added, counted, kept through an edit, and taken back', async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         await createBoard(page, `react-${Date.now()}`)
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
@@ -88,10 +88,10 @@ test.describe('Cards — comment reactions', () => {
         // The bar sits outside the inline edit swap, so it stays put while
         // the comment is being edited and after Escape.
         await peek(page).getByText(COMMENT).click()
-        await expect(page.getByTestId('cards-comment-editor')).toBeVisible()
+        await expect(page.getByTestId('boards-comment-editor')).toBeVisible()
         await expect(thumbsUp(page)).toBeVisible()
         await page.keyboard.press('Escape')
-        await expect(page.getByTestId('cards-comment-editor')).toHaveCount(0)
+        await expect(page.getByTestId('boards-comment-editor')).toHaveCount(0)
         await expect(thumbsUp(page)).toBeVisible()
 
         // Pressing your own chip takes the reaction back.
@@ -101,7 +101,7 @@ test.describe('Cards — comment reactions', () => {
 
     test('a second commentor raises the count; a viewer only looks', async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         const boardName = `react-two-${Date.now()}`
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
@@ -115,7 +115,7 @@ test.describe('Cards — comment reactions', () => {
 
         const { page: bobPage, close } = await signInAsCollaborator(page)
         try {
-            await navigateToPackage(bobPage, 'cards')
+            await navigateToPackage(bobPage, 'boards')
             await openBoard(bobPage, boardName, CARD_TITLE)
             await openCard(bobPage, CARD_TITLE)
             await expect(thumbsUp(bobPage)).toContainText('1')
@@ -145,11 +145,11 @@ test.describe('Cards — comment reactions', () => {
 
         const { page: viewerPage, close: closeViewer } = await signInAsCollaborator(page)
         try {
-            await navigateToPackage(viewerPage, 'cards')
+            await navigateToPackage(viewerPage, 'boards')
             await openBoard(viewerPage, boardName, CARD_TITLE)
             await openCard(viewerPage, CARD_TITLE)
             await expect(thumbsUp(viewerPage)).toContainText('1')
-            await expect(viewerPage.getByTestId('cards-reaction-add')).toHaveCount(0)
+            await expect(viewerPage.getByTestId('boards-reaction-add')).toHaveCount(0)
         } finally {
             await closeViewer()
         }

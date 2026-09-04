@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"net/http"
@@ -7,7 +7,7 @@ import (
 	"github.com/pocketbase/pocketbase/tests"
 )
 
-// The same-board invariant on cards_cards.parent.
+// The same-board invariant on boards_cards.parent.
 //
 // A sub-task may only ever name a card on ITS OWN board. This is the pin that
 // makes everything downstream safe: the rollup cannot count a card the viewer
@@ -35,7 +35,7 @@ func TestCardsParentRLS_EditorCanParentWithinTheBoard(t *testing.T) {
 
 	req{
 		method:  http.MethodPatch,
-		url:     "/api/collections/cards_cards/records/" + child.Id,
+		url:     "/api/collections/boards_cards/records/" + child.Id,
 		token:   env.editorToken,
 		body:    `{"parent":"` + env.card.Id + `"}`,
 		want:    http.StatusOK,
@@ -59,7 +59,7 @@ func TestCardsParentRLS_EditorCannotParentOntoAnotherBoard(t *testing.T) {
 
 	req{
 		method: http.MethodPatch,
-		url:    "/api/collections/cards_cards/records/" + env.card.Id,
+		url:    "/api/collections/boards_cards/records/" + env.card.Id,
 		token:  env.editorToken,
 		body:   `{"parent":"` + foreign.Id + `"}`,
 		want:   http.StatusNotFound,
@@ -80,7 +80,7 @@ func TestCardsParentRLS_CannotCreateWithAForeignParent(t *testing.T) {
 
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_cards/records",
+		url:    "/api/collections/boards_cards/records",
 		token:  env.editorToken,
 		body: `{"project":"` + env.project.Id + `","list":"` + env.list.Id +
 			`","title":"smuggled","position":"a9","parent":"` + foreign.Id + `"}`,
@@ -101,7 +101,7 @@ func TestCardsParentRLS_EditorCanClearAParent(t *testing.T) {
 
 	req{
 		method:  http.MethodPatch,
-		url:     "/api/collections/cards_cards/records/" + child.Id,
+		url:     "/api/collections/boards_cards/records/" + child.Id,
 		token:   env.editorToken,
 		body:    `{"parent":""}`,
 		want:    http.StatusOK,
@@ -123,7 +123,7 @@ func TestCardsParentRLS_AnEditWithoutParentIsUnaffected(t *testing.T) {
 
 	req{
 		method:  http.MethodPatch,
-		url:     "/api/collections/cards_cards/records/" + child.Id,
+		url:     "/api/collections/boards_cards/records/" + child.Id,
 		token:   env.editorToken,
 		body:    `{"title":"renamed"}`,
 		want:    http.StatusOK,
@@ -142,7 +142,7 @@ func TestCardsParentRLS_CommentorCannotParent(t *testing.T) {
 
 	req{
 		method: http.MethodPatch,
-		url:    "/api/collections/cards_cards/records/" + child.Id,
+		url:    "/api/collections/boards_cards/records/" + child.Id,
 		token:  env.commentorToken,
 		body:   `{"parent":"` + env.card.Id + `"}`,
 		want:   http.StatusNotFound,
@@ -155,7 +155,7 @@ func TestCardsParentRLS_CommentorCannotParent(t *testing.T) {
 // assertion alone would pass if the row had been written and then hidden.
 func requireCardParent(cardID, want string) func(t testing.TB, app *tests.TestApp) {
 	return func(t testing.TB, app *tests.TestApp) {
-		card, err := app.FindRecordById("cards_cards", cardID)
+		card, err := app.FindRecordById("boards_cards", cardID)
 		if err != nil {
 			t.Fatalf("reload card: %v", err)
 		}

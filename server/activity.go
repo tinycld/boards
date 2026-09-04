@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"strconv"
@@ -10,7 +10,7 @@ import (
 	"tinycld.org/core/logging"
 )
 
-// Card history: one cards_activity row per change a person can see.
+// Card history: one boards_activity row per change a person can see.
 //
 // Written from the AFTER-success hooks, which is deliberate on two counts.
 // First, a row must describe a write that happened, and only the after hook
@@ -27,24 +27,24 @@ import (
 // Never fails the user's write (the counters.go invariant): a history row is
 // worth having, not worth refusing a card move over.
 
-var activityLog = logging.ForPackage("cards")
+var activityLog = logging.ForPackage("boards")
 
 // descriptionCoalesceWindow is how long a description edit by the same actor
 // keeps folding into the previous row.
 const descriptionCoalesceWindow = 10 * time.Minute
 
 func registerCardActivity(app core.App) {
-	app.OnRecordAfterCreateSuccess("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordAfterCreateSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		actor := actorOf(e.Record)
 		writeActivity(e.App, e.Record, actor, "created", "", "")
 		return e.Next()
 	})
-	app.OnRecordAfterUpdateSuccess("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordAfterUpdateSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		actor := actorOf(e.Record)
 		logCardChanges(e.App, e.Record, actor)
 		return e.Next()
 	})
-	app.OnRecordAfterUpdateSuccess("cards_checklist_items").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordAfterUpdateSuccess("boards_checklist_items").BindFunc(func(e *core.RecordEvent) error {
 		actor := actorOf(e.Record)
 		original := e.Record.Original()
 		if original.GetString("card") != "" && e.Record.GetBool("is_done") && !original.GetBool("is_done") {
@@ -54,7 +54,7 @@ func registerCardActivity(app core.App) {
 		}
 		return e.Next()
 	})
-	app.OnRecordAfterCreateSuccess("cards_attachments").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordAfterCreateSuccess("boards_attachments").BindFunc(func(e *core.RecordEvent) error {
 		actor := actorOf(e.Record)
 		if card := parentCard(e.App, e.Record.GetString("card")); card != nil {
 			name := e.Record.GetString("name")
@@ -170,7 +170,7 @@ func estimateText(points int) string {
 // writeActivity inserts one row. Failure is logged, never returned: the
 // card write it describes has already succeeded.
 func writeActivity(app core.App, card *core.Record, actor, kind, from, to string) {
-	col, err := app.FindCollectionByNameOrId("cards_activity")
+	col, err := app.FindCollectionByNameOrId("boards_activity")
 	if err != nil {
 		activityLog.Warn("activity collection missing", "error", err)
 		return
@@ -191,7 +191,7 @@ func writeActivity(app core.App, card *core.Record, actor, kind, from, to string
 // description edit by the same actor inside the coalesce window.
 func recentDescriptionEdit(app core.App, cardID, actor string) bool {
 	rows, err := app.FindRecordsByFilter(
-		"cards_activity",
+		"boards_activity",
 		"card = {:card}",
 		"-created",
 		1,
@@ -212,7 +212,7 @@ func parentCard(app core.App, cardID string) *core.Record {
 	if cardID == "" {
 		return nil
 	}
-	card, err := app.FindRecordById("cards_cards", cardID)
+	card, err := app.FindRecordById("boards_cards", cardID)
 	if err != nil {
 		return nil
 	}

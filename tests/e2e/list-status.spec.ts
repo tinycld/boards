@@ -28,27 +28,27 @@ async function setListStatus(page: Page, listName: string, category: string) {
     // rendering a full-screen Overlay on web it could not — the overlay sat
     // above the submenu and swallowed the click. It used to need
     // dispatchEvent to bypass hit-testing.
-    await page.getByTestId(`cards-list-status-${category}`).click()
+    await page.getByTestId(`boards-list-status-${category}`).click()
 }
 
 async function openFilter(page: Page) {
-    await page.getByTestId('cards-filter-button').click()
-    await expect(page.getByTestId('cards-filter-panel')).toBeVisible()
+    await page.getByTestId('boards-filter-button').click()
+    await expect(page.getByTestId('boards-filter-panel')).toBeVisible()
 }
 
 async function closeFilter(page: Page) {
     await page.keyboard.press('Escape')
-    await expect(page.getByTestId('cards-filter-panel')).toHaveCount(0)
+    await expect(page.getByTestId('boards-filter-panel')).toHaveCount(0)
 }
 
 function glyph(page: Page, listName: string, category: string) {
-    return columnHeader(page, listName).getByTestId(`cards-list-category-${category}`)
+    return columnHeader(page, listName).getByTestId(`boards-list-category-${category}`)
 }
 
-test.describe('Cards — list status', () => {
+test.describe('Boards — list status', () => {
     test.beforeEach(async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
     })
 
     test('a new board carries the default statuses, and the menu changes one', async ({ page }) => {
@@ -61,16 +61,16 @@ test.describe('Cards — list status', () => {
         // keeps it closed but changes the glyph.
         await addCard(page, 2, ALPHA)
         const face = boardCard(page, ALPHA)
-        await expect(face.locator('[data-testid^="cards-card-closed-"]')).toBeVisible()
+        await expect(face.locator('[data-testid^="boards-card-closed-"]')).toBeVisible()
 
         await setListStatus(page, 'Done', 'canceled')
         await expect(glyph(page, 'Done', 'canceled')).toBeVisible()
-        await expect(face.locator('[data-testid^="cards-card-closed-"]')).toBeVisible()
+        await expect(face.locator('[data-testid^="boards-card-closed-"]')).toBeVisible()
 
         // Back to an open status: the card gets its ordinary face again.
         await setListStatus(page, 'Done', 'todo')
         await expect(glyph(page, 'Done', 'todo')).toBeVisible()
-        await expect(face.locator('[data-testid^="cards-card-closed-"]')).toHaveCount(0)
+        await expect(face.locator('[data-testid^="boards-card-closed-"]')).toHaveCount(0)
     })
 
     test('the status facet narrows the board by list', async ({ page }) => {
@@ -80,17 +80,19 @@ test.describe('Cards — list status', () => {
 
         await openFilter(page)
         await page
-            .getByTestId('cards-filter-panel')
+            .getByTestId('boards-filter-panel')
             .getByRole('checkbox', { name: 'In progress' })
             .click()
         await closeFilter(page)
 
         await expect(boardCard(page, ALPHA)).toHaveCount(0)
         await expect(boardCard(page, BRAVO)).toBeVisible()
-        await expect(page.locator('[data-testid^="cards-column-count-"]').first()).toHaveText('0/1')
+        await expect(page.locator('[data-testid^="boards-column-count-"]').first()).toHaveText(
+            '0/1'
+        )
 
         await page
-            .getByTestId('cards-filter-bar')
+            .getByTestId('boards-filter-bar')
             .getByRole('button', { name: 'Clear all' })
             .click()
         await expect(boardCard(page, ALPHA)).toBeVisible()
@@ -99,15 +101,15 @@ test.describe('Cards — list status', () => {
     test('board settings round-trip the auto-archive days', async ({ page }) => {
         await freshBoard(page)
         await page.getByRole('button', { name: 'Board actions' }).click()
-        await page.getByTestId('cards-board-settings').click()
+        await page.getByTestId('boards-settings').click()
         const field = page.getByLabel('Auto-archive finished cards after (days)')
         await expect(field).toHaveValue('0')
         await field.fill('30')
-        await page.getByTestId('cards-board-settings-save').click()
+        await page.getByTestId('boards-settings-save').click()
         await expect(field).toHaveCount(0)
 
         await page.getByRole('button', { name: 'Board actions' }).click()
-        await page.getByTestId('cards-board-settings').click()
+        await page.getByTestId('boards-settings').click()
         await expect(page.getByLabel('Auto-archive finished cards after (days)')).toHaveValue('30')
     })
 })

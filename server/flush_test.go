@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"encoding/json"
@@ -53,7 +53,7 @@ func writeFragment(t *testing.T, handle realtime.DocHandle, cardID, text string)
 
 func description(t *testing.T, env *cardsEnv, cardID string) string {
 	t.Helper()
-	record, err := env.app.FindRecordById("cards_cards", cardID)
+	record, err := env.app.FindRecordById("boards_cards", cardID)
 	if err != nil {
 		t.Fatalf("load card %s: %v", cardID, err)
 	}
@@ -84,7 +84,7 @@ func TestFlush_LeavesAnUntouchedCardAlone(t *testing.T) {
 	if err := env.app.Save(env.card); err != nil {
 		t.Fatalf("seed description: %v", err)
 	}
-	before, err := env.app.FindRecordById("cards_cards", env.card.Id)
+	before, err := env.app.FindRecordById("boards_cards", env.card.Id)
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestFlush_LeavesAnUntouchedCardAlone(t *testing.T) {
 		t.Fatalf("flush: %v", err)
 	}
 
-	after, err := env.app.FindRecordById("cards_cards", env.card.Id)
+	after, err := env.app.FindRecordById("boards_cards", env.card.Id)
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestFlush_PreservesAnEditMadeOutsideTheRoom(t *testing.T) {
 
 	_, _, flush, handle := boardRoom(t, env)
 
-	record, err := env.app.FindRecordById("cards_cards", env.card.Id)
+	record, err := env.app.FindRecordById("boards_cards", env.card.Id)
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
@@ -165,7 +165,7 @@ func TestFlush_SkipsADeletedCard(t *testing.T) {
 	_, _, flush, handle := boardRoom(t, env)
 	writeFragment(t, handle, env.card.Id, "About to vanish.\n")
 
-	record, err := env.app.FindRecordById("cards_cards", env.card.Id)
+	record, err := env.app.FindRecordById("boards_cards", env.card.Id)
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestFlush_IsIdempotent(t *testing.T) {
 	if err := flush(t.Context(), env.project.Id, handle); err != nil {
 		t.Fatalf("first flush: %v", err)
 	}
-	first, err := env.app.FindRecordById("cards_cards", env.card.Id)
+	first, err := env.app.FindRecordById("boards_cards", env.card.Id)
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
@@ -213,7 +213,7 @@ func TestFlush_IsIdempotent(t *testing.T) {
 	if err := flush(t.Context(), env.project.Id, handle); err != nil {
 		t.Fatalf("second flush: %v", err)
 	}
-	second, err := env.app.FindRecordById("cards_cards", env.card.Id)
+	second, err := env.app.FindRecordById("boards_cards", env.card.Id)
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
@@ -268,7 +268,7 @@ func TestBootstrap_ThenFlushIsANoOp(t *testing.T) {
 	if err := env.app.Save(env.card); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	before, err := env.app.FindRecordById("cards_cards", env.card.Id)
+	before, err := env.app.FindRecordById("boards_cards", env.card.Id)
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
@@ -279,7 +279,7 @@ func TestBootstrap_ThenFlushIsANoOp(t *testing.T) {
 		t.Fatalf("flush: %v", err)
 	}
 
-	after, err := env.app.FindRecordById("cards_cards", env.card.Id)
+	after, err := env.app.FindRecordById("boards_cards", env.card.Id)
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}

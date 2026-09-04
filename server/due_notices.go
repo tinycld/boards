@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"sync"
@@ -34,7 +34,7 @@ import (
 // finished work is not late, whichever way it finished. A backlog card still
 // does — a due date on it is an explicit ask, not a scheduling accident.
 
-const notifyTypeDue = "cards_due"
+const notifyTypeDue = "boards_due"
 
 const soonWindowDays = 2
 
@@ -43,7 +43,7 @@ const soonWindowDays = 2
 var schedulerWrites sync.Map // *core.Record → struct{}
 
 func registerDueNotices(app core.App) {
-	app.OnRecordUpdate("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordUpdate("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		if _, mine := schedulerWrites.Load(e.Record); mine {
 			return e.Next()
 		}
@@ -96,7 +96,7 @@ func checkDueNotices(app core.App, now time.Time) {
 	soonUntil := today.AddDate(0, 0, soonWindowDays+1) // exclusive: due < this is "soon"
 
 	rows, err := app.FindRecordsByFilter(
-		"cards_cards",
+		"boards_cards",
 		"due != '' && archived = false && ("+
 			"(due_soon_notified_at = '' && due < {:soon}) || "+
 			"(overdue_notified_at = '' && ("+
@@ -161,12 +161,12 @@ func notifyDue(app core.App, card *core.Record, event, headline string) {
 		notify.NotifyUser(app, notify.NotifyParams{
 			UserID:  userID,
 			Type:    notifyTypeDue,
-			Package: "cards",
+			Package: "boards",
 			Title:   headline,
 			Body:    truncateRunes(card.GetString("title"), 200),
 			URL:     descriptionMentionURL(app, card.Id),
 			Meta: map[string]any{
-				"targetCollection": "cards_cards",
+				"targetCollection": "boards_cards",
 				"targetRecord":     card.Id,
 				"project":          card.GetString("project"),
 				"event":            event,

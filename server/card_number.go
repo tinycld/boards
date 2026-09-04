@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"errors"
@@ -20,7 +20,7 @@ import (
 //     is, and MAX would silently re-issue its number — two cards in a board's
 //     history answering to OTTER-7, and a permalink that quietly changes
 //     meaning. The counter therefore lives on the PROJECT
-//     (cards_projects.next_number) and only ever moves forward.
+//     (boards_projects.next_number) and only ever moves forward.
 //   - MUST FAIL THE WRITE. counters.go logs and moves on because a stale badge
 //     is cosmetic. A card with no number is not: it has no key, so it cannot be
 //     linked, cited or looked up, and nothing later would ever repair it.
@@ -34,7 +34,7 @@ import (
 // core/db.go's app.create() with no RunInTransaction anywhere on that path —
 // only apis/batch.go opens one. So a SELECT-then-UPDATE here would be a real
 // time-of-check window under two concurrent inserts, not a theoretical one, and
-// it is exactly the path both useCreateCard and `cards card add` take.
+// it is exactly the path both useCreateCard and `boards card add` take.
 // allocateNumber is therefore a COMPARE-AND-SWAP: one UPDATE whose WHERE clause
 // carries the value the SELECT read. A racing writer's UPDATE matches zero rows
 // and it retries against the new value.
@@ -60,7 +60,7 @@ func allocateNumber(app core.App, projectID string) (int, error) {
 	for attempt := 0; attempt < numberAllocRetries; attempt++ {
 		var current int
 		err := app.DB().
-			NewQuery("SELECT COALESCE(NULLIF(next_number, 0), 1) AS n FROM cards_projects WHERE id = {:id}").
+			NewQuery("SELECT COALESCE(NULLIF(next_number, 0), 1) AS n FROM boards_projects WHERE id = {:id}").
 			Bind(dbx.Params{"id": projectID}).
 			Row(&current)
 		if err != nil {
@@ -68,7 +68,7 @@ func allocateNumber(app core.App, projectID string) (int, error) {
 		}
 
 		res, err := app.NonconcurrentDB().
-			NewQuery(`UPDATE cards_projects SET next_number = {:next}
+			NewQuery(`UPDATE boards_projects SET next_number = {:next}
 			          WHERE id = {:id}
 			            AND COALESCE(NULLIF(next_number, 0), 1) = {:current}`).
 			Bind(dbx.Params{"id": projectID, "next": current + 1, "current": current}).
@@ -104,7 +104,7 @@ func allocateNumber(app core.App, projectID string) (int, error) {
 // Returning the error — rather than logging it, as counters.go does — is what
 // aborts the save. See the invariants above.
 func registerCardNumbers(app *pocketbase.PocketBase) {
-	app.OnRecordCreate("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordCreate("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		// A client-supplied number is IGNORED, never trusted: no access rule
 		// pins this field (it is a scalar, not a relation), so a member can put
 		// anything in the request body. Overwriting unconditionally is what
@@ -134,7 +134,7 @@ func registerCardNumbers(app *pocketbase.PocketBase) {
 	// card on every such write and burn a number per edit. An unknown prior
 	// project means we cannot prove a move happened, so we do nothing — the
 	// card keeps the number it already has, which is always the safe outcome.
-	app.OnRecordUpdate("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordUpdate("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		next := e.Record.GetString("project")
 		prior := e.Record.Original().GetString("project")
 		if next == "" || prior == "" || next == prior {

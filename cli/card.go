@@ -38,7 +38,7 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "view <id>",
 		Short:   "Show a card in full",
-		Long:    "Show a card in full.\n\n<id> is a card id (see `tinycld cards board view`).",
+		Long:    "Show a card in full.\n\n<id> is a card id (see `tinycld boards view`).",
 		Args:    cobra.ExactArgs(1),
 		Aliases: []string{"show"},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -215,7 +215,7 @@ func newCardAddCmd(c *client.Client) *cobra.Command {
 				return err
 			}
 			if listRef == "" {
-				return fmt.Errorf("--list is required (a list id or name; see `tinycld cards list show`)")
+				return fmt.Errorf("--list is required (a list id or name; see `tinycld boards column show`)")
 			}
 			l, err := resolveList(ctx, c, p.ID, listRef)
 			if err != nil {
@@ -244,7 +244,7 @@ func newCardAddCmd(c *client.Client) *cobra.Command {
 			// Defaults to the caller, which is what created_by records anyway.
 			// No server hook fills this in — core.RecordEvent carries no request
 			// auth, so it could not recover the caller — so every insert path
-			// writes it, and `cards card add --reporter <id>` is how the CLI
+			// writes it, and `boards card add --reporter <id>` is how the CLI
 			// files a card on someone else's behalf.
 			reporterID := userID
 			if cmd.Flags().Changed("reporter") {
@@ -603,7 +603,7 @@ func newCardRemoveCmd(c *client.Client) *cobra.Command {
 			// script must pass --yes exactly as before.
 			question := fmt.Sprintf(
 				"PERMANENTLY delete %q, with its checklist, comments and attachments? "+
-					"(`cards card archive` hides it reversibly)", cd.Title)
+					"(`boards card archive` hides it reversibly)", cd.Title)
 			ok, err := ui.Confirm(o, yes, cmd.InOrStdin(), cmd.ErrOrStderr(), question)
 			if err != nil {
 				// The generic "pass --yes" refusal alone would not say WHAT the
@@ -624,7 +624,7 @@ func newCardRemoveCmd(c *client.Client) *cobra.Command {
 }
 
 // moveCardToBoard moves a card to another board through
-// POST /api/cards/cards/{id}/move. The destination list defaults to the
+// POST /api/boards/cards/{id}/move. The destination list defaults to the
 // target board's first column; the rank appends, as a cross-column move
 // with no --index does.
 func moveCardToBoard(cmd *cobra.Command, c *client.Client, o output.Options, cd card, target project, listRef string, hasList bool, family string) error {
@@ -659,7 +659,7 @@ func moveCardToBoard(cmd *cobra.Command, c *client.Client, o output.Options, cd 
 		OrphanedChildren int      `json:"orphaned_children"`
 		ClearedParent    bool     `json:"cleared_parent"`
 	}
-	err = c.PostJSON(ctx, "/api/cards/cards/"+cd.ID+"/move", map[string]any{
+	err = c.PostJSON(ctx, "/api/boards/cards/"+cd.ID+"/move", map[string]any{
 		"project_id": target.ID,
 		"list_id":    dest.ID,
 		"position":   position,

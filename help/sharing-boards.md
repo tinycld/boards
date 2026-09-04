@@ -53,7 +53,7 @@ Open the member list and find **General access** at the bottom. Choose what
 the link should allow and when it should expire, then press **Create link**
 and copy the URL. It looks like this:
 
-    {{server-host}}/p/cards/board/1f4c…
+    {{server-host}}/p/boards/1f4c…
 
 What each kind of link allows:
 

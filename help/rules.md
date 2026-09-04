@@ -34,7 +34,7 @@ the point.
 either as "moved, if the destination is the Done list", but you can't: a
 condition can only look at the card's own fields, and a list's status is a
 property of the list. So each is a separate trigger. See
-[List status](help://cards:working-with-cards) for how a list gets its status.
+[List status](help://boards:working-with-cards) for how a list gets its status.
 
 Reordering a card within a list is not a move. Only a change of list counts.
 

@@ -1,6 +1,6 @@
 /// <reference path="../../tinycld/server/pb_data/types.d.ts" />
 //
-// cards_cards.parent — sub-tasks, as cards that name another card.
+// boards_cards.parent — sub-tasks, as cards that name another card.
 //
 // A sub-task is an ordinary card. It keeps its own list, position, key,
 // assignees and dates, and it renders on the board like any other card; the
@@ -45,15 +45,15 @@
 // One kind covers both directions: `to = ""` is a clear, `from = ""` a set.
 migrate(
     app => {
-        const cards = app.findCollectionByNameOrId('cards_cards')
+        const cards = app.findCollectionByNameOrId('boards_cards')
         cards.fields.addAt(
             cards.fields.length,
             new Field({
-                id: 'cards_cards_parent',
+                id: 'boards_cards_parent',
                 name: 'parent',
                 type: 'relation',
                 required: false,
-                collectionId: 'pbc_cards_cards_01',
+                collectionId: 'pbc_boards_cards_01',
                 cascadeDelete: false,
                 maxSelect: 1,
             })
@@ -61,7 +61,7 @@ migrate(
         cards.fields.addAt(
             cards.fields.length,
             new Field({
-                id: 'cards_cards_subtask_total',
+                id: 'boards_cards_subtask_total',
                 name: 'subtask_total',
                 type: 'number',
                 required: false,
@@ -71,7 +71,7 @@ migrate(
         cards.fields.addAt(
             cards.fields.length,
             new Field({
-                id: 'cards_cards_subtask_done',
+                id: 'boards_cards_subtask_done',
                 name: 'subtask_done',
                 type: 'number',
                 required: false,
@@ -82,17 +82,17 @@ migrate(
         // a table scan on every card write.
         cards.indexes = [
             ...cards.indexes,
-            'CREATE INDEX `idx_cards_cards_parent` ON `cards_cards` (`parent`)',
+            'CREATE INDEX `idx_boards_cards_parent` ON `boards_cards` (`parent`)',
         ]
         app.save(cards)
 
         // Restated verbatim from 1980000000 — never re-read off a collection;
         // shipped_rules_test.go asserts on literal clauses.
         const enabled = '@request.auth.disabled != true'
-        const viaMember = 'project.cards_project_members_via_project.user ?= @request.auth.id'
+        const viaMember = 'project.boards_project_members_via_project.user ?= @request.auth.id'
         const viaWriter =
-            `${viaMember} && (project.cards_project_members_via_project.role ?= "owner"` +
-            ' || project.cards_project_members_via_project.role ?= "editor")'
+            `${viaMember} && (project.boards_project_members_via_project.role ?= "owner"` +
+            ' || project.boards_project_members_via_project.role ?= "editor")'
         const pinProject =
             '(@request.body.project:isset = false || @request.body.project = project)'
 
@@ -110,42 +110,42 @@ migrate(
             '(@request.body.parent:isset = false || @request.body.parent = ""' +
             ' || @request.body.parent.project = project)'
 
-        const cardsCol = app.findCollectionByNameOrId('cards_cards')
+        const cardsCol = app.findCollectionByNameOrId('boards_cards')
         cardsCol.createRule = `${enabled} && ${viaWriter} && ${pinParentProject}`
         cardsCol.updateRule = `${enabled} && ${viaWriter} && ${pinProject} && ${pinParentProject}`
         app.save(cardsCol)
 
-        const activity = app.findCollectionByNameOrId('cards_activity')
-        const kind = activity.fields.getById('cards_activity_kind')
+        const activity = app.findCollectionByNameOrId('boards_activity')
+        const kind = activity.fields.getById('boards_activity_kind')
         kind.values = [...kind.values, 'parent']
         app.save(activity)
     },
     app => {
-        const activity = app.findCollectionByNameOrId('cards_activity')
-        const kind = activity.fields.getById('cards_activity_kind')
+        const activity = app.findCollectionByNameOrId('boards_activity')
+        const kind = activity.fields.getById('boards_activity_kind')
         kind.values = kind.values.filter(value => value !== 'parent')
         app.save(activity)
 
         const enabled = '@request.auth.disabled != true'
-        const viaMember = 'project.cards_project_members_via_project.user ?= @request.auth.id'
+        const viaMember = 'project.boards_project_members_via_project.user ?= @request.auth.id'
         const viaWriter =
-            `${viaMember} && (project.cards_project_members_via_project.role ?= "owner"` +
-            ' || project.cards_project_members_via_project.role ?= "editor")'
+            `${viaMember} && (project.boards_project_members_via_project.role ?= "owner"` +
+            ' || project.boards_project_members_via_project.role ?= "editor")'
         const pinProject =
             '(@request.body.project:isset = false || @request.body.project = project)'
 
-        const cardsCol = app.findCollectionByNameOrId('cards_cards')
+        const cardsCol = app.findCollectionByNameOrId('boards_cards')
         cardsCol.createRule = `${enabled} && ${viaWriter}`
         cardsCol.updateRule = `${enabled} && ${viaWriter} && ${pinProject}`
         app.save(cardsCol)
 
-        const cards = app.findCollectionByNameOrId('cards_cards')
+        const cards = app.findCollectionByNameOrId('boards_cards')
         cards.indexes = cards.indexes.filter(
-            index => !index.includes('idx_cards_cards_parent')
+            index => !index.includes('idx_boards_cards_parent')
         )
-        cards.fields.removeById('cards_cards_subtask_done')
-        cards.fields.removeById('cards_cards_subtask_total')
-        cards.fields.removeById('cards_cards_parent')
+        cards.fields.removeById('boards_cards_subtask_done')
+        cards.fields.removeById('boards_cards_subtask_total')
+        cards.fields.removeById('boards_cards_parent')
         app.save(cards)
     }
 )

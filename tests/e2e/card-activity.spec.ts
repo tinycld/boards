@@ -19,7 +19,7 @@ async function freshBoard(page: Page): Promise<string> {
 }
 
 function peek(page: Page) {
-    return page.getByTestId('cards-card-peek')
+    return page.getByTestId('boards-card-peek')
 }
 
 async function openCard(page: Page, title: string) {
@@ -27,10 +27,10 @@ async function openCard(page: Page, title: string) {
     await expect(peek(page).getByText('Description', { exact: true })).toBeVisible()
 }
 
-test.describe('Cards — activity history', () => {
+test.describe('Boards — activity history', () => {
     test.beforeEach(async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
     })
 
     test('records creation, a move, an assignment and a due date in order', async ({ page }) => {
@@ -38,13 +38,13 @@ test.describe('Cards — activity history', () => {
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
 
-        await expect(peek(page).getByTestId('cards-activity-created')).toContainText(
+        await expect(peek(page).getByTestId('boards-activity-created')).toContainText(
             'created this card'
         )
 
         // Move via the list stepper's second segment.
         await peek(page).getByRole('button', { name: 'Move to Doing' }).click()
-        await expect(peek(page).getByTestId('cards-activity-moved')).toContainText(
+        await expect(peek(page).getByTestId('boards-activity-moved')).toContainText(
             'moved this from To do to Doing'
         )
 
@@ -54,31 +54,31 @@ test.describe('Cards — activity history', () => {
         // The multi-select stays open after a pick; Escape closes it. Pressing
         // Escape with the menu already gone would close the peek instead.
         if ((await page.getByRole('menuitem').count()) > 0) await page.keyboard.press('Escape')
-        await expect(peek(page).getByTestId('cards-activity-assignee_added')).toContainText(
+        await expect(peek(page).getByTestId('boards-activity-assignee_added')).toContainText(
             'assigned'
         )
 
         await peek(page).getByRole('button', { name: 'Set due date' }).click()
         await page.getByRole('button', { name: 'Tomorrow' }).click()
-        await expect(peek(page).getByTestId('cards-activity-due')).toContainText(
+        await expect(peek(page).getByTestId('boards-activity-due')).toContainText(
             'set the due date to'
         )
 
-        const rows = peek(page).locator('[data-testid^="cards-activity-"]')
+        const rows = peek(page).locator('[data-testid^="boards-activity-"]')
         await expect(rows).toHaveCount(4)
         expect(
             await rows.evaluateAll(nodes => nodes.map(n => n.getAttribute('data-testid')))
         ).toEqual([
-            'cards-activity-created',
-            'cards-activity-moved',
-            'cards-activity-assignee_added',
-            'cards-activity-due',
+            'boards-activity-created',
+            'boards-activity-moved',
+            'boards-activity-assignee_added',
+            'boards-activity-due',
         ])
 
         // Persisted, not just optimistic: navigate away in-app and back.
         await navigateToPackage(page, 'settings')
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         await openCard(page, CARD_TITLE)
-        await expect(peek(page).locator('[data-testid^="cards-activity-"]')).toHaveCount(4)
+        await expect(peek(page).locator('[data-testid^="boards-activity-"]')).toHaveCount(4)
     })
 })

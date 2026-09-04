@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"sync"
@@ -31,15 +31,15 @@ var pendingActors sync.Map // *core.Record → users id
 // actorCapturedCollections are the collections whose writes the history and
 // notification hooks attribute.
 var actorCapturedCollections = []string{
-	"cards_cards",
-	"cards_checklist_items",
-	"cards_attachments",
-	"cards_comments",
-	"cards_card_watchers",
+	"boards_cards",
+	"boards_checklist_items",
+	"boards_attachments",
+	"boards_comments",
+	"boards_card_watchers",
 	// Creating a link is attributed; REMOVING one is not, because this list
 	// only feeds create/update request hooks and there is no delete capture.
 	// See registerCardLinkActivity.
-	"cards_card_links",
+	"boards_card_links",
 }
 
 func registerActorCapture(app core.App) {

@@ -2,7 +2,7 @@
 //
 // resolvePosition reads window.innerWidth/innerHeight.
 import { beforeEach, describe, expect, it } from 'vitest'
-import { resolvePosition } from '../tinycld/cards/components/detail/MentionPopover.web'
+import { resolvePosition } from '../tinycld/boards/components/detail/MentionPopover.web'
 
 // Where the picker lands relative to the caret.
 //

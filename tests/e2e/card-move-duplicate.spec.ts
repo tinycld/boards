@@ -25,7 +25,7 @@ async function freshBoard(page: Page, key: string): Promise<string> {
 }
 
 function peek(page: Page) {
-    return page.getByTestId('cards-card-peek')
+    return page.getByTestId('boards-card-peek')
 }
 
 async function openCard(page: Page, title: string) {
@@ -44,10 +44,10 @@ async function addChecklistItems(page: Page, titles: string[]) {
     await page.keyboard.press('Escape')
 }
 
-test.describe('Cards — duplicate and move to board', () => {
+test.describe('Boards — duplicate and move to board', () => {
     test.beforeEach(async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
     })
 
     test('duplicate copies the card and its checklist beside the original', async ({ page }) => {
@@ -96,7 +96,7 @@ test.describe('Cards — duplicate and move to board', () => {
 
         await peek(page).getByRole('button', { name: 'More actions' }).click()
         await page.getByText('Move to board…', { exact: true }).click()
-        const dialog = page.getByTestId('cards-move-board-dialog')
+        const dialog = page.getByTestId('boards-move-board-dialog')
         await dialog.getByRole('radio', { name: target }).click()
         await dialog.getByRole('radio', { name: 'To do' }).click()
         await dialog.getByRole('button', { name: 'Move' }).click()
@@ -106,7 +106,7 @@ test.describe('Cards — duplicate and move to board', () => {
 
         await page.getByText(target, { exact: true }).click()
         await expect(boardCard(page, CARD_TITLE)).toBeVisible()
-        await expect(boardCard(page, CARD_TITLE).getByTestId('cards-card-key')).toContainText(
+        await expect(boardCard(page, CARD_TITLE).getByTestId('boards-card-key')).toContainText(
             /^TGT/
         )
     })

@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"sync"
@@ -27,7 +27,7 @@ import (
 func TestRecountCard_ConcurrentInsertsAreAllCounted(t *testing.T) {
 	env := setupCardsEnv(t)
 
-	env.app.OnRecordAfterCreateSuccess("cards_checklist_items").BindFunc(func(e *core.RecordEvent) error {
+	env.app.OnRecordAfterCreateSuccess("boards_checklist_items").BindFunc(func(e *core.RecordEvent) error {
 		recountCard(e.App, e.Record.GetString("card"))
 		return e.Next()
 	})

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { MANUAL_SORT } from '../tinycld/cards/lib/board-sort'
-import { buildTimeline, dayColumns, dayIndex, timelineRange } from '../tinycld/cards/lib/timeline'
-import type { BoardCardView, BoardListView, BoardProject } from '../tinycld/cards/types'
+import { MANUAL_SORT } from '../tinycld/boards/lib/board-sort'
+import { buildTimeline, dayColumns, dayIndex, timelineRange } from '../tinycld/boards/lib/timeline'
+import type { BoardCardView, BoardListView, BoardProject } from '../tinycld/boards/types'
 
 const TODAY = new Date(2026, 8, 4, 12)
 const day = (offset: number) => new Date(2026, 8, 4 + offset)

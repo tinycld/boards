@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"net/http"
@@ -15,16 +15,16 @@ import (
 //
 // TRAP 1 LIVES HERE, in the commentor cases, and nowhere else.
 // Rewriting viaWriter to drive's `role ?!= "viewer"` idiom was measured against
-// this suite: it does NOT admit a viewer (cards_project_members is UNIQUE on
+// this suite: it does NOT admit a viewer (boards_project_members is UNIQUE on
 // (project, user), so a viewer holds exactly one row and `?!= "viewer"` finds
 // no other row to match), but it DOES admit a commentor. So the correlation
 // suite — which only ever acts as a viewer — cannot see trap 1, and
 // TestCardsMatrix_CommentorCannotUpdateCard is its actual detector. Verified by
 // applying the broken rule and watching this case, and only this case, flip.
 //
-// cards_attachments is deliberately absent from the behavioural matrix: its
+// boards_attachments is deliberately absent from the behavioural matrix: its
 // create needs a multipart body, and its rule composition
-// (viaWriter + isUploader + pin) is identical to cards_comments'
+// (viaWriter + isUploader + pin) is identical to boards_comments'
 // (viaCommenter + isAuthor + pin), which is covered here. The clauses are
 // asserted in the shipped-rules table instead. Revisit with M6, which is when
 // attachments actually get built.
@@ -35,7 +35,7 @@ func TestCardsMatrix_OutsiderListsNoProjects(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method:  http.MethodGet,
-		url:     "/api/collections/cards_projects/records",
+		url:     "/api/collections/boards_projects/records",
 		token:   env.outsiderToken,
 		want:    http.StatusOK,
 		content: []string{`"totalItems":0`},
@@ -46,19 +46,19 @@ func TestCardsMatrix_OutsiderCannotViewProjectById(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodGet,
-		url:    "/api/collections/cards_projects/records/" + env.project.Id,
+		url:    "/api/collections/boards_projects/records/" + env.project.Id,
 		token:  env.outsiderToken,
 		want:   http.StatusNotFound,
 	}.run(t, env)
 }
 
-// Sharper than the project case: cards_cards.view walks the DENORMALIZED
+// Sharper than the project case: boards_cards.view walks the DENORMALIZED
 // project relation, so a bug in that back-relation shows here first.
 func TestCardsMatrix_OutsiderCannotViewCardById(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodGet,
-		url:    "/api/collections/cards_cards/records/" + env.card.Id,
+		url:    "/api/collections/boards_cards/records/" + env.card.Id,
 		token:  env.outsiderToken,
 		want:   http.StatusNotFound,
 	}.run(t, env)
@@ -68,7 +68,7 @@ func TestCardsMatrix_OutsiderCannotCreateCardOnForeignProject(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_cards/records",
+		url:    "/api/collections/boards_cards/records",
 		token:  env.outsiderToken,
 		body: `{"project":"` + env.project.Id + `","list":"` + env.list.Id +
 			`","title":"by-outsider","position":"a9","created_by":"` + env.outsider.Id + `"}`,
@@ -77,13 +77,13 @@ func TestCardsMatrix_OutsiderCannotCreateCardOnForeignProject(t *testing.T) {
 }
 
 // Positive control for every outsider deny above: the token is valid and the
-// user is not globally blocked. cards_projects.create carries no membership
+// user is not globally blocked. boards_projects.create carries no membership
 // term, so any non-guest may mint their own board.
 func TestCardsMatrix_OutsiderCanCreateOwnProject(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_projects/records",
+		url:    "/api/collections/boards_projects/records",
 		token:  env.outsiderToken,
 		body: `{"name":"outsiders-own","color":"#22c55e","visibility":"private",` +
 			`"created_by":"` + env.outsider.Id + `"}`,
@@ -98,7 +98,7 @@ func TestCardsMatrix_ViewerCanViewCard(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method:  http.MethodGet,
-		url:     "/api/collections/cards_cards/records/" + env.card.Id,
+		url:     "/api/collections/boards_cards/records/" + env.card.Id,
 		token:   env.viewerToken,
 		want:    http.StatusOK,
 		content: []string{`"title":"seeded-card"`},
@@ -109,7 +109,7 @@ func TestCardsMatrix_ViewerCanListCards(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method:  http.MethodGet,
-		url:     "/api/collections/cards_cards/records",
+		url:     "/api/collections/boards_cards/records",
 		token:   env.viewerToken,
 		want:    http.StatusOK,
 		content: []string{`"totalItems":1`},
@@ -120,7 +120,7 @@ func TestCardsMatrix_ViewerCannotCreateCard(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_cards/records",
+		url:    "/api/collections/boards_cards/records",
 		token:  env.viewerToken,
 		body: `{"project":"` + env.project.Id + `","list":"` + env.list.Id +
 			`","title":"by-viewer","position":"a9","created_by":"` + env.viewer.Id + `"}`,
@@ -132,7 +132,7 @@ func TestCardsMatrix_ViewerCannotUpdateCardTitle(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodPatch,
-		url:    "/api/collections/cards_cards/records/" + env.card.Id,
+		url:    "/api/collections/boards_cards/records/" + env.card.Id,
 		token:  env.viewerToken,
 		body:   `{"title":"renamed-by-viewer"}`,
 		want:   http.StatusNotFound,
@@ -150,7 +150,7 @@ func TestCardsMatrix_ViewerCannotRestoreCard(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodPatch,
-		url:    "/api/collections/cards_cards/records/" + env.card.Id,
+		url:    "/api/collections/boards_cards/records/" + env.card.Id,
 		token:  env.viewerToken,
 		body:   `{"archived":false}`,
 		want:   http.StatusNotFound,
@@ -161,7 +161,7 @@ func TestCardsMatrix_ViewerCannotSetPriority(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodPatch,
-		url:    "/api/collections/cards_cards/records/" + env.card.Id,
+		url:    "/api/collections/boards_cards/records/" + env.card.Id,
 		token:  env.viewerToken,
 		body:   `{"priority":"urgent"}`,
 		want:   http.StatusNotFound,
@@ -172,12 +172,12 @@ func TestCardsMatrix_ViewerCannotMoveCard(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodPatch,
-		url:    "/api/collections/cards_cards/records/" + env.card.Id,
+		url:    "/api/collections/boards_cards/records/" + env.card.Id,
 		token:  env.viewerToken,
 		body:   `{"list":"` + env.list2.Id + `","position":"a5"}`,
 		want:   http.StatusNotFound,
 		after: func(t testingTB, app testApp) {
-			fresh, err := app.FindRecordById("cards_cards", env.card.Id)
+			fresh, err := app.FindRecordById("boards_cards", env.card.Id)
 			if err != nil {
 				t.Fatalf("re-read card: %v", err)
 			}
@@ -192,7 +192,7 @@ func TestCardsMatrix_ViewerCannotDeleteCard(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodDelete,
-		url:    "/api/collections/cards_cards/records/" + env.card.Id,
+		url:    "/api/collections/boards_cards/records/" + env.card.Id,
 		token:  env.viewerToken,
 		want:   http.StatusNotFound,
 	}.run(t, env)
@@ -203,7 +203,7 @@ func TestCardsMatrix_ViewerCannotComment(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_comments/records",
+		url:    "/api/collections/boards_comments/records",
 		token:  env.viewerToken,
 		body: `{"project":"` + env.project.Id + `","card":"` + env.card.Id +
 			`","body":"by-viewer"}`,
@@ -217,7 +217,7 @@ func TestCardsMatrix_CommentorCanCreateComment(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_comments/records",
+		url:    "/api/collections/boards_comments/records",
 		token:  env.commentorToken,
 		body: `{"project":"` + env.project.Id + `","card":"` + env.card.Id +
 			`","author":"` + env.commentor.Id + `","body":"by-commentor"}`,
@@ -232,7 +232,7 @@ func TestCardsMatrix_CommentorCannotForgeCommentAuthor(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_comments/records",
+		url:    "/api/collections/boards_comments/records",
 		token:  env.commentorToken,
 		body: `{"project":"` + env.project.Id + `","card":"` + env.card.Id +
 			`","author":"` + env.editor.Id + `","body":"forged"}`,
@@ -245,13 +245,13 @@ func TestCardsMatrix_CommentorCannotForgeCommentAuthor(t *testing.T) {
 // A commentor reads and comments; it never edits. Drive's updateRule once said
 // `role ?!= "viewer"` — "any role that is not viewer" — which admitted
 // commentor the day the role was added to the schema. Measured: rewriting
-// cards' viaWriter to that idiom leaves every other test in this package green
+// boards' viaWriter to that idiom leaves every other test in this package green
 // and flips exactly this one.
 func TestCardsMatrix_CommentorCannotUpdateCard(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodPatch,
-		url:    "/api/collections/cards_cards/records/" + env.card.Id,
+		url:    "/api/collections/boards_cards/records/" + env.card.Id,
 		token:  env.commentorToken,
 		body:   `{"title":"renamed-by-commentor"}`,
 		want:   http.StatusNotFound,
@@ -263,7 +263,7 @@ func TestCardsMatrix_CommentorCannotMoveCard(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodPatch,
-		url:    "/api/collections/cards_cards/records/" + env.card.Id,
+		url:    "/api/collections/boards_cards/records/" + env.card.Id,
 		token:  env.commentorToken,
 		body:   `{"list":"` + env.list2.Id + `","position":"a5"}`,
 		want:   http.StatusNotFound,
@@ -276,7 +276,7 @@ func TestCardsMatrix_CommentorCanViewCard(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method:  http.MethodGet,
-		url:     "/api/collections/cards_cards/records/" + env.card.Id,
+		url:     "/api/collections/boards_cards/records/" + env.card.Id,
 		token:   env.commentorToken,
 		want:    http.StatusOK,
 		content: []string{`"title":"seeded-card"`},
@@ -289,7 +289,7 @@ func TestCardsMatrix_EditorCanCreateCard(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_cards/records",
+		url:    "/api/collections/boards_cards/records",
 		token:  env.editorToken,
 		body: `{"project":"` + env.project.Id + `","list":"` + env.list.Id +
 			`","title":"by-editor","position":"a9","created_by":"` + env.editor.Id + `"}`,
@@ -304,7 +304,7 @@ func TestCardsMatrix_EditorCanUpdateCardTitle(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method:  http.MethodPatch,
-		url:     "/api/collections/cards_cards/records/" + env.card.Id,
+		url:     "/api/collections/boards_cards/records/" + env.card.Id,
 		token:   env.editorToken,
 		body:    `{"title":"renamed-by-editor"}`,
 		want:    http.StatusOK,
@@ -319,7 +319,7 @@ func TestCardsMatrix_EditorCanSetPriority(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method:  http.MethodPatch,
-		url:     "/api/collections/cards_cards/records/" + env.card.Id,
+		url:     "/api/collections/boards_cards/records/" + env.card.Id,
 		token:   env.editorToken,
 		body:    `{"priority":"urgent"}`,
 		want:    http.StatusOK,
@@ -333,7 +333,7 @@ func TestCardsMatrix_EditorPriorityMustBeInTheEnum(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodPatch,
-		url:    "/api/collections/cards_cards/records/" + env.card.Id,
+		url:    "/api/collections/boards_cards/records/" + env.card.Id,
 		token:  env.editorToken,
 		body:   `{"priority":"blocker"}`,
 		want:   http.StatusBadRequest,
@@ -344,7 +344,7 @@ func TestCardsMatrix_EditorCanMoveCard(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method:  http.MethodPatch,
-		url:     "/api/collections/cards_cards/records/" + env.card.Id,
+		url:     "/api/collections/boards_cards/records/" + env.card.Id,
 		token:   env.editorToken,
 		body:    `{"list":"` + env.list2.Id + `","position":"a5"}`,
 		want:    http.StatusOK,
@@ -356,12 +356,12 @@ func TestCardsMatrix_EditorCannotRenameProject(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodPatch,
-		url:    "/api/collections/cards_projects/records/" + env.project.Id,
+		url:    "/api/collections/boards_projects/records/" + env.project.Id,
 		token:  env.editorToken,
 		body:   `{"name":"renamed-by-editor"}`,
 		want:   http.StatusNotFound,
 		after: func(t testingTB, app testApp) {
-			fresh, err := app.FindRecordById("cards_projects", env.project.Id)
+			fresh, err := app.FindRecordById("boards_projects", env.project.Id)
 			if err != nil {
 				t.Fatalf("re-read project: %v", err)
 			}
@@ -376,7 +376,7 @@ func TestCardsMatrix_EditorCannotDeleteProject(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodDelete,
-		url:    "/api/collections/cards_projects/records/" + env.project.Id,
+		url:    "/api/collections/boards_projects/records/" + env.project.Id,
 		token:  env.editorToken,
 		want:   http.StatusNotFound,
 	}.run(t, env)
@@ -388,7 +388,7 @@ func TestCardsMatrix_EditorCannotMintShareLink(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_share_links/records",
+		url:    "/api/collections/boards_share_links/records",
 		token:  env.editorToken,
 		body: `{"project":"` + env.project.Id + `","token":"` + longToken +
 			`","role":"editor","created_by":"` + env.editor.Id + `","is_active":true}`,
@@ -403,7 +403,7 @@ func TestCardsMatrix_EditorCannotAddAMember(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_project_members/records",
+		url:    "/api/collections/boards_project_members/records",
 		token:  env.editorToken,
 		body: `{"project":"` + env.project.Id + `","user":"` + env.outsider.Id +
 			`","role":"viewer"}`,
@@ -417,7 +417,7 @@ func TestCardsMatrix_OwnerCanRenameProject(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method:  http.MethodPatch,
-		url:     "/api/collections/cards_projects/records/" + env.project.Id,
+		url:     "/api/collections/boards_projects/records/" + env.project.Id,
 		token:   env.ownerToken,
 		body:    `{"name":"renamed-by-owner"}`,
 		want:    http.StatusOK,
@@ -429,7 +429,7 @@ func TestCardsMatrix_OwnerCanAddAMember(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_project_members/records",
+		url:    "/api/collections/boards_project_members/records",
 		token:  env.ownerToken,
 		body: `{"project":"` + env.project.Id + `","user":"` + env.outsider.Id +
 			`","role":"viewer"}`,
@@ -442,7 +442,7 @@ func TestCardsMatrix_OwnerCanMintShareLink(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_share_links/records",
+		url:    "/api/collections/boards_share_links/records",
 		token:  env.ownerToken,
 		body: `{"project":"` + env.project.Id + `","token":"` + longToken +
 			`","role":"viewer","created_by":"` + env.owner.Id + `","is_active":true}`,
@@ -457,7 +457,7 @@ func TestCardsMatrix_OwnerCanUpdateCard(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method:  http.MethodPatch,
-		url:     "/api/collections/cards_cards/records/" + env.card.Id,
+		url:     "/api/collections/boards_cards/records/" + env.card.Id,
 		token:   env.ownerToken,
 		body:    `{"title":"renamed-by-owner"}`,
 		want:    http.StatusOK,

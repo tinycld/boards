@@ -20,7 +20,7 @@ async function freshBoard(page: Page): Promise<string> {
 }
 
 function peek(page: Page) {
-    return page.getByTestId('cards-card-peek')
+    return page.getByTestId('boards-card-peek')
 }
 
 async function openCard(page: Page, title: string) {
@@ -32,10 +32,10 @@ async function openBoardMenu(page: Page) {
     await page.getByRole('button', { name: 'Board actions' }).click()
 }
 
-test.describe('Cards — archive and restore', () => {
+test.describe('Boards — archive and restore', () => {
     test.beforeEach(async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
     })
 
     test('an archived card is listed in the panel and restored to its column', async ({ page }) => {
@@ -46,15 +46,15 @@ test.describe('Cards — archive and restore', () => {
         await page.getByText('Archive card', { exact: true }).click()
         await expect(boardCard(page, CARD_TITLE)).toHaveCount(0)
 
-        await page.getByTestId('cards-archived-button').click()
-        const panel = page.getByTestId('cards-archived-panel')
+        await page.getByTestId('boards-archived-button').click()
+        const panel = page.getByTestId('boards-archived-panel')
         await expect(panel).toBeVisible()
-        const row = panel.locator('[data-testid^="cards-archived-row-"]').first()
+        const row = panel.locator('[data-testid^="boards-archived-row-"]').first()
         await expect(row).toContainText(CARD_TITLE)
         await expect(row).toContainText('To do')
 
         await row.getByRole('button', { name: `Restore ${CARD_TITLE}` }).click()
-        await expect(panel.locator('[data-testid^="cards-archived-row-"]')).toHaveCount(0)
+        await expect(panel.locator('[data-testid^="boards-archived-row-"]')).toHaveCount(0)
         await panel.getByRole('button', { name: 'Close' }).click()
         expect(await cardsInColumn(page, 'To do')).toContain(CARD_TITLE)
     })
@@ -66,11 +66,11 @@ test.describe('Cards — archive and restore', () => {
         await peek(page).getByRole('button', { name: 'More actions' }).click()
         await page.getByText('Archive card', { exact: true }).click()
 
-        await page.getByTestId('cards-archived-button').click()
-        const panel = page.getByTestId('cards-archived-panel')
+        await page.getByTestId('boards-archived-button').click()
+        const panel = page.getByTestId('boards-archived-panel')
         await panel.getByRole('button', { name: `Delete ${CARD_TITLE}` }).click()
         await page.getByRole('button', { name: 'Delete', exact: true }).click()
-        await expect(panel.locator('[data-testid^="cards-archived-row-"]')).toHaveCount(0)
+        await expect(panel.locator('[data-testid^="boards-archived-row-"]')).toHaveCount(0)
         await expect(panel).toContainText('Nothing here')
     })
 
@@ -82,16 +82,16 @@ test.describe('Cards — archive and restore', () => {
         await page.getByText('Archive board', { exact: true }).click()
         await page.getByRole('button', { name: 'Archive', exact: true }).click()
 
-        const archivedToggle = page.getByTestId('cards-archived-boards')
+        const archivedToggle = page.getByTestId('boards-archived-boards')
         await expect(archivedToggle).toBeVisible()
         await archivedToggle.click()
         await page.getByText(name, { exact: true }).click()
 
-        const banner = page.getByTestId('cards-archived-banner')
+        const banner = page.getByTestId('boards-archived-banner')
         await expect(banner).toBeVisible()
         await banner.getByRole('button', { name: 'Restore board' }).click()
         await expect(banner).toHaveCount(0)
-        await expect(page.getByTestId('cards-archived-boards')).toHaveCount(0)
+        await expect(page.getByTestId('boards-archived-boards')).toHaveCount(0)
     })
 
     test('deleting a board requires its name and removes it from the sidebar', async ({ page }) => {
@@ -100,7 +100,7 @@ test.describe('Cards — archive and restore', () => {
         await openBoardMenu(page)
         await page.getByText('Delete board…', { exact: true }).click()
 
-        const dialog = page.getByTestId('cards-delete-board-dialog')
+        const dialog = page.getByTestId('boards-delete-board-dialog')
         await expect(dialog).toContainText('3 lists, 1 card')
         const confirm = dialog.getByRole('button', { name: 'Delete board' })
         await expect(confirm).toBeDisabled()

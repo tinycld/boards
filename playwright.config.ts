@@ -8,16 +8,16 @@ import appConfig from '@tinycld/core/playwright-config'
 // keeps node resolution walking up into the app shell's install, so
 // @playwright/test and other deps resolve there — not from a (nonexistent)
 // local node_modules.
-// The @tinycld/cards symlink lives in the workspace-root node_modules (deps
+// The @tinycld/boards symlink lives in the workspace-root node_modules (deps
 // hoist there in this layout). Routing testDir through it keeps node resolution
 // walking up into the install where @playwright/test lives.
 const WS_ROOT = path.resolve(import.meta.dirname, '..')
-const TEST_DIR = path.join(WS_ROOT, 'node_modules', '@tinycld', 'cards', 'tests', 'e2e')
+const TEST_DIR = path.join(WS_ROOT, 'node_modules', '@tinycld', 'boards', 'tests', 'e2e')
 
 export default defineConfig({
     ...appConfig,
     testDir: TEST_DIR,
-    // Two workers, cards only, as an experiment.
+    // Two workers, boards only, as an experiment.
     //
     // Playwright resolves `workers` to 50% OF CPUS by default — not a CI
     // special case, whatever the folklore says; see resolveWorkers in its

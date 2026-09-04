@@ -42,8 +42,8 @@ a Done list; a list you add is To do until you say otherwise.
 Cards in a **Done** list show a green check and lose their details; cards in a
 **Canceled** list show a cross and a struck-through title. Both are *closed*:
 they get no due-date reminders, never count as overdue, and stay out of
-[My cards](help://cards:my-cards) unless you ask for them. Moving a card into
-a Done list fires the **A card is completed** [rule](help://cards:rules);
+[My cards](help://boards:my-cards) unless you ask for them. Moving a card into
+a Done list fires the **A card is completed** [rule](help://boards:rules);
 moving one into a Canceled list fires **A card is canceled**.
 
 **Backlog** and **In progress** are for scanning and filtering — a due date on
@@ -53,7 +53,7 @@ a backlog card still reminds you, since you set it on purpose.
 
 The filter and sort icons in the board's top bar narrow the board to the cards
 you care about and order each list — see
-[Filtering and sorting a board](help://cards:filtering-and-sorting).
+[Filtering and sorting a board](help://boards:filtering-and-sorting).
 
 ## Making room on a busy board
 
@@ -99,7 +99,7 @@ which cards on the board are part of something larger. Click the row in the
 parent's Sub-tasks section to open one.
 
 For a larger piece of work spanning many separate cards rather than one card's
-own pieces, use an [epic](help://cards:epics) instead.
+own pieces, use an [epic](help://boards:epics) instead.
 
 **Sub-tasks or a checklist?** A checklist item is a line of text that lives on
 one card — right for "don't forget these five steps". A sub-task is a card, so
@@ -187,9 +187,9 @@ to type one — `14:30`, `2:30 pm` and `9` all work. A timed deadline is late
 the minute it passes rather than the next morning, and it lands on the
 calendar at its time rather than as an all-day item. **Clear time** turns it
 back into a plain day. Both dates appear in the card's history and in the
-[timeline view](help://cards:filtering-and-sorting).
+[timeline view](help://boards:filtering-and-sorting).
 
-To add a file, see [Attaching files to cards](help://cards:attaching-files).
+To add a file, see [Attaching files to cards](help://boards:attaching-files).
 
 ## Card priority
 
@@ -204,7 +204,7 @@ medium and low. Cards without a priority show nothing, so a board where only
 the important cards are marked stays easy to scan. The glyph is kept when you
 hide card details.
 
-Priority is also available to [board rules](help://cards:rules): a rule can
+Priority is also available to [board rules](help://boards:rules): a rule can
 react when a card's priority changes, and can set a card's priority as its
 action.
 
@@ -221,7 +221,7 @@ that hides half a column also halves its total. Lists with nothing estimated
 show no total at all.
 
 You can sort a list by estimate and filter the board to estimated or
-unestimated cards; see [Filtering and sorting](help://cards:filtering-and-sorting).
+unestimated cards; see [Filtering and sorting](help://boards:filtering-and-sorting).
 Setting or clearing an estimate is recorded in the card's history.
 
 ## Who to ask about a card
@@ -259,7 +259,7 @@ card's image attachments — or upload a new one from the same dialog. On a
 computer you can also drop an image file straight onto the description, and it
 lands where you dropped it. Either way the picture is stored as a card
 attachment, so it also appears in the Attachments section and follows the same
-rules described in [Attaching files to cards](help://cards:attaching-files).
+rules described in [Attaching files to cards](help://boards:attaching-files).
 
 There is no save button: every change is kept as you type. Esc leaves the
 description without discarding anything, and plain Enter starts a new line,
@@ -357,7 +357,7 @@ you can select and copy it. The link button beside it copies a web address that
 opens the card on its board.
 
 You can also open a card straight from its key. Put it in the address bar after
-your board's web address — `{{server-host}}/cards/OTTER-1` — and the card
+your board's web address — `{{server-host}}/boards/OTTER-1` — and the card
 opens, even if you were last looking at a different board. Opening a card this
 way does not switch the board you have open; use the back button to return to
 where you were.
@@ -391,7 +391,7 @@ stops working.
 
 A card you archived is not gone: the archive icon in the board's top bar opens
 the list of archived cards, where it can be restored or deleted for good. See
-[Archiving and deleting](help://cards:archiving-and-deleting).
+[Archiving and deleting](help://boards:archiving-and-deleting).
 
 ## Finding a card
 
@@ -451,10 +451,10 @@ for jumping between apps.
 
 Boards, lists and cards are all reachable from the `tinycld` command line, which
 is the quicker path for bulk edits and for scripting a board from another tool —
-see [Cards from the command line](help://cards:command-line).
+see [Boards from the command line](help://boards:command-line).
 
 ## Missing a button?
 
 What you can do on a board depends on your role there. If you can't add or
 edit cards, you're likely a viewer or commentor — see
-[Sharing boards](help://cards:sharing-boards).
+[Sharing boards](help://boards:sharing-boards).

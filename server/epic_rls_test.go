@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"net/http"
@@ -8,7 +8,7 @@ import (
 	"github.com/pocketbase/pocketbase/tests"
 )
 
-// cards_epics' own rules, and the same-board invariant on cards_cards.epic.
+// boards_epics' own rules, and the same-board invariant on boards_cards.epic.
 //
 // The epic pin is the parent pin one collection over, and it protects the same
 // thing: an editor who belongs to two boards could otherwise file a card on
@@ -22,13 +22,13 @@ import (
 //	 || @request.body.epic = ""           -- clearing an epic
 //	 || @request.body.epic.project = project)
 //
-// The collection's own rules are cards_labels': members read, writers write.
+// The collection's own rules are boards_labels': members read, writers write.
 
 func cardsEpic(t *testing.T, app core.App, project *core.Record, title, position string) *core.Record {
 	t.Helper()
-	col, err := app.FindCollectionByNameOrId("cards_epics")
+	col, err := app.FindCollectionByNameOrId("boards_epics")
 	if err != nil {
-		t.Fatalf("find cards_epics: %v", err)
+		t.Fatalf("find boards_epics: %v", err)
 	}
 	r := core.NewRecord(col)
 	r.Set("project", project.Id)
@@ -42,7 +42,7 @@ func cardsEpic(t *testing.T, app core.App, project *core.Record, title, position
 
 func requireCardEpic(cardID, want string) func(t testing.TB, app *tests.TestApp) {
 	return func(t testing.TB, app *tests.TestApp) {
-		card, err := app.FindRecordById("cards_cards", cardID)
+		card, err := app.FindRecordById("boards_cards", cardID)
 		if err != nil {
 			t.Fatalf("reload card: %v", err)
 		}
@@ -58,7 +58,7 @@ func TestCardsEpicRLS_EditorCanFileWithinTheBoard(t *testing.T) {
 
 	req{
 		method:  http.MethodPatch,
-		url:     "/api/collections/cards_cards/records/" + env.card.Id,
+		url:     "/api/collections/boards_cards/records/" + env.card.Id,
 		token:   env.editorToken,
 		body:    `{"epic":"` + epic.Id + `"}`,
 		want:    http.StatusOK,
@@ -81,7 +81,7 @@ func TestCardsEpicRLS_EditorCannotFileOntoAnotherBoardsEpic(t *testing.T) {
 
 	req{
 		method: http.MethodPatch,
-		url:    "/api/collections/cards_cards/records/" + env.card.Id,
+		url:    "/api/collections/boards_cards/records/" + env.card.Id,
 		token:  env.editorToken,
 		body:   `{"epic":"` + foreign.Id + `"}`,
 		want:   http.StatusNotFound,
@@ -101,7 +101,7 @@ func TestCardsEpicRLS_CannotCreateWithAForeignEpic(t *testing.T) {
 
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_cards/records",
+		url:    "/api/collections/boards_cards/records",
 		token:  env.editorToken,
 		body: `{"project":"` + env.project.Id + `","list":"` + env.list.Id +
 			`","title":"smuggled","position":"a9","epic":"` + foreign.Id + `"}`,
@@ -121,7 +121,7 @@ func TestCardsEpicRLS_EditorCanClearAnEpic(t *testing.T) {
 
 	req{
 		method:  http.MethodPatch,
-		url:     "/api/collections/cards_cards/records/" + env.card.Id,
+		url:     "/api/collections/boards_cards/records/" + env.card.Id,
 		token:   env.editorToken,
 		body:    `{"epic":""}`,
 		want:    http.StatusOK,
@@ -143,7 +143,7 @@ func TestCardsEpicRLS_AnEditWithoutEpicIsUnaffected(t *testing.T) {
 
 	req{
 		method:  http.MethodPatch,
-		url:     "/api/collections/cards_cards/records/" + env.card.Id,
+		url:     "/api/collections/boards_cards/records/" + env.card.Id,
 		token:   env.editorToken,
 		body:    `{"title":"renamed"}`,
 		want:    http.StatusOK,
@@ -159,7 +159,7 @@ func TestCardsEpicRLS_CommentorCannotFile(t *testing.T) {
 
 	req{
 		method: http.MethodPatch,
-		url:    "/api/collections/cards_cards/records/" + env.card.Id,
+		url:    "/api/collections/boards_cards/records/" + env.card.Id,
 		token:  env.commentorToken,
 		body:   `{"epic":"` + epic.Id + `"}`,
 		want:   http.StatusNotFound,
@@ -167,7 +167,7 @@ func TestCardsEpicRLS_CommentorCannotFile(t *testing.T) {
 	}.run(t, env)
 }
 
-// The collection's own rules — cards_labels': members read, writers write.
+// The collection's own rules — boards_labels': members read, writers write.
 
 func TestCardsEpicRLS_ViewerReadsAnEpic(t *testing.T) {
 	env := setupCardsEnv(t)
@@ -175,7 +175,7 @@ func TestCardsEpicRLS_ViewerReadsAnEpic(t *testing.T) {
 
 	req{
 		method:  http.MethodGet,
-		url:     "/api/collections/cards_epics/records/" + epic.Id,
+		url:     "/api/collections/boards_epics/records/" + epic.Id,
 		token:   env.viewerToken,
 		want:    http.StatusOK,
 		content: []string{`"title":"Authentication"`},
@@ -187,7 +187,7 @@ func TestCardsEpicRLS_EditorCreatesAnEpic(t *testing.T) {
 
 	req{
 		method:  http.MethodPost,
-		url:     "/api/collections/cards_epics/records",
+		url:     "/api/collections/boards_epics/records",
 		token:   env.editorToken,
 		body:    `{"project":"` + env.project.Id + `","title":"Billing","position":"a1"}`,
 		want:    http.StatusOK,
@@ -195,13 +195,13 @@ func TestCardsEpicRLS_EditorCreatesAnEpic(t *testing.T) {
 	}.run(t, env)
 }
 
-// A viewer reads but does not write — the cards_labels split.
+// A viewer reads but does not write — the boards_labels split.
 func TestCardsEpicRLS_ViewerCannotCreateAnEpic(t *testing.T) {
 	env := setupCardsEnv(t)
 
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_epics/records",
+		url:    "/api/collections/boards_epics/records",
 		token:  env.viewerToken,
 		body:   `{"project":"` + env.project.Id + `","title":"Nope","position":"a2"}`,
 		want:   http.StatusBadRequest,
@@ -214,7 +214,7 @@ func TestCardsEpicRLS_OutsiderReadsNothing(t *testing.T) {
 
 	req{
 		method: http.MethodGet,
-		url:    "/api/collections/cards_epics/records/" + epic.Id,
+		url:    "/api/collections/boards_epics/records/" + epic.Id,
 		token:  env.outsiderToken,
 		want:   http.StatusNotFound,
 	}.run(t, env)
@@ -232,7 +232,7 @@ func TestCardsEpicRLS_CannotRepointAnEpicToAnotherBoard(t *testing.T) {
 
 	req{
 		method: http.MethodPatch,
-		url:    "/api/collections/cards_epics/records/" + epic.Id,
+		url:    "/api/collections/boards_epics/records/" + epic.Id,
 		token:  env.editorToken,
 		body:   `{"project":"` + other.Id + `"}`,
 		want:   http.StatusNotFound,

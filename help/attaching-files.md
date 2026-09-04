@@ -20,7 +20,7 @@ finishes.
 
 An image dropped onto a card's *description* does a little more: it uploads as
 an attachment and appears in the text right where you dropped it. See
-[Working with cards](help://cards:working-with-cards) for the rest of the
+[Working with cards](help://boards:working-with-cards) for the rest of the
 description editor.
 
 Each file uploads with a progress bar, so you can see how far a large one has
@@ -65,7 +65,7 @@ Deleting a card deletes its attachments too — the confirmation says so.
 ## What each role can do
 
 Attachments follow the same roles as the rest of a board, described in
-[Sharing boards](help://cards:sharing-boards):
+[Sharing boards](help://boards:sharing-boards):
 
 - **Owners** and **editors** can attach files. An owner can delete any
   attachment; an editor can rename or delete the ones they uploaded.

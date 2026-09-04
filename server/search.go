@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"fmt"
@@ -17,17 +17,17 @@ import (
 // from the same code rather than from two copies that drift.
 //
 // It reuses ftsConfig — the same value driving the index-sync hooks and
-// /api/cards/search — so the search surface cannot diverge from the index.
+// /api/boards/search — so the search surface cannot diverge from the index.
 func searchSource() search.Source {
 	return search.Source{
-		Slug:  "cards",
-		Label: "Cards",
+		Slug:  "boards",
+		Label: "Boards",
 		// Mirrors manifest.ts nav.order, which is the cross-package ranking
 		// tie-break. Out of step with the manifest, cards would sort wrongly
 		// against other packages but nothing would fail — hence the comment
 		// rather than a lookup: there is no Go-visible copy of the manifest.
 		Order:  25,
-		Scopes: []string{"cards:read"},
+		Scopes: []string{"boards:read"},
 		Search: searchCards,
 	}
 }
@@ -47,7 +47,7 @@ func searchCards(app core.App, userID string, q search.Query) (search.Result, er
 	// reach — those come from the searched collection alone. One batched lookup
 	// for the page rather than widening the fts join: a page of hits spans a
 	// handful of boards at most, and a second collection in that join would
-	// push a cards-specific shape into core's generic query.
+	// push a boards-specific shape into core's generic query.
 	slugs := projectSlugs(app, hits)
 
 	rows := make([]search.Row, 0, len(hits))
@@ -107,7 +107,7 @@ func projectSlugs(app core.App, hits []fts.SearchResult) map[string]string {
 	var rows []row
 	if err := app.DB().
 		Select("id", "slug").
-		From("cards_projects").
+		From("boards_projects").
 		Where(dbx.In("id", ids...)).
 		All(&rows); err != nil {
 		app.Logger().Warn("cards: search slug lookup failed", "error", err)
@@ -122,7 +122,7 @@ func projectSlugs(app core.App, hits []fts.SearchResult) map[string]string {
 }
 
 // formatCardKey renders OTTER-123 — the third copy of this two-line grammar,
-// alongside cli/key.go and tinycld/cards/lib/card-key.ts. The CLI and the
+// alongside cli/key.go and tinycld/boards/lib/card-key.ts. The CLI and the
 // server are separate Go modules, so sharing one implementation would cost more
 // than the duplication does; keep the three in step by hand.
 func formatCardKey(slug string, number int) string {

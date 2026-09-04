@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	"github.com/pocketbase/pocketbase/tools/types"
 )
 
-// cards_cards.archived_at — the server-owned stamp behind the archived-items
+// boards_cards.archived_at — the server-owned stamp behind the archived-items
 // panel. These bind registerCardArchivedAt itself, so they cover the shipped
 // hook rather than a paraphrase of it.
 
@@ -19,7 +19,7 @@ func TestCardArchivedAt_ArchivingStampsAndRestoringClears(t *testing.T) {
 		t.Fatalf("archived_at = %v on a live card, want zero", got)
 	}
 
-	fresh, err := env.app.FindRecordById("cards_cards", env.card.Id)
+	fresh, err := env.app.FindRecordById("boards_cards", env.card.Id)
 	if err != nil {
 		t.Fatalf("reload card: %v", err)
 	}
@@ -35,7 +35,7 @@ func TestCardArchivedAt_ArchivingStampsAndRestoringClears(t *testing.T) {
 		t.Errorf("archived_at = %v, want approximately now", stamped)
 	}
 
-	fresh, err = env.app.FindRecordById("cards_cards", env.card.Id)
+	fresh, err = env.app.FindRecordById("boards_cards", env.card.Id)
 	if err != nil {
 		t.Fatalf("reload card: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestCardArchivedAt_UnchangedFlagCannotForgeOrErase(t *testing.T) {
 	registerCardArchivedAt(env.app)
 
 	// Forge on a live card: a title edit carrying a stamp.
-	fresh, err := env.app.FindRecordById("cards_cards", env.card.Id)
+	fresh, err := env.app.FindRecordById("boards_cards", env.card.Id)
 	if err != nil {
 		t.Fatalf("reload card: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestCardArchivedAt_UnchangedFlagCannotForgeOrErase(t *testing.T) {
 
 	// Erase on an archived card: archive for real, then an unrelated update
 	// carrying ''.
-	fresh, err = env.app.FindRecordById("cards_cards", env.card.Id)
+	fresh, err = env.app.FindRecordById("boards_cards", env.card.Id)
 	if err != nil {
 		t.Fatalf("reload card: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestCardArchivedAt_UnchangedFlagCannotForgeOrErase(t *testing.T) {
 		t.Fatalf("archived_at zero after archiving")
 	}
 
-	fresh, err = env.app.FindRecordById("cards_cards", env.card.Id)
+	fresh, err = env.app.FindRecordById("boards_cards", env.card.Id)
 	if err != nil {
 		t.Fatalf("reload card: %v", err)
 	}

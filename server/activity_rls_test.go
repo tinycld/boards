@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"net/http"
@@ -7,12 +7,12 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 )
 
-// cards_activity access: members read, share-link visitors read, nobody
+// boards_activity access: members read, share-link visitors read, nobody
 // writes through the API. No hooks bound — this measures the shipped rules.
 
 func seedActivityRow(t *testing.T, app core.App, env *cardsEnv) *core.Record {
 	t.Helper()
-	col, err := app.FindCollectionByNameOrId("cards_activity")
+	col, err := app.FindCollectionByNameOrId("boards_activity")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func TestActivityRLS_ViewerCanList(t *testing.T) {
 	seedActivityRow(t, env.app, env)
 	req{
 		method:  http.MethodGet,
-		url:     "/api/collections/cards_activity/records",
+		url:     "/api/collections/boards_activity/records",
 		token:   env.viewerToken,
 		want:    http.StatusOK,
 		content: []string{`"totalItems":1`, `"kind":"created"`},
@@ -44,7 +44,7 @@ func TestActivityRLS_OutsiderSeesNothing(t *testing.T) {
 	seedActivityRow(t, env.app, env)
 	req{
 		method:  http.MethodGet,
-		url:     "/api/collections/cards_activity/records",
+		url:     "/api/collections/boards_activity/records",
 		token:   env.outsiderToken,
 		want:    http.StatusOK,
 		content: []string{`"totalItems":0`},
@@ -55,7 +55,7 @@ func TestActivityRLS_ClientCannotCreate(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_activity/records",
+		url:    "/api/collections/boards_activity/records",
 		token:  env.ownerToken,
 		body: `{"project":"` + env.project.Id + `","card":"` + env.card.Id +
 			`","actor":"` + env.owner.Id + `","kind":"created"}`,
@@ -73,7 +73,7 @@ func TestActivityRLS_ClientCannotUpdate(t *testing.T) {
 	row := seedActivityRow(t, env.app, env)
 	req{
 		method: http.MethodPatch,
-		url:    "/api/collections/cards_activity/records/" + row.Id,
+		url:    "/api/collections/boards_activity/records/" + row.Id,
 		token:  env.ownerToken,
 		body:   `{"kind":"moved"}`,
 		// Superuser-only, so 403 (see ClientCannotCreate).
@@ -86,7 +86,7 @@ func TestActivityRLS_ClientCannotDelete(t *testing.T) {
 	row := seedActivityRow(t, env.app, env)
 	req{
 		method: http.MethodDelete,
-		url:    "/api/collections/cards_activity/records/" + row.Id,
+		url:    "/api/collections/boards_activity/records/" + row.Id,
 		token:  env.ownerToken,
 		want:   http.StatusForbidden,
 	}.run(t, env)

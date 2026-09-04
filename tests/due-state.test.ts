@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dueStateFor, formatDueDate } from '../tinycld/cards/lib/due-state'
+import { dueStateFor, formatDueDate } from '../tinycld/boards/lib/due-state'
 
 // LOCAL noon, not a Z instant: a due date names a calendar day, and building
 // the fixtures in UTC would make every case here depend on the runner's

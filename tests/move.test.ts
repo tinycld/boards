@@ -4,8 +4,8 @@ import {
     rankForInsert,
     rankForPrepend,
     rankForReorder,
-} from '../tinycld/cards/lib/move'
-import { initialRanks } from '../tinycld/cards/lib/rank'
+} from '../tinycld/boards/lib/move'
+import { initialRanks } from '../tinycld/boards/lib/rank'
 
 // Ranks are opaque strings (lib/rank.ts), so every assertion here is about
 // ORDERING against the column's neighbours — never about the key's shape.

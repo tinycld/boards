@@ -5,7 +5,7 @@ tags: [my cards, assigned, search, boards]
 order: 35
 ---
 
-**My cards**, at the top of the Cards sidebar, lists the cards that are yours
+**My cards**, at the top of the Boards sidebar, lists the cards that are yours
 across every board you belong to — no need to visit each board in turn.
 
 ## Choosing what counts as yours

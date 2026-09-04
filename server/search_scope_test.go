@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"testing"
@@ -8,8 +8,8 @@ import (
 	"tinycld.org/core/fts"
 )
 
-// setupSearchApp builds the minimal schema fts.Search reads for cards: users
-// with a `disabled` flag, cards_projects, cards_project_members, cards_cards,
+// setupSearchApp builds the minimal schema fts.Search reads for boards: users
+// with a `disabled` flag, boards_projects, boards_project_members, boards_cards,
 // and the FTS virtual table.
 func setupSearchApp(t *testing.T) *tests.TestApp {
 	t.Helper()
@@ -28,7 +28,7 @@ func setupSearchApp(t *testing.T) *tests.TestApp {
 		t.Fatal(err)
 	}
 
-	projects := core.NewBaseCollection("cards_projects")
+	projects := core.NewBaseCollection("boards_projects")
 	projects.Fields.Add(&core.TextField{Name: "name"})
 	// projectSlugs reads this to build each row's key. A board with no slug is
 	// a legitimate shape, so the fixtures leave it empty and the rows simply
@@ -39,20 +39,20 @@ func setupSearchApp(t *testing.T) *tests.TestApp {
 		t.Fatal(err)
 	}
 
-	members := core.NewBaseCollection("cards_project_members")
+	members := core.NewBaseCollection("boards_project_members")
 	members.Fields.Add(&core.RelationField{Name: "project", CollectionId: projects.Id, MaxSelect: 1})
 	members.Fields.Add(&core.RelationField{Name: "user", CollectionId: users.Id, MaxSelect: 1})
 	if err := app.Save(members); err != nil {
 		t.Fatal(err)
 	}
 
-	lists := core.NewBaseCollection("cards_lists")
+	lists := core.NewBaseCollection("boards_lists")
 	lists.Fields.Add(&core.TextField{Name: "name"})
 	if err := app.Save(lists); err != nil {
 		t.Fatal(err)
 	}
 
-	cards := core.NewBaseCollection("cards_cards")
+	cards := core.NewBaseCollection("boards_cards")
 	cards.Fields.Add(&core.TextField{Name: "title"})
 	cards.Fields.Add(&core.TextField{Name: "description"})
 	// ftsConfig selects this as an Output column to build the OTTER-123 key, so
@@ -67,10 +67,10 @@ func setupSearchApp(t *testing.T) *tests.TestApp {
 	}
 
 	if _, err := app.DB().NewQuery(`
-		CREATE VIRTUAL TABLE fts_cards USING fts5(
+		CREATE VIRTUAL TABLE fts_boards USING fts5(
 			record_id UNINDEXED, title, description, tokenize='porter unicode61'
 		)`).Execute(); err != nil {
-		t.Fatalf("create fts_cards: %v", err)
+		t.Fatalf("create fts_boards: %v", err)
 	}
 
 	return app
@@ -97,7 +97,7 @@ func seedProjectWithCard(t *testing.T, app *tests.TestApp, title string) (string
 	member := newUser("member@example.com")
 	other := newUser("other@example.com")
 
-	projects, err := app.FindCollectionByNameOrId("cards_projects")
+	projects, err := app.FindCollectionByNameOrId("boards_projects")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func seedProjectWithCard(t *testing.T, app *tests.TestApp, title string) (string
 		t.Fatal(err)
 	}
 
-	membersColl, err := app.FindCollectionByNameOrId("cards_project_members")
+	membersColl, err := app.FindCollectionByNameOrId("boards_project_members")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func seedProjectWithCard(t *testing.T, app *tests.TestApp, title string) (string
 		t.Fatal(err)
 	}
 
-	cardsColl, err := app.FindCollectionByNameOrId("cards_cards")
+	cardsColl, err := app.FindCollectionByNameOrId("boards_cards")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func seedProjectWithCard(t *testing.T, app *tests.TestApp, title string) (string
 	}
 
 	if _, err := app.DB().NewQuery(
-		`INSERT INTO fts_cards (record_id, title, description) VALUES ({:id}, {:t}, '')`,
+		`INSERT INTO fts_boards (record_id, title, description) VALUES ({:id}, {:t}, '')`,
 	).Bind(map[string]any{"id": card.Id, "t": title}).Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +174,7 @@ func TestSearchDeniesRemovedMember(t *testing.T) {
 	app := setupSearchApp(t)
 	member, _, _ := seedProjectWithCard(t, app, "Ship the budget")
 
-	rows, err := app.FindRecordsByFilter("cards_project_members", "user = {:u}", "", 0, 0,
+	rows, err := app.FindRecordsByFilter("boards_project_members", "user = {:u}", "", 0, 0,
 		map[string]any{"u": member})
 	if err != nil {
 		t.Fatal(err)
@@ -194,14 +194,14 @@ func TestSearchDeniesRemovedMember(t *testing.T) {
 	}
 }
 
-// TestSearchScopeWiresMemberAndRecordFieldsCorrectly pins cards' MemberScope
-// to the real schema (cards_project_members.project -> cards_projects,
-// cards_cards.project -> cards_projects). MemberField and RecordField are
+// TestSearchScopeWiresMemberAndRecordFieldsCorrectly pins boards' MemberScope
+// to the real schema (boards_project_members.project -> boards_projects,
+// boards_cards.project -> boards_projects). MemberField and RecordField are
 // both literally "project" in the shipped config, so swapping them emits
 // byte-identical SQL and no string-based check can tell them apart. Only a
 // behavioural test — two projects, membership in one, a card in each — can
 // catch that transposition: under a swap, the membership subquery
-// (`SELECT project FROM cards_project_members WHERE user = :scopeUser`)
+// (`SELECT project FROM boards_project_members WHERE user = :scopeUser`)
 // still yields project-A's id, but comparing it against `c.project` degrades
 // into no scoping distinction being provable via id alone unless a SECOND,
 // distinctly-idd project with its own card exists to show the wrong one
@@ -220,7 +220,7 @@ func TestSearchScopeWiresMemberAndRecordFieldsCorrectly(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	projects, err := app.FindCollectionByNameOrId("cards_projects")
+	projects, err := app.FindCollectionByNameOrId("boards_projects")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,7 +235,7 @@ func TestSearchScopeWiresMemberAndRecordFieldsCorrectly(t *testing.T) {
 	projectA := newProject("Project A")
 	projectB := newProject("Project B")
 
-	membersColl, err := app.FindCollectionByNameOrId("cards_project_members")
+	membersColl, err := app.FindCollectionByNameOrId("boards_project_members")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +246,7 @@ func TestSearchScopeWiresMemberAndRecordFieldsCorrectly(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cardsColl, err := app.FindCollectionByNameOrId("cards_cards")
+	cardsColl, err := app.FindCollectionByNameOrId("boards_cards")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +258,7 @@ func TestSearchScopeWiresMemberAndRecordFieldsCorrectly(t *testing.T) {
 			t.Fatal(err)
 		}
 		if _, err := app.DB().NewQuery(
-			`INSERT INTO fts_cards (record_id, title, description) VALUES ({:id}, {:t}, '')`,
+			`INSERT INTO fts_boards (record_id, title, description) VALUES ({:id}, {:t}, '')`,
 		).Bind(map[string]any{"id": c.Id, "t": title}).Execute(); err != nil {
 			t.Fatal(err)
 		}
@@ -307,7 +307,7 @@ func TestSearchExcludesArchivedCards(t *testing.T) {
 	app := setupSearchApp(t)
 	member, _, _ := seedProjectWithCard(t, app, "Ship the budget")
 
-	card, err := app.FindFirstRecordByFilter("cards_cards", "title ~ 'budget'")
+	card, err := app.FindFirstRecordByFilter("boards_cards", "title ~ 'budget'")
 	if err != nil {
 		t.Fatal(err)
 	}

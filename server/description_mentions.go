@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"log/slog"
@@ -51,10 +51,10 @@ import (
 // A self-mention therefore CANNOT be filtered here: with no author, there is
 // no "self" to compare against. The client suppresses itself from the mention
 // picker, which is where that check belongs.
-const descriptionMentionType = "cards_mention"
+const descriptionMentionType = "boards_mention"
 
 // mentionToken matches the wire format core's client writes: `[[@<userId>]]`.
-// Kept in step with cards/tinycld/cards/lib/mention-text.ts by hand.
+// Kept in step with boards/tinycld/boards/lib/mention-text.ts by hand.
 //
 // The brackets may arrive BACKSLASH-ESCAPED. A description is authored in the
 // rich editor and serialized to markdown, where `[` is syntax, so the stored
@@ -117,7 +117,7 @@ func notifyDescriptionMentions(app core.App, projectID, cardID, prev, next strin
 		// in a collaborative document — anyone with write access to the board
 		// could type one naming any user id in the deployment, so without this
 		// check the description would be a channel for notifying strangers.
-		member, err := app.CountRecords("cards_project_members",
+		member, err := app.CountRecords("boards_project_members",
 			dbx.HashExp{"project": projectID, "user": userID},
 		)
 		if err != nil {
@@ -133,14 +133,14 @@ func notifyDescriptionMentions(app core.App, projectID, cardID, prev, next strin
 			UserID: userID,
 			Type:   descriptionMentionType,
 			// Matches the manifest slug, so the bell groups it with the rest
-			// of cards' notifications.
-			Package: "cards",
+			// of boards' notifications.
+			Package: "boards",
 			// No author to name — see the header.
 			Title: "You were mentioned on a card",
 			Body:  truncateRunes(cardTitle(app, cardID), 200),
 			URL:   descriptionMentionURL(app, cardID),
 			Meta: map[string]any{
-				"targetCollection": "cards_cards",
+				"targetCollection": "boards_cards",
 				"targetRecord":     cardID,
 				"project":          projectID,
 				"source":           "description",
@@ -152,7 +152,7 @@ func notifyDescriptionMentions(app core.App, projectID, cardID, prev, next strin
 // cardTitle returns the card's title for the notification body, or a neutral
 // fallback. The body answers "which card?", since the title cannot.
 func cardTitle(app core.App, cardID string) string {
-	rec, err := app.FindRecordById("cards_cards", cardID)
+	rec, err := app.FindRecordById("boards_cards", cardID)
 	if err != nil {
 		return "A card mentions you"
 	}
@@ -171,7 +171,7 @@ func descriptionMentionURL(app core.App, cardID string) string {
 	for len(appURL) > 0 && appURL[len(appURL)-1] == '/' {
 		appURL = appURL[:len(appURL)-1]
 	}
-	return appURL + "/cards?focused=" + cardID
+	return appURL + "/boards?focused=" + cardID
 }
 
 // truncateRunes caps a notification body without splitting a rune.

@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { Awareness } from 'y-protocols/awareness'
 import * as Y from 'yjs'
 import {
-    type CardsPresenceState,
+    type BoardsPresenceState,
     parsePresence,
     samePresence,
-} from '~/tinycld/cards/hooks/useBoardPresence'
+} from '~/tinycld/boards/hooks/useBoardPresence'
 
 /**
  * The awareness slot is the one place cards reads data it did not write: any
@@ -19,7 +19,7 @@ import {
 
 const validUser = { id: 'u1', name: 'Ada', color: 'hsl(200, 70%, 45%)' }
 
-function state(overrides: Partial<CardsPresenceState> = {}): CardsPresenceState {
+function state(overrides: Partial<BoardsPresenceState> = {}): BoardsPresenceState {
     return { user: validUser, cardId: null, ...overrides }
 }
 

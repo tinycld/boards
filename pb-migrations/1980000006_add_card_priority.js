@@ -1,6 +1,6 @@
 /// <reference path="../../tinycld/server/pb_data/types.d.ts" />
 //
-// cards_cards.priority — how urgent a card is, as a fixed five-step scale.
+// boards_cards.priority — how urgent a card is, as a fixed five-step scale.
 //
 // Appended rather than edited into the create migration, for the reason
 // 1980000005 gives: an applied migration never re-runs, so an in-place edit
@@ -28,12 +28,12 @@
 // make '' and 'none' indistinguishable to a reader.
 migrate(
     app => {
-        const cards = app.findCollectionByNameOrId('cards_cards')
+        const cards = app.findCollectionByNameOrId('boards_cards')
 
         cards.fields.addAt(
             cards.fields.length,
             new Field({
-                id: 'cards_cards_priority',
+                id: 'boards_cards_priority',
                 name: 'priority',
                 type: 'select',
                 required: false,
@@ -46,11 +46,11 @@ migrate(
 
         // Backfill AFTER the save, and in SQL rather than a record loop — the
         // same split 1980000005 documents: a plain column write needs no JS.
-        app.db().newQuery("UPDATE cards_cards SET priority = 'none' WHERE priority = ''").execute()
+        app.db().newQuery("UPDATE boards_cards SET priority = 'none' WHERE priority = ''").execute()
     },
     app => {
-        const cards = app.findCollectionByNameOrId('cards_cards')
-        cards.fields.removeById('cards_cards_priority')
+        const cards = app.findCollectionByNameOrId('boards_cards')
+        cards.fields.removeById('boards_cards_priority')
         app.save(cards)
     }
 )

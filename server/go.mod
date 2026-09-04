@@ -1,4 +1,4 @@
-module tinycld.org/packages/cards
+module tinycld.org/packages/boards
 
 go 1.26.3
 
@@ -9,7 +9,7 @@ go 1.26.3
 // appears, and let `go build ./...` name what is missing.
 //
 // There is deliberately NO go.sum beside this file, unlike calendar/ and drive/
-// which commit one. Cards imports nothing outside these three modules, and all
+// which commit one. Boards imports nothing outside these three modules, and all
 // three resolve through go.work replaces to local directories — core and the
 // vendored PocketBase fork by replace, dbx transitively through the fork. So
 // there are no module hashes to record; what little there is lands in the

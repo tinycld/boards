@@ -15,7 +15,7 @@ async function freshBoard(page: import('@playwright/test').Page, label: string):
 
 /** The zero-size marker BoardCard mounts while it holds the focus ring. */
 function focusedCard(page: import('@playwright/test').Page) {
-    return page.getByTestId(/^cards-focused-/)
+    return page.getByTestId(/^boards-focused-/)
 }
 
 /**
@@ -30,7 +30,7 @@ function focusedCard(page: import('@playwright/test').Page) {
 async function focusedTitle(page: import('@playwright/test').Page): Promise<string | null> {
     await focusedCard(page).first().waitFor({ state: 'attached' })
     return page.evaluate(() => {
-        const marker = document.querySelector('[data-testid^="cards-focused-"]')
+        const marker = document.querySelector('[data-testid^="boards-focused-"]')
         // The marker is a child of the card face, so the face is its parent.
         return (marker?.parentElement?.textContent ?? '').trim() || null
     })
@@ -106,10 +106,10 @@ async function pressUntil(
     }).toPass({ timeout: 15_000 })
 }
 
-test.describe('Cards — keyboard control', () => {
+test.describe('Boards — keyboard control', () => {
     test.beforeEach(async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
     })
 
     test('walks cards with j/k and opens the focused one', async ({ page }) => {
@@ -225,7 +225,7 @@ test.describe('Cards — keyboard control', () => {
 
     // The regression test for the core scope fix (core/lib/shortcuts/scopes.ts).
     // The package tabs use freezeOnBlur, so a departed screen stays MOUNTED:
-    // with a mount-keyed scope push, leaving cards never popped its scope and
+    // with a mount-keyed scope push, leaving boards never popped its scope and
     // every cards shortcut silently stopped matching on return. Fails without
     // the focus-keyed push.
     test('keyboard control survives a round trip through another screen', async ({ page }) => {
@@ -236,7 +236,7 @@ test.describe('Cards — keyboard control', () => {
         await expect(focusedCard(page)).toHaveCount(1)
 
         await navigateToPackage(page, 'settings')
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
 
         // The board is live again, so its 'list' scope must be back on top.
         await expect(boardCard(page, 'survivor')).toBeVisible()

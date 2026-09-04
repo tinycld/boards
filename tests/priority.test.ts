@@ -6,7 +6,7 @@ import {
     PRIORITIES,
     priorityLabel,
     priorityRank,
-} from '../tinycld/cards/lib/priority'
+} from '../tinycld/boards/lib/priority'
 
 describe('priority scale', () => {
     it('orders urgent first and none last', () => {

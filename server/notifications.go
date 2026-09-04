@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"github.com/pocketbase/pocketbase/core"
@@ -12,17 +12,17 @@ import (
 // Five notification TYPES, and each is also a mute switch in core's
 // notification preferences (use-notification-preferences.ts):
 //
-//	cards_assigned  you were assigned
-//	cards_reply     someone replied to your comment
-//	cards_reaction  someone reacted to your comment
-//	cards_watched   a card you watch changed — Meta.event says how:
+//	boards_assigned  you were assigned
+//	boards_reply     someone replied to your comment
+//	boards_reaction  someone reacted to your comment
+//	boards_watched   a card you watch changed — Meta.event says how:
 //	                comment | moved | completed | canceled | archived
-//	cards_due       a card you watch or own is due soon / overdue (due_notices.go)
+//	boards_due       a card you watch or own is due soon / overdue (due_notices.go)
 //
 // PRECEDENCE, per event: one notification per person. A reply's author is
 // told it is a reply, not that a watched card gained a comment; someone
-// @mentioned in the comment already got cards_mention from core's pipeline
-// and is skipped here; everyone else watching gets cards_watched. The actor
+// @mentioned in the comment already got boards_mention from core's pipeline
+// and is skipped here; everyone else watching gets boards_watched. The actor
 // is never told about their own action.
 //
 // The hooks hand off to a goroutine, as core's comment_mentions.go does — a
@@ -31,23 +31,23 @@ import (
 // them directly.
 
 const (
-	notifyTypeAssigned = "cards_assigned"
-	notifyTypeReply    = "cards_reply"
-	notifyTypeReaction = "cards_reaction"
-	notifyTypeWatched  = "cards_watched"
+	notifyTypeAssigned = "boards_assigned"
+	notifyTypeReply    = "boards_reply"
+	notifyTypeReaction = "boards_reaction"
+	notifyTypeWatched  = "boards_watched"
 )
 
 func registerCardNotifications(app core.App) {
-	app.OnRecordAfterUpdateSuccess("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordAfterUpdateSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		actor := actorOf(e.Record)
 		go notifyCardUpdate(app, e.Record, actor)
 		return e.Next()
 	})
-	app.OnRecordAfterCreateSuccess("cards_comments").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordAfterCreateSuccess("boards_comments").BindFunc(func(e *core.RecordEvent) error {
 		go notifyNewComment(app, e.Record)
 		return e.Next()
 	})
-	app.OnRecordAfterCreateSuccess("cards_comment_reactions").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordAfterCreateSuccess("boards_comment_reactions").BindFunc(func(e *core.RecordEvent) error {
 		go notifyReaction(app, e.Record)
 		return e.Next()
 	})
@@ -57,7 +57,7 @@ func registerCardNotifications(app core.App) {
 // the author: a reaction is a nod to one person, not news about the card, so
 // the watchers are left alone. Reacting to your own comment tells nobody.
 func notifyReaction(app core.App, reaction *core.Record) {
-	comment, err := app.FindRecordById("cards_comments", reaction.GetString("comment"))
+	comment, err := app.FindRecordById("boards_comments", reaction.GetString("comment"))
 	if err != nil {
 		return
 	}
@@ -66,7 +66,7 @@ func notifyReaction(app core.App, reaction *core.Record) {
 	if author == "" || author == reactor {
 		return
 	}
-	card, err := app.FindRecordById("cards_cards", comment.GetString("card"))
+	card, err := app.FindRecordById("boards_cards", comment.GetString("card"))
 	if err != nil {
 		return
 	}
@@ -120,7 +120,7 @@ func notifyCardUpdate(app core.App, card *core.Record, actor string) {
 
 // notifyNewComment tells the replied-to author, then the other watchers.
 func notifyNewComment(app core.App, comment *core.Record) {
-	card, err := app.FindRecordById("cards_cards", comment.GetString("card"))
+	card, err := app.FindRecordById("boards_cards", comment.GetString("card"))
 	if err != nil {
 		return
 	}
@@ -129,13 +129,13 @@ func notifyNewComment(app core.App, comment *core.Record) {
 	title := truncateRunes(card.GetString("title"), 200)
 
 	told := map[string]bool{author: true}
-	// Mentioned users already received cards_mention from core's pipeline.
+	// Mentioned users already received boards_mention from core's pipeline.
 	for _, id := range parseMentions(comment.GetString("body")) {
 		told[id] = true
 	}
 
 	if parentID := comment.GetString("parent"); parentID != "" {
-		if parent, err := app.FindRecordById("cards_comments", parentID); err == nil {
+		if parent, err := app.FindRecordById("boards_comments", parentID); err == nil {
 			if target := parent.GetString("author"); target != "" && !told[target] {
 				told[target] = true
 				deliver(app, target, notifyTypeReply, who+" replied to your comment", title, card, "reply")
@@ -156,12 +156,12 @@ func deliver(app core.App, userID, kind, headline, body string, card *core.Recor
 	notify.NotifyUser(app, notify.NotifyParams{
 		UserID:  userID,
 		Type:    kind,
-		Package: "cards",
+		Package: "boards",
 		Title:   headline,
 		Body:    body,
 		URL:     descriptionMentionURL(app, card.Id),
 		Meta: map[string]any{
-			"targetCollection": "cards_cards",
+			"targetCollection": "boards_cards",
 			"targetRecord":     card.Id,
 			"project":          card.GetString("project"),
 			"event":            event,

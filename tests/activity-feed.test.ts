@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { buildActivityFeed, describeActivity } from '../tinycld/cards/lib/activity-feed'
-import { buildCommentThreads } from '../tinycld/cards/lib/comment-threads'
-import type { BoardActivity, BoardComment, BoardMember } from '../tinycld/cards/types'
+import { buildActivityFeed, describeActivity } from '../tinycld/boards/lib/activity-feed'
+import { buildCommentThreads } from '../tinycld/boards/lib/comment-threads'
+import type { BoardActivity, BoardComment, BoardMember } from '../tinycld/boards/types'
 
 const maya: BoardMember = { id: 'u1', firstName: 'Maya', lastName: 'Kim' }
 

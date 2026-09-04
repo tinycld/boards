@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FIRST_RANK, initialRanks, rankBetween } from '../tinycld/cards/lib/rank'
+import { FIRST_RANK, initialRanks, rankBetween } from '../tinycld/boards/lib/rank'
 
 // A rank is opaque: any ASCII-ordered key of unbounded-but-short length. These
 // tests assert the ORDERING CONTRACT the board depends on, never the shape of

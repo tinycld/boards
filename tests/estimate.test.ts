@@ -5,7 +5,7 @@ import {
     formatEstimate,
     normalizeEstimate,
     sumEstimates,
-} from '../tinycld/cards/lib/estimate'
+} from '../tinycld/boards/lib/estimate'
 
 describe('normalizeEstimate', () => {
     it('maps the stored zero, and anything unusable, to unset', () => {

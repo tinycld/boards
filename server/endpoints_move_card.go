@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"encoding/json"
@@ -14,7 +14,7 @@ import (
 // Moving a card to ANOTHER board.
 //
 // A within-board move is one PATCH the rules admit. A cross-board move is not
-// expressible from the client at all: cards_cards.update pins `project`
+// expressible from the client at all: boards_cards.update pins `project`
 // (1980000000, trap 2), and every child row — checklist items, comments,
 // attachments — carries the same denormalized `project` behind the same pin.
 // So the move is an endpoint that does the whole thing in one transaction
@@ -126,7 +126,7 @@ func moveFamily(
 		}
 
 		previousKey := ""
-		if slugRow, err := tx.FindRecordById("cards_projects", child.GetString("project")); err == nil {
+		if slugRow, err := tx.FindRecordById("boards_projects", child.GetString("project")); err == nil {
 			previousKey = formatCardKey(slugRow.GetString("slug"), child.GetInt("number"))
 		}
 		child.Set("project", body.ProjectID)
@@ -141,7 +141,7 @@ func moveFamily(
 			return err
 		}
 		// The child's own rows carry the denormalized project too.
-		for _, collection := range []string{"cards_checklist_items", "cards_comments", "cards_attachments", "cards_comment_reactions", "cards_activity", "cards_card_watchers"} {
+		for _, collection := range []string{"boards_checklist_items", "boards_comments", "boards_attachments", "boards_comment_reactions", "boards_activity", "boards_card_watchers"} {
 			rows, err := tx.FindRecordsByFilter(
 				collection, "card = {:card}", "", 0, 0, dbx.Params{"card": child.Id})
 			if err != nil {
@@ -163,7 +163,7 @@ func isProjectWriter(app core.App, projectID, userID string) bool {
 	if projectID == "" || userID == "" {
 		return false
 	}
-	n, err := app.CountRecords("cards_project_members", dbx.And(
+	n, err := app.CountRecords("boards_project_members", dbx.And(
 		dbx.HashExp{"project": projectID, "user": userID},
 		dbx.In("role", "owner", "editor"),
 	))
@@ -171,7 +171,7 @@ func isProjectWriter(app core.App, projectID, userID string) bool {
 }
 
 func bindCardRoutes(e *core.ServeEvent, rt *boardRealtime) {
-	e.Router.POST("/api/cards/cards/{id}/move", func(re *core.RequestEvent) error {
+	e.Router.POST("/api/boards/cards/{id}/move", func(re *core.RequestEvent) error {
 		return handleMoveCard(e.App, rt, re)
 	}).BindFunc(requireAuth)
 }
@@ -186,7 +186,7 @@ func handleMoveCard(app core.App, rt *boardRealtime, re *core.RequestEvent) erro
 	}
 
 	cardID := re.Request.PathValue("id")
-	card, err := app.FindRecordById("cards_cards", cardID)
+	card, err := app.FindRecordById("boards_cards", cardID)
 	if err != nil {
 		return re.NotFoundError("card not found", nil)
 	}
@@ -194,7 +194,7 @@ func handleMoveCard(app core.App, rt *boardRealtime, re *core.RequestEvent) erro
 	// A non-member of the source cannot tell the card exists: 404, the same
 	// answer the rules give a read.
 	if !isProjectWriter(app, source, re.Auth.Id) {
-		if member, _ := app.CountRecords("cards_project_members",
+		if member, _ := app.CountRecords("boards_project_members",
 			dbx.HashExp{"project": source, "user": re.Auth.Id}); member == 0 {
 			return re.NotFoundError("card not found", nil)
 		}
@@ -206,7 +206,7 @@ func handleMoveCard(app core.App, rt *boardRealtime, re *core.RequestEvent) erro
 	if !isProjectWriter(app, body.ProjectID, re.Auth.Id) {
 		return re.ForbiddenError("you cannot add cards to that board", nil)
 	}
-	list, err := app.FindRecordById("cards_lists", body.ListID)
+	list, err := app.FindRecordById("boards_lists", body.ListID)
 	if err != nil || list.GetString("project") != body.ProjectID {
 		return re.BadRequestError("list_id must name a list on the target board", nil)
 	}
@@ -215,7 +215,7 @@ func handleMoveCard(app core.App, rt *boardRealtime, re *core.RequestEvent) erro
 	// answer — the same-board pin (1980000015) admits no cross-board parent —
 	// so the only real question is what happens to its CHILDREN.
 	children, err := app.FindRecordsByFilter(
-		"cards_cards", "parent = {:card}", "", 0, 0, dbx.Params{"card": cardID})
+		"boards_cards", "parent = {:card}", "", 0, 0, dbx.Params{"card": cardID})
 	if err != nil {
 		return re.InternalServerError("failed to read the card's sub-tasks", err)
 	}
@@ -239,14 +239,14 @@ func handleMoveCard(app core.App, rt *boardRealtime, re *core.RequestEvent) erro
 		if err := rt.flushNow(source); err != nil {
 			activityLog.Warn("move: source flush failed", "card", cardID, "error", err)
 		}
-		card, err = app.FindRecordById("cards_cards", cardID)
+		card, err = app.FindRecordById("boards_cards", cardID)
 		if err != nil {
 			return re.NotFoundError("card not found", nil)
 		}
 	}
 
 	previousKey := ""
-	if slugRow, err := app.FindRecordById("cards_projects", source); err == nil {
+	if slugRow, err := app.FindRecordById("boards_projects", source); err == nil {
 		previousKey = formatCardKey(slugRow.GetString("slug"), card.GetInt("number"))
 	}
 
@@ -306,11 +306,11 @@ func handleMoveCard(app core.App, rt *boardRealtime, re *core.RequestEvent) erro
 		if err := moveFamily(tx, re.Auth.Id, children, body, cardID); err != nil {
 			return err
 		}
-		// cards_comment_reactions belongs in this list for the same reason the
+		// boards_comment_reactions belongs in this list for the same reason the
 		// rest do — a reaction row carries `project`, and its read rule
 		// resolves membership through it, so a row left naming the source
 		// board becomes unreadable to everyone on the target.
-		for _, child := range []string{"cards_checklist_items", "cards_comments", "cards_attachments", "cards_comment_reactions", "cards_activity", "cards_card_watchers"} {
+		for _, child := range []string{"boards_checklist_items", "boards_comments", "boards_attachments", "boards_comment_reactions", "boards_activity", "boards_card_watchers"} {
 			rows, err := tx.FindRecordsByFilter(child, "card = {:card}", "", 0, 0, dbx.Params{"card": cardID})
 			if err != nil {
 				return err
@@ -323,7 +323,7 @@ func handleMoveCard(app core.App, rt *boardRealtime, re *core.RequestEvent) erro
 			}
 		}
 		// Watchers who cannot see the target board must not keep following.
-		watchers, err := tx.FindRecordsByFilter("cards_card_watchers", "card = {:card}", "", 0, 0, dbx.Params{"card": cardID})
+		watchers, err := tx.FindRecordsByFilter("boards_card_watchers", "card = {:card}", "", 0, 0, dbx.Params{"card": cardID})
 		if err != nil {
 			return err
 		}
@@ -343,7 +343,7 @@ func handleMoveCard(app core.App, rt *boardRealtime, re *core.RequestEvent) erro
 
 	handoffDescription(app, rt, source, body.ProjectID, card)
 
-	fresh, err := app.FindRecordById("cards_cards", cardID)
+	fresh, err := app.FindRecordById("boards_cards", cardID)
 	if err != nil {
 		return re.InternalServerError("failed to reload card", err)
 	}
@@ -367,7 +367,7 @@ func remapLabels(app core.App, labelIDs []string, targetProject string) (kept []
 	if len(labelIDs) == 0 {
 		return kept, droppedNames
 	}
-	targets, err := app.FindRecordsByFilter("cards_labels", "project = {:p}", "", 0, 0, dbx.Params{"p": targetProject})
+	targets, err := app.FindRecordsByFilter("boards_labels", "project = {:p}", "", 0, 0, dbx.Params{"p": targetProject})
 	if err != nil {
 		return kept, droppedNames
 	}
@@ -376,7 +376,7 @@ func remapLabels(app core.App, labelIDs []string, targetProject string) (kept []
 		byName[strings.ToLower(strings.TrimSpace(t.GetString("name")))] = t.Id
 	}
 	for _, id := range labelIDs {
-		label, err := app.FindRecordById("cards_labels", id)
+		label, err := app.FindRecordById("boards_labels", id)
 		if err != nil {
 			continue
 		}
@@ -415,7 +415,7 @@ func resolveTargetEpic(
 	if sourceEpicID == "" || answer != epicMove {
 		return "", false, nil
 	}
-	source, err := app.FindRecordById("cards_epics", sourceEpicID)
+	source, err := app.FindRecordById("boards_epics", sourceEpicID)
 	if err != nil {
 		// A dangling epic id — the row was deleted, which orphans rather than
 		// cascades. Nothing to carry, and not an error.
@@ -425,7 +425,7 @@ func resolveTargetEpic(
 	key := strings.ToLower(strings.TrimSpace(title))
 
 	existing, err := app.FindRecordsByFilter(
-		"cards_epics", "project = {:p}", "", 0, 0, dbx.Params{"p": targetProject})
+		"boards_epics", "project = {:p}", "", 0, 0, dbx.Params{"p": targetProject})
 	if err != nil {
 		return "", false, err
 	}
@@ -435,7 +435,7 @@ func resolveTargetEpic(
 		}
 	}
 
-	col, err := app.FindCollectionByNameOrId("cards_epics")
+	col, err := app.FindCollectionByNameOrId("boards_epics")
 	if err != nil {
 		return "", false, err
 	}
@@ -457,7 +457,7 @@ func membersOnly(app core.App, projectID string, userIDs []string) []string {
 		if id == "" {
 			continue
 		}
-		n, err := app.CountRecords("cards_project_members", dbx.HashExp{"project": projectID, "user": id})
+		n, err := app.CountRecords("boards_project_members", dbx.HashExp{"project": projectID, "user": id})
 		if err == nil && n > 0 {
 			out = append(out, id)
 		}

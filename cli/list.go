@@ -12,11 +12,11 @@ import (
 	"tinycld.org/cli/ui"
 )
 
-func newListCmd(c *client.Client) *cobra.Command {
+func newColumnCmd(c *client.Client) *cobra.Command {
 	l := &cobra.Command{
-		Use:     "list",
-		Short:   "Lists (columns): show, add, rename, move, remove",
-		Aliases: []string{"lists", "column"},
+		Use:     "column",
+		Short:   "Columns (lists): show, add, rename, move, remove",
+		Aliases: []string{"columns"},
 	}
 	l.AddCommand(
 		newListShowCmd(c),
@@ -249,7 +249,7 @@ func setListCategory(cmd *cobra.Command, c *client.Client, boardRef, listRef, ca
 	return writeListResult(cmd, o, updated)
 }
 
-// newListRemoveCmd deletes a column. `cards_cards.list` ships
+// newListRemoveCmd deletes a column. `boards_cards.list` ships
 // cascadeDelete: true, so PocketBase deletes the column's cards server-side —
 // there is no way to delete a list without its cards short of moving them
 // first. The confirm therefore NAMES THE COUNT, exactly as the app's dialog

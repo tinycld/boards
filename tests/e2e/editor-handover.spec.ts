@@ -35,7 +35,7 @@ async function openCard(page: Page, title: string) {
 }
 
 function composer(page: Page) {
-    return page.getByTestId('cards-comment-composer')
+    return page.getByTestId('boards-comment-composer')
 }
 
 function composerEditor(page: Page) {
@@ -43,11 +43,11 @@ function composerEditor(page: Page) {
 }
 
 function commentEditor(page: Page) {
-    return page.getByTestId('cards-comment-editor').locator('.ProseMirror')
+    return page.getByTestId('boards-comment-editor').locator('.ProseMirror')
 }
 
 function descriptionEditor(page: Page) {
-    return page.getByTestId('cards-description-editor').locator('.ProseMirror')
+    return page.getByTestId('boards-description-editor').locator('.ProseMirror')
 }
 
 /** The core invariant. One instance app-wide means one node on the page. */
@@ -87,10 +87,10 @@ async function postComment(page: Page, body: string) {
     await expect(composerEditor(page)).toHaveText('')
 }
 
-test.describe('Cards — one editor, handed between surfaces', () => {
+test.describe('Boards — one editor, handed between surfaces', () => {
     test.beforeEach(async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
     })
 
     /**

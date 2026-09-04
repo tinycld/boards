@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { buildArchivedCards } from '../tinycld/cards/lib/archived-cards'
-import type { CardsCards } from '../tinycld/cards/types'
+import { buildArchivedCards } from '../tinycld/boards/lib/archived-cards'
+import type { BoardsCards } from '../tinycld/boards/types'
 
-function card(id: string, overrides: Partial<CardsCards> = {}): CardsCards {
+function card(id: string, overrides: Partial<BoardsCards> = {}): BoardsCards {
     return {
         id,
         project: 'p1',

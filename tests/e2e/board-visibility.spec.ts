@@ -23,12 +23,12 @@ import { addCard, createBoard, openBoard, shareBoard } from './helpers'
 
 const CARD_TITLE = 'Live visibility card'
 
-test.describe('Cards — live board visibility', () => {
+test.describe('Boards — live board visibility', () => {
     test('a board shared mid-session appears without navigating, and leaves on removal', async ({
         page,
     }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         const boardName = `livevis-${Date.now()}`
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
@@ -37,7 +37,7 @@ test.describe('Cards — live board visibility', () => {
         // whose collections all synced before any grant existed.
         const { page: bobPage, close } = await signInAsCollaborator(page)
         try {
-            await navigateToPackage(bobPage, 'cards')
+            await navigateToPackage(bobPage, 'boards')
             // Not shared yet: the board must not be visible to bob. This is
             // the positive control for "appears" below — a sidebar that
             // simply showed everyone everything would pass that assertion.

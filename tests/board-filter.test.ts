@@ -9,8 +9,8 @@ import {
     matchesKeyword,
     NO_EPIC,
     UNASSIGNED,
-} from '../tinycld/cards/lib/board-filter'
-import type { BoardCardView, BoardMember } from '../tinycld/cards/types'
+} from '../tinycld/boards/lib/board-filter'
+import type { BoardCardView, BoardMember } from '../tinycld/boards/types'
 
 const maya: BoardMember = { id: 'u1', firstName: 'Maya', lastName: 'Kim' }
 const sam: BoardMember = { id: 'u2', firstName: 'Sam', lastName: 'Doe' }

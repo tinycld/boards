@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"net/http"
@@ -9,7 +9,7 @@ import (
 //
 //	user = @request.auth.id
 //	&& role = "owner"
-//	&& project.cards_project_members_via_project.id = ""
+//	&& project.boards_project_members_via_project.id = ""
 //	&& @request.auth.role != "guest"
 //
 // The third clause is PocketBase's "this back-relation is empty" idiom, and it
@@ -22,7 +22,7 @@ import (
 // This is also the gap calendar could not close. calendar_members' create rule
 // admits a membership only when the caller ALREADY owns the calendar, which the
 // first membership cannot satisfy, so calendar needs a privileged Go hook to
-// write that row (see calendar/server/bootstrap_probe_test.go). Cards puts the
+// write that row (see calendar/server/bootstrap_probe_test.go). Boards puts the
 // bootstrap in the RULE, so ownership is established by the same request that
 // creates the board — no hook has to fire, and nothing can leave a board owned
 // by nobody if one fails to.
@@ -37,7 +37,7 @@ func TestCardsBootstrap_CreatorSelfGrantsFirstOwnership(t *testing.T) {
 
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_project_members/records",
+		url:    "/api/collections/boards_project_members/records",
 		token:  env.outsiderToken,
 		body: `{"project":"` + created.Id + `","user":"` + env.outsider.Id +
 			`","role":"owner"}`,
@@ -55,7 +55,7 @@ func TestCardsBootstrap_RefusedOnceTheProjectHasMembers(t *testing.T) {
 
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_project_members/records",
+		url:    "/api/collections/boards_project_members/records",
 		token:  env.outsiderToken,
 		body: `{"project":"` + env.project.Id + `","user":"` + env.outsider.Id +
 			`","role":"owner"}`,
@@ -73,7 +73,7 @@ func TestCardsBootstrap_GuestCannotBootstrapEvenOnAnEmptyProject(t *testing.T) {
 
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_project_members/records",
+		url:    "/api/collections/boards_project_members/records",
 		token:  env.guestToken,
 		body: `{"project":"` + memberless.Id + `","user":"` + env.appGuest.Id +
 			`","role":"owner"}`,
@@ -89,7 +89,7 @@ func TestCardsBootstrap_CannotSelfGrantANonOwnerRole(t *testing.T) {
 
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_project_members/records",
+		url:    "/api/collections/boards_project_members/records",
 		token:  env.outsiderToken,
 		body: `{"project":"` + memberless.Id + `","user":"` + env.outsider.Id +
 			`","role":"editor"}`,
@@ -105,7 +105,7 @@ func TestCardsBootstrap_CannotBootstrapSomeoneElse(t *testing.T) {
 
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_project_members/records",
+		url:    "/api/collections/boards_project_members/records",
 		token:  env.outsiderToken,
 		body: `{"project":"` + memberless.Id + `","user":"` + env.editor.Id +
 			`","role":"owner"}`,

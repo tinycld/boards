@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"fmt"
@@ -16,7 +16,7 @@ import (
 
 // Shared fixture for the cards RLS suites.
 //
-// Cards' access decisions live in the rules the migration ships, because those
+// Boards' access decisions live in the rules the migration ships, because those
 // rules are the entire authorization for any caller that does not pass through
 // a Go hook — which includes the REST API a client drives directly. (The one
 // exception is the last-owner guard —
@@ -49,7 +49,7 @@ import (
 // and looks like it still passes. This bit during development of these very
 // tests.
 
-// longToken is a well-formed value for cards_share_links.token, whose field is
+// longToken is a well-formed value for boards_share_links.token, whose field is
 // min64/max64. The value is irrelevant to a rule test — only the length is.
 const longToken = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
@@ -92,7 +92,7 @@ type cardsEnv struct {
 }
 
 // newCardsApp builds a test app whose users collection carries the two fields
-// cards' rules read, then applies the shipped migrations.
+// boards' rules read, then applies the shipped migrations.
 //
 // Order is load-bearing: `users.role` and `users.disabled` must exist BEFORE
 // the migrations run. Every cards rule conjoins `@request.auth.disabled != true`
@@ -163,9 +163,9 @@ func cardsToken(t *testing.T, u *core.Record) string {
 
 func cardsProject(t *testing.T, app core.App, name string, createdBy *core.Record) *core.Record {
 	t.Helper()
-	col, err := app.FindCollectionByNameOrId("cards_projects")
+	col, err := app.FindCollectionByNameOrId("boards_projects")
 	if err != nil {
-		t.Fatalf("find cards_projects: %v", err)
+		t.Fatalf("find boards_projects: %v", err)
 	}
 	r := core.NewRecord(col)
 	r.Set("name", name)
@@ -180,9 +180,9 @@ func cardsProject(t *testing.T, app core.App, name string, createdBy *core.Recor
 
 func cardsMember(t *testing.T, app core.App, project, user *core.Record, role string) *core.Record {
 	t.Helper()
-	col, err := app.FindCollectionByNameOrId("cards_project_members")
+	col, err := app.FindCollectionByNameOrId("boards_project_members")
 	if err != nil {
-		t.Fatalf("find cards_project_members: %v", err)
+		t.Fatalf("find boards_project_members: %v", err)
 	}
 	r := core.NewRecord(col)
 	r.Set("project", project.Id)
@@ -194,13 +194,13 @@ func cardsMember(t *testing.T, app core.App, project, user *core.Record, role st
 	return r
 }
 
-// cardsLabel seeds a label. Labels are BOARD-SCOPED (cards_labels.project),
+// cardsLabel seeds a label. Labels are BOARD-SCOPED (boards_labels.project),
 // which is what lets a label authorizer refuse one belonging to another board.
 func cardsLabel(t *testing.T, app core.App, project *core.Record, name, color string) *core.Record {
 	t.Helper()
-	col, err := app.FindCollectionByNameOrId("cards_labels")
+	col, err := app.FindCollectionByNameOrId("boards_labels")
 	if err != nil {
-		t.Fatalf("find cards_labels: %v", err)
+		t.Fatalf("find boards_labels: %v", err)
 	}
 	r := core.NewRecord(col)
 	r.Set("project", project.Id)
@@ -213,13 +213,13 @@ func cardsLabel(t *testing.T, app core.App, project *core.Record, name, color st
 }
 
 // cardsList seeds a column. `position` is a FRACTIONAL RANK STRING (see
-// tinycld/cards/lib/rank.ts), not a number — the field is text and a numeric
+// tinycld/boards/lib/rank.ts), not a number — the field is text and a numeric
 // value would silently stringify into a rank that sorts wrong.
 func cardsList(t *testing.T, app core.App, project *core.Record, name, position string) *core.Record {
 	t.Helper()
-	col, err := app.FindCollectionByNameOrId("cards_lists")
+	col, err := app.FindCollectionByNameOrId("boards_lists")
 	if err != nil {
-		t.Fatalf("find cards_lists: %v", err)
+		t.Fatalf("find boards_lists: %v", err)
 	}
 	r := core.NewRecord(col)
 	r.Set("project", project.Id)
@@ -233,9 +233,9 @@ func cardsList(t *testing.T, app core.App, project *core.Record, name, position 
 
 func cardsCard(t *testing.T, app core.App, project, list *core.Record, title, position string, by *core.Record) *core.Record {
 	t.Helper()
-	col, err := app.FindCollectionByNameOrId("cards_cards")
+	col, err := app.FindCollectionByNameOrId("boards_cards")
 	if err != nil {
-		t.Fatalf("find cards_cards: %v", err)
+		t.Fatalf("find boards_cards: %v", err)
 	}
 	r := core.NewRecord(col)
 	r.Set("project", project.Id)
@@ -256,9 +256,9 @@ func cardsCard(t *testing.T, app core.App, project, list *core.Record, title, po
 
 func cardsComment(t *testing.T, app core.App, project, card, author *core.Record, body string) *core.Record {
 	t.Helper()
-	col, err := app.FindCollectionByNameOrId("cards_comments")
+	col, err := app.FindCollectionByNameOrId("boards_comments")
 	if err != nil {
-		t.Fatalf("find cards_comments: %v", err)
+		t.Fatalf("find boards_comments: %v", err)
 	}
 	r := core.NewRecord(col)
 	r.Set("project", project.Id)
@@ -273,9 +273,9 @@ func cardsComment(t *testing.T, app core.App, project, card, author *core.Record
 
 func cardsChecklistItem(t *testing.T, app core.App, project, card *core.Record, title, position string) *core.Record {
 	t.Helper()
-	col, err := app.FindCollectionByNameOrId("cards_checklist_items")
+	col, err := app.FindCollectionByNameOrId("boards_checklist_items")
 	if err != nil {
-		t.Fatalf("find cards_checklist_items: %v", err)
+		t.Fatalf("find boards_checklist_items: %v", err)
 	}
 	r := core.NewRecord(col)
 	r.Set("project", project.Id)
@@ -295,9 +295,9 @@ func cardsChecklistItem(t *testing.T, app core.App, project, card *core.Record, 
 // validation rather than landing with an empty file.
 func cardsAttachment(t *testing.T, app core.App, project, card, uploader *core.Record, name string) *core.Record {
 	t.Helper()
-	col, err := app.FindCollectionByNameOrId("cards_attachments")
+	col, err := app.FindCollectionByNameOrId("boards_attachments")
 	if err != nil {
-		t.Fatalf("find cards_attachments: %v", err)
+		t.Fatalf("find boards_attachments: %v", err)
 	}
 	body := []byte("attachment body for " + name)
 	f, err := filesystem.NewFileFromBytes(body, name)
@@ -422,7 +422,7 @@ func (r req) run(t *testing.T, env *cardsEnv) {
 // written the row and THEN returned 404.
 func requireCardTitle(cardID, want string) func(testing.TB, *tests.TestApp) {
 	return func(t testing.TB, app *tests.TestApp) {
-		fresh, err := app.FindRecordById("cards_cards", cardID)
+		fresh, err := app.FindRecordById("boards_cards", cardID)
 		if err != nil {
 			t.Fatalf("re-read card: %v", err)
 		}
@@ -436,7 +436,7 @@ func requireCardTitle(cardID, want string) func(testing.TB, *tests.TestApp) {
 // still point where it did.
 func requireCardProject(cardID, wantProjectID string) func(testing.TB, *tests.TestApp) {
 	return func(t testing.TB, app *tests.TestApp) {
-		fresh, err := app.FindRecordById("cards_cards", cardID)
+		fresh, err := app.FindRecordById("boards_cards", cardID)
 		if err != nil {
 			t.Fatalf("re-read card: %v", err)
 		}
@@ -453,9 +453,9 @@ func TestCardsFixture_AppliesShippedMigrations(t *testing.T) {
 	env := setupCardsEnv(t)
 
 	for _, name := range []string{
-		"cards_projects", "cards_project_members", "cards_share_links",
-		"cards_labels", "cards_lists", "cards_cards",
-		"cards_checklist_items", "cards_comments", "cards_attachments",
+		"boards_projects", "boards_project_members", "boards_share_links",
+		"boards_labels", "boards_lists", "boards_cards",
+		"boards_checklist_items", "boards_comments", "boards_attachments",
 	} {
 		if _, err := env.app.FindCollectionByNameOrId(name); err != nil {
 			t.Fatalf("collection %s missing after migrations: %v", name, err)
@@ -464,7 +464,7 @@ func TestCardsFixture_AppliesShippedMigrations(t *testing.T) {
 
 	// A rule that came back nil would mean "superusers only", which would make
 	// every deny-test below pass for entirely the wrong reason.
-	if rule, ok := rlstest.Rule(t, env.app, "cards_cards", "create"); !ok || rule == "" {
-		t.Fatalf("cards_cards.createRule is nil or public (%q, ok=%v)", rule, ok)
+	if rule, ok := rlstest.Rule(t, env.app, "boards_cards", "create"); !ok || rule == "" {
+		t.Fatalf("boards_cards.createRule is nil or public (%q, ok=%v)", rule, ok)
 	}
 }

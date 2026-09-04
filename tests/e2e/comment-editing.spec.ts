@@ -25,7 +25,7 @@ async function freshBoard(page: Page, label: string): Promise<string> {
 }
 
 function composer(page: Page) {
-    return page.getByTestId('cards-comment-composer')
+    return page.getByTestId('boards-comment-composer')
 }
 
 function composerEditor(page: Page) {
@@ -33,7 +33,7 @@ function composerEditor(page: Page) {
 }
 
 function commentEditor(page: Page) {
-    return page.getByTestId('cards-comment-editor').locator('.ProseMirror')
+    return page.getByTestId('boards-comment-editor').locator('.ProseMirror')
 }
 
 /**
@@ -75,10 +75,10 @@ async function beginEdit(page: Page, bodyText: string) {
     await expect(commentEditor(page)).toContainText(bodyText)
 }
 
-test.describe('Cards — editing comments', () => {
+test.describe('Boards — editing comments', () => {
     test.beforeEach(async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
     })
 
     // Clicking a comment's prose must put the caret IN the editor, the same way
@@ -155,7 +155,7 @@ test.describe('Cards — editing comments', () => {
         await expect(composerEditor(page)).toHaveCount(0)
         await expect(prompt).toBeVisible()
         // Still on the card — the editor consumed that press.
-        await expect(page.getByTestId('cards-card-peek')).toHaveCount(1)
+        await expect(page.getByTestId('boards-card-peek')).toHaveCount(1)
 
         // Re-opening starts clean rather than restoring what was dismissed.
         await prompt.click()
@@ -172,13 +172,13 @@ test.describe('Cards — editing comments', () => {
         await beginEdit(page, 'First take.')
         // The session gets the same toolbar the description has.
         await expect(
-            page.getByTestId('cards-comment-editor').getByRole('button', { name: 'Bold' })
+            page.getByTestId('boards-comment-editor').getByRole('button', { name: 'Bold' })
         ).toBeVisible()
 
         await typeInto(page, commentEditor(page), 'Second take, considered.')
         await page.getByRole('button', { name: 'Save', exact: true }).click()
 
-        await expect(page.getByTestId('cards-comment-editor')).toHaveCount(0)
+        await expect(page.getByTestId('boards-comment-editor')).toHaveCount(0)
         await expect(page.getByText('Second take, considered.')).toBeVisible()
         await expect(page.getByText('First take.', { exact: true })).toHaveCount(0)
 
@@ -188,7 +188,7 @@ test.describe('Cards — editing comments', () => {
         // the same by tearing down the whole SPA — the hard navigation this suite
         // forbids (it cancels in-flight chunk loads and is a CI flake source).
         await navigateToPackage(page, 'settings')
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         await openCard(page, CARD_TITLE)
         await expect(page.getByText('Second take, considered.')).toBeVisible()
     })
@@ -203,11 +203,11 @@ test.describe('Cards — editing comments', () => {
         await typeInto(page, commentEditor(page), 'Scratch that.')
         await page.keyboard.press('Escape')
 
-        await expect(page.getByTestId('cards-comment-editor')).toHaveCount(0)
+        await expect(page.getByTestId('boards-comment-editor')).toHaveCount(0)
         await expect(page.getByText('Keep this wording.', { exact: true })).toBeVisible()
         await expect(page.getByText('Scratch that.')).toHaveCount(0)
         // The first Escape ends the edit, not the peek.
-        await expect(page.getByTestId('cards-card-peek')).toBeVisible()
+        await expect(page.getByTestId('boards-card-peek')).toBeVisible()
     })
 
     /**
@@ -230,12 +230,12 @@ test.describe('Cards — editing comments', () => {
         await page.getByText('Activity', { exact: true }).click()
 
         // Still editing, and still holding what was typed.
-        await expect(page.getByTestId('cards-comment-editor')).toHaveCount(1)
+        await expect(page.getByTestId('boards-comment-editor')).toHaveCount(1)
         await expect(commentEditor(page)).toContainText('Settled thought.')
 
         // Save is what writes it.
         await page.getByRole('button', { name: 'Save', exact: true }).click()
-        await expect(page.getByTestId('cards-comment-editor')).toHaveCount(0)
+        await expect(page.getByTestId('boards-comment-editor')).toHaveCount(0)
         await expect(page.getByText('Settled thought.')).toBeVisible()
     })
 
@@ -259,7 +259,7 @@ test.describe('Cards — editing comments', () => {
         await page.getByLabel('More actions').first().click()
         await expect(page.getByRole('menuitem').first()).toBeVisible()
 
-        await expect(page.getByTestId('cards-comment-editor')).toHaveCount(1)
+        await expect(page.getByTestId('boards-comment-editor')).toHaveCount(1)
         // Still has its text — the edit was neither committed nor discarded.
         await expect(commentEditor(page)).toContainText('Menu safe.')
     })
@@ -332,14 +332,14 @@ test.describe('Cards — editing comments', () => {
         expect(Math.abs(gapDuring - gapBefore)).toBeLessThanOrEqual(2)
 
         // The toolbar sits in the row the author line vacated, Save beside it.
-        const bold = page.getByTestId('cards-comment-editor').getByRole('button', { name: 'Bold' })
+        const bold = page.getByTestId('boards-comment-editor').getByRole('button', { name: 'Bold' })
         const save = page.getByRole('button', { name: 'Save', exact: true })
         const boldBox = await bold.boundingBox()
         const saveBox = await save.boundingBox()
         expect(Math.abs((boldBox?.y ?? 0) - (saveBox?.y ?? -1))).toBeLessThanOrEqual(8)
 
         await page.keyboard.press('Escape')
-        await expect(page.getByTestId('cards-comment-editor')).toHaveCount(0)
+        await expect(page.getByTestId('boards-comment-editor')).toHaveCount(0)
     })
 
     test('the reply flow survives its own save', async ({ page }) => {
@@ -392,7 +392,7 @@ test.describe('Cards — editing comments', () => {
         // And it PERSISTED: leave cards and come back, so the marker below is
         // re-read from the server's stamp rather than the optimistic one.
         await navigateToPackage(page, 'settings')
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         await openCard(page, CARD_TITLE)
         await expect(page.getByText('Better phrasing.')).toBeVisible()
         await expect(page.getByText('(edited)')).toBeVisible()
@@ -412,7 +412,7 @@ test.describe('Cards — editing comments', () => {
         // board exists.
         const { page: bobPage, close } = await signInAsCollaborator(page)
         try {
-            await navigateToPackage(bobPage, 'cards')
+            await navigateToPackage(bobPage, 'boards')
             await openBoard(bobPage, board, CARD_TITLE)
             await openCard(bobPage, CARD_TITLE)
             await postComment(bobPage, 'Commentor reply.')

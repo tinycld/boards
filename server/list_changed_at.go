@@ -1,11 +1,11 @@
-package cards
+package boards
 
 import (
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tools/types"
 )
 
-// registerListChangedAt owns cards_cards.list_changed_at — when the card
+// registerListChangedAt owns boards_cards.list_changed_at — when the card
 // entered the list it is in, which is the clock auto_archive.go counts from.
 //
 // SERVER-OWNED the way archived_at is (card_archived.go): no access rule pins
@@ -21,11 +21,11 @@ import (
 // reload has an empty Original, and `project` — required, never blank on a
 // real row — is the sentinel.
 func registerListChangedAt(app core.App) {
-	app.OnRecordCreate("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordCreate("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		e.Record.Set("list_changed_at", types.NowDateTime())
 		return e.Next()
 	})
-	app.OnRecordUpdate("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordUpdate("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		original := e.Record.Original()
 		if original.GetString("project") == "" {
 			return e.Next()

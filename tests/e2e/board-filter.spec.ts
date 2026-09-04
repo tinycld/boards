@@ -20,7 +20,7 @@ async function freshBoard(page: Page): Promise<string> {
 }
 
 function peek(page: Page) {
-    return page.getByTestId('cards-card-peek')
+    return page.getByTestId('boards-card-peek')
 }
 
 async function openCard(page: Page, title: string) {
@@ -41,19 +41,19 @@ async function setPriority(page: Page, title: string, level: string) {
 }
 
 async function openFilter(page: Page) {
-    await page.getByTestId('cards-filter-button').click()
-    await expect(page.getByTestId('cards-filter-panel')).toBeVisible()
+    await page.getByTestId('boards-filter-button').click()
+    await expect(page.getByTestId('boards-filter-panel')).toBeVisible()
 }
 
 async function closeFilter(page: Page) {
     await page.keyboard.press('Escape')
-    await expect(page.getByTestId('cards-filter-panel')).toHaveCount(0)
+    await expect(page.getByTestId('boards-filter-panel')).toHaveCount(0)
 }
 
-test.describe('Cards — filtering and sorting', () => {
+test.describe('Boards — filtering and sorting', () => {
     test.beforeEach(async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
     })
 
     test('a priority filter hides the other card, counts it, and clears', async ({ page }) => {
@@ -63,18 +63,23 @@ test.describe('Cards — filtering and sorting', () => {
         await setPriority(page, ALPHA, 'High')
 
         await openFilter(page)
-        await page.getByTestId('cards-filter-panel').getByRole('checkbox', { name: 'High' }).click()
+        await page
+            .getByTestId('boards-filter-panel')
+            .getByRole('checkbox', { name: 'High' })
+            .click()
         await closeFilter(page)
 
         await expect(boardCard(page, BRAVO)).toHaveCount(0)
         await expect(boardCard(page, ALPHA)).toBeVisible()
-        await expect(page.locator('[data-testid^="cards-column-count-"]').first()).toHaveText('1/2')
-        await expect(page.getByTestId('cards-filter-bar')).toContainText('High')
+        await expect(page.locator('[data-testid^="boards-column-count-"]').first()).toHaveText(
+            '1/2'
+        )
+        await expect(page.getByTestId('boards-filter-bar')).toContainText('High')
 
-        await page.getByTestId('cards-filter-clear').click()
+        await page.getByTestId('boards-filter-clear').click()
         await expect(boardCard(page, BRAVO)).toBeVisible()
-        await expect(page.getByTestId('cards-filter-bar')).toHaveCount(0)
-        await expect(page.locator('[data-testid^="cards-column-count-"]').first()).toHaveText('2')
+        await expect(page.getByTestId('boards-filter-bar')).toHaveCount(0)
+        await expect(page.locator('[data-testid^="boards-column-count-"]').first()).toHaveText('2')
     })
 
     test('a keyword narrows by title and the keyboard never lands on a hidden card', async ({
@@ -85,15 +90,18 @@ test.describe('Cards — filtering and sorting', () => {
         await addCard(page, 0, BRAVO)
 
         await openFilter(page)
-        await page.getByTestId('cards-filter-text').fill('bravo')
+        await page.getByTestId('boards-filter-text').fill('bravo')
         await closeFilter(page)
         await expect(boardCard(page, ALPHA)).toHaveCount(0)
 
         // j adopts the first VISIBLE card, and a second j has nowhere to go.
         await page.keyboard.press('j')
-        await expect(page.locator('[data-testid^="cards-focused-"]')).toHaveCount(1)
-        const focused = page.locator('[data-testid^="cards-focused-"]').first()
-        const focusedId = (await focused.getAttribute('data-testid'))?.replace('cards-focused-', '')
+        await expect(page.locator('[data-testid^="boards-focused-"]')).toHaveCount(1)
+        const focused = page.locator('[data-testid^="boards-focused-"]').first()
+        const focusedId = (await focused.getAttribute('data-testid'))?.replace(
+            'boards-focused-',
+            ''
+        )
         const bravoId = (await boardCard(page, BRAVO).getAttribute('data-testid'))?.replace(
             'board-card-',
             ''
@@ -103,10 +111,10 @@ test.describe('Cards — filtering and sorting', () => {
         expect(
             (
                 await page
-                    .locator('[data-testid^="cards-focused-"]')
+                    .locator('[data-testid^="boards-focused-"]')
                     .first()
                     .getAttribute('data-testid')
-            )?.replace('cards-focused-', '')
+            )?.replace('boards-focused-', '')
         ).toBe(bravoId)
     })
 
@@ -116,8 +124,8 @@ test.describe('Cards — filtering and sorting', () => {
         await addCard(page, 0, ALPHA)
         expect(await cardsInColumn(page, 'To do')).toEqual([BRAVO, ALPHA])
 
-        await page.getByTestId('cards-sort-button').click()
-        await page.getByTestId('cards-sort-title').click()
+        await page.getByTestId('boards-sort-button').click()
+        await page.getByTestId('boards-sort-title').click()
         await expect.poll(() => cardsInColumn(page, 'To do')).toEqual([ALPHA, BRAVO])
 
         // Shift+ArrowDown on the first card would swap them under manual
@@ -128,8 +136,8 @@ test.describe('Cards — filtering and sorting', () => {
         await page.keyboard.press('Shift+ArrowDown')
         await expect.poll(() => cardsInColumn(page, 'To do')).toEqual([ALPHA, BRAVO])
 
-        await page.getByTestId('cards-sort-button').click()
-        await page.getByTestId('cards-sort-manual').click()
+        await page.getByTestId('boards-sort-button').click()
+        await page.getByTestId('boards-sort-manual').click()
         await expect.poll(() => cardsInColumn(page, 'To do')).toEqual([BRAVO, ALPHA])
     })
 
@@ -137,12 +145,12 @@ test.describe('Cards — filtering and sorting', () => {
         await freshBoard(page)
         await addCard(page, 0, ALPHA)
         await openFilter(page)
-        await page.getByTestId('cards-filter-text').fill('nothing matches')
+        await page.getByTestId('boards-filter-text').fill('nothing matches')
         await closeFilter(page)
         await expect(boardCard(page, ALPHA)).toHaveCount(0)
 
         const second = await freshBoard(page)
-        await expect(page.getByTestId('cards-filter-bar')).toHaveCount(0)
+        await expect(page.getByTestId('boards-filter-bar')).toHaveCount(0)
         await addCard(page, 0, BRAVO)
         await expect(boardCard(page, BRAVO)).toBeVisible()
         expect(second).not.toBe('')

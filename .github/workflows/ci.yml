@@ -19,7 +19,7 @@ on:
   pull_request:
 
 env:
-  PACKAGE: cards
+  PACKAGE: boards
   TEST_USER_LOGIN: user@tinycld.org
   TEST_USER_PW: TestUser1234!
   ADMIN_USER_LOGIN: admin@tinycld.org
@@ -54,11 +54,11 @@ jobs:
           # back to its default branch when there is none (the ordinary
           # single-repo PR, where every sibling should be at its release state).
           #
-          # Only `tinycld` is listed: cards depends on core and nothing else.
+          # Only `tinycld` is listed: boards depends on core and nothing else.
           # Mentions once threatened to add drive here (the shared
           # comment_mentions table was drive's creation), but that was a
           # sibling-on-sibling dependency — core's 1985000003 now owns the
-          # table's creation, so a cards-only assembly carries everything the
+          # table's creation, so a boards-only assembly carries everything the
           # mentions suites need.
           BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
           for repo in tinycld; do
@@ -94,7 +94,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: ws/.go-version
-          # cards' own key is go.mod, not go.sum: cards deliberately commits no
+          # boards' own key is go.mod, not go.sum: boards deliberately commits no
           # go.sum (see the comment in server/go.mod — every dep resolves
           # through go.work replaces to local dirs, so there are no module
           # hashes to record). The hand-maintained require block still changes
@@ -107,7 +107,7 @@ jobs:
           # the job spends its time fetching. The assemble step above has
           # already cloned ws/tinycld by the time this hashes.
           cache-dependency-path: |
-            ws/cards/server/go.mod
+            ws/boards/server/go.mod
             ws/tinycld/server/go.sum
             ws/tinycld/core/server/go.sum
       # corepack enables the pnpm version pinned in the workspace root's
@@ -132,7 +132,7 @@ jobs:
       - name: Typecheck + unit
         working-directory: ws/${{ env.PACKAGE }}
         run: pnpm exec tinycld-pkg check
-      # cards/server holds almost no product logic — it is the RLS suite that
+      # boards/server holds almost no product logic — it is the RLS suite that
       # proves the migration's access rules against PocketBase's REAL rule
       # engine, plus the board-face counters and the presence-room authorize.
       # Those rules are the whole authorization for every caller that does not
@@ -182,7 +182,7 @@ jobs:
       # Playwright exits 0 when testDir contains no specs, so without this gate
       # the job would assemble a workspace, build a bundle and boot a server for
       # several minutes, then report green having run nothing — a check that
-      # cannot fail, which reads as coverage on the PR page. cards has no
+      # cannot fail, which reads as coverage on the PR page. boards has no
       # tests/e2e yet (it arrives with M7); skip honestly until it does.
       - name: Check for e2e specs
         id: specs
@@ -233,7 +233,7 @@ jobs:
           go-version-file: ws/.go-version
           # Same key as the check job — see the note there.
           cache-dependency-path: |
-            ws/cards/server/go.mod
+            ws/boards/server/go.mod
             ws/tinycld/server/go.sum
             ws/tinycld/core/server/go.sum
       - name: Cache pnpm store

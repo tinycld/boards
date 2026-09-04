@@ -7,8 +7,8 @@ import {
     type LINK_TYPES,
     orientLinks,
     resolveFarCard,
-} from '../tinycld/cards/lib/card-links'
-import type { BoardCardView } from '../tinycld/cards/types'
+} from '../tinycld/boards/lib/card-links'
+import type { BoardCardView } from '../tinycld/boards/types'
 
 function card(id: string, overrides: Partial<BoardCardView> = {}): BoardCardView {
     return {

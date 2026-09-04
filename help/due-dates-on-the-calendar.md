@@ -9,7 +9,7 @@ If the Calendar app is installed in your workspace, every card with a due date
 also appears there — as an all-day item on the day it is due, or at its time
 when the due date has one, across all the boards you're a member of. Nothing
 to set up; setting a due date on a card is enough. A card's start date is not
-shown on the calendar yet; the [timeline view](help://cards:filtering-and-sorting)
+shown on the calendar yet; the [timeline view](help://boards:filtering-and-sorting)
 is where a span is drawn.
 
 ## What you can do from the calendar

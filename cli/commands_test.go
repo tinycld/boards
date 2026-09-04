@@ -40,7 +40,7 @@ func board(t *testing.T) *fakeCards {
 func TestBoardList(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
-	out, _, err := runCmd(t, c, "cards", "board", "list")
+	out, _, err := runCmd(t, c, "boards", "list")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,14 +58,14 @@ func TestBoardListHidesArchivedUnlessAll(t *testing.T) {
 	f.projects["prjB"].Archived = true
 	_, c := f.serve()
 
-	out, _, err := runCmd(t, c, "cards", "board", "list")
+	out, _, err := runCmd(t, c, "boards", "list")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(out, "Home projects") {
 		t.Errorf("archived board listed without --all:\n%s", out)
 	}
-	out, _, err = runCmd(t, c, "cards", "board", "list", "--all")
+	out, _, err = runCmd(t, c, "boards", "list", "--all")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestBoardResolvesByIDAndName(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
 	for _, ref := range []string{"prjA", "Product launch", "product launch"} {
-		out, _, err := runCmd(t, c, "cards", "board", "view", ref)
+		out, _, err := runCmd(t, c, "boards", "view", ref)
 		if err != nil {
 			t.Fatalf("board view %q: %v", ref, err)
 		}
@@ -97,7 +97,7 @@ func TestAmbiguousBoardNameIsRefused(t *testing.T) {
 	f.addProject("prjC", "Product launch")
 	_, c := f.serve()
 
-	_, _, err := runCmd(t, c, "cards", "board", "view", "Product launch")
+	_, _, err := runCmd(t, c, "boards", "view", "Product launch")
 	if err == nil {
 		t.Fatal("an ambiguous board name was silently resolved")
 	}
@@ -108,7 +108,7 @@ func TestAmbiguousBoardNameIsRefused(t *testing.T) {
 	}
 	// The id still works — an ambiguous NAME must not make the board
 	// unreachable.
-	if _, _, err := runCmd(t, c, "cards", "board", "view", "prjA"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "view", "prjA"); err != nil {
 		t.Errorf("id lookup broke under an ambiguous name: %v", err)
 	}
 }
@@ -116,7 +116,7 @@ func TestAmbiguousBoardNameIsRefused(t *testing.T) {
 func TestBoardViewShowsColumnsAndCards(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
-	out, _, err := runCmd(t, c, "cards", "board", "view", "prjA")
+	out, _, err := runCmd(t, c, "boards", "view", "prjA")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestBoardViewShowsColumnsAndCards(t *testing.T) {
 func TestCardAddAppendsAndPinsProject(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
-	_, _, err := runCmd(t, c, "cards", "card", "add", "Ship it", "--board", "prjA", "--list", "To do")
+	_, _, err := runCmd(t, c, "boards", "card", "add", "Ship it", "--board", "prjA", "--list", "To do")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +165,7 @@ func TestCardAddAppendsAndPinsProject(t *testing.T) {
 func TestCardAddAtIndex(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
-	_, _, err := runCmd(t, c, "cards", "card", "add", "First", "--board", "prjA", "--list", "To do", "--index", "0")
+	_, _, err := runCmd(t, c, "boards", "card", "add", "First", "--board", "prjA", "--list", "To do", "--index", "0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func TestCardAddAtIndex(t *testing.T) {
 func TestCardAddRejectsABadDueDate(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
-	_, _, err := runCmd(t, c, "cards", "card", "add", "X", "--board", "prjA", "--list", "To do", "--due", "next tuesday")
+	_, _, err := runCmd(t, c, "boards", "card", "add", "X", "--board", "prjA", "--list", "To do", "--due", "next tuesday")
 	if err == nil {
 		t.Fatal("a non-date --due was accepted")
 	}
@@ -190,10 +190,10 @@ func TestCardAddRejectsABadDueDate(t *testing.T) {
 func TestCardAddRequiresBoardAndList(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
-	if _, _, err := runCmd(t, c, "cards", "card", "add", "X", "--list", "To do"); err == nil {
+	if _, _, err := runCmd(t, c, "boards", "card", "add", "X", "--list", "To do"); err == nil {
 		t.Error("card add without --board succeeded")
 	}
-	if _, _, err := runCmd(t, c, "cards", "card", "add", "X", "--board", "prjA"); err == nil {
+	if _, _, err := runCmd(t, c, "boards", "card", "add", "X", "--board", "prjA"); err == nil {
 		t.Error("card add without --list succeeded")
 	}
 }
@@ -205,7 +205,7 @@ func TestCardMoveWritesListAndPositionInOneUpdate(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
 	before := f.patchCount
-	_, _, err := runCmd(t, c, "cards", "card", "move", "crdCopy", "--list", "Doing")
+	_, _, err := runCmd(t, c, "boards", "card", "move", "crdCopy", "--list", "Doing")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +230,7 @@ func TestCardMoveWithinAColumnExcludesTheMover(t *testing.T) {
 	_, c := f.serve()
 
 	// Move the FIRST card to the end.
-	_, _, err := runCmd(t, c, "cards", "card", "move", "crdCopy", "--index", "2")
+	_, _, err := runCmd(t, c, "boards", "card", "move", "crdCopy", "--index", "2")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +245,7 @@ func TestCardMoveWithinAColumnExcludesTheMover(t *testing.T) {
 func TestCardMoveRequiresSomethingToDo(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
-	if _, _, err := runCmd(t, c, "cards", "card", "move", "crdCopy"); err == nil {
+	if _, _, err := runCmd(t, c, "boards", "card", "move", "crdCopy"); err == nil {
 		t.Error("a move with neither --list nor --index succeeded")
 	}
 }
@@ -257,7 +257,7 @@ func TestCardMoveRequiresSomethingToDo(t *testing.T) {
 func TestCardMoveWithABoardAndListGoesToThatBoardsList(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
-	_, _, err := runCmd(t, c, "cards", "card", "move", "crdCopy", "--board", "Home projects", "--list", "Someday")
+	_, _, err := runCmd(t, c, "boards", "card", "move", "crdCopy", "--board", "Home projects", "--list", "Someday")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +274,7 @@ func TestCardEditOnlySendsChangedFields(t *testing.T) {
 	f.cards["crdCopy"].Description = "keep me"
 	_, c := f.serve()
 
-	_, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--title", "New title")
+	_, _, err := runCmd(t, c, "boards", "card", "edit", "crdCopy", "--title", "New title")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,7 +293,7 @@ func TestCardEditOnlySendsChangedFields(t *testing.T) {
 func TestCardEditRequiresAChange(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
-	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy"); err == nil {
+	if _, _, err := runCmd(t, c, "boards", "card", "edit", "crdCopy"); err == nil {
 		t.Error("an edit with no flags succeeded")
 	}
 }
@@ -302,20 +302,20 @@ func TestCardEditDueAndClearDue(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
 
-	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--due", "2026-09-01"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "card", "edit", "crdCopy", "--due", "2026-09-01"); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.cards["crdCopy"].Due; !strings.HasPrefix(got, "2026-09-01") {
 		t.Errorf("due = %q, want it to start with 2026-09-01", got)
 	}
-	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--clear-due"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "card", "edit", "crdCopy", "--clear-due"); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.cards["crdCopy"].Due; got != "" {
 		t.Errorf("due = %q after --clear-due, want empty", got)
 	}
 	// The two contradict each other and must not silently pick one.
-	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy",
+	if _, _, err := runCmd(t, c, "boards", "card", "edit", "crdCopy",
 		"--due", "2026-09-01", "--clear-due"); err == nil {
 		t.Error("--due together with --clear-due was accepted")
 	}
@@ -326,7 +326,7 @@ func TestCardEditReporterAndClearReporter(t *testing.T) {
 	f.users["user2"] = &user{ID: "user2", Email: "sam@example.com", FirstName: "Sam"}
 	_, c := f.serve()
 
-	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--reporter", "user2"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "card", "edit", "crdCopy", "--reporter", "user2"); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.cards["crdCopy"].Reporter; got != "user2" {
@@ -334,19 +334,19 @@ func TestCardEditReporterAndClearReporter(t *testing.T) {
 	}
 	// Clearing restores the created_by fallback rather than emptying the row,
 	// which is why the flag is named for the effect and not for the field.
-	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--clear-reporter"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "card", "edit", "crdCopy", "--clear-reporter"); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.cards["crdCopy"].Reporter; got != "" {
 		t.Errorf("reporter = %q after --clear-reporter, want empty", got)
 	}
-	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy",
+	if _, _, err := runCmd(t, c, "boards", "card", "edit", "crdCopy",
 		"--reporter", "user2", "--clear-reporter"); err == nil {
 		t.Error("--reporter together with --clear-reporter was accepted")
 	}
 	// An empty --reporter is indistinguishable from an unpassed one, so it must
 	// be refused rather than silently clearing the field.
-	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--reporter", ""); err == nil {
+	if _, _, err := runCmd(t, c, "boards", "card", "edit", "crdCopy", "--reporter", ""); err == nil {
 		t.Error("an empty --reporter was accepted")
 	}
 }
@@ -358,7 +358,7 @@ func TestCardAddDefaultsReporterToCaller(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
 
-	if _, _, err := runCmd(t, c, "cards", "card", "add", "Ship it",
+	if _, _, err := runCmd(t, c, "boards", "card", "add", "Ship it",
 		"--board", "prjA", "--list", "lstTodo"); err != nil {
 		t.Fatal(err)
 	}
@@ -370,7 +370,7 @@ func TestCardAddDefaultsReporterToCaller(t *testing.T) {
 	}
 
 	// Filing on someone else's behalf is the case the field exists for.
-	if _, _, err := runCmd(t, c, "cards", "card", "add", "For Sam",
+	if _, _, err := runCmd(t, c, "boards", "card", "add", "For Sam",
 		"--board", "prjA", "--list", "lstTodo", "--reporter", "user2"); err != nil {
 		t.Fatal(err)
 	}
@@ -391,7 +391,7 @@ func TestCardViewFallsBackToCreator(t *testing.T) {
 	f.cards["crdCopy"].Reporter = ""
 	_, c := f.serve()
 
-	out, _, err := runCmd(t, c, "cards", "card", "view", "crdCopy")
+	out, _, err := runCmd(t, c, "boards", "card", "view", "crdCopy")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -408,7 +408,7 @@ func TestCardViewShowsTheListName(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
 
-	out, _, err := runCmd(t, c, "cards", "card", "view", "crdCopy")
+	out, _, err := runCmd(t, c, "boards", "card", "view", "crdCopy")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -426,7 +426,7 @@ func TestCardViewJSONKeepsTheListID(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
 
-	out, _, err := runCmd(t, c, "--json", "cards", "card", "view", "crdCopy")
+	out, _, err := runCmd(t, c, "--json", "boards", "card", "view", "crdCopy")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -449,7 +449,7 @@ func TestCardViewFallsBackToTheListIDWhenUnreadable(t *testing.T) {
 	delete(f.lists, "lstTodo")
 	_, c := f.serve()
 
-	out, _, err := runCmd(t, c, "cards", "card", "view", "crdCopy")
+	out, _, err := runCmd(t, c, "boards", "card", "view", "crdCopy")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -462,14 +462,14 @@ func TestCardArchiveAndRestore(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
 
-	if _, _, err := runCmd(t, c, "cards", "card", "archive", "crdCopy"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "card", "archive", "crdCopy"); err != nil {
 		t.Fatal(err)
 	}
 	if !f.cards["crdCopy"].Archived {
 		t.Error("card was not archived")
 	}
 	// An archived card drops out of a board view...
-	out, _, err := runCmd(t, c, "cards", "board", "view", "prjA")
+	out, _, err := runCmd(t, c, "boards", "view", "prjA")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -477,7 +477,7 @@ func TestCardArchiveAndRestore(t *testing.T) {
 		t.Errorf("archived card still listed:\n%s", out)
 	}
 	// ...but --all shows it.
-	out, _, err = runCmd(t, c, "cards", "board", "view", "prjA", "--all")
+	out, _, err = runCmd(t, c, "boards", "view", "prjA", "--all")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -485,7 +485,7 @@ func TestCardArchiveAndRestore(t *testing.T) {
 		t.Errorf("--all did not include the archived card:\n%s", out)
 	}
 
-	if _, _, err := runCmd(t, c, "cards", "card", "archive", "crdCopy", "--unset"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "card", "archive", "crdCopy", "--unset"); err != nil {
 		t.Fatal(err)
 	}
 	if f.cards["crdCopy"].Archived {
@@ -500,7 +500,7 @@ func TestCardRemoveNeedsConfirmation(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
 
-	_, _, err := runCmd(t, c, "cards", "card", "remove", "crdCopy")
+	_, _, err := runCmd(t, c, "boards", "card", "remove", "crdCopy")
 	if err == nil {
 		t.Fatal("a card was deleted without --yes")
 	}
@@ -514,7 +514,7 @@ func TestCardRemoveNeedsConfirmation(t *testing.T) {
 		t.Fatal("the card is gone despite the refusal")
 	}
 
-	if _, _, err := runCmd(t, c, "cards", "card", "remove", "crdCopy", "--yes"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "card", "remove", "crdCopy", "--yes"); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := f.cards["crdCopy"]; ok {
@@ -526,7 +526,7 @@ func TestListShowAndAdd(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
 
-	out, _, err := runCmd(t, c, "cards", "list", "show", "--board", "prjA")
+	out, _, err := runCmd(t, c, "boards", "column", "show", "--board", "prjA")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -536,7 +536,7 @@ func TestListShowAndAdd(t *testing.T) {
 		}
 	}
 
-	if _, _, err := runCmd(t, c, "cards", "list", "add", "Blocked", "--board", "prjA"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "column", "add", "Blocked", "--board", "prjA"); err != nil {
 		t.Fatal(err)
 	}
 	var added *list
@@ -560,7 +560,7 @@ func TestListRenameAndCategory(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
 
-	if _, _, err := runCmd(t, c, "cards", "list", "rename", "To do", "Backlog", "--board", "prjA"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "column", "rename", "To do", "Backlog", "--board", "prjA"); err != nil {
 		t.Fatal(err)
 	}
 	if f.lists["lstTodo"].Name != "Backlog" {
@@ -568,13 +568,13 @@ func TestListRenameAndCategory(t *testing.T) {
 	}
 
 	// `done` is the shorthand for `category done`; --unset returns to todo.
-	if _, _, err := runCmd(t, c, "cards", "list", "done", "Done", "--board", "prjA"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "column", "done", "Done", "--board", "prjA"); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.lists["lstDone"].Category; got != "done" {
 		t.Errorf("category = %q, want done", got)
 	}
-	if _, _, err := runCmd(t, c, "cards", "list", "done", "Done", "--board", "prjA", "--unset"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "column", "done", "Done", "--board", "prjA", "--unset"); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.lists["lstDone"].Category; got != "todo" {
@@ -582,13 +582,13 @@ func TestListRenameAndCategory(t *testing.T) {
 	}
 
 	// "To do" was renamed to "Backlog" above.
-	if _, _, err := runCmd(t, c, "cards", "list", "category", "Backlog", "in_progress", "--board", "prjA"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "column", "category", "Backlog", "in_progress", "--board", "prjA"); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.lists["lstTodo"].Category; got != "in_progress" {
 		t.Errorf("category = %q, want in_progress", got)
 	}
-	if _, _, err := runCmd(t, c, "cards", "list", "category", "Backlog", "blocked", "--board", "prjA"); err == nil {
+	if _, _, err := runCmd(t, c, "boards", "column", "category", "Backlog", "blocked", "--board", "prjA"); err == nil {
 		t.Error("expected an error for an unknown category")
 	}
 	if got := f.lists["lstTodo"].Category; got != "in_progress" {
@@ -601,7 +601,7 @@ func TestListMoveReordersColumns(t *testing.T) {
 	_, c := f.serve()
 
 	// Send the first column to the end.
-	if _, _, err := runCmd(t, c, "cards", "list", "move", "To do", "2", "--board", "prjA"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "column", "move", "To do", "2", "--board", "prjA"); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.lists["lstTodo"].Position; got <= f.lists["lstDone"].Position {
@@ -613,19 +613,19 @@ func TestListMoveReordersColumns(t *testing.T) {
 func TestListMoveRejectsANonNumericIndex(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
-	if _, _, err := runCmd(t, c, "cards", "list", "move", "To do", "last", "--board", "prjA"); err == nil {
+	if _, _, err := runCmd(t, c, "boards", "column", "move", "To do", "last", "--board", "prjA"); err == nil {
 		t.Error("a non-numeric index was accepted")
 	}
 }
 
-// cards_cards.list ships cascadeDelete: true, so deleting a column deletes its
+// boards_cards.list ships cascadeDelete: true, so deleting a column deletes its
 // cards server-side. The confirm must NAME THE COUNT — a delete that silently
 // destroys seven cards because the cascade was invisible is the failure mode.
 func TestListRemoveWarnsAboutTheCascade(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
 
-	_, _, err := runCmd(t, c, "cards", "list", "remove", "To do", "--board", "prjA")
+	_, _, err := runCmd(t, c, "boards", "column", "remove", "To do", "--board", "prjA")
 	if err == nil {
 		t.Fatal("a column with cards was deleted without --yes")
 	}
@@ -636,7 +636,7 @@ func TestListRemoveWarnsAboutTheCascade(t *testing.T) {
 		t.Fatalf("a DELETE was sent despite the refusal: %v", f.deletedLists)
 	}
 
-	if _, _, err := runCmd(t, c, "cards", "list", "remove", "To do", "--board", "prjA", "--yes"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "column", "remove", "To do", "--board", "prjA", "--yes"); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := f.lists["lstTodo"]; ok {
@@ -653,7 +653,7 @@ func TestListRemoveWarnsAboutTheCascade(t *testing.T) {
 func TestListRemoveSkipsTheConfirmWhenEmpty(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
-	if _, _, err := runCmd(t, c, "cards", "list", "remove", "Done", "--board", "prjA"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "column", "remove", "Done", "--board", "prjA"); err != nil {
 		t.Fatalf("deleting an empty column required confirmation: %v", err)
 	}
 	if _, ok := f.lists["lstDone"]; ok {
@@ -669,7 +669,7 @@ func TestListRemoveCountsArchivedCards(t *testing.T) {
 	f.cards["crdVenue"].Archived = true
 	_, c := f.serve()
 
-	_, _, err := runCmd(t, c, "cards", "list", "remove", "To do", "--board", "prjA")
+	_, _, err := runCmd(t, c, "boards", "column", "remove", "To do", "--board", "prjA")
 	if err == nil {
 		t.Fatal("a column holding archived cards was deleted without --yes")
 	}
@@ -688,7 +688,7 @@ func TestCardViewRendersChecklistAndComments(t *testing.T) {
 	f.cards["crdCopy"].Assignees = []string{"user1"}
 	_, c := f.serve()
 
-	out, _, err := runCmd(t, c, "cards", "card", "view", "crdCopy")
+	out, _, err := runCmd(t, c, "boards", "card", "view", "crdCopy")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -709,7 +709,7 @@ func TestUnreadableAssigneeRendersAsAPlaceholder(t *testing.T) {
 	f.cards["crdCopy"].Labels = []string{"ghostLabel"}
 	_, c := f.serve()
 
-	out, _, err := runCmd(t, c, "cards", "card", "view", "crdCopy")
+	out, _, err := runCmd(t, c, "boards", "card", "view", "crdCopy")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -724,7 +724,7 @@ func TestUnreadableAssigneeRendersAsAPlaceholder(t *testing.T) {
 func TestJSONOutputIsTheRecord(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
-	out, _, err := runCmd(t, c, "cards", "board", "list", "--json")
+	out, _, err := runCmd(t, c, "boards", "list", "--json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -742,7 +742,7 @@ func TestJSONOutputIsTheRecord(t *testing.T) {
 func TestInfoChatterStaysOffStdout(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
-	out, errOut, err := runCmd(t, c, "cards", "card", "add", "Ship it",
+	out, errOut, err := runCmd(t, c, "boards", "card", "add", "Ship it",
 		"--board", "prjA", "--list", "To do", "--json")
 	if err != nil {
 		t.Fatal(err)
@@ -759,10 +759,10 @@ func TestInfoChatterStaysOffStdout(t *testing.T) {
 func TestUnknownBoardAndCardAreReported(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
-	if _, _, err := runCmd(t, c, "cards", "board", "view", "Nope"); err == nil {
+	if _, _, err := runCmd(t, c, "boards", "view", "Nope"); err == nil {
 		t.Error("an unknown board did not error")
 	}
-	if _, _, err := runCmd(t, c, "cards", "card", "view", "crdNope"); err == nil {
+	if _, _, err := runCmd(t, c, "boards", "card", "view", "crdNope"); err == nil {
 		t.Error("an unknown card did not error")
 	}
 }
@@ -774,7 +774,7 @@ func TestListNamesAreScopedToTheirBoard(t *testing.T) {
 	f.addList("lstDoneB", "prjB", "Done", "a1")
 	_, c := f.serve()
 
-	if _, _, err := runCmd(t, c, "cards", "list", "rename", "Done", "Shipped", "--board", "prjA"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "column", "rename", "Done", "Shipped", "--board", "prjA"); err != nil {
 		t.Fatalf("a same-named list on another board made this ambiguous: %v", err)
 	}
 	if f.lists["lstDone"].Name != "Shipped" {
@@ -795,7 +795,7 @@ func TestResolveBoardByKey(t *testing.T) {
 	f.projects["prjA"].Slug = "PL"
 	_, c := f.serve()
 
-	out, _, err := runCmd(t, c, "cards", "board", "view", "PL")
+	out, _, err := runCmd(t, c, "boards", "view", "PL")
 	if err != nil {
 		t.Fatalf("a board must resolve by the key its own output prints: %v", err)
 	}
@@ -813,7 +813,7 @@ func TestBoardKeyBeatsName(t *testing.T) {
 	f.projects["prjB"].Name = "PL"
 	_, c := f.serve()
 
-	out, _, err := runCmd(t, c, "cards", "board", "view", "PL")
+	out, _, err := runCmd(t, c, "boards", "view", "PL")
 	if err != nil {
 		t.Fatalf("key lookup must win over a name collision: %v", err)
 	}
@@ -828,7 +828,7 @@ func TestAmbiguousListNameOnOneBoardIsRefused(t *testing.T) {
 	f := board(t)
 	f.addList("lstTodo2", "prjA", "To do", "a3")
 	_, c := f.serve()
-	_, _, err := runCmd(t, c, "cards", "list", "rename", "To do", "X", "--board", "prjA")
+	_, _, err := runCmd(t, c, "boards", "column", "rename", "To do", "X", "--board", "prjA")
 	if err == nil {
 		t.Fatal("an ambiguous list name was silently resolved")
 	}
@@ -844,12 +844,12 @@ func TestBoardViewReadsCardsInOneRequest(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
 	before := f.cardListCount
-	out, _, err := runCmd(t, c, "cards", "board", "view", "prjA")
+	out, _, err := runCmd(t, c, "boards", "view", "prjA")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := f.cardListCount - before; got != 1 {
-		t.Errorf("board view issued %d cards_cards list reads, want exactly 1", got)
+		t.Errorf("board view issued %d boards_cards list reads, want exactly 1", got)
 	}
 	// The single read must still produce the same board.
 	for _, want := range []string{"Write copy", "Book venue", "Design deck"} {
@@ -868,7 +868,7 @@ func TestBoardViewReadsCardsInOneRequest(t *testing.T) {
 func TestBoardViewKeepsWithinColumnOrder(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
-	out, _, err := runCmd(t, c, "cards", "board", "view", "prjA")
+	out, _, err := runCmd(t, c, "boards", "view", "prjA")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -890,7 +890,7 @@ func TestLongMultibyteBodyTruncatesOnRunes(t *testing.T) {
 	long := strings.Repeat("é", 200)
 	f.cards["crdCopy"].Description = long
 	_, c := f.serve()
-	out, _, err := runCmd(t, c, "cards", "card", "view", "crdCopy")
+	out, _, err := runCmd(t, c, "boards", "card", "view", "crdCopy")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -927,14 +927,14 @@ func TestCSVOutputEmitsTheRecord(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"card add", []string{"cards", "card", "add", "Ship it", "--board", "prjA", "--list", "To do"}, "Ship it"},
-		{"card edit", []string{"cards", "card", "edit", "crdCopy", "--title", "Rewritten"}, "Rewritten"},
-		{"card move", []string{"cards", "card", "move", "crdCopy", "--list", "Doing"}, "crdCopy"},
-		{"card archive", []string{"cards", "card", "archive", "crdVenue"}, "crdVenue"},
-		{"card view", []string{"cards", "card", "view", "crdDeck"}, "Design deck"},
-		{"list add", []string{"cards", "list", "add", "Blocked", "--board", "prjA"}, "Blocked"},
-		{"list rename", []string{"cards", "list", "rename", "Done", "Shipped", "--board", "prjA"}, "Shipped"},
-		{"list done", []string{"cards", "list", "done", "Doing", "--board", "prjA"}, "Doing"},
+		{"card add", []string{"boards", "card", "add", "Ship it", "--board", "prjA", "--list", "To do"}, "Ship it"},
+		{"card edit", []string{"boards", "card", "edit", "crdCopy", "--title", "Rewritten"}, "Rewritten"},
+		{"card move", []string{"boards", "card", "move", "crdCopy", "--list", "Doing"}, "crdCopy"},
+		{"card archive", []string{"boards", "card", "archive", "crdVenue"}, "crdVenue"},
+		{"card view", []string{"boards", "card", "view", "crdDeck"}, "Design deck"},
+		{"list add", []string{"boards", "column", "add", "Blocked", "--board", "prjA"}, "Blocked"},
+		{"list rename", []string{"boards", "column", "rename", "Done", "Shipped", "--board", "prjA"}, "Shipped"},
+		{"list done", []string{"boards", "column", "done", "Doing", "--board", "prjA"}, "Doing"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out, _, err := runCmd(t, c, append(tc.args, "--output", "csv")...)
@@ -967,9 +967,9 @@ func TestNegativeIndexIsRefused(t *testing.T) {
 		name string
 		args []string
 	}{
-		{"card add", []string{"cards", "card", "add", "X", "--board", "prjA", "--list", "To do", "--index", "-1"}},
-		{"card move", []string{"cards", "card", "move", "crdCopy", "--index", "-1"}},
-		{"list add", []string{"cards", "list", "add", "X", "--board", "prjA", "--index", "-1"}},
+		{"card add", []string{"boards", "card", "add", "X", "--board", "prjA", "--list", "To do", "--index", "-1"}},
+		{"card move", []string{"boards", "card", "move", "crdCopy", "--index", "-1"}},
+		{"list add", []string{"boards", "column", "add", "X", "--board", "prjA", "--index", "-1"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, _, err := runCmd(t, c, tc.args...)
@@ -990,7 +990,7 @@ func TestListMoveRejectsANegativeIndex(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
 	before := f.lists["lstDoing"].Position
-	if _, _, err := runCmd(t, c, "cards", "list", "move", "Doing", "-1", "--board", "prjA"); err == nil {
+	if _, _, err := runCmd(t, c, "boards", "column", "move", "Doing", "-1", "--board", "prjA"); err == nil {
 		t.Fatal("a negative index was accepted")
 	}
 	if f.lists["lstDoing"].Position != before {
@@ -1071,14 +1071,14 @@ func TestCardEditAndArchiveAcceptCardKeys(t *testing.T) {
 	f.cards["crdVenue"].Number = 13
 	_, c := f.serve()
 
-	if _, _, err := runCmd(t, c, "cards", "card", "edit", "OTTER-12", "--title", "Renamed by key"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "card", "edit", "OTTER-12", "--title", "Renamed by key"); err != nil {
 		t.Fatalf("card edit must accept a card key: %v", err)
 	}
 	if got := f.cards["crdCopy"].Title; got != "Renamed by key" {
 		t.Errorf("the wrong card was edited: crdCopy.Title = %q", got)
 	}
 
-	if _, _, err := runCmd(t, c, "cards", "card", "archive", "OTTER-13"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "card", "archive", "OTTER-13"); err != nil {
 		t.Fatalf("card archive must accept a card key: %v", err)
 	}
 	if !f.cards["crdVenue"].Archived {
@@ -1086,7 +1086,7 @@ func TestCardEditAndArchiveAcceptCardKeys(t *testing.T) {
 	}
 
 	// Plain ids keep working — the key form is an addition, not a replacement.
-	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdDeck", "--title", "By id"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "card", "edit", "crdDeck", "--title", "By id"); err != nil {
 		t.Fatalf("card edit must still accept a record id: %v", err)
 	}
 	if got := f.cards["crdDeck"].Title; got != "By id" {
@@ -1094,14 +1094,14 @@ func TestCardEditAndArchiveAcceptCardKeys(t *testing.T) {
 	}
 }
 
-// cards' rm/archive demanded --yes outright while every other package prompts.
+// boards' rm/archive demanded --yes outright while every other package prompts.
 // They use ui.Confirm now: a TTY asks, a non-TTY still refuses (so scripts are
 // unaffected), and --yes proceeds. The cascade detail survives on both paths.
 func TestDestructiveCommandsPromptRatherThanDemandYes(t *testing.T) {
 	t.Run("card remove proceeds with --yes", func(t *testing.T) {
 		f := board(t)
 		_, c := f.serve()
-		if _, _, err := runCmd(t, c, "cards", "card", "remove", "crdCopy", "--yes"); err != nil {
+		if _, _, err := runCmd(t, c, "boards", "card", "remove", "crdCopy", "--yes"); err != nil {
 			t.Fatalf("--yes must delete: %v", err)
 		}
 		if len(f.deletedCards) != 1 || f.deletedCards[0] != "crdCopy" {
@@ -1112,7 +1112,7 @@ func TestDestructiveCommandsPromptRatherThanDemandYes(t *testing.T) {
 	t.Run("list remove proceeds with --yes", func(t *testing.T) {
 		f := board(t)
 		_, c := f.serve()
-		if _, _, err := runCmd(t, c, "cards", "list", "remove", "To do",
+		if _, _, err := runCmd(t, c, "boards", "column", "remove", "To do",
 			"--board", "prjA", "--yes"); err != nil {
 			t.Fatalf("--yes must delete: %v", err)
 		}
@@ -1125,7 +1125,7 @@ func TestDestructiveCommandsPromptRatherThanDemandYes(t *testing.T) {
 	t.Run("an empty list deletes without asking", func(t *testing.T) {
 		f := board(t)
 		_, c := f.serve()
-		if _, _, err := runCmd(t, c, "cards", "list", "remove", "Done", "--board", "prjA"); err != nil {
+		if _, _, err := runCmd(t, c, "boards", "column", "remove", "Done", "--board", "prjA"); err != nil {
 			t.Fatalf("an empty column must delete without --yes: %v", err)
 		}
 		if len(f.deletedLists) != 1 {
@@ -1139,7 +1139,7 @@ func TestCardAddAndEditPriority(t *testing.T) {
 	_, c := f.serve()
 
 	// Omitted → "none", written explicitly so the row never carries ''.
-	_, _, err := runCmd(t, c, "cards", "card", "add", "Triage me", "--board", "prjA", "--list", "To do")
+	_, _, err := runCmd(t, c, "boards", "card", "add", "Triage me", "--board", "prjA", "--list", "To do")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1147,7 +1147,7 @@ func TestCardAddAndEditPriority(t *testing.T) {
 		t.Fatalf("priority default = %q, want none", got)
 	}
 
-	_, _, err = runCmd(t, c, "cards", "card", "add", "Hot fix", "--board", "prjA", "--list", "To do",
+	_, _, err = runCmd(t, c, "boards", "card", "add", "Hot fix", "--board", "prjA", "--list", "To do",
 		"--priority", "urgent")
 	if err != nil {
 		t.Fatal(err)
@@ -1156,7 +1156,7 @@ func TestCardAddAndEditPriority(t *testing.T) {
 		t.Fatalf("priority = %q, want urgent", got)
 	}
 
-	_, _, err = runCmd(t, c, "cards", "card", "edit", "crdCopy", "--priority", "low")
+	_, _, err = runCmd(t, c, "boards", "card", "edit", "crdCopy", "--priority", "low")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1173,7 +1173,7 @@ func TestCardAddAndEditEstimate(t *testing.T) {
 	_, c := f.serve()
 
 	// Omitted → 0, written explicitly: 0 is the stored form of "no estimate".
-	_, _, err := runCmd(t, c, "cards", "card", "add", "Size me", "--board", "prjA", "--list", "To do")
+	_, _, err := runCmd(t, c, "boards", "card", "add", "Size me", "--board", "prjA", "--list", "To do")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1181,7 +1181,7 @@ func TestCardAddAndEditEstimate(t *testing.T) {
 		t.Fatalf("estimate default = %d, want 0", got)
 	}
 
-	_, _, err = runCmd(t, c, "cards", "card", "add", "Big one", "--board", "prjA", "--list", "To do",
+	_, _, err = runCmd(t, c, "boards", "card", "add", "Big one", "--board", "prjA", "--list", "To do",
 		"--estimate", "8")
 	if err != nil {
 		t.Fatal(err)
@@ -1190,7 +1190,7 @@ func TestCardAddAndEditEstimate(t *testing.T) {
 		t.Fatalf("estimate = %d, want 8", got)
 	}
 
-	_, _, err = runCmd(t, c, "cards", "card", "edit", "crdCopy", "--estimate", "3")
+	_, _, err = runCmd(t, c, "boards", "card", "edit", "crdCopy", "--estimate", "3")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1202,7 +1202,7 @@ func TestCardAddAndEditEstimate(t *testing.T) {
 	}
 
 	// 0 IS the clear, and it must be sent rather than dropped as a zero value.
-	_, _, err = runCmd(t, c, "cards", "card", "edit", "crdCopy", "--estimate", "0")
+	_, _, err = runCmd(t, c, "boards", "card", "edit", "crdCopy", "--estimate", "0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1215,7 +1215,7 @@ func TestCardStartAndTimedDue(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
 
-	_, _, err := runCmd(t, c, "cards", "card", "add", "Plan it", "--board", "prjA", "--list", "To do",
+	_, _, err := runCmd(t, c, "boards", "card", "add", "Plan it", "--board", "prjA", "--list", "To do",
 		"--start", "2026-09-03", "--due", "2026-09-10 14:30")
 	if err != nil {
 		t.Fatal(err)
@@ -1236,7 +1236,7 @@ func TestCardStartAndTimedDue(t *testing.T) {
 	}
 
 	// A bare day keeps the flag off.
-	_, _, err = runCmd(t, c, "cards", "card", "edit", "crdCopy", "--due", "2026-09-11")
+	_, _, err = runCmd(t, c, "boards", "card", "edit", "crdCopy", "--due", "2026-09-11")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1244,22 +1244,22 @@ func TestCardStartAndTimedDue(t *testing.T) {
 		t.Fatalf("day-only --due must clear the flag: %v", f.lastCardPatch)
 	}
 	// Clearing clears both halves.
-	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--clear-due"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "card", "edit", "crdCopy", "--clear-due"); err != nil {
 		t.Fatal(err)
 	}
 	if f.lastCardPatch["due"] != "" || f.lastCardPatch["due_has_time"] != false {
 		t.Fatalf("--clear-due must clear the flag too: %v", f.lastCardPatch)
 	}
-	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--clear-start"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "card", "edit", "crdCopy", "--clear-start"); err != nil {
 		t.Fatal(err)
 	}
 	if got, sent := f.lastCardPatch["start"]; !sent || got != "" {
 		t.Fatalf("--clear-start must send an empty start: %v", f.lastCardPatch)
 	}
-	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--start", "2026-09-01", "--clear-start"); err == nil {
+	if _, _, err := runCmd(t, c, "boards", "card", "edit", "crdCopy", "--start", "2026-09-01", "--clear-start"); err == nil {
 		t.Error("--start together with --clear-start was accepted")
 	}
-	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--due", "2026-09-10 25:00"); err == nil {
+	if _, _, err := runCmd(t, c, "boards", "card", "edit", "crdCopy", "--due", "2026-09-10 25:00"); err == nil {
 		t.Error("a bad time was accepted")
 	}
 }
@@ -1267,7 +1267,7 @@ func TestCardStartAndTimedDue(t *testing.T) {
 func TestCardEditRejectsNegativeEstimate(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
-	_, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--estimate", "-1")
+	_, _, err := runCmd(t, c, "boards", "card", "edit", "crdCopy", "--estimate", "-1")
 	if err == nil {
 		t.Fatal("expected an error for a negative estimate")
 	}
@@ -1279,7 +1279,7 @@ func TestCardEditRejectsNegativeEstimate(t *testing.T) {
 func TestCardEditRejectsUnknownPriority(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
-	_, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--priority", "blocker")
+	_, _, err := runCmd(t, c, "boards", "card", "edit", "crdCopy", "--priority", "blocker")
 	if err == nil {
 		t.Fatal("expected an error for an unknown priority")
 	}
@@ -1297,13 +1297,13 @@ func TestBoardArchiveAndRestore(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
 
-	if _, _, err := runCmd(t, c, "cards", "board", "archive", "Product launch"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "archive", "Product launch"); err != nil {
 		t.Fatal(err)
 	}
 	if f.lastProjectPatch["archived"] != true {
 		t.Fatalf("archive sent %v, want archived:true", f.lastProjectPatch)
 	}
-	out, _, err := runCmd(t, c, "cards", "board", "list")
+	out, _, err := runCmd(t, c, "boards", "list")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1311,13 +1311,13 @@ func TestBoardArchiveAndRestore(t *testing.T) {
 		t.Fatalf("archived board still listed without --all:\n%s", out)
 	}
 
-	if _, _, err := runCmd(t, c, "cards", "board", "archive", "prjA", "--unset"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "archive", "prjA", "--unset"); err != nil {
 		t.Fatal(err)
 	}
 	if f.lastProjectPatch["archived"] != false {
 		t.Fatalf("restore sent %v, want archived:false", f.lastProjectPatch)
 	}
-	out, _, err = runCmd(t, c, "cards", "board", "list")
+	out, _, err = runCmd(t, c, "boards", "list")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1331,7 +1331,7 @@ func TestBoardRemoveNeedsConfirmationAndCounts(t *testing.T) {
 	_, c := f.serve()
 
 	// No TTY and no --yes: refused, and the refusal names what would go.
-	_, _, err := runCmd(t, c, "cards", "board", "remove", "Product launch")
+	_, _, err := runCmd(t, c, "boards", "remove", "Product launch")
 	if err == nil {
 		t.Fatal("expected a refusal without --yes")
 	}
@@ -1344,13 +1344,13 @@ func TestBoardRemoveNeedsConfirmationAndCounts(t *testing.T) {
 		t.Fatalf("board deleted despite the refusal: %v", f.deletedProjects)
 	}
 
-	if _, _, err := runCmd(t, c, "cards", "board", "remove", "Product launch", "--yes"); err != nil {
+	if _, _, err := runCmd(t, c, "boards", "remove", "Product launch", "--yes"); err != nil {
 		t.Fatal(err)
 	}
 	if len(f.deletedProjects) != 1 || f.deletedProjects[0] != "prjA" {
 		t.Fatalf("deleted %v, want [prjA]", f.deletedProjects)
 	}
-	out, _, err := runCmd(t, c, "cards", "board", "list", "--all")
+	out, _, err := runCmd(t, c, "boards", "list", "--all")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1362,7 +1362,7 @@ func TestBoardRemoveNeedsConfirmationAndCounts(t *testing.T) {
 func TestCardMoveToAnotherBoardCallsTheEndpoint(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
-	_, _, err := runCmd(t, c, "cards", "card", "move", "crdCopy", "--board", "Home projects")
+	_, _, err := runCmd(t, c, "boards", "card", "move", "crdCopy", "--board", "Home projects")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1390,7 +1390,7 @@ func TestCardCopyCreatesCardAndChecklist(t *testing.T) {
 	f.checklist["chk1"] = &checklistItem{ID: "chk1", Card: "crdCopy", Title: "Outline", IsDone: true, Position: "a0"}
 	f.checklist["chk2"] = &checklistItem{ID: "chk2", Card: "crdCopy", Title: "Draft", Position: "a1"}
 
-	_, _, err := runCmd(t, c, "cards", "card", "copy", "crdCopy")
+	_, _, err := runCmd(t, c, "boards", "card", "copy", "crdCopy")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1420,7 +1420,7 @@ func TestCardAddAndEditParent(t *testing.T) {
 
 	// Omitted → "", written explicitly, like every other relation the create
 	// body carries: PocketBase fills nothing in for an absent field.
-	_, _, err := runCmd(t, c, "cards", "card", "add", "Top level", "--board", "prjA", "--list", "To do")
+	_, _, err := runCmd(t, c, "boards", "card", "add", "Top level", "--board", "prjA", "--list", "To do")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1428,7 +1428,7 @@ func TestCardAddAndEditParent(t *testing.T) {
 		t.Fatalf("parent default = %v, want \"\"", got)
 	}
 
-	_, _, err = runCmd(t, c, "cards", "card", "add", "A sub-task",
+	_, _, err = runCmd(t, c, "boards", "card", "add", "A sub-task",
 		"--board", "prjA", "--list", "To do", "--parent", "crdCopy")
 	if err != nil {
 		t.Fatal(err)
@@ -1437,7 +1437,7 @@ func TestCardAddAndEditParent(t *testing.T) {
 		t.Fatalf("parent = %v, want crdCopy", got)
 	}
 
-	_, _, err = runCmd(t, c, "cards", "card", "edit", "crdVenue", "--parent", "crdCopy")
+	_, _, err = runCmd(t, c, "boards", "card", "edit", "crdVenue", "--parent", "crdCopy")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1455,7 +1455,7 @@ func TestCardEditClearParent(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
 
-	_, _, err := runCmd(t, c, "cards", "card", "edit", "crdVenue", "--clear-parent")
+	_, _, err := runCmd(t, c, "boards", "card", "edit", "crdVenue", "--clear-parent")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1463,7 +1463,7 @@ func TestCardEditClearParent(t *testing.T) {
 		t.Fatalf("--clear-parent must send \"\": %v", f.lastCardPatch)
 	}
 
-	_, _, err = runCmd(t, c, "cards", "card", "edit", "crdVenue",
+	_, _, err = runCmd(t, c, "boards", "card", "edit", "crdVenue",
 		"--parent", "crdCopy", "--clear-parent")
 	if err == nil {
 		t.Fatal("--parent and --clear-parent together must be refused")
@@ -1479,7 +1479,7 @@ func TestCardEditRejectsEmptyParent(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
 
-	_, _, err := runCmd(t, c, "cards", "card", "edit", "crdVenue", "--parent", "  ")
+	_, _, err := runCmd(t, c, "boards", "card", "edit", "crdVenue", "--parent", "  ")
 	if err == nil {
 		t.Fatal("an empty --parent must be refused")
 	}

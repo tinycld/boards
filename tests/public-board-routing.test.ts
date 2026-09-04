@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
     decidePublicBoardRoute,
     type PublicBoardRouteInput,
-} from '~/tinycld/cards/lib/public-board-routing'
+} from '~/tinycld/boards/lib/public-board-routing'
 
 // The full truth table. This function exists as a pure one precisely so it can
 // have one — drive's equivalent lived in JSX and shipped a dead branch that
@@ -40,13 +40,13 @@ describe('decidePublicBoardRoute', () => {
         // a whole board, so the live board beats a read-only rendering of it.
         expect(decidePublicBoardRoute(input({ isSignedIn: true, isMember: true }))).toEqual({
             kind: 'redirect',
-            href: '/a/cards',
+            href: '/a/boards',
         })
     })
 
     it('shows the public board to a signed-in NON-member', () => {
         // Someone with an account on this server who was sent a link to a board
-        // they are not on. Redirecting would drop them on /cards with no idea
+        // they are not on. Redirecting would drop them on /boards with no idea
         // why the board they clicked is missing.
         expect(decidePublicBoardRoute(input({ isSignedIn: true, isMember: false }))).toEqual({
             kind: 'public',

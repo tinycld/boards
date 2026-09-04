@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"fmt"
@@ -25,7 +25,7 @@ import (
 // graph is corruption, not display state.
 
 func registerCardLinkGuard(app core.App) {
-	app.OnRecordCreate("cards_card_links").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordCreate("boards_card_links").BindFunc(func(e *core.RecordEvent) error {
 		if err := checkLink(e.App, e.Record); err != nil {
 			return err
 		}
@@ -58,7 +58,7 @@ func checkLink(app core.App, link *core.Record) error {
 	}
 
 	reverse, err := app.FindRecordsByFilter(
-		"cards_card_links",
+		"boards_card_links",
 		"source = {:target} && target = {:source} && type = 'blocks'",
 		"", 1, 0,
 		dbx.Params{"source": source, "target": target},
@@ -95,11 +95,11 @@ func checkLink(app core.App, link *core.Record) error {
 // honest smaller change, and history that says a link went away is worth more
 // than history that omits it entirely.
 func registerCardLinkActivity(app core.App) {
-	app.OnRecordAfterCreateSuccess("cards_card_links").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordAfterCreateSuccess("boards_card_links").BindFunc(func(e *core.RecordEvent) error {
 		writeLinkActivity(e.App, e.Record, actorOf(e.Record), "link_added")
 		return e.Next()
 	})
-	app.OnRecordAfterDeleteSuccess("cards_card_links").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordAfterDeleteSuccess("boards_card_links").BindFunc(func(e *core.RecordEvent) error {
 		// A link is cascade-deleted when either card is deleted, and writing
 		// history onto a card that no longer exists is pointless — writeActivity
 		// resolves the card and quietly skips a missing one.

@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"sync"
@@ -10,13 +10,13 @@ import (
 
 // Board-face counters.
 //
-// cards_checklist_items, cards_comments and cards_attachments register with
-// syncMode 'on-demand' (see tinycld/cards/collections.ts): a client fetches
+// boards_checklist_items, boards_comments and boards_attachments register with
+// syncMode 'on-demand' (see tinycld/boards/collections.ts): a client fetches
 // them only for the card it has open. That is right for the detail view and
 // wrong for the board face, where every card wants to show "3/7", a comment
 // count and a paperclip at rest. Rather than sync those collections eagerly —
 // which would ship every comment on every board to every client — the counts
-// are denormalized onto cards_cards here.
+// are denormalized onto boards_cards here.
 //
 // Two invariants, both learned the hard way elsewhere:
 //
@@ -33,7 +33,7 @@ import (
 // re-checked against here.
 
 func registerBoardCounters(app *pocketbase.PocketBase) {
-	for _, collection := range []string{"cards_checklist_items", "cards_comments", "cards_attachments"} {
+	for _, collection := range []string{"boards_checklist_items", "boards_comments", "boards_attachments"} {
 		app.OnRecordAfterCreateSuccess(collection).BindFunc(func(e *core.RecordEvent) error {
 			recountCard(e.App, e.Record.GetString("card"))
 			return e.Next()
@@ -87,27 +87,27 @@ func recountCard(app core.App, cardID string) {
 	lock.Lock()
 	defer lock.Unlock()
 
-	card, err := app.FindRecordById("cards_cards", cardID)
+	card, err := app.FindRecordById("boards_cards", cardID)
 	if err != nil {
 		return
 	}
 
-	checklistTotal, err := countRows(app, "cards_checklist_items", dbx.HashExp{"card": cardID})
+	checklistTotal, err := countRows(app, "boards_checklist_items", dbx.HashExp{"card": cardID})
 	if err != nil {
 		app.Logger().Warn("cards: checklist recount failed", "card", cardID, "error", err)
 		return
 	}
-	checklistDone, err := countRows(app, "cards_checklist_items", dbx.HashExp{"card": cardID, "is_done": true})
+	checklistDone, err := countRows(app, "boards_checklist_items", dbx.HashExp{"card": cardID, "is_done": true})
 	if err != nil {
 		app.Logger().Warn("cards: checklist-done recount failed", "card", cardID, "error", err)
 		return
 	}
-	commentCount, err := countRows(app, "cards_comments", dbx.HashExp{"card": cardID})
+	commentCount, err := countRows(app, "boards_comments", dbx.HashExp{"card": cardID})
 	if err != nil {
 		app.Logger().Warn("cards: comment recount failed", "card", cardID, "error", err)
 		return
 	}
-	attachmentCount, err := countRows(app, "cards_attachments", dbx.HashExp{"card": cardID})
+	attachmentCount, err := countRows(app, "boards_attachments", dbx.HashExp{"card": cardID})
 	if err != nil {
 		app.Logger().Warn("cards: attachment recount failed", "card", cardID, "error", err)
 		return

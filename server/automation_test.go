@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"fmt"
@@ -12,14 +12,14 @@ import (
 	"tinycld.org/core/automation"
 )
 
-// automation_test.go covers cards' automation registrations: the board-
+// automation_test.go covers boards' automation registrations: the board-
 // membership owner resolver shared by all four card triggers, the filter that
 // separates card-completed from card-moved, and the native action handlers with
 // their relation authorizers.
 //
 // Run against the package's real migrations (newCardsApp / rlstest), because
 // both answers are only correct relative to the actual schema — `category`
-// lives on cards_lists, and membership on cards_project_members.
+// lives on boards_lists, and membership on boards_project_members.
 
 type cardsAutomationEnv struct {
 	app      *tests.TestApp
@@ -97,7 +97,7 @@ func TestCardOwnerResolver_MalformedRecordsResolveNil(t *testing.T) {
 		t.Errorf("nil record: got %v, want nil", owners)
 	}
 
-	col, err := env.app.FindCollectionByNameOrId("cards_cards")
+	col, err := env.app.FindCollectionByNameOrId("boards_cards")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func TestCardOwnerResolver_MalformedRecordsResolveNil(t *testing.T) {
 }
 
 // card-completed and card-moved fire on the SAME event. What separates them is
-// the destination list's category — which lives on cards_lists, so a rule
+// the destination list's category — which lives on boards_lists, so a rule
 // condition could never express it.
 func TestCardMovedToDoneList(t *testing.T) {
 	env := setupCardsAutomation(t)
@@ -208,7 +208,7 @@ func TestCardInClosedList(t *testing.T) {
 func TestCardMovedToDoneList_UnresolvableListFailsClosed(t *testing.T) {
 	env := setupCardsAutomation(t)
 
-	col, err := env.app.FindCollectionByNameOrId("cards_cards")
+	col, err := env.app.FindCollectionByNameOrId("boards_cards")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +227,7 @@ func TestCardMovedToDoneList_UnresolvableListFailsClosed(t *testing.T) {
 	}
 }
 
-// moveDestinationAuthorizer is what makes cards:move-card runnable at all: the
+// moveDestinationAuthorizer is what makes boards:move-card runnable at all: the
 // engine refuses an action whose relation param has no registered authorizer.
 // These cover the two questions the engine's view-rule floor cannot answer —
 // may this owner WRITE the board, and is the destination even on it.
@@ -308,7 +308,7 @@ func TestMoveDestination_FailsClosedOnMissingInputs(t *testing.T) {
 	}
 }
 
-// --- cards:add-assignee -----------------------------------------------------
+// --- boards:add-assignee -----------------------------------------------------
 //
 // The action's authorization splits across two DIFFERENT questions (see
 // assigneeAuthorizer): the rule owner needs board WRITE, the assignee needs only
@@ -418,10 +418,10 @@ func TestAddAssignee_AlreadyAssignedIsANoOp(t *testing.T) {
 	// redundant save land in the same clock tick, so the timestamp is equal
 	// either way and such an assertion cannot fail. Asserting "no duplicate id"
 	// alone is just as weak — it passes when the handler saves an unchanged
-	// record every firing, which still fires cards:card-assigned and burns a
+	// record every firing, which still fires boards:card-assigned and burns a
 	// chain-depth level. Only counting the write proves the early return.
 	var updates int
-	env.app.OnRecordUpdate("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	env.app.OnRecordUpdate("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		updates++
 		return e.Next()
 	})
@@ -490,16 +490,16 @@ func TestAddAssignee_FailsClosedOnMissingInputs(t *testing.T) {
 
 func reloadCard(t *testing.T, app core.App, id string) *core.Record {
 	t.Helper()
-	rec, err := app.FindRecordById("cards_cards", id)
+	rec, err := app.FindRecordById("boards_cards", id)
 	if err != nil {
 		t.Fatalf("reload card %s: %v", id, err)
 	}
 	return rec
 }
 
-// --- cards:add-label --------------------------------------------------------
+// --- boards:add-label --------------------------------------------------------
 //
-// Simpler than add-assignee: cards_labels is board-scoped, so asserting the
+// Simpler than add-assignee: boards_labels is board-scoped, so asserting the
 // label belongs to the card's own board subsumes the separate membership
 // question a `users` target needed. The shared append behaviour (idempotency,
 // maxSelect, stamping) lives in appendRelation and is covered once under
@@ -616,7 +616,7 @@ func TestAddLabel_AlreadyPresentIsANoOp(t *testing.T) {
 	}
 
 	var updates int
-	env.app.OnRecordUpdate("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	env.app.OnRecordUpdate("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		updates++
 		return e.Next()
 	})

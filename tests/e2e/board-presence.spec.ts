@@ -24,10 +24,10 @@ import { addCard, boardCard, createBoard, openBoard, shareBoard } from './helper
 const CARD_TITLE = 'Ship the release'
 const OTHER_CARD = 'Write the changelog'
 
-test.describe('Cards — real-time presence', () => {
+test.describe('Boards — real-time presence', () => {
     test('shows who else is on the board, and which card they have open', async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         const boardName = `presence-${Date.now()}`
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
@@ -38,7 +38,7 @@ test.describe('Cards — real-time presence', () => {
         // Alone on the board: no presence row at all. The positive control
         // for every assertion below — without it, a presence stack that
         // never renders would pass the "own avatar absent" checks.
-        await expect(page.getByTestId('cards-live-presence')).toHaveCount(0)
+        await expect(page.getByTestId('boards-live-presence')).toHaveCount(0)
 
         await shareBoard(page, boardName, TEST_COLLABORATOR_EMAIL, 'Editor')
 
@@ -48,12 +48,12 @@ test.describe('Cards — real-time presence', () => {
         const { page: bobPage, close } = await signInAsCollaborator(page)
         try {
             // --- Bob joins the board ---
-            await navigateToPackage(bobPage, 'cards')
+            await navigateToPackage(bobPage, 'boards')
             await openBoard(bobPage, boardName, CARD_TITLE)
 
             // Each session sees the OTHER, and neither sees itself.
-            await expect(page.getByTestId('cards-live-presence')).toBeVisible()
-            await expect(bobPage.getByTestId('cards-live-presence')).toBeVisible()
+            await expect(page.getByTestId('boards-live-presence')).toBeVisible()
+            await expect(bobPage.getByTestId('boards-live-presence')).toBeVisible()
 
             // --- Bob opens a card; the owner sees it on that card's face ---
             await boardCard(bobPage, CARD_TITLE).click()
@@ -61,23 +61,23 @@ test.describe('Cards — real-time presence', () => {
 
             const bobCardId = await cardIdFor(page, CARD_TITLE)
             const otherCardId = await cardIdFor(page, OTHER_CARD)
-            await expect(page.getByTestId(`cards-watchers-${bobCardId}`)).toBeVisible()
+            await expect(page.getByTestId(`boards-watchers-${bobCardId}`)).toBeVisible()
             // Pinned to the card he is actually on, not just "somewhere on the
             // board" — the whole point of carrying cardId in the awareness slot.
-            await expect(page.getByTestId(`cards-watchers-${otherCardId}`)).toHaveCount(0)
+            await expect(page.getByTestId(`boards-watchers-${otherCardId}`)).toHaveCount(0)
             // Bob does not see himself on the card he has open.
-            await expect(bobPage.getByTestId(`cards-watchers-${bobCardId}`)).toHaveCount(0)
+            await expect(bobPage.getByTestId(`boards-watchers-${bobCardId}`)).toHaveCount(0)
 
             // --- Bob moves to the other card; the marker follows ---
             await bobPage.keyboard.press('Escape')
             await boardCard(bobPage, OTHER_CARD).click()
-            await expect(page.getByTestId(`cards-watchers-${otherCardId}`)).toBeVisible()
-            await expect(page.getByTestId(`cards-watchers-${bobCardId}`)).toHaveCount(0)
+            await expect(page.getByTestId(`boards-watchers-${otherCardId}`)).toBeVisible()
+            await expect(page.getByTestId(`boards-watchers-${bobCardId}`)).toHaveCount(0)
 
             // --- Bob closes the card: still on the board, on no card ---
             await bobPage.keyboard.press('Escape')
-            await expect(page.getByTestId(`cards-watchers-${otherCardId}`)).toHaveCount(0)
-            await expect(page.getByTestId('cards-live-presence')).toBeVisible()
+            await expect(page.getByTestId(`boards-watchers-${otherCardId}`)).toHaveCount(0)
+            await expect(page.getByTestId('boards-live-presence')).toBeVisible()
 
             // --- Bob leaves cards entirely ---
             // `freezeOnBlur` keeps the cards screen MOUNTED here, so nothing
@@ -86,7 +86,7 @@ test.describe('Cards — real-time presence', () => {
             // The assertion must resolve promptly: waiting on y-protocols' 30s
             // reaper instead would be the bug, not the fix.
             await navigateToPackage(bobPage, 'settings')
-            await expect(page.getByTestId('cards-live-presence')).toHaveCount(0)
+            await expect(page.getByTestId('boards-live-presence')).toHaveCount(0)
         } finally {
             await close()
         }

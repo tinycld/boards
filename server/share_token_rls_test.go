@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"fmt"
@@ -83,9 +83,9 @@ func shareLink(
 	expires string,
 ) string {
 	t.Helper()
-	col, err := env.app.FindCollectionByNameOrId("cards_share_links")
+	col, err := env.app.FindCollectionByNameOrId("boards_share_links")
 	if err != nil {
-		t.Fatalf("find cards_share_links: %v", err)
+		t.Fatalf("find boards_share_links: %v", err)
 	}
 	r := core.NewRecord(col)
 	r.Set("project", projectID)
@@ -250,7 +250,7 @@ func TestShareToken_LiveTokenReadsProject(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_projects/records",
+		url:        "/api/collections/boards_projects/records",
 		shareToken: env.tokLive,
 		want:       http.StatusOK,
 		content:    []string{env.project.Id},
@@ -262,7 +262,7 @@ func TestShareToken_LiveTokenReadsLists(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_lists/records",
+		url:        "/api/collections/boards_lists/records",
 		shareToken: env.tokLive,
 		want:       http.StatusOK,
 		content:    []string{env.list.Id},
@@ -274,7 +274,7 @@ func TestShareToken_LiveTokenReadsCards(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_cards/records",
+		url:        "/api/collections/boards_cards/records",
 		shareToken: env.tokLive,
 		want:       http.StatusOK,
 		content:    []string{env.card.Id},
@@ -286,7 +286,7 @@ func TestShareToken_LiveTokenReadsLabels(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_labels/records",
+		url:        "/api/collections/boards_labels/records",
 		shareToken: env.tokLive,
 		want:       http.StatusOK,
 		content:    []string{env.aLabel.Id},
@@ -298,7 +298,7 @@ func TestShareToken_LiveTokenReadsChecklistItems(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_checklist_items/records",
+		url:        "/api/collections/boards_checklist_items/records",
 		shareToken: env.tokLive,
 		want:       http.StatusOK,
 		content:    []string{env.aCheckItem.Id},
@@ -310,7 +310,7 @@ func TestShareToken_LiveTokenReadsComments(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_comments/records",
+		url:        "/api/collections/boards_comments/records",
 		shareToken: env.tokLive,
 		want:       http.StatusOK,
 		content:    []string{env.aComment.Id},
@@ -322,7 +322,7 @@ func TestShareToken_LiveTokenReadsAttachments(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_attachments/records",
+		url:        "/api/collections/boards_attachments/records",
 		shareToken: env.tokLive,
 		want:       http.StatusOK,
 		content:    []string{env.aAttach.Id},
@@ -337,7 +337,7 @@ func TestShareToken_FutureExpiryIsLive(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_cards/records",
+		url:        "/api/collections/boards_cards/records",
 		shareToken: env.tokFuture,
 		want:       http.StatusOK,
 		content:    []string{env.card.Id},
@@ -358,7 +358,7 @@ func TestShareToken_BoardATokenSeesNoBoardBLists(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_lists/records",
+		url:        "/api/collections/boards_lists/records",
 		shareToken: env.tokLive,
 		want:       http.StatusOK,
 		notContent: []string{env.bList.Id},
@@ -370,7 +370,7 @@ func TestShareToken_BoardATokenSeesNoBoardBCards(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_cards/records",
+		url:        "/api/collections/boards_cards/records",
 		shareToken: env.tokLive,
 		want:       http.StatusOK,
 		notContent: []string{env.bCard.Id},
@@ -382,7 +382,7 @@ func TestShareToken_BoardATokenSeesNoBoardBLabels(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_labels/records",
+		url:        "/api/collections/boards_labels/records",
 		shareToken: env.tokLive,
 		want:       http.StatusOK,
 		notContent: []string{env.bLabel.Id},
@@ -394,7 +394,7 @@ func TestShareToken_BoardATokenSeesNoBoardBChecklistItems(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_checklist_items/records",
+		url:        "/api/collections/boards_checklist_items/records",
 		shareToken: env.tokLive,
 		want:       http.StatusOK,
 		notContent: []string{env.bCheckItem.Id},
@@ -406,7 +406,7 @@ func TestShareToken_BoardATokenSeesNoBoardBComments(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_comments/records",
+		url:        "/api/collections/boards_comments/records",
 		shareToken: env.tokLive,
 		want:       http.StatusOK,
 		notContent: []string{env.bComment.Id},
@@ -418,7 +418,7 @@ func TestShareToken_BoardATokenSeesNoBoardBAttachments(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_attachments/records",
+		url:        "/api/collections/boards_attachments/records",
 		shareToken: env.tokLive,
 		want:       http.StatusOK,
 		notContent: []string{env.bAttach.Id},
@@ -430,7 +430,7 @@ func TestShareToken_BoardATokenCannotSeeBoardBProject(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_projects/records",
+		url:        "/api/collections/boards_projects/records",
 		shareToken: env.tokLive,
 		want:       http.StatusOK,
 		content:    []string{env.project.Id},
@@ -449,7 +449,7 @@ func TestShareToken_BoardATokenCannotViewBoardBProjectById(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_projects/records/" + env.bProject.Id,
+		url:        "/api/collections/boards_projects/records/" + env.bProject.Id,
 		shareToken: env.tokLive,
 		want:       http.StatusNotFound,
 	}.run(t, env)
@@ -460,7 +460,7 @@ func TestShareToken_BoardATokenCannotViewBoardBCardById(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_cards/records/" + env.bCard.Id,
+		url:        "/api/collections/boards_cards/records/" + env.bCard.Id,
 		shareToken: env.tokLive,
 		want:       http.StatusNotFound,
 	}.run(t, env)
@@ -471,7 +471,7 @@ func TestShareToken_BoardATokenCannotViewBoardBCommentById(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_comments/records/" + env.bComment.Id,
+		url:        "/api/collections/boards_comments/records/" + env.bComment.Id,
 		shareToken: env.tokLive,
 		want:       http.StatusNotFound,
 	}.run(t, env)
@@ -485,7 +485,7 @@ func TestShareToken_RevokedTokenListsNothing(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_cards/records",
+		url:        "/api/collections/boards_cards/records",
 		shareToken: env.tokRevoked,
 		want:       http.StatusOK,
 		content:    emptyList,
@@ -497,7 +497,7 @@ func TestShareToken_RevokedTokenCannotViewById(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_cards/records/" + env.card.Id,
+		url:        "/api/collections/boards_cards/records/" + env.card.Id,
 		shareToken: env.tokRevoked,
 		want:       http.StatusNotFound,
 	}.run(t, env)
@@ -508,7 +508,7 @@ func TestShareToken_ExpiredTokenListsNothing(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_cards/records",
+		url:        "/api/collections/boards_cards/records",
 		shareToken: env.tokExpired,
 		want:       http.StatusOK,
 		content:    emptyList,
@@ -520,7 +520,7 @@ func TestShareToken_ExpiredTokenCannotViewById(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_cards/records/" + env.card.Id,
+		url:        "/api/collections/boards_cards/records/" + env.card.Id,
 		shareToken: env.tokExpired,
 		want:       http.StatusNotFound,
 	}.run(t, env)
@@ -531,7 +531,7 @@ func TestShareToken_UnknownTokenReadsNothing(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_cards/records",
+		url:        "/api/collections/boards_cards/records",
 		shareToken: tok64("nosuchtoken"),
 		want:       http.StatusOK,
 		content:    emptyList,
@@ -547,7 +547,7 @@ func TestShareToken_NoHeaderReadsNoCards(t *testing.T) {
 
 	anonReq{
 		method:  http.MethodGet,
-		url:     "/api/collections/cards_cards/records",
+		url:     "/api/collections/boards_cards/records",
 		want:    http.StatusOK,
 		content: emptyList,
 	}.run(t, env)
@@ -558,7 +558,7 @@ func TestShareToken_NoHeaderReadsNoProjects(t *testing.T) {
 
 	anonReq{
 		method:  http.MethodGet,
-		url:     "/api/collections/cards_projects/records",
+		url:     "/api/collections/boards_projects/records",
 		want:    http.StatusOK,
 		content: emptyList,
 	}.run(t, env)
@@ -575,7 +575,7 @@ func TestShareToken_CannotReadRoster(t *testing.T) {
 	// 1980000003 deliberately adds no disjunct to either.
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_project_members/records",
+		url:        "/api/collections/boards_project_members/records",
 		shareToken: env.tokLive,
 		want:       http.StatusOK,
 		content:    emptyList,
@@ -586,11 +586,11 @@ func TestShareToken_CannotReadRoster(t *testing.T) {
 func TestShareToken_CannotEnumerateShareLinks(t *testing.T) {
 	env := setupShareTokenEnv(t)
 
-	// A token that could list cards_share_links would hand its holder every
+	// A token that could list boards_share_links would hand its holder every
 	// other board's tokens — including boards it has no access to.
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_share_links/records",
+		url:        "/api/collections/boards_share_links/records",
 		shareToken: env.tokLive,
 		want:       http.StatusOK,
 		content:    emptyList,
@@ -626,7 +626,7 @@ func TestShareToken_EditorLinkCannotCreateCard(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodPost,
-		url:        "/api/collections/cards_cards/records",
+		url:        "/api/collections/boards_cards/records",
 		shareToken: env.tokEditor,
 		body: fmt.Sprintf(
 			`{"project":"%s","list":"%s","title":"forged","position":"a9"}`,
@@ -635,7 +635,7 @@ func TestShareToken_EditorLinkCannotCreateCard(t *testing.T) {
 		want: http.StatusBadRequest,
 		after: func(t testing.TB, app *tests.TestApp) {
 			rows, err := app.FindRecordsByFilter(
-				"cards_cards", "title = 'forged'", "", 0, 0, nil)
+				"boards_cards", "title = 'forged'", "", 0, 0, nil)
 			if err != nil {
 				t.Fatalf("re-read cards: %v", err)
 			}
@@ -651,7 +651,7 @@ func TestShareToken_EditorLinkCannotUpdateCard(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodPatch,
-		url:        "/api/collections/cards_cards/records/" + env.card.Id,
+		url:        "/api/collections/boards_cards/records/" + env.card.Id,
 		shareToken: env.tokEditor,
 		body:       `{"title":"rewritten"}`,
 		want:       http.StatusNotFound,
@@ -664,7 +664,7 @@ func TestShareToken_EditorLinkCannotCreateComment(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodPost,
-		url:        "/api/collections/cards_comments/records",
+		url:        "/api/collections/boards_comments/records",
 		shareToken: env.tokEditor,
 		body: fmt.Sprintf(
 			`{"project":"%s","card":"%s","body":"forged"}`,
@@ -673,7 +673,7 @@ func TestShareToken_EditorLinkCannotCreateComment(t *testing.T) {
 		want: http.StatusBadRequest,
 		after: func(t testing.TB, app *tests.TestApp) {
 			rows, err := app.FindRecordsByFilter(
-				"cards_comments", "body = 'forged'", "", 0, 0, nil)
+				"boards_comments", "body = 'forged'", "", 0, 0, nil)
 			if err != nil {
 				t.Fatalf("re-read comments: %v", err)
 			}
@@ -689,11 +689,11 @@ func TestShareToken_EditorLinkCannotDeleteList(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodDelete,
-		url:        "/api/collections/cards_lists/records/" + env.list.Id,
+		url:        "/api/collections/boards_lists/records/" + env.list.Id,
 		shareToken: env.tokEditor,
 		want:       http.StatusNotFound,
 		after: func(t testing.TB, app *tests.TestApp) {
-			if _, err := app.FindRecordById("cards_lists", env.list.Id); err != nil {
+			if _, err := app.FindRecordById("boards_lists", env.list.Id); err != nil {
 				t.Fatalf("list was deleted despite the refusal: %v", err)
 			}
 		},
@@ -707,7 +707,7 @@ func TestShareToken_EditorLinkCannotRepointCardToOtherBoard(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodPatch,
-		url:        "/api/collections/cards_cards/records/" + env.card.Id,
+		url:        "/api/collections/boards_cards/records/" + env.card.Id,
 		shareToken: env.tokEditor,
 		body:       fmt.Sprintf(`{"project":"%s"}`, env.bProject.Id),
 		want:       http.StatusNotFound,
@@ -728,7 +728,7 @@ func TestShareToken_RevocationTakesEffectImmediately(t *testing.T) {
 	}
 
 	link, err := env.app.FindFirstRecordByFilter(
-		"cards_share_links", "token = {:t}", map[string]any{"t": env.tokLive})
+		"boards_share_links", "token = {:t}", map[string]any{"t": env.tokLive})
 	if err != nil {
 		t.Fatalf("find link: %v", err)
 	}
@@ -754,7 +754,7 @@ func TestShareToken_ExpiryIsEvaluatedPerRequest(t *testing.T) {
 	}
 
 	link, err := env.app.FindFirstRecordByFilter(
-		"cards_share_links", "token = {:t}", map[string]any{"t": env.tokFuture})
+		"boards_share_links", "token = {:t}", map[string]any{"t": env.tokFuture})
 	if err != nil {
 		t.Fatalf("find link: %v", err)
 	}
@@ -798,7 +798,7 @@ func TestShareToken_OutsiderWithoutTokenStillRefused(t *testing.T) {
 
 	req{
 		method:  http.MethodGet,
-		url:     "/api/collections/cards_cards/records",
+		url:     "/api/collections/boards_cards/records",
 		token:   env.outsiderToken,
 		want:    http.StatusOK,
 		content: emptyList,
@@ -834,10 +834,10 @@ func TestShareToken_DisabledUserReadsSharedBoardButNotTheirOwn(t *testing.T) {
 // The file blob.
 //
 // These three tests exist because writing them uncovered a pre-existing hole
-// well outside cards: PocketBase consulted the collection's viewRule before
+// well outside boards: PocketBase consulted the collection's viewRule before
 // serving /api/files/... ONLY for a file field marked `protected`
 // (apis/file.go, `if fileField.Protected`). No file field in this workspace was
-// — not cards', not mail's, not drive's, not text's — so every attachment in
+// — not boards', not mail's, not drive's, not text's — so every attachment in
 // every package was downloadable by anyone who knew a record id and a filename,
 // with no auth at all. 1980000000's own comment asserted the opposite.
 //
@@ -852,7 +852,7 @@ func TestShareToken_ServesSharedBoardFile(t *testing.T) {
 
 	anonReq{
 		method: http.MethodGet,
-		url: fmt.Sprintf("/api/files/cards_attachments/%s/%s",
+		url: fmt.Sprintf("/api/files/boards_attachments/%s/%s",
 			env.aAttach.Id, env.aAttach.GetString("file")),
 		shareToken: env.tokLive,
 		want:       http.StatusOK,
@@ -866,7 +866,7 @@ func TestShareToken_DoesNotServeAnotherBoardsFile(t *testing.T) {
 
 	anonReq{
 		method: http.MethodGet,
-		url: fmt.Sprintf("/api/files/cards_attachments/%s/%s",
+		url: fmt.Sprintf("/api/files/boards_attachments/%s/%s",
 			env.bAttach.Id, env.bAttach.GetString("file")),
 		shareToken: env.tokLive,
 		want:       http.StatusNotFound,
@@ -881,13 +881,13 @@ func TestShareToken_ServesNoFileWithoutAToken(t *testing.T) {
 
 	anonReq{
 		method: http.MethodGet,
-		url: fmt.Sprintf("/api/files/cards_attachments/%s/%s",
+		url: fmt.Sprintf("/api/files/boards_attachments/%s/%s",
 			env.aAttach.Id, env.aAttach.GetString("file")),
 		want: http.StatusNotFound,
 	}.run(t, env)
 }
 
-// --- cards_card_links: the doubled token hazard -----------------------------
+// --- boards_card_links: the doubled token hazard -----------------------------
 //
 // Links are the only collection whose token disjunct needs TWO @collection
 // joins, because a link row points at two boards. Each join gets its own alias
@@ -903,9 +903,9 @@ func TestShareToken_ServesNoFileWithoutAToken(t *testing.T) {
 // cases are about the READ path.
 func seedTokenLink(t *testing.T, env *shareTokenEnv, source, target *core.Record) *core.Record {
 	t.Helper()
-	col, err := env.app.FindCollectionByNameOrId("cards_card_links")
+	col, err := env.app.FindCollectionByNameOrId("boards_card_links")
 	if err != nil {
-		t.Fatalf("find cards_card_links: %v", err)
+		t.Fatalf("find boards_card_links: %v", err)
 	}
 	row := core.NewRecord(col)
 	row.Set("source", source.Id)
@@ -924,7 +924,7 @@ func TestShareToken_ReadsLinkBySourceEnd(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_card_links/records",
+		url:        "/api/collections/boards_card_links/records",
 		shareToken: env.tokLive,
 		want:       http.StatusOK,
 		content:    []string{`"totalItems":1`, crossing.Id},
@@ -941,7 +941,7 @@ func TestShareToken_ReadsLinkByTargetEnd(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_card_links/records",
+		url:        "/api/collections/boards_card_links/records",
 		shareToken: env.tokLive,
 		want:       http.StatusOK,
 		content:    []string{`"totalItems":1`, crossing.Id},
@@ -959,7 +959,7 @@ func TestShareToken_DoesNotReachLinksBetweenOtherBoards(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_card_links/records",
+		url:        "/api/collections/boards_card_links/records",
 		shareToken: env.tokLive,
 		want:       http.StatusOK,
 		content:    emptyList,
@@ -975,7 +975,7 @@ func TestShareToken_RevokedTokenReadsNoLinks(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodGet,
-		url:        "/api/collections/cards_card_links/records",
+		url:        "/api/collections/boards_card_links/records",
 		shareToken: env.tokRevoked,
 		want:       http.StatusOK,
 		content:    emptyList,
@@ -989,7 +989,7 @@ func TestShareToken_NoTokenReadsNoLinks(t *testing.T) {
 
 	anonReq{
 		method:  http.MethodGet,
-		url:     "/api/collections/cards_card_links/records",
+		url:     "/api/collections/boards_card_links/records",
 		want:    http.StatusOK,
 		content: emptyList,
 	}.run(t, env)
@@ -1003,7 +1003,7 @@ func TestShareToken_CannotCreateALink(t *testing.T) {
 
 	anonReq{
 		method:     http.MethodPost,
-		url:        "/api/collections/cards_card_links/records",
+		url:        "/api/collections/boards_card_links/records",
 		shareToken: env.tokEditor,
 		body:       `{"source":"` + env.card.Id + `","target":"` + other.Id + `","type":"blocks"}`,
 		want:       http.StatusBadRequest,

@@ -1,24 +1,24 @@
-package cards
+package boards
 
-// RLS suite for cards' branch of the shared `comment_mentions` createRule.
+// RLS suite for boards' branch of the shared `comment_mentions` createRule.
 //
-// The table is CORE's (1985000003 creates it when no package has), and cards'
-// 1986000000 appends the cards branch to its createRule. This suite therefore
-// stages exactly what a cards-only assembly boots with: core's mentions
-// migrations plus cards' own — no sibling. Drive's own contribution (its
+// The table is CORE's (1985000003 creates it when no package has), and boards'
+// 1986000000 appends the boards branch to its createRule. This suite therefore
+// stages exactly what a boards-only assembly boots with: core's mentions
+// migrations plus boards' own — no sibling. Drive's own contribution (its
 // drive_item column and rule branch) is drive's to test in drive's repo; a
 // feature package may depend on core and nothing else, and replaying another
 // sibling's migrations here was that forbidden dependency in test form.
 //
-// Why the branch lives in cards rather than core, since that will look
+// Why the branch lives in boards rather than core, since that will look
 // misplaced otherwise: PocketBase's rule validator resolves every
 // `@collection.<name>` reference eagerly at save time and rejects the whole
 // expression if one is missing — including an OR-ed rule where only one branch
 // is absent (it does not short-circuit). Migrations are symlinked into one flat
 // directory from the INSTALLED packages only, so a core migration naming
-// `cards_cards` would hard-fail at boot in every cards-less workspace.
+// `boards_cards` would hard-fail at boot in every boards-less workspace.
 //
-// The expectations mirror cards_comments' own createRule, deliberately:
+// The expectations mirror boards_comments' own createRule, deliberately:
 // mentioning someone is a comment-shaped act, so it takes commenting standing.
 //
 //	owner / editor / commentor -> 200
@@ -95,14 +95,14 @@ func setupMentionsEnv(t *testing.T) *mentionsEnv {
 		t.Fatalf("add users.role/users.disabled: %v", err)
 	}
 
-	// Applied in the order a cards-only boot reaches them, which is filename
+	// Applied in the order a boards-only boot reaches them, which is filename
 	// order across the flat directory:
 	//
 	//	core  1985000002  (generalize — no-op with no table yet)
 	//	core  1985000003  (creates comment_mentions, core-owned shape)
-	//	cards 1986000000  (appends the branch that READS its columns)
+	//	boards 1986000000  (appends the branch that READS its columns)
 	//
-	// That ordering is a REQUIREMENT, not an observation: cards' file is
+	// That ordering is a REQUIREMENT, not an observation: boards' file is
 	// numbered 1986000000 precisely so it sorts after core's. Applying these
 	// dirs in dependency order here would hide a mis-numbering — this suite
 	// happens to agree with filename order, and must keep agreeing.
@@ -138,8 +138,8 @@ func setupMentionsEnv(t *testing.T) *mentionsEnv {
 
 // mentionBody is a well-formed comment_mentions insert aimed at a card.
 func mentionBody(env *mentionsEnv, cardID string) string {
-	return `{"comment_collection":"cards_comments","comment_record":"abcdefghij12345",` +
-		`"target_collection":"cards_cards","target_record":"` + cardID + `",` +
+	return `{"comment_collection":"boards_comments","comment_record":"abcdefghij12345",` +
+		`"target_collection":"boards_cards","target_record":"` + cardID + `",` +
 		`"mentioned_user":"` + env.target.Id + `"}`
 }
 
@@ -158,7 +158,7 @@ func postMention(t *testing.T, env *mentionsEnv, token string, want int) {
 		// Assert the row landed with the CARDS target. Status alone would
 		// pass even if the row had somehow been coerced into another shape.
 		r.content = []string{
-			`"target_collection":"cards_cards"`,
+			`"target_collection":"boards_cards"`,
 			`"target_record":"` + env.card.Id + `"`,
 		}
 	}
@@ -270,7 +270,7 @@ func TestCommentMentionsRLS_AppendPreservesExistingBranch(t *testing.T) {
 	rule := *mentions.CreateRule
 	for _, want := range []string{
 		`target_collection = "synthetic_pkg"`, // the pre-existing branch
-		`target_collection = "cards_cards"`,   // cards' branch
+		`target_collection = "boards_cards"`,  // boards' branch
 	} {
 		if !containsSub(rule, want) {
 			t.Errorf("createRule lost %q.\nrule = %s", want, rule)
@@ -302,8 +302,8 @@ func TestCommentMentionsRLS_CoreOwnedShape(t *testing.T) {
 func TestCommentMentionsRLS_FixtureAppliesShippedMigrations(t *testing.T) {
 	env := setupMentionsEnv(t)
 	var app *tests.TestApp = env.app
-	if _, err := app.FindCollectionByNameOrId("cards_cards"); err != nil {
-		t.Fatalf("cards_cards missing: %v", err)
+	if _, err := app.FindCollectionByNameOrId("boards_cards"); err != nil {
+		t.Fatalf("boards_cards missing: %v", err)
 	}
 	if _, err := app.FindCollectionByNameOrId("comment_mentions"); err != nil {
 		t.Fatalf("comment_mentions missing: %v", err)
@@ -321,17 +321,17 @@ func containsSub(haystack, needle string) bool {
 
 // The flat directory is the real environment: every installed package's
 // migrations are symlinked into ONE directory and applied in FILENAME order
-// ACROSS packages. Cards' branch reads columns core's migration adds, so it
+// ACROSS packages. Boards' branch reads columns core's migration adds, so it
 // must sort after it — and the suite above cannot prove that, because it
 // applies whole directories in dependency order.
 //
-// This shipped broken once: the file was numbered in cards' own 1980-series,
+// This shipped broken once: the file was numbered in boards' own 1980-series,
 // ran before core's 1985000002, and failed with `unknown field
 // "target_collection"` on a real install.
-func TestCommentMentionsRLS_CardsBranchSortsAfterCoreGeneralization(t *testing.T) {
+func TestCommentMentionsRLS_BoardsBranchSortsAfterCoreGeneralization(t *testing.T) {
 	const (
 		coreGeneralize = "1985000002_generalize_comment_mentions_target.js"
-		cardsBranch    = "1986000000_comment_mentions_cards_branch.js"
+		boardsBranch   = "1986000000_comment_mentions_boards_branch.js"
 	)
 
 	if _, err := os.Stat(filepath.Join(
@@ -340,16 +340,16 @@ func TestCommentMentionsRLS_CardsBranchSortsAfterCoreGeneralization(t *testing.T
 		t.Fatalf("core generalizing migration missing: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(
-		rlstest.MigrationsDir(t, "../pb-migrations"), cardsBranch,
+		rlstest.MigrationsDir(t, "../pb-migrations"), boardsBranch,
 	)); err != nil {
-		t.Fatalf("cards branch migration missing (was it renamed?): %v", err)
+		t.Fatalf("boards branch migration missing (was it renamed?): %v", err)
 	}
 
 	// Filename order is what PocketBase applies, so a plain string compare is
 	// exactly the check that matters.
-	if !(coreGeneralize < cardsBranch) {
-		t.Fatalf("cards' branch (%s) must sort AFTER core's generalization (%s) — "+
+	if !(coreGeneralize < boardsBranch) {
+		t.Fatalf("boards' branch (%s) must sort AFTER core's generalization (%s) — "+
 			"it reads target_collection/target_record, which core adds",
-			cardsBranch, coreGeneralize)
+			boardsBranch, coreGeneralize)
 	}
 }

@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"net/http"
@@ -7,12 +7,12 @@ import (
 
 // The project-create sequence, proven against the real rules.
 //
-// useCreateProject (tinycld/cards/hooks/useProjectMutations.ts) writes three
+// useCreateProject (tinycld/boards/hooks/useProjectMutations.ts) writes three
 // things in a fixed order, and each step is admitted by a DIFFERENT rule:
 //
-//	1. cards_projects        — authed && notGuest
-//	2. cards_project_members — the bootstrapFirstOwner branch
-//	3. cards_lists           — viaWriter, which needs step 2 committed
+//	1. boards_projects        — authed && notGuest
+//	2. boards_project_members — the bootstrapFirstOwner branch
+//	3. boards_lists           — viaWriter, which needs step 2 committed
 //
 // The client cannot batch them, and the ordering constraint is invisible in the
 // TypeScript: nothing there says "the owner row must land before the lists".
@@ -28,7 +28,7 @@ func TestCardsCreateFlow_ProjectThenOwnerThenLists(t *testing.T) {
 	// 1. The board itself.
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_projects/records",
+		url:    "/api/collections/boards_projects/records",
 		token:  env.outsiderToken,
 		// A client-supplied id, as newRecordId() produces: the create flow mints
 		// the project id locally so the owner row can reference it without a
@@ -46,7 +46,7 @@ func TestCardsCreateFlow_OwnerRowLandsOnTheFreshProject(t *testing.T) {
 
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_project_members/records",
+		url:    "/api/collections/boards_project_members/records",
 		token:  env.outsiderToken,
 		body: `{"project":"` + fresh.Id + `","user":"` + env.outsider.Id +
 			`","role":"owner","created_by":""}`,
@@ -64,7 +64,7 @@ func TestCardsCreateFlow_ListsNeedTheOwnerRowFirst(t *testing.T) {
 
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_lists/records",
+		url:    "/api/collections/boards_lists/records",
 		token:  env.outsiderToken,
 		body:   `{"project":"` + fresh.Id + `","name":"To do","position":"a0","category":"todo"}`,
 		want:   http.StatusBadRequest,
@@ -80,7 +80,7 @@ func TestCardsCreateFlow_ListsSucceedOnceOwnerExists(t *testing.T) {
 
 	req{
 		method:  http.MethodPost,
-		url:     "/api/collections/cards_lists/records",
+		url:     "/api/collections/boards_lists/records",
 		token:   env.outsiderToken,
 		body:    `{"project":"` + fresh.Id + `","name":"To do","position":"a0","category":"todo"}`,
 		want:    http.StatusOK,
@@ -99,7 +99,7 @@ func TestCardsCreateFlow_DoneColumnCarriesCategory(t *testing.T) {
 
 	req{
 		method:  http.MethodPost,
-		url:     "/api/collections/cards_lists/records",
+		url:     "/api/collections/boards_lists/records",
 		token:   env.outsiderToken,
 		body:    `{"project":"` + fresh.Id + `","name":"Done","position":"a2","category":"done"}`,
 		want:    http.StatusOK,

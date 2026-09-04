@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"net/http"
@@ -7,7 +7,7 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 )
 
-// cards_comment_reactions access: commentors and up may react — for
+// boards_comment_reactions access: commentors and up may react — for
 // themselves only, on a comment of the named card, on the named board — and
 // take back only their own. Members and share-link visitors may read. No
 // hooks bound; this measures the shipped rules.
@@ -22,7 +22,7 @@ func TestReactionsRLS_CommentorCanReactForThemselves(t *testing.T) {
 	comment := cardsComment(t, env.app, env.project, env.card, env.editor, "hello")
 	req{
 		method:  http.MethodPost,
-		url:     "/api/collections/cards_comment_reactions/records",
+		url:     "/api/collections/boards_comment_reactions/records",
 		token:   env.commentorToken,
 		body:    reactionBody(env, comment.Id, env.commentor.Id, "👍"),
 		want:    http.StatusOK,
@@ -35,7 +35,7 @@ func TestReactionsRLS_ViewerCannotReact(t *testing.T) {
 	comment := cardsComment(t, env.app, env.project, env.card, env.editor, "hello")
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_comment_reactions/records",
+		url:    "/api/collections/boards_comment_reactions/records",
 		token:  env.viewerToken,
 		body:   reactionBody(env, comment.Id, env.viewer.Id, "👍"),
 		want:   http.StatusBadRequest,
@@ -47,7 +47,7 @@ func TestReactionsRLS_CannotReactAsAnother(t *testing.T) {
 	comment := cardsComment(t, env.app, env.project, env.card, env.editor, "hello")
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_comment_reactions/records",
+		url:    "/api/collections/boards_comment_reactions/records",
 		token:  env.editorToken,
 		body:   reactionBody(env, comment.Id, env.commentor.Id, "👍"),
 		want:   http.StatusBadRequest,
@@ -60,7 +60,7 @@ func TestReactionsRLS_EmojiMustBeInThePalette(t *testing.T) {
 	comment := cardsComment(t, env.app, env.project, env.card, env.editor, "hello")
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_comment_reactions/records",
+		url:    "/api/collections/boards_comment_reactions/records",
 		token:  env.editorToken,
 		body:   reactionBody(env, comment.Id, env.editor.Id, "🦄"),
 		want:   http.StatusBadRequest,
@@ -75,7 +75,7 @@ func TestReactionsRLS_CommentMustBelongToTheCard(t *testing.T) {
 	comment := cardsComment(t, env.app, env.project, other, env.editor, "elsewhere")
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_comment_reactions/records",
+		url:    "/api/collections/boards_comment_reactions/records",
 		token:  env.editorToken,
 		body:   reactionBody(env, comment.Id, env.editor.Id, "👍"),
 		want:   http.StatusBadRequest,
@@ -89,7 +89,7 @@ func TestReactionsRLS_ProjectMustMatchTheCard(t *testing.T) {
 	cardsMember(t, env.app, otherProject, env.owner, "owner")
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_comment_reactions/records",
+		url:    "/api/collections/boards_comment_reactions/records",
 		token:  env.ownerToken,
 		body: `{"project":"` + otherProject.Id + `","card":"` + env.card.Id +
 			`","comment":"` + comment.Id + `","user":"` + env.owner.Id + `","emoji":"👍"}`,
@@ -104,7 +104,7 @@ func TestReactionsRLS_DuplicateIsRefused(t *testing.T) {
 	seedReaction(t, env, comment.Id, env.editor.Id, "👍")
 	req{
 		method: http.MethodPost,
-		url:    "/api/collections/cards_comment_reactions/records",
+		url:    "/api/collections/boards_comment_reactions/records",
 		token:  env.editorToken,
 		body:   reactionBody(env, comment.Id, env.editor.Id, "👍"),
 		want:   http.StatusBadRequest,
@@ -117,7 +117,7 @@ func TestReactionsRLS_OwnerCannotRemoveAnothersReaction(t *testing.T) {
 	id := seedReaction(t, env, comment.Id, env.commentor.Id, "👍").Id
 	req{
 		method: http.MethodDelete,
-		url:    "/api/collections/cards_comment_reactions/records/" + id,
+		url:    "/api/collections/boards_comment_reactions/records/" + id,
 		token:  env.ownerToken,
 		want:   http.StatusNotFound,
 	}.run(t, env)
@@ -129,7 +129,7 @@ func TestReactionsRLS_CanRemoveYourOwn(t *testing.T) {
 	id := seedReaction(t, env, comment.Id, env.commentor.Id, "👍").Id
 	req{
 		method: http.MethodDelete,
-		url:    "/api/collections/cards_comment_reactions/records/" + id,
+		url:    "/api/collections/boards_comment_reactions/records/" + id,
 		token:  env.commentorToken,
 		want:   http.StatusNoContent,
 	}.run(t, env)
@@ -141,7 +141,7 @@ func TestReactionsRLS_ViewerListsThemButOutsiderDoesNot(t *testing.T) {
 	seedReaction(t, env, comment.Id, env.commentor.Id, "👍")
 	req{
 		method:  http.MethodGet,
-		url:     "/api/collections/cards_comment_reactions/records",
+		url:     "/api/collections/boards_comment_reactions/records",
 		token:   env.viewerToken,
 		want:    http.StatusOK,
 		content: []string{`"totalItems":1`},
@@ -154,7 +154,7 @@ func TestReactionsRLS_OutsiderListsNothing(t *testing.T) {
 	seedReaction(t, env, comment.Id, env.commentor.Id, "👍")
 	req{
 		method:  http.MethodGet,
-		url:     "/api/collections/cards_comment_reactions/records",
+		url:     "/api/collections/boards_comment_reactions/records",
 		token:   env.outsiderToken,
 		want:    http.StatusOK,
 		content: emptyList,
@@ -183,7 +183,7 @@ func TestReactionsRLS_ShareLinkReadsWhileLive(t *testing.T) {
 
 func seedReaction(t *testing.T, env *cardsEnv, commentID, userID, emoji string) *core.Record {
 	t.Helper()
-	col, err := env.app.FindCollectionByNameOrId("cards_comment_reactions")
+	col, err := env.app.FindCollectionByNameOrId("boards_comment_reactions")
 	if err != nil {
 		t.Fatal(err)
 	}

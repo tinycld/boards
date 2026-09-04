@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"github.com/pocketbase/pocketbase"
@@ -10,20 +10,20 @@ import (
 )
 
 // ftsConfig is the cards FTS index/search config, driving both the index-sync
-// hooks and the /api/cards/search route. The fts_cards virtual table is created
+// hooks and the /api/boards/search route. The fts_boards virtual table is created
 // by pb-migrations/1980000002; this only reads and writes it.
 //
 // description is markdown source rather than HTML, so it is indexed verbatim.
 var ftsConfig = fts.Config{
-	Slug:       "cards",
-	Collection: "cards_cards",
-	Table:      "fts_cards",
+	Slug:       "boards",
+	Collection: "boards_cards",
+	Table:      "fts_boards",
 	Columns: []fts.Column{
 		{FTS: "title", Field: "title"},
 		{FTS: "description", Field: "description"},
 	},
 	Scope: fts.MemberScope{
-		Table:       "cards_project_members",
+		Table:       "boards_project_members",
 		MemberField: "project",
 		UserField:   "user",
 		RecordField: "project",
@@ -36,8 +36,8 @@ var ftsConfig = fts.Config{
 		//
 		// Deliberately an OUTPUT column and NOT an indexed one. FTS5 cannot
 		// ALTER-add a column, so indexing the key would mean dropping,
-		// recreating and backfilling fts_cards — real risk to the only search
-		// index cards has — and it would not even work well: `porter
+		// recreating and backfilling fts_boards — real risk to the only search
+		// index boards has — and it would not even work well: `porter
 		// unicode61` splits OTTER-123 on the hyphen, so the full key would
 		// match every card on the OTTER board plus everything mentioning
 		// "123". Exact-key lookup belongs to the URL resolver
@@ -48,11 +48,11 @@ var ftsConfig = fts.Config{
 	ExcludeField: "archived",
 }
 
-// Register wires server-side behavior for the Cards package. Core's generator
+// Register wires server-side behavior for the Boards package. Core's generator
 // injects a call to this from server/package_extensions.go once the package is
 // linked.
 //
-// Cards is deliberately rule-first: authorization decisions live in the
+// Boards is deliberately rule-first: authorization decisions live in the
 // access rules the migrations ship (see
 // pb-migrations/1980000000_create_cards_collections.js), not in Go hooks,
 // because the rules are the ENTIRE authorization for every path that does not
@@ -77,7 +77,7 @@ var ftsConfig = fts.Config{
 // share-link token minting (32 bytes of entropy must come from the server).
 func Register(app *pocketbase.PocketBase) {
 	registerShared(app)
-	// Cards binds no listener and mounts no protocol server, so this single
+	// Boards binds no listener and mounts no protocol server, so this single
 	// entry point serves the single-org app and a multi-org tenant
 	// identically. If hosted behavior must ever differ, detect it with
 	// coreserver.GetTenantContext — never fork registerShared.
@@ -90,11 +90,11 @@ func registerShared(app *pocketbase.PocketBase) {
 	// relations is cascadeDelete:false in the migration, which is the shape
 	// offboard exists to handle.
 	for _, ref := range []offboard.ReassignableRef{
-		{Collection: "cards_projects", Field: "created_by"},
-		{Collection: "cards_cards", Field: "created_by"},
-		{Collection: "cards_cards", Field: "reporter"},
-		{Collection: "cards_comments", Field: "author"},
-		{Collection: "cards_attachments", Field: "uploaded_by"},
+		{Collection: "boards_projects", Field: "created_by"},
+		{Collection: "boards_cards", Field: "created_by"},
+		{Collection: "boards_cards", Field: "reporter"},
+		{Collection: "boards_comments", Field: "author"},
+		{Collection: "boards_attachments", Field: "uploaded_by"},
 	} {
 		offboard.RegisterReassignable(ref)
 	}
@@ -145,12 +145,12 @@ func registerShared(app *pocketbase.PocketBase) {
 	rt := registerRealtime(app)
 
 	// FTS index-sync record hooks only — deliberately NOT fts.Register, which
-	// would also mount GET /api/cards/search. Cards has no in-app search box,
+	// would also mount GET /api/boards/search. Boards has no in-app search box,
 	// so the federated /api/search is its only reader; a per-package route
 	// would be dead on arrival.
 	fts.RegisterSync(app, ftsConfig)
 
-	// Cards' contribution to the federated GET /api/search. Registered here
+	// Boards' contribution to the federated GET /api/search. Registered here
 	// rather than in Register so a hosted tenant and a self-hosted deployment
 	// search identically.
 	search.RegisterSources(searchSource())
@@ -158,7 +158,7 @@ func registerShared(app *pocketbase.PocketBase) {
 	registerShareLinkEndpoints(app, rt)
 }
 
-// registerShareLinkEndpoints mounts cards' first HTTP routes (M6a).
+// registerShareLinkEndpoints mounts boards' first HTTP routes (M6a).
 //
 // Owner-facing management only. There is deliberately no public read endpoint:
 // a share-link visitor reads the board through the ORDINARY collection REST and
@@ -187,15 +187,15 @@ func registerShareLinkEndpoints(app *pocketbase.PocketBase, rt *boardRealtime) {
 // the SAME one rather than a paraphrase. A test that registered its own routes
 // would keep passing after this table changed.
 func bindShareLinkRoutes(e *core.ServeEvent) {
-	e.Router.POST("/api/cards/share-link", func(re *core.RequestEvent) error {
+	e.Router.POST("/api/boards/share-link", func(re *core.RequestEvent) error {
 		return handleCreateShareLink(e.App, re)
 	}).BindFunc(requireAuth)
 
-	e.Router.GET("/api/cards/share-links", func(re *core.RequestEvent) error {
+	e.Router.GET("/api/boards/share-links", func(re *core.RequestEvent) error {
 		return handleListShareLinks(e.App, re)
 	}).BindFunc(requireAuth)
 
-	e.Router.DELETE("/api/cards/share-link/{id}", func(re *core.RequestEvent) error {
+	e.Router.DELETE("/api/boards/share-link/{id}", func(re *core.RequestEvent) error {
 		return handleRevokeShareLink(e.App, re)
 	}).BindFunc(requireAuth)
 
@@ -203,15 +203,15 @@ func bindShareLinkRoutes(e *core.ServeEvent) {
 	// account gets one: a commentor/editor link holder proves an email address
 	// and is minted a membership. A public route here is simply one that omits
 	// the middleware; there is no exemptPaths list to add to.
-	e.Router.GET("/api/cards/share-link/{token}", func(re *core.RequestEvent) error {
+	e.Router.GET("/api/boards/share-link/{token}", func(re *core.RequestEvent) error {
 		return handleShareLinkMetadata(e.App, re)
 	})
 
-	e.Router.POST("/api/cards/share-link/{token}/otp-request", func(re *core.RequestEvent) error {
+	e.Router.POST("/api/boards/share-link/{token}/otp-request", func(re *core.RequestEvent) error {
 		return handleShareOTPRequest(e.App, re)
 	})
 
-	e.Router.POST("/api/cards/share-link/{token}/otp-verify", func(re *core.RequestEvent) error {
+	e.Router.POST("/api/boards/share-link/{token}/otp-verify", func(re *core.RequestEvent) error {
 		return handleShareOTPVerify(e.App, re)
 	})
 }

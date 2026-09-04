@@ -38,7 +38,7 @@ async function freshBoard(page: Page, label: string): Promise<string> {
  * deliberately queried off `page` instead.
  */
 function peek(page: Page) {
-    return page.getByTestId('cards-card-peek')
+    return page.getByTestId('boards-card-peek')
 }
 
 /** Open a card's peek and wait for the body, not just the click. */
@@ -87,10 +87,10 @@ function dayCellLabel(date: Date): string {
     return `${date.getFullYear()}-${month}-${day}`
 }
 
-test.describe('Cards — editing a card', () => {
+test.describe('Boards — editing a card', () => {
     test.beforeEach(async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
     })
 
     test('moves the card between lists with the stepper', async ({ page }) => {
@@ -177,7 +177,7 @@ test.describe('Cards — editing a card', () => {
         await peek(page)
             .getByRole('button', { name: new RegExp(`^Due ${nextWeek}`) })
             .click()
-        await page.getByTestId('cards-due-time').fill('14:30')
+        await page.getByTestId('boards-due-time').fill('14:30')
         await page.keyboard.press('Enter')
         await expect(
             peek(page).getByRole('button', { name: new RegExp(`^Due ${nextWeek}, 2:30 PM`) })
@@ -345,7 +345,7 @@ test.describe('Cards — editing a card', () => {
         // there and the wait times out against a full suite that is otherwise
         // green.
         await navigateToPackage(page, 'settings')
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         await openCard(page, CARD_TITLE)
         await expect(peek(page).getByRole('button', { name: 'Change reporter' })).toContainText(
             creatorName

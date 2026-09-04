@@ -5,13 +5,17 @@ import {
     isMine,
     type JoinedRow,
     sortMyCards,
-} from '../tinycld/cards/lib/my-cards'
-import type { CardsCards, CardsLists, CardsProjects } from '../tinycld/cards/types'
+} from '../tinycld/boards/lib/my-cards'
+import type { BoardsCards, BoardsLists, BoardsProjects } from '../tinycld/boards/types'
 
 const NOW = new Date(2026, 8, 3, 12)
 const day = (n: number) => `2026-09-${String(3 + n).padStart(2, '0')} 00:00:00.000Z`
 
-function project(id: string, name: string, overrides: Partial<CardsProjects> = {}): CardsProjects {
+function project(
+    id: string,
+    name: string,
+    overrides: Partial<BoardsProjects> = {}
+): BoardsProjects {
     return {
         id,
         name,
@@ -28,7 +32,7 @@ function project(id: string, name: string, overrides: Partial<CardsProjects> = {
     }
 }
 
-function list(id: string, projectId: string, name = 'To do'): CardsLists {
+function list(id: string, projectId: string, name = 'To do'): BoardsLists {
     return {
         id,
         project: projectId,
@@ -40,7 +44,7 @@ function list(id: string, projectId: string, name = 'To do'): CardsLists {
     }
 }
 
-function card(id: string, projectId: string, overrides: Partial<CardsCards> = {}): CardsCards {
+function card(id: string, projectId: string, overrides: Partial<BoardsCards> = {}): BoardsCards {
     return {
         id,
         project: projectId,
@@ -69,7 +73,7 @@ function card(id: string, projectId: string, overrides: Partial<CardsCards> = {}
     }
 }
 
-function row(cardRecord: CardsCards, projectRecord: CardsProjects): JoinedRow {
+function row(cardRecord: BoardsCards, projectRecord: BoardsProjects): JoinedRow {
     return {
         card: cardRecord,
         project: projectRecord,
@@ -79,8 +83,8 @@ function row(cardRecord: CardsCards, projectRecord: CardsProjects): JoinedRow {
 
 /** A row whose list is closed — done by default, or canceled. */
 function closedRow(
-    cardRecord: CardsCards,
-    projectRecord: CardsProjects,
+    cardRecord: BoardsCards,
+    projectRecord: BoardsProjects,
     category: 'done' | 'canceled' = 'done'
 ): JoinedRow {
     return {

@@ -29,7 +29,7 @@ async function freshBoard(page: Page, label: string): Promise<string> {
 }
 
 function descriptionEditor(page: Page) {
-    return page.getByTestId('cards-description-editor').locator('.ProseMirror')
+    return page.getByTestId('boards-description-editor').locator('.ProseMirror')
 }
 
 /**
@@ -72,10 +72,10 @@ async function typeDescription(page: Page, text: string) {
     await expect(editor).toContainText(text)
 }
 
-test.describe('Cards — description formatting toolbar', () => {
+test.describe('Boards — description formatting toolbar', () => {
     test.beforeEach(async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
     })
 
     test('stays hidden until the description has focus', async ({ page }) => {
@@ -87,7 +87,7 @@ test.describe('Cards — description formatting toolbar', () => {
         // a card is opened far more often than it is edited, and an editor per
         // card-open is the most expensive thing on the screen. So there is no
         // toolbar because there is nothing to format yet.
-        await expect(page.getByTestId('cards-description-read')).toBeVisible()
+        await expect(page.getByTestId('boards-description-read')).toBeVisible()
         await expect(descriptionEditor(page)).toHaveCount(0)
         await expect(boldButton(page)).toHaveCount(0)
 
@@ -122,7 +122,7 @@ test.describe('Cards — description formatting toolbar', () => {
         // the whole SPA — the hard navigation this suite forbids.
         await closeCardPeek(page)
         await navigateToPackage(page, 'settings')
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         await openBoard(page, board, CARD_TITLE)
         await openCard(page, CARD_TITLE)
         // Reopened for the assertion: coming back to a card shows MARKDOWN,
@@ -233,7 +233,7 @@ test.describe('Cards — description formatting toolbar', () => {
         // back from storage rather than from a live room.
         await closeCardPeek(page)
         await navigateToPackage(page, 'settings')
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
         await openBoard(page, board, CARD_TITLE)
         await openCard(page, CARD_TITLE)
         // Reopened: a card shows markdown until edited, and these assertions
@@ -376,12 +376,12 @@ test.describe('Cards — description formatting toolbar', () => {
         // board exists.
         const { page: bobPage, close } = await signInAsCollaborator(page)
         try {
-            await navigateToPackage(bobPage, 'cards')
+            await navigateToPackage(bobPage, 'boards')
             await openBoard(bobPage, board, CARD_TITLE)
             await openCard(bobPage, CARD_TITLE)
 
             // The words are readable...
-            await expect(bobPage.getByTestId('cards-description-read')).toContainText(
+            await expect(bobPage.getByTestId('boards-description-read')).toContainText(
                 'Owner wrote this.'
             )
             // ...and there is nothing to format them with. A viewer gets no
@@ -390,7 +390,7 @@ test.describe('Cards — description formatting toolbar', () => {
             // and so no toolbar. Clicking the prose must not conjure any.
             await expect(descriptionEditor(bobPage)).toHaveCount(0)
             await expect(bobPage.getByRole('button', { name: 'Edit description' })).toHaveCount(0)
-            await bobPage.getByTestId('cards-description-read').click()
+            await bobPage.getByTestId('boards-description-read').click()
             await expect(boldButton(bobPage)).toHaveCount(0)
             await expect(descriptionEditor(bobPage)).toHaveCount(0)
         } finally {

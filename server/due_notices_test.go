@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"testing"
@@ -21,7 +21,7 @@ func setupDueEnv(t *testing.T) *cardsEnv {
 
 func setDue(t *testing.T, app core.App, cardID string, due time.Time, assignee string) {
 	t.Helper()
-	card, err := app.FindRecordById("cards_cards", cardID)
+	card, err := app.FindRecordById("boards_cards", cardID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestDueNotices_OverdueFiresOnceAndStamps(t *testing.T) {
 	checkDueNotices(env.app, now)
 	notes := notificationsFor(t, env.app, env.editor.Id)
 	if len(notes) != 1 || notes[0].GetString("type") != notifyTypeDue || eventOf(t, notes[0]) != "overdue" {
-		t.Fatalf("got %v, want one overdue cards_due", notificationTypes(t, env.app, env.editor.Id))
+		t.Fatalf("got %v, want one overdue boards_due", notificationTypes(t, env.app, env.editor.Id))
 	}
 
 	// A second sweep is a no-op: the stamp survived the save.
@@ -50,7 +50,7 @@ func TestDueNotices_OverdueFiresOnceAndStamps(t *testing.T) {
 	if got := len(notificationsFor(t, env.app, env.editor.Id)); got != 1 {
 		t.Fatalf("second sweep sent again: %d notifications", got)
 	}
-	card, _ := env.app.FindRecordById("cards_cards", env.card.Id)
+	card, _ := env.app.FindRecordById("boards_cards", env.card.Id)
 	if card.GetDateTime("overdue_notified_at").IsZero() {
 		t.Fatalf("overdue stamp not written")
 	}
@@ -80,7 +80,7 @@ func TestDueNotices_ChangingTheDueDateResetsTheStamps(t *testing.T) {
 
 	// Pushed out a week: a new deadline, so both notices are live again.
 	setDue(t, env.app, env.card.Id, now.AddDate(0, 0, 7), "")
-	card, _ := env.app.FindRecordById("cards_cards", env.card.Id)
+	card, _ := env.app.FindRecordById("boards_cards", env.card.Id)
 	if !card.GetDateTime("overdue_notified_at").IsZero() || !card.GetDateTime("due_soon_notified_at").IsZero() {
 		t.Fatalf("stamps survived a due-date change")
 	}
@@ -94,7 +94,7 @@ func TestDueNotices_ArchivedAndClosedCardsAreSkipped(t *testing.T) {
 	env := setupDueEnv(t)
 	now := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
 	setDue(t, env.app, env.card.Id, now.AddDate(0, 0, -1), env.editor.Id)
-	card, _ := env.app.FindRecordById("cards_cards", env.card.Id)
+	card, _ := env.app.FindRecordById("boards_cards", env.card.Id)
 	card.Set("archived", true)
 	if err := env.app.Save(card); err != nil {
 		t.Fatal(err)
@@ -175,7 +175,7 @@ func TestDueNotices_AddingATimeResetsTheStamps(t *testing.T) {
 		t.Fatalf("got %d notifications, want 1", got)
 	}
 	setDueHasTime(t, env.app, env.card.Id, true)
-	card, _ := env.app.FindRecordById("cards_cards", env.card.Id)
+	card, _ := env.app.FindRecordById("boards_cards", env.card.Id)
 	if !card.GetDateTime("overdue_notified_at").IsZero() {
 		t.Fatalf("stamps survived a flag change")
 	}
@@ -187,7 +187,7 @@ func TestDueNotices_AddingATimeResetsTheStamps(t *testing.T) {
 
 func setDueHasTime(t *testing.T, app core.App, cardID string, hasTime bool) {
 	t.Helper()
-	card, err := app.FindRecordById("cards_cards", cardID)
+	card, err := app.FindRecordById("boards_cards", cardID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func setDueHasTime(t *testing.T, app core.App, cardID string, hasTime bool) {
 
 func TestDueNotices_ClientCannotForgeOrEraseAStamp(t *testing.T) {
 	env := setupDueEnv(t)
-	card, _ := env.app.FindRecordById("cards_cards", env.card.Id)
+	card, _ := env.app.FindRecordById("boards_cards", env.card.Id)
 	card.Set("title", "renamed")
 	card.Set("overdue_notified_at", types.NowDateTime())
 	if err := env.app.Save(card); err != nil {
@@ -212,7 +212,7 @@ func TestDueNotices_ClientCannotForgeOrEraseAStamp(t *testing.T) {
 	now := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
 	setDue(t, env.app, env.card.Id, now.AddDate(0, 0, -1), env.editor.Id)
 	checkDueNotices(env.app, now)
-	card, _ = env.app.FindRecordById("cards_cards", env.card.Id)
+	card, _ = env.app.FindRecordById("boards_cards", env.card.Id)
 	card.Set("title", "renamed again")
 	card.Set("overdue_notified_at", "")
 	if err := env.app.Save(card); err != nil {

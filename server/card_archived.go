@@ -1,11 +1,11 @@
-package cards
+package boards
 
 import (
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tools/types"
 )
 
-// registerCardArchivedAt owns cards_cards.archived_at — the timestamp the
+// registerCardArchivedAt owns boards_cards.archived_at — the timestamp the
 // archived-items panel sorts by and renders.
 //
 // The column is SERVER-OWNED in fact, the same way comment_edited.go owns
@@ -26,7 +26,7 @@ import (
 // Bound against core.App rather than *pocketbase.PocketBase so the test suite
 // binds THIS function, not a restatement of it.
 func registerCardArchivedAt(app core.App) {
-	app.OnRecordUpdate("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordUpdate("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		original := e.Record.Original()
 		if original.GetString("project") == "" {
 			return e.Next()

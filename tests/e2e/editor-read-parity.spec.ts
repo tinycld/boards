@@ -207,7 +207,7 @@ function steps(tops: number[]): number[] {
 test.describe('the editor lays out exactly as the read view', () => {
     test.beforeEach(async ({ page }) => {
         await login(page)
-        await navigateToPackage(page, 'cards')
+        await navigateToPackage(page, 'boards')
     })
 
     test('a description', async ({ page }) => {
@@ -216,7 +216,7 @@ test.describe('the editor lays out exactly as the read view', () => {
         await openCard(page, 'Parity card')
 
         await page.getByRole('button', { name: 'Edit description' }).click()
-        const editor = page.getByTestId('cards-description-editor').locator('.ProseMirror')
+        const editor = page.getByTestId('boards-description-editor').locator('.ProseMirror')
         await expect(editor).toBeVisible()
         await typeSample(page, editor)
         const edit = await blocks(editor)
@@ -224,7 +224,7 @@ test.describe('the editor lays out exactly as the read view', () => {
         // Reopening is what returns the description to its rendered state.
         await closeCardPeek(page)
         await openCard(page, 'Parity card')
-        const readView = page.getByTestId('cards-description-read')
+        const readView = page.getByTestId('boards-description-read')
         await expect(readView).toBeVisible()
 
         expectSameLayout(await blocks(readView), edit)
@@ -236,7 +236,7 @@ test.describe('the editor lays out exactly as the read view', () => {
         await openCard(page, 'Parity card')
 
         await page.getByRole('button', { name: 'Write a comment' }).click()
-        const composer = page.getByTestId('cards-comment-composer').locator('.ProseMirror')
+        const composer = page.getByTestId('boards-comment-composer').locator('.ProseMirror')
         await typeSample(page, composer)
         await page.keyboard.press('ControlOrMeta+Enter')
         // Derived from SAMPLE, never a literal: the markers moved once already
@@ -256,7 +256,7 @@ test.describe('the editor lays out exactly as the read view', () => {
         const read = await blocks(rendered)
 
         await anchor.click()
-        const editor = page.getByTestId('cards-comment-editor').locator('.ProseMirror')
+        const editor = page.getByTestId('boards-comment-editor').locator('.ProseMirror')
         await expect(editor).toBeVisible()
 
         expectSameLayout(read, await blocks(editor))
@@ -285,7 +285,7 @@ test.describe('the editor lays out exactly as the read view', () => {
 
         // Several paragraphs: a one-line body hides a per-block discrepancy.
         await page.getByRole('button', { name: 'Edit description' }).click()
-        const editor = page.getByTestId('cards-description-editor').locator('.ProseMirror')
+        const editor = page.getByTestId('boards-description-editor').locator('.ProseMirror')
         await expect(editor).toBeVisible()
         await editor.click()
         for (const [i, line] of PARAGRAPHS.entries()) {
@@ -295,7 +295,7 @@ test.describe('the editor lays out exactly as the read view', () => {
 
         await closeCardPeek(page)
         await openCard(page, 'Parity card')
-        await expect(page.getByTestId('cards-description-read')).toBeVisible()
+        await expect(page.getByTestId('boards-description-read')).toBeVisible()
 
         // "Attachments" is the next section down — what a reader watching this
         // description would see move.
@@ -306,7 +306,7 @@ test.describe('the editor lays out exactly as the read view', () => {
         // Scoped to the READ view: the description's editor stays mounted for
         // the life of an open card, so an unscoped locator matches both.
         await page
-            .getByTestId('cards-description-read')
+            .getByTestId('boards-description-read')
             .getByText(PARAGRAPHS[0], { exact: true })
             .click()
         await expect(editor).toBeFocused()
@@ -327,21 +327,21 @@ test.describe('the editor lays out exactly as the read view', () => {
         await openCard(page, 'Parity card')
 
         await page.getByRole('button', { name: 'Edit description' }).click()
-        const editor = page.getByTestId('cards-description-editor').locator('.ProseMirror')
+        const editor = page.getByTestId('boards-description-editor').locator('.ProseMirror')
         await expect(editor).toBeVisible()
         await editor.click()
         await editor.pressSequentially('One short line', { delay: 6 })
 
         await closeCardPeek(page)
         await openCard(page, 'Parity card')
-        await expect(page.getByTestId('cards-description-read')).toBeVisible()
+        await expect(page.getByTestId('boards-description-read')).toBeVisible()
 
         const below = page.getByText('Attachments', { exact: true })
         const topOf = async () => Math.round((await below.boundingBox())?.y ?? -1)
         const atRest = await topOf()
 
         await page
-            .getByTestId('cards-description-read')
+            .getByTestId('boards-description-read')
             .getByText('One short line', { exact: true })
             .click()
         await expect(editor).toBeFocused()
@@ -354,7 +354,7 @@ test.describe('the editor lays out exactly as the read view', () => {
         await openCard(page, 'Parity card')
 
         await page.getByRole('button', { name: 'Write a comment' }).click()
-        const composer = page.getByTestId('cards-comment-composer').locator('.ProseMirror')
+        const composer = page.getByTestId('boards-comment-composer').locator('.ProseMirror')
         await composer.click()
         for (const [i, line] of PARAGRAPHS.entries()) {
             await composer.pressSequentially(line, { delay: 6 })
@@ -379,7 +379,7 @@ test.describe('the editor lays out exactly as the read view', () => {
         // that is not one — the blocks themselves sit at identical y. The
         // composer is a container of the same shape in both states, which is
         // what a reader actually sees hold still or move.
-        const below = page.getByTestId('cards-comment-composer')
+        const below = page.getByTestId('boards-comment-composer')
         const topOf = async () => Math.round((await below.boundingBox())?.y ?? -1)
         const atRest = await topOf()
 
@@ -387,13 +387,15 @@ test.describe('the editor lays out exactly as the read view', () => {
         // The toolbar is the last thing to land, and it is what would push the
         // composer down. Waiting for it is the settled state; a timeout here
         // would only be guessing at the same thing.
-        await expect(page.getByTestId('cards-comment-editor').locator('.ProseMirror')).toBeVisible()
+        await expect(
+            page.getByTestId('boards-comment-editor').locator('.ProseMirror')
+        ).toBeVisible()
         await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible()
         expectWithin(await topOf(), atRest, 'comment below, while editing')
 
         // Leaving must put it back exactly, not merely close to.
         await page.getByRole('button', { name: 'Cancel' }).click()
-        await expect(page.getByTestId('cards-comment-editor')).toHaveCount(0)
+        await expect(page.getByTestId('boards-comment-editor')).toHaveCount(0)
         expectWithin(await topOf(), atRest, 'comment below, after blur')
     })
 
@@ -412,7 +414,7 @@ test.describe('the editor lays out exactly as the read view', () => {
         await openCard(page, 'Parity card')
 
         await page.getByRole('button', { name: 'Write a comment' }).click()
-        const composer = page.getByTestId('cards-comment-composer').locator('.ProseMirror')
+        const composer = page.getByTestId('boards-comment-composer').locator('.ProseMirror')
         await composer.click()
         await composer.pressSequentially('Before the list', { delay: 6 })
         await page.keyboard.press('Enter')
@@ -423,12 +425,12 @@ test.describe('the editor lays out exactly as the read view', () => {
         await closeCardPeek(page)
         await openCard(page, 'Parity card')
 
-        const below = page.getByTestId('cards-comment-composer')
+        const below = page.getByTestId('boards-comment-composer')
         const topOf = async () => Math.round((await below.boundingBox())?.y ?? -1)
         const atRest = await topOf()
 
         await page.getByText('Before the list', { exact: true }).click()
-        const editor = page.getByTestId('cards-comment-editor').locator('.ProseMirror')
+        const editor = page.getByTestId('boards-comment-editor').locator('.ProseMirror')
         await expect(editor).toBeVisible()
         expectWithin(await topOf(), atRest, 'composer below a list-ending comment')
 
@@ -451,7 +453,7 @@ test.describe('the editor lays out exactly as the read view', () => {
         await openCard(page, 'Parity card')
 
         await page.getByRole('button', { name: 'Write a comment' }).click()
-        const composer = page.getByTestId('cards-comment-composer').locator('.ProseMirror')
+        const composer = page.getByTestId('boards-comment-composer').locator('.ProseMirror')
         await composer.click()
         for (const [i, line] of PARAGRAPHS.entries()) {
             await composer.pressSequentially(line, { delay: 6 })
@@ -465,7 +467,9 @@ test.describe('the editor lays out exactly as the read view', () => {
         const read = steps(await paragraphTops(page))
 
         await page.getByText(PARAGRAPHS[0], { exact: true }).click()
-        await expect(page.getByTestId('cards-comment-editor').locator('.ProseMirror')).toBeVisible()
+        await expect(
+            page.getByTestId('boards-comment-editor').locator('.ProseMirror')
+        ).toBeVisible()
         const edit = steps(await paragraphTops(page))
 
         expect(read).toHaveLength(PARAGRAPHS.length - 1)

@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { EdgeScrollSample } from '~/tinycld/cards/lib/dnd'
+import type { EdgeScrollSample } from '~/tinycld/boards/lib/dnd'
 import {
     columnDropIndex,
     edgeScrollDirection,
     isCardDragPayload,
     isColumnDragPayload,
     movedEntry,
-} from '~/tinycld/cards/lib/dnd'
+} from '~/tinycld/boards/lib/dnd'
 
 describe('movedEntry', () => {
     it('recovers a forward move (item dragged toward the end)', () => {
@@ -164,20 +164,20 @@ describe('edgeScrollDirection', () => {
 
 describe('payload guards', () => {
     it('isCardDragPayload accepts a card payload', () => {
-        expect(isCardDragPayload({ kind: 'cards-card', cardId: 'x', listId: 'y' })).toBe(true)
+        expect(isCardDragPayload({ kind: 'boards-card', cardId: 'x', listId: 'y' })).toBe(true)
     })
 
     it('isCardDragPayload rejects a column payload, and vice versa', () => {
-        expect(isCardDragPayload({ kind: 'cards-column', listId: 'y' })).toBe(false)
-        expect(isColumnDragPayload({ kind: 'cards-card', cardId: 'x', listId: 'y' })).toBe(false)
+        expect(isCardDragPayload({ kind: 'boards-column', listId: 'y' })).toBe(false)
+        expect(isColumnDragPayload({ kind: 'boards-card', cardId: 'x', listId: 'y' })).toBe(false)
     })
 
     it('isColumnDragPayload accepts a column payload', () => {
-        expect(isColumnDragPayload({ kind: 'cards-column', listId: 'y' })).toBe(true)
+        expect(isColumnDragPayload({ kind: 'boards-column', listId: 'y' })).toBe(true)
     })
 
     it('both reject null, undefined, and foreign objects', () => {
-        for (const value of [null, undefined, 'cards-card', 42, {}, { kind: 'drive-items' }]) {
+        for (const value of [null, undefined, 'boards-card', 42, {}, { kind: 'drive-items' }]) {
             expect(isCardDragPayload(value)).toBe(false)
             expect(isColumnDragPayload(value)).toBe(false)
         }
@@ -185,7 +185,7 @@ describe('payload guards', () => {
 
     it('tolerates the extra fields SortableItem merges into the payload', () => {
         const merged = {
-            kind: 'cards-card',
+            kind: 'boards-card',
             cardId: 'x',
             listId: 'y',
             index: 3,

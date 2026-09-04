@@ -199,13 +199,13 @@ func priorityCell(cd card) string {
 }
 
 const (
-	projectsCollection  = "cards_projects"
-	listsCollection     = "cards_lists"
-	cardsCollection     = "cards_cards"
-	labelsCollection    = "cards_labels"
-	membersCollection   = "cards_project_members"
-	checklistCollection = "cards_checklist_items"
-	commentsCollection  = "cards_comments"
+	projectsCollection  = "boards_projects"
+	listsCollection     = "boards_lists"
+	cardsCollection     = "boards_cards"
+	labelsCollection    = "boards_labels"
+	membersCollection   = "boards_project_members"
+	checklistCollection = "boards_checklist_items"
+	commentsCollection  = "boards_comments"
 
 	// Every rank-ordered query sorts by `position, id`. Ranks are NOT unique
 	// (rank.go), so `id` is the tiebreaker that keeps a tie rendering in the
@@ -331,7 +331,7 @@ func resolveList(ctx context.Context, c *client.Client, projectID, ref string) (
 //
 // Still never by TITLE: a title is free text, is not unique even within a
 // column, and is the field most likely to be edited — resolving one by name
-// would make `cards card edit` act on a different row after a rename. A key has
+// would make `boards card edit` act on a different row after a rename. A key has
 // none of those problems, which is the whole reason it exists.
 //
 // The key path costs one extra request, because the slug names a board that has
@@ -353,7 +353,7 @@ func getCard(ctx context.Context, c *client.Client, ref string) (card, error) {
 		return card{}, err
 	}
 	// No ambiguity handling, unlike resolveProject's by-name path: the unique
-	// index on cards_projects.slug guarantees at most one board per key.
+	// index on boards_projects.slug guarantees at most one board per key.
 	var projectID string
 	for _, p := range projects {
 		if p.Slug != "" && strings.EqualFold(p.Slug, slug) {

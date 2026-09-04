@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { byCreatedThenId } from '../tinycld/cards/lib/created-order'
+import { byCreatedThenId } from '../tinycld/boards/lib/created-order'
 
 const row = (id: string, created: string) => ({ id, created })
 

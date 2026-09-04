@@ -1,6 +1,6 @@
 /// <reference path="../../tinycld/server/pb_data/types.d.ts" />
 //
-// cards_comments.edited_at — the explicit "this body was revised" timestamp.
+// boards_comments.edited_at — the explicit "this body was revised" timestamp.
 //
 // The "(edited)" marker used to be INFERRED from `updated !== created`, and
 // that inference destroys the information it needs at write time: PocketBase
@@ -23,12 +23,12 @@
 // same-millisecond pair) stay unmarked — that information was never stored.
 migrate(
     app => {
-        const comments = app.findCollectionByNameOrId('cards_comments')
+        const comments = app.findCollectionByNameOrId('boards_comments')
 
         comments.fields.addAt(
             comments.fields.length,
             new Field({
-                id: 'cards_comments_edited_at',
+                id: 'boards_comments_edited_at',
                 name: 'edited_at',
                 type: 'date',
                 required: false,
@@ -39,13 +39,13 @@ migrate(
 
         app.db()
             .newQuery(
-                'UPDATE cards_comments SET edited_at = updated WHERE updated != created'
+                'UPDATE boards_comments SET edited_at = updated WHERE updated != created'
             )
             .execute()
     },
     app => {
-        const comments = app.findCollectionByNameOrId('cards_comments')
-        comments.fields.removeById('cards_comments_edited_at')
+        const comments = app.findCollectionByNameOrId('boards_comments')
+        comments.fields.removeById('boards_comments_edited_at')
         app.save(comments)
     }
 )

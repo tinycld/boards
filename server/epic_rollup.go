@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"sync"
@@ -7,7 +7,7 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 )
 
-// The epic points rollup: points_total / points_done on cards_epics.
+// The epic points rollup: points_total / points_done on boards_epics.
 //
 // card_parent.go's registerCardParentRollup shape, with two differences.
 //
@@ -43,14 +43,14 @@ var epicRecountLocks sync.Map // epicID → *sync.Mutex
 // Cards are not cascade-deleted by their epic (cascadeDelete: false,
 // deliberately), so this fires once per card.
 //
-// Bound on cards_cards only. An epic's own row carries the counters but never
+// Bound on boards_cards only. An epic's own row carries the counters but never
 // contributes to them, so writing an epic cannot change any total.
 func registerEpicRollup(app core.App) {
-	app.OnRecordAfterCreateSuccess("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordAfterCreateSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		recountEpic(e.App, e.Record.GetString("epic"))
 		return e.Next()
 	})
-	app.OnRecordAfterUpdateSuccess("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordAfterUpdateSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		// Both epics: the one this card left, and the one it joined. When the
 		// epic did not change these are the same id and the second call exits
 		// at the unchanged check.
@@ -62,7 +62,7 @@ func registerEpicRollup(app core.App) {
 		recountEpic(e.App, e.Record.GetString("epic"))
 		return e.Next()
 	})
-	app.OnRecordAfterDeleteSuccess("cards_cards").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordAfterDeleteSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		recountEpic(e.App, e.Record.GetString("epic"))
 		return e.Next()
 	})
@@ -86,7 +86,7 @@ func recountEpic(app core.App, epicID string) {
 	lock.Lock()
 	defer lock.Unlock()
 
-	epic, err := app.FindRecordById("cards_epics", epicID)
+	epic, err := app.FindRecordById("boards_epics", epicID)
 	if err != nil {
 		return
 	}
@@ -140,12 +140,12 @@ func recountEpic(app core.App, epicID string) {
 // and lib/list-category.ts.
 func sumEpicPoints(app core.App, epicID string, closed bool) (int, error) {
 	var total int
-	query := app.RecordQuery("cards_cards").
+	query := app.RecordQuery("boards_cards").
 		Select("COALESCE(SUM(MAX(estimate, 1)), 0)").
 		AndWhere(dbx.HashExp{"epic": epicID, "archived": false})
 	if closed {
 		query = query.AndWhere(dbx.NewExp(
-			"list IN (SELECT id FROM cards_lists WHERE category IN ('done', 'canceled'))",
+			"list IN (SELECT id FROM boards_lists WHERE category IN ('done', 'canceled'))",
 		))
 	}
 	err := query.Row(&total)

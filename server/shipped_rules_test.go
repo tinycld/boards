@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"strings"
@@ -19,10 +19,10 @@ import (
 // "here is what it was protecting".
 
 var allCardsCollections = []string{
-	"cards_projects", "cards_project_members", "cards_share_links",
-	"cards_labels", "cards_lists", "cards_cards",
-	"cards_checklist_items", "cards_comments", "cards_attachments",
-	"cards_card_links", "cards_epics",
+	"boards_projects", "boards_project_members", "boards_share_links",
+	"boards_labels", "boards_lists", "boards_cards",
+	"boards_checklist_items", "boards_comments", "boards_attachments",
+	"boards_card_links", "boards_epics",
 }
 
 var allRuleKinds = []string{"list", "view", "create", "update", "delete"}
@@ -35,17 +35,17 @@ func TestCardsShippedRules_CarryTheirGuards(t *testing.T) {
 		//
 		// Conjoined onto all 45 rules; sampled here where its absence is a blob
 		// or escalation leak rather than a listing nuisance.
-		{"cards_attachments", "view", `@request.auth.disabled != true`,
-			"a suspended user must not read attachment records. NOTE: this does NOT reach the file blob — PB checks the viewRule before serving /api/files/... only for a `protected` file field, and cards_attach_file is not one (apis/file.go:108). An earlier version of this row claimed otherwise; see share_token_rls_test.go"},
-		{"cards_cards", "view", `@request.auth.disabled != true`,
+		{"boards_attachments", "view", `@request.auth.disabled != true`,
+			"a suspended user must not read attachment records. NOTE: this does NOT reach the file blob — PB checks the viewRule before serving /api/files/... only for a `protected` file field, and boards_attach_file is not one (apis/file.go:108). An earlier version of this row claimed otherwise; see share_token_rls_test.go"},
+		{"boards_cards", "view", `@request.auth.disabled != true`,
 			"a suspended user must not read board content"},
-		{"cards_comments", "view", `@request.auth.disabled != true`,
+		{"boards_comments", "view", `@request.auth.disabled != true`,
 			"a suspended user must not read discussion"},
-		{"cards_projects", "list", `@request.auth.disabled != true`,
+		{"boards_projects", "list", `@request.auth.disabled != true`,
 			"a suspended user must not enumerate boards"},
-		{"cards_cards", "create", `@request.auth.disabled != true`,
+		{"boards_cards", "create", `@request.auth.disabled != true`,
 			"a suspended user must not write"},
-		{"cards_project_members", "create", `@request.auth.disabled != true`,
+		{"boards_project_members", "create", `@request.auth.disabled != true`,
 			"a suspended user must not grant membership"},
 
 		// --- the named-roles idiom (trap 1) ---
@@ -53,9 +53,9 @@ func TestCardsShippedRules_CarryTheirGuards(t *testing.T) {
 		// The highest-value rows here. Measured: rewriting viaWriter to
 		// `role ?!= "viewer"` admits a COMMENTOR (drive's bug) while still
 		// refusing a viewer — see role_matrix_rls_test.go.
-		{"cards_cards", "create", `project.cards_project_members_via_project.role ?= "editor"`,
+		{"boards_cards", "create", `project.boards_project_members_via_project.role ?= "editor"`,
 			`trap 1 — ?!= "viewer" admits every role that is not viewer, which is how drive silently granted commentor UPDATE (drive/pb-migrations/1782100000)`},
-		{"cards_cards", "update", `project.cards_project_members_via_project.role ?= "editor"`,
+		{"boards_cards", "update", `project.boards_project_members_via_project.role ?= "editor"`,
 			"same idiom on the update path, which is what a drag-and-drop board exercises constantly"},
 
 		// --- the sub-task same-board pin (1980000015) ---
@@ -65,37 +65,37 @@ func TestCardsShippedRules_CarryTheirGuards(t *testing.T) {
 		// the viewer is unable to read and the Go recount never spans projects.
 		// Both paths, because a create-only or update-only pin leaves the other
 		// half of the hole open.
-		{"cards_cards", "create", `@request.body.parent.project = project`,
+		{"boards_cards", "create", `@request.body.parent.project = project`,
 			"without it a writer on two boards can file a card whose parent is on the other one, and the board query — which joins on project — shows a chip pointing at a card the viewer cannot open"},
-		{"cards_cards", "update", `@request.body.parent.project = project`,
+		{"boards_cards", "update", `@request.body.parent.project = project`,
 			"the repoint form of the same hole: PATCH an editable card's parent onto a foreign board"},
-		{"cards_cards", "update", `@request.body.parent = ""`,
+		{"boards_cards", "update", `@request.body.parent = ""`,
 			`the clear branch — without it un-parenting has to satisfy "".project = project and a card is stuck as a sub-task forever`},
-		{"cards_lists", "create", `project.cards_project_members_via_project.role ?= "editor"`,
+		{"boards_lists", "create", `project.boards_project_members_via_project.role ?= "editor"`,
 			"a viewer must not add columns"},
-		{"cards_labels", "create", `project.cards_project_members_via_project.role ?= "editor"`,
+		{"boards_labels", "create", `project.boards_project_members_via_project.role ?= "editor"`,
 			"a viewer must not add labels"},
-		{"cards_comments", "create", `project.cards_project_members_via_project.role ?= "commentor"`,
+		{"boards_comments", "create", `project.boards_project_members_via_project.role ?= "commentor"`,
 			"viewer is excluded by omission, so a future read-only role cannot inherit comment rights by accident"},
 
 		// --- notGuest: @request.auth.role != "guest" ---
-		{"cards_projects", "create", `@request.auth.role != "guest"`,
+		{"boards_projects", "create", `@request.auth.role != "guest"`,
 			"the only thing between a share-link visitor and a board of their own — there is no membership to check on a project that does not exist yet"},
-		{"cards_project_members", "list", `@request.auth.role != "guest"`,
+		{"boards_project_members", "list", `@request.auth.role != "guest"`,
 			"the roster carries the org's member names and emails; core's 1870000000 exists to close this leak"},
-		{"cards_project_members", "view", `@request.auth.role != "guest"`,
+		{"boards_project_members", "view", `@request.auth.role != "guest"`,
 			"list-filtering and view-refusal are separate PocketBase code paths"},
-		{"cards_project_members", "create", `@request.auth.role != "guest"`,
+		{"boards_project_members", "create", `@request.auth.role != "guest"`,
 			"bootstrapFirstOwner carries its own notGuest — a guest must not self-grant ownership of a memberless board"},
 
 		// --- author / uploader pinning ---
-		{"cards_comments", "create", `author = @request.auth.id`,
+		{"boards_comments", "create", `author = @request.auth.id`,
 			"a commenter must not attribute a comment to someone else"},
-		{"cards_attachments", "create", `uploaded_by = @request.auth.id`,
+		{"boards_attachments", "create", `uploaded_by = @request.auth.id`,
 			"provenance on a file blob, and the basis of the uploader-or-owner delete rule"},
 
 		// --- the bootstrap branch ---
-		{"cards_project_members", "create", `project.cards_project_members_via_project.id = ""`,
+		{"boards_project_members", "create", `project.boards_project_members_via_project.id = ""`,
 			`PocketBase's empty-back-relation idiom, and the reason a fresh project can get its first owner without a privileged Go hook. This is the ONE intentional bare "=" in the file (see the ?!= sweep below, which deliberately does not generalize to bare =)`},
 	} {
 		t.Run(c.collection+"."+c.kind+" "+c.clause, func(t *testing.T) {
@@ -115,9 +115,9 @@ func TestCardsShippedRules_EveryUpdateRuleIsPinned(t *testing.T) {
 	const pinCard = `(@request.body.card:isset = false || @request.body.card = card)`
 
 	for _, collection := range []string{
-		"cards_project_members", "cards_share_links", "cards_labels",
-		"cards_lists", "cards_cards", "cards_checklist_items",
-		"cards_comments", "cards_attachments", "cards_epics",
+		"boards_project_members", "boards_share_links", "boards_labels",
+		"boards_lists", "boards_cards", "boards_checklist_items",
+		"boards_comments", "boards_attachments", "boards_epics",
 	} {
 		t.Run(collection+".update pinProject", func(t *testing.T) {
 			rlstest.RequireRuleContains(t, env.app, collection, "update", pinProject)
@@ -126,7 +126,7 @@ func TestCardsShippedRules_EveryUpdateRuleIsPinned(t *testing.T) {
 
 	// The three collections that hang off a card as well as a project.
 	for _, collection := range []string{
-		"cards_checklist_items", "cards_comments", "cards_attachments",
+		"boards_checklist_items", "boards_comments", "boards_attachments",
 	} {
 		t.Run(collection+".update pinCard", func(t *testing.T) {
 			rlstest.RequireRuleContains(t, env.app, collection, "update", pinCard)
@@ -190,15 +190,15 @@ func TestCardsShippedRules_NoCollectionIsPublicOrLocked(t *testing.T) {
 
 	// The ONE deliberate nil, named rather than tolerated by a loosened check.
 	//
-	// cards_card_links is a junction: a row is filed or removed, never edited,
+	// boards_card_links is a junction: a row is filed or removed, never edited,
 	// so an update rule would describe an operation the feature does not have.
 	// Retyping a link is a delete plus a create, which the unique index
-	// governs. cards_card_watchers and cards_comment_reactions are the same
+	// governs. boards_card_watchers and boards_comment_reactions are the same
 	// shape and are absent from allCardsCollections entirely — this collection
 	// is enrolled for the sweeps that DO apply to it, so its one exemption is
 	// stated here instead.
 	deliberatelyLocked := map[string]string{
-		"cards_card_links.update": "a link is toggled, never edited (1980000016)",
+		"boards_card_links.update": "a link is toggled, never edited (1980000016)",
 	}
 
 	for _, collection := range allCardsCollections {
@@ -234,20 +234,20 @@ func TestCardsShippedRules_NoCollectionIsPublicOrLocked(t *testing.T) {
 func TestCardsShippedRules_ShareTokenDisjunctIsCorrelated(t *testing.T) {
 	env := setupCardsEnv(t)
 
-	const tokenMatch = `@collection.cards_share_links.token ?= @request.headers.x_share_token`
-	const isActive = `@collection.cards_share_links.is_active ?= true`
-	const neverExpires = `@collection.cards_share_links.expires_at ?= ""`
-	const notYetExpired = `@collection.cards_share_links.expires_at ?> @now`
+	const tokenMatch = `@collection.boards_share_links.token ?= @request.headers.x_share_token`
+	const isActive = `@collection.boards_share_links.is_active ?= true`
+	const neverExpires = `@collection.boards_share_links.expires_at ?= ""`
+	const notYetExpired = `@collection.boards_share_links.expires_at ?> @now`
 
-	// cards_projects correlates on its own id; every content row on `project`.
+	// boards_projects correlates on its own id; every content row on `project`.
 	for _, c := range []struct{ collection, correlation string }{
-		{"cards_projects", `@collection.cards_share_links.project ?= id`},
-		{"cards_lists", `@collection.cards_share_links.project ?= project`},
-		{"cards_cards", `@collection.cards_share_links.project ?= project`},
-		{"cards_labels", `@collection.cards_share_links.project ?= project`},
-		{"cards_checklist_items", `@collection.cards_share_links.project ?= project`},
-		{"cards_comments", `@collection.cards_share_links.project ?= project`},
-		{"cards_attachments", `@collection.cards_share_links.project ?= project`},
+		{"boards_projects", `@collection.boards_share_links.project ?= id`},
+		{"boards_lists", `@collection.boards_share_links.project ?= project`},
+		{"boards_cards", `@collection.boards_share_links.project ?= project`},
+		{"boards_labels", `@collection.boards_share_links.project ?= project`},
+		{"boards_checklist_items", `@collection.boards_share_links.project ?= project`},
+		{"boards_comments", `@collection.boards_share_links.project ?= project`},
+		{"boards_attachments", `@collection.boards_share_links.project ?= project`},
 	} {
 		for _, kind := range []string{"list", "view"} {
 			t.Run(c.collection+"."+kind, func(t *testing.T) {
@@ -261,7 +261,7 @@ func TestCardsShippedRules_ShareTokenDisjunctIsCorrelated(t *testing.T) {
 	}
 }
 
-// cards_card_links carries the disjunct TWICE, and neither copy is optional.
+// boards_card_links carries the disjunct TWICE, and neither copy is optional.
 //
 // A link row names two boards, so a single join could only ever unlock one end
 // — and because an unaliased @collection derives ONE alias and registerJoin
@@ -281,19 +281,19 @@ func TestCardsShippedRules_LinkTokenDisjunctIsCorrelatedOnBothEnds(t *testing.T)
 		{"src", "source"},
 		{"tgt", "target"},
 	} {
-		c := `@collection.cards_share_links:` + end.alias
+		c := `@collection.boards_share_links:` + end.alias
 		for _, kind := range []string{"list", "view"} {
 			t.Run(end.alias+"."+kind, func(t *testing.T) {
-				rlstest.RequireRuleContains(t, env.app, "cards_card_links", kind,
+				rlstest.RequireRuleContains(t, env.app, "boards_card_links", kind,
 					c+`.token ?= @request.headers.x_share_token`)
-				rlstest.RequireRuleContains(t, env.app, "cards_card_links", kind,
+				rlstest.RequireRuleContains(t, env.app, "boards_card_links", kind,
 					c+`.is_active ?= true`)
-				rlstest.RequireRuleContains(t, env.app, "cards_card_links", kind,
+				rlstest.RequireRuleContains(t, env.app, "boards_card_links", kind,
 					c+`.expires_at ?= ""`)
-				rlstest.RequireRuleContains(t, env.app, "cards_card_links", kind,
+				rlstest.RequireRuleContains(t, env.app, "boards_card_links", kind,
 					c+`.expires_at ?> @now`)
 				// The correlation — the clause whose absence is a silent leak.
-				rlstest.RequireRuleContains(t, env.app, "cards_card_links", kind,
+				rlstest.RequireRuleContains(t, env.app, "boards_card_links", kind,
 					c+`.project ?= `+end.ref+`.project`)
 			})
 		}
@@ -307,48 +307,48 @@ func TestCardsShippedRules_LinkRuleReadsBothEnds(t *testing.T) {
 	env := setupCardsEnv(t)
 
 	for _, ref := range []string{"source", "target"} {
-		clause := ref + `.project.cards_project_members_via_project.user ?= @request.auth.id`
+		clause := ref + `.project.boards_project_members_via_project.user ?= @request.auth.id`
 		for _, kind := range []string{"list", "view"} {
-			rlstest.RequireRuleContains(t, env.app, "cards_card_links", kind, clause)
+			rlstest.RequireRuleContains(t, env.app, "boards_card_links", kind, clause)
 		}
 	}
 	// Create is asymmetric on purpose: WRITE on the source, membership on the
 	// target. The named roles guard trap 1 on the source side.
-	rlstest.RequireRuleContains(t, env.app, "cards_card_links", "create",
-		`source.project.cards_project_members_via_project.role ?= "editor"`)
-	rlstest.RequireRuleContains(t, env.app, "cards_card_links", "create",
-		`target.project.cards_project_members_via_project.user ?= @request.auth.id`)
+	rlstest.RequireRuleContains(t, env.app, "boards_card_links", "create",
+		`source.project.boards_project_members_via_project.role ?= "editor"`)
+	rlstest.RequireRuleContains(t, env.app, "boards_card_links", "create",
+		`target.project.boards_project_members_via_project.user ?= @request.auth.id`)
 	// Delete follows the source alone — the far board may see a dependency but
 	// must not quietly detach it.
-	rlstest.RequireRuleContains(t, env.app, "cards_card_links", "delete",
-		`source.project.cards_project_members_via_project.role ?= "editor"`)
+	rlstest.RequireRuleContains(t, env.app, "boards_card_links", "delete",
+		`source.project.boards_project_members_via_project.role ?= "editor"`)
 }
 
 // The inverse, and the more important half: the disjunct must appear NOWHERE
-// else. A token that reached cards_project_members would read the org's member
+// else. A token that reached boards_project_members would read the org's member
 // names and emails — exactly what rosterRule and core's 1870000000 exist to
-// prevent — and one that reached cards_share_links could enumerate every other
+// prevent — and one that reached boards_share_links could enumerate every other
 // board's tokens. On a write rule it would hand an anonymous caller the board.
 func TestCardsShippedRules_ShareTokenIsAbsentEverywhereElse(t *testing.T) {
 	env := setupCardsEnv(t)
 
 	readOnlyOnContent := map[string]bool{
-		"cards_projects": true, "cards_lists": true, "cards_cards": true,
-		"cards_labels": true, "cards_checklist_items": true,
-		"cards_comments": true, "cards_attachments": true,
+		"boards_projects": true, "boards_lists": true, "boards_cards": true,
+		"boards_labels": true, "boards_checklist_items": true,
+		"boards_comments": true, "boards_attachments": true,
 		// A public board shows its cards, so it shows their dependencies.
 		// Unlike the seven above, this one's disjunct is DOUBLED — two aliased
 		// joins, one per end — because a link row names two boards. Its
 		// correlation clauses are asserted in the test above, and the leak they
 		// prevent is covered behaviourally in share_token_rls_test.go
 		// (TestShareToken_DoesNotReachLinksBetweenOtherBoards).
-		"cards_card_links": true,
+		"boards_card_links": true,
 		// A public board renders the epic chip on its cards, so a visitor must
-		// be able to resolve the epic's name. The cards_labels case exactly —
+		// be able to resolve the epic's name. The boards_labels case exactly —
 		// a board-scoped grouping row whose whole content is already visible
 		// on the cards it groups. One project, one disjunct, unlike the links
 		// row above.
-		"cards_epics": true,
+		"boards_epics": true,
 	}
 
 	for _, collection := range allCardsCollections {
@@ -384,8 +384,8 @@ func TestCardsShippedRules_ShareTokenDisjunctIsTopLevel(t *testing.T) {
 	const wrapped = `(@request.auth.disabled != true && `
 
 	for _, collection := range []string{
-		"cards_projects", "cards_lists", "cards_cards", "cards_labels",
-		"cards_checklist_items", "cards_comments", "cards_attachments",
+		"boards_projects", "boards_lists", "boards_cards", "boards_labels",
+		"boards_checklist_items", "boards_comments", "boards_attachments",
 	} {
 		for _, kind := range []string{"list", "view"} {
 			rule, ok := rlstest.Rule(t, env.app, collection, kind)

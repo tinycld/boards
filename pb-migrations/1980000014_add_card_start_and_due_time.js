@@ -1,6 +1,6 @@
 /// <reference path="../../tinycld/server/pb_data/types.d.ts" />
 //
-// cards_cards.start and cards_cards.due_has_time — a card that spans days,
+// boards_cards.start and boards_cards.due_has_time — a card that spans days,
 // and a deadline that names a time.
 //
 // `start` is a DAY, stored exactly as `due` always has been: the picker
@@ -20,31 +20,31 @@
 // `start` is appended here, as 1980000010 did for `estimate`.
 migrate(
     app => {
-        const cards = app.findCollectionByNameOrId('cards_cards')
+        const cards = app.findCollectionByNameOrId('boards_cards')
         cards.fields.addAt(
             cards.fields.length,
-            new Field({ id: 'cards_cards_start', name: 'start', type: 'date', required: false })
+            new Field({ id: 'boards_cards_start', name: 'start', type: 'date', required: false })
         )
         cards.fields.addAt(
             cards.fields.length,
-            new Field({ id: 'cards_cards_due_has_time', name: 'due_has_time', type: 'bool' })
+            new Field({ id: 'boards_cards_due_has_time', name: 'due_has_time', type: 'bool' })
         )
         app.save(cards)
 
-        const activity = app.findCollectionByNameOrId('cards_activity')
-        const kind = activity.fields.getById('cards_activity_kind')
+        const activity = app.findCollectionByNameOrId('boards_activity')
+        const kind = activity.fields.getById('boards_activity_kind')
         kind.values = [...kind.values, 'start']
         app.save(activity)
     },
     app => {
-        const activity = app.findCollectionByNameOrId('cards_activity')
-        const kind = activity.fields.getById('cards_activity_kind')
+        const activity = app.findCollectionByNameOrId('boards_activity')
+        const kind = activity.fields.getById('boards_activity_kind')
         kind.values = kind.values.filter(value => value !== 'start')
         app.save(activity)
 
-        const cards = app.findCollectionByNameOrId('cards_cards')
-        cards.fields.removeById('cards_cards_due_has_time')
-        cards.fields.removeById('cards_cards_start')
+        const cards = app.findCollectionByNameOrId('boards_cards')
+        cards.fields.removeById('boards_cards_due_has_time')
+        cards.fields.removeById('boards_cards_start')
         app.save(cards)
     }
 )

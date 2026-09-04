@@ -1,4 +1,4 @@
-package cards
+package boards
 
 import (
 	"fmt"
@@ -79,7 +79,7 @@ func verifyBody(email, code, otpID string) string {
 }
 
 func memberRole(t testing.TB, app *tests.TestApp, projectID, userID string) string {
-	row, err := app.FindFirstRecordByFilter("cards_project_members",
+	row, err := app.FindFirstRecordByFilter("boards_project_members",
 		"project = {:p} && user = {:u}", dbx.Params{"p": projectID, "u": userID})
 	if err != nil || row == nil {
 		return ""
@@ -102,7 +102,7 @@ func userByEmail(t testing.TB, app *tests.TestApp, email string) *core.Record {
 // --------------------------------------------------------------------------
 // The public metadata endpoint.
 //
-// Small, and load-bearing out of proportion to its size: cards_share_links is
+// Small, and load-bearing out of proportion to its size: boards_share_links is
 // owner-only by rule, so this is the ONLY way a visitor's client can learn
 // which board their token names or whether signing in would gain them
 // anything. The board screen resolves through it, so a wrong answer here is a
@@ -117,7 +117,7 @@ func TestShareLinkMetadata_DescribesALiveLink(t *testing.T) {
 
 	mintReq{
 		method: http.MethodGet,
-		url:    "/api/cards/share-link/" + tok,
+		url:    "/api/boards/share-link/" + tok,
 		want:   http.StatusOK,
 		// project_id is what the client resolves the board by. Before it was
 		// returned, a signed-in NON-member fell back to guessing the first
@@ -137,7 +137,7 @@ func TestShareLinkMetadata_ViewerLinkResolvesButOffersNoSignIn(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodGet,
-		url:     "/api/cards/share-link/" + tok,
+		url:     "/api/boards/share-link/" + tok,
 		want:    http.StatusOK,
 		content: []string{`"role":"viewer"`, `"needs_signin":false`},
 	}.run(t, env.cardsEnv)
@@ -152,7 +152,7 @@ func TestShareLinkMetadata_RevokedLinkIsGone(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodGet,
-		url:     "/api/cards/share-link/" + tok,
+		url:     "/api/boards/share-link/" + tok,
 		want:    http.StatusGone,
 		content: []string{"revoked"},
 	}.run(t, env.cardsEnv)
@@ -165,7 +165,7 @@ func TestShareLinkMetadata_ExpiredLinkIsGone(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodGet,
-		url:     "/api/cards/share-link/" + tok,
+		url:     "/api/boards/share-link/" + tok,
 		want:    http.StatusGone,
 		content: []string{"expired"},
 	}.run(t, env.cardsEnv)
@@ -178,7 +178,7 @@ func TestShareLinkMetadata_UnknownTokenIsNotFound(t *testing.T) {
 
 	mintReq{
 		method:     http.MethodGet,
-		url:        "/api/cards/share-link/" + tok64("metanosuch"),
+		url:        "/api/boards/share-link/" + tok64("metanosuch"),
 		want:       http.StatusNotFound,
 		content:    []string{`"error"`},
 		notContent: []string{env.project.Id, "Board"},
@@ -191,7 +191,7 @@ func TestShareLinkMetadata_MalformedTokenIsNotFound(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodGet,
-		url:     "/api/cards/share-link/short",
+		url:     "/api/boards/share-link/short",
 		want:    http.StatusNotFound,
 		content: []string{`"error"`},
 	}.run(t, env.cardsEnv)
@@ -199,14 +199,14 @@ func TestShareLinkMetadata_MalformedTokenIsNotFound(t *testing.T) {
 
 // The disclosure boundary. A link says "this board, this role" and no more —
 // in particular nothing about who is on the board, which is the whole reason
-// 1980000003 adds no token disjunct to cards_project_members.
+// 1980000003 adds no token disjunct to boards_project_members.
 func TestShareLinkMetadata_DisclosesNothingAboutTheRoster(t *testing.T) {
 	env := setupOTPEnv(t)
 	tok := shareLink(t, env.cardsEnv, env.project.Id, tok64("metaquiet"), "commentor", true, "")
 
 	mintReq{
 		method: http.MethodGet,
-		url:    "/api/cards/share-link/" + tok,
+		url:    "/api/boards/share-link/" + tok,
 		want:   http.StatusOK,
 		// No member emails, and not the token itself echoed back.
 		notContent: []string{env.owner.Email(), env.editor.Email(), tok},
@@ -222,7 +222,7 @@ func TestShareOTP_EditorLinkMintsACode(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodPost,
-		url:     "/api/cards/share-link/" + tok + "/otp-request",
+		url:     "/api/boards/share-link/" + tok + "/otp-request",
 		body:    otpBody("newcomer@test.local"),
 		want:    http.StatusOK,
 		content: []string{`"otp_id"`},
@@ -258,7 +258,7 @@ func TestShareOTP_CodeIsNeverInTheResponse(t *testing.T) {
 	scenario := &tests.ApiScenario{
 		Name:   "otp-request must not echo the code",
 		Method: http.MethodPost,
-		URL:    "/api/cards/share-link/" + tok + "/otp-request",
+		URL:    "/api/boards/share-link/" + tok + "/otp-request",
 		Body:   strings.NewReader(otpBody("secret@test.local")),
 		Headers: map[string]string{
 			"Content-Type": "application/json",
@@ -297,7 +297,7 @@ func TestShareOTP_ViewerLinkRefusesSignIn(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodPost,
-		url:     "/api/cards/share-link/" + tok + "/otp-request",
+		url:     "/api/boards/share-link/" + tok + "/otp-request",
 		body:    otpBody("nobody@test.local"),
 		want:    http.StatusBadRequest,
 		content: []string{`"error"`},
@@ -315,7 +315,7 @@ func TestShareOTP_RevokedLinkRefusesSignIn(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodPost,
-		url:     "/api/cards/share-link/" + tok + "/otp-request",
+		url:     "/api/boards/share-link/" + tok + "/otp-request",
 		body:    otpBody("nobody2@test.local"),
 		want:    http.StatusGone,
 		content: []string{`"error"`},
@@ -328,7 +328,7 @@ func TestShareOTP_InvalidEmailIsRefused(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodPost,
-		url:     "/api/cards/share-link/" + tok + "/otp-request",
+		url:     "/api/boards/share-link/" + tok + "/otp-request",
 		body:    otpBody("not-an-address"),
 		want:    http.StatusBadRequest,
 		content: []string{`"error"`},
@@ -345,7 +345,7 @@ func TestShareOTP_VerifyMintsMembershipAtTheLinkRole(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodPost,
-		url:     "/api/cards/share-link/" + tok + "/otp-verify",
+		url:     "/api/boards/share-link/" + tok + "/otp-verify",
 		body:    verifyBody("joiner@test.local", env.code(), otpID),
 		want:    http.StatusOK,
 		content: []string{`"token"`, `"record"`},
@@ -376,7 +376,7 @@ func TestShareOTP_VerifyNeverUpgradesAnExistingMembership(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodPost,
-		url:     "/api/cards/share-link/" + tok + "/otp-verify",
+		url:     "/api/boards/share-link/" + tok + "/otp-verify",
 		body:    verifyBody(env.viewer.Email(), env.code(), otpID),
 		want:    http.StatusOK,
 		content: []string{`"token"`},
@@ -396,7 +396,7 @@ func TestShareOTP_VerifyNeverDowngradesAnExistingMembership(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodPost,
-		url:     "/api/cards/share-link/" + tok + "/otp-verify",
+		url:     "/api/boards/share-link/" + tok + "/otp-verify",
 		body:    verifyBody(env.editor.Email(), env.code(), otpID),
 		want:    http.StatusOK,
 		content: []string{`"token"`},
@@ -417,7 +417,7 @@ func TestShareOTP_VerifyNeverDemotesAnOrgMemberToGuest(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodPost,
-		url:     "/api/cards/share-link/" + tok + "/otp-verify",
+		url:     "/api/boards/share-link/" + tok + "/otp-verify",
 		body:    verifyBody(env.outsider.Email(), env.code(), otpID),
 		want:    http.StatusOK,
 		content: []string{`"token"`},
@@ -441,7 +441,7 @@ func TestShareOTP_WrongCodeIsRefused(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodPost,
-		url:     "/api/cards/share-link/" + tok + "/otp-verify",
+		url:     "/api/boards/share-link/" + tok + "/otp-verify",
 		body:    verifyBody("wrong@test.local", "000000", otpID),
 		want:    http.StatusBadRequest,
 		content: []string{`"error"`},
@@ -466,7 +466,7 @@ func TestShareOTP_WrongEmailBurnsTheCode(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodPost,
-		url:     "/api/cards/share-link/" + tok + "/otp-verify",
+		url:     "/api/boards/share-link/" + tok + "/otp-verify",
 		body:    verifyBody("attacker@test.local", env.code(), otpID),
 		want:    http.StatusBadRequest,
 		content: []string{`"error"`},
@@ -485,7 +485,7 @@ func TestShareOTP_RevokedBetweenRequestAndVerify(t *testing.T) {
 	tok := shareLink(t, env.cardsEnv, env.project.Id, tok64("otpmidrevoke"), "editor", true, "")
 	otpID := requestCode(t, env, tok, "midrevoke@test.local")
 
-	link, err := env.app.FindFirstRecordByFilter("cards_share_links",
+	link, err := env.app.FindFirstRecordByFilter("boards_share_links",
 		"token = {:t}", dbx.Params{"t": tok})
 	if err != nil {
 		t.Fatalf("find link: %v", err)
@@ -497,7 +497,7 @@ func TestShareOTP_RevokedBetweenRequestAndVerify(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodPost,
-		url:     "/api/cards/share-link/" + tok + "/otp-verify",
+		url:     "/api/boards/share-link/" + tok + "/otp-verify",
 		body:    verifyBody("midrevoke@test.local", env.code(), otpID),
 		want:    http.StatusGone,
 		content: []string{`"error"`},
@@ -521,7 +521,7 @@ func TestShareOTP_CodeIsConsumedOnSuccess(t *testing.T) {
 
 	mintReq{
 		method:  http.MethodPost,
-		url:     "/api/cards/share-link/" + tok + "/otp-verify",
+		url:     "/api/boards/share-link/" + tok + "/otp-verify",
 		body:    verifyBody("once@test.local", env.code(), otpID),
 		want:    http.StatusOK,
 		content: []string{`"token"`},
