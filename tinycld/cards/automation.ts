@@ -347,6 +347,57 @@ const automation = {
             ],
         },
         {
+            // Native, not a record-op `create`: the op cannot derive `project`
+            // from the chosen list, and a card whose project and list disagree
+            // is INVISIBLE (the board query joins on project). Deriving it in
+            // Go is what makes the two incapable of disagreeing.
+            //
+            // `number` is not a param and not set here — card_number.go's
+            // OnRecordCreate hook owns that column for every caller.
+            //
+            // The destination legitimately MAY be another board, unlike
+            // move-card's: "when a bug is filed, open a QA task on the QA
+            // board" is the motivating rule. createCardListAuthorizer requires
+            // the rule owner to be able to write the destination, so a rule can
+            // only create cards where its owner could have made one by hand.
+            id: 'create-card',
+            label: 'Create a card',
+            kind: 'native',
+            params: [
+                // Templatable, so "Follow up: {{title}}" reaches the trigger
+                // card's fields. Clipped to the column's max in Go, because a
+                // template can expand far past anything typed here.
+                { key: 'title', type: 'text', label: 'Title' },
+                {
+                    key: 'list',
+                    type: 'relation',
+                    relationTarget: 'cards_lists',
+                    label: 'In list',
+                },
+            ],
+        },
+        {
+            // Native for the date math. RELATIVE ONLY, and always to a day:
+            // the server has no user time zone, so it cannot honestly resolve
+            // an absolute "5pm" for the rule's author — it would mean the
+            // SERVER's 5pm, the wrong hour in every zone but one. The sweep
+            // works in the same UTC day frame for the same reason.
+            //
+            // A card whose deadline named a TIME loses it here (due_has_time
+            // goes false). A real cost, taken over a time that is quietly
+            // wrong for everyone but whoever sits beside the server.
+            id: 'set-due-date',
+            label: 'Move the due date',
+            kind: 'native',
+            params: [
+                {
+                    key: 'days',
+                    type: 'number',
+                    label: 'Days from the current due date (or from today if unset)',
+                },
+            ],
+        },
+        {
             // Native for the same reason as add-assignee: `labels` is a
             // multi-value relation, so a record-op `set` would replace the
             // card's whole label set rather than add to it.
