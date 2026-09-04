@@ -4,8 +4,9 @@ import { useRouter } from 'expo-router'
 import { useMemo } from 'react'
 import { findCardEntry, neighborCardId } from '../lib/board-cards'
 import { columnStep, composerTargetColumnId, targetColumnForMove } from '../lib/board-focus'
+import { focusedCardRect } from '../lib/card-rect'
 import { rankForAppend, rankForReorder } from '../lib/move'
-import { selectBoardSort, useBoardsUIStore } from '../stores/boards-ui-store'
+import { type CanvasPickerKind, selectBoardSort, useBoardsUIStore } from '../stores/boards-ui-store'
 import type { BoardProject } from '../types'
 import { useArchiveCard, useMoveCard } from './useCardMutations'
 
@@ -52,6 +53,8 @@ export function useBoardShortcuts(
     const focusColumn = useBoardsUIStore(s => s.focusColumn)
     const openComposer = useBoardsUIStore(s => s.openComposer)
     const setAddListOpen = useBoardsUIStore(s => s.setAddListOpen)
+    const openCanvasPicker = useBoardsUIStore(s => s.openCanvasPicker)
+    const setFilterPanelOpen = useBoardsUIStore(s => s.setFilterPanelOpen)
     const toggleColumnCollapsed = useBoardsUIStore(s => s.toggleColumnCollapsed)
     const moveCard = useMoveCard()
     const archiveCard = useArchiveCard()
@@ -156,6 +159,23 @@ export function useBoardShortcuts(
             focusCard(null)
         }
 
+        /**
+         * Open a property picker against the focused card.
+         *
+         * Re-derives the card the way `archive` does — a realtime archive
+         * between keypresses must be a no-op, not a menu over a row that is
+         * gone. The rect is measured HERE rather than stored per card: it is a
+         * viewport rect, so a scroll or a collapse invalidates it, and this is
+         * the one moment it is certainly right.
+         */
+        const openPicker = (kind: CanvasPickerKind) => () => {
+            const { focusedCardId } = focus()
+            if (!focusedCardId || !findCardEntry(project, focusedCardId)) return
+            const anchor = focusedCardRect(focusedCardId)
+            if (!anchor) return
+            openCanvasPicker({ cardId: focusedCardId, kind, anchor })
+        }
+
         const addCard = () => {
             const { focusedCardId, focusedColumnId } = focus()
             // Resolved at call time from the live board — see the helper's note
@@ -199,6 +219,11 @@ export function useBoardShortcuts(
             nav('boards.board.myCards', 'g m', 'Go to My cards', () =>
                 router.push(orgHref('boards/my-cards'))
             ),
+            // The board's filter, not a card's — no focus needed, and it is
+            // offered to every role because filtering is a view preference.
+            // FilterPopover already drives its Menu from this flag, and its
+            // own FilterButton is the mounted trigger, so this needs no anchor.
+            nav('boards.board.filter', 'f', 'Filter cards', () => setFilterPanelOpen(true)),
         ]
 
         if (!canEdit) return list
@@ -214,11 +239,19 @@ export function useBoardShortcuts(
         ]
         if (visibleOrder) return [...list, ...editing]
 
+        // Board-view only, all of them. The table view renders no card faces
+        // to measure, so the four pickers have nothing to anchor to — and its
+        // rows are not columns, so the within-column moves and the composers
+        // do not apply either.
         return [
             ...list,
             ...editing,
             nav('boards.board.moveUp', 'Shift+ArrowUp', 'Move card up', () => moveWithin(-1)),
             nav('boards.board.moveDown', 'Shift+ArrowDown', 'Move card down', () => moveWithin(1)),
+            nav('boards.board.due', 'd', 'Set due date', openPicker('due')),
+            nav('boards.board.labels', 'l', 'Edit labels', openPicker('labels')),
+            nav('boards.board.assignees', 'a', 'Assign card', openPicker('assignees')),
+            nav('boards.board.priority', 'p', 'Set priority', openPicker('priority')),
             nav('boards.board.addCard', 'n', 'Add card to this column', addCard),
             // Shift+N is a no-op on an empty board, where BoardCanvas renders
             // EmptyBoard and mounts no AddListColumn to open.
@@ -240,6 +273,8 @@ export function useBoardShortcuts(
         openComposer,
         setAddListOpen,
         toggleColumnCollapsed,
+        openCanvasPicker,
+        setFilterPanelOpen,
     ])
 
     useRegisterShortcuts(shortcuts, scopeOwner)

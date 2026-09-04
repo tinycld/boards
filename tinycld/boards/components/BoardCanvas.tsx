@@ -8,6 +8,7 @@ import { useBoardsUIStore } from '../stores/boards-ui-store'
 import type { BoardProject } from '../types'
 import { AddListColumn } from './AddListColumn'
 import { BoardColumn } from './BoardColumn'
+import { CanvasCardPicker } from './CanvasCardPicker'
 import { EmptyBoard } from './EmptyBoard'
 
 export function BoardCanvas({ project }: { project: BoardProject }) {
@@ -57,6 +58,7 @@ export function BoardCanvas({ project }: { project: BoardProject }) {
                 ) : null}
             </ScrollView>
             <DragActiveMarker />
+            <CanvasCardPicker project={project} />
         </SortableBoardContainer>
     )
 }

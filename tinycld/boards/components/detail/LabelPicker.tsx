@@ -1,32 +1,31 @@
 import { MenuActionItem } from '@tinycld/core/components/DropdownMenu'
 import { Menu } from '@tinycld/core/ui/menu'
 import { Settings2 } from 'lucide-react-native'
-import type { ReactElement } from 'react'
 import { Text, View } from 'react-native'
 import type { BoardLabel } from '../../types'
+import { menuPropsFor, type PickerAnchor } from './picker-anchor'
 
-interface LabelPickerProps {
+type LabelPickerProps = {
     /** Every label defined on this board. */
     labels: BoardLabel[]
     selectedIds: string[]
     onToggle: (labelId: string, isSelected: boolean) => void
     /** Opens the manager, where labels are created, renamed and deleted. */
     onManage: () => void
-    children: ReactElement
-}
+} & PickerAnchor
 
 export function LabelPicker({
     labels,
     selectedIds,
     onToggle,
     onManage,
-    children,
+    ...anchor
 }: LabelPickerProps) {
     const selected = new Set(selectedIds)
 
     return (
-        <Menu>
-            <Menu.Trigger>{children}</Menu.Trigger>
+        <Menu {...menuPropsFor(anchor)}>
+            {anchor.children ? <Menu.Trigger>{anchor.children}</Menu.Trigger> : null}
             <Menu.Portal>
                 <Menu.Overlay />
                 <Menu.Content presentation="popover" placement="bottom" align="start">

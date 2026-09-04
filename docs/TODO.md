@@ -12,7 +12,9 @@ shipped as five stacked branches (`feat/tier2-estimates` → `-status` →
 notification preferences on `tinycld`'s `feat/boards-notification-prefs`
 (PR #229). Sub-tasks (9a) followed on `feat/tier2-subtasks`, card links (9b)
 on `feat/tier2-links`, and time-based automation (11) on
-`feat/tier2-automation`. Open: 14–21 and Tier 3.
+`feat/tier2-automation`. Epics (15) followed on `feat/tier2-epics` (PR #57),
+and the package was renamed cards→boards on `rename-boards` (PR #58).
+Open: 14, 16–21 and Tier 3.
 
 ## Tier 1 — table stakes in all three ✅ shipped
 
@@ -84,6 +86,13 @@ on `feat/tier2-links`, and time-based automation (11) on
     15-minute sweep. `list category` on the CLI, with `list done` as
     shorthand.
 
+15. **Epics / milestones** — landed as `boards_epics` (title, colour, archived)
+    with a server-owned rollup of each epic's card counts
+    (`server/epic_rollup.go`), an epic picker on the card, a filter facet, epic
+    rows in the board tree, and the manager dialog for creating, renaming and
+    archiving them. `card.epic` reads through to the face as a chip. Roadmaps
+    still sit on top later.
+
 11. **Time-based automation and missing actions** — landed as `card-overdue`
     and `card-due-soon`, RECORD triggers watching the two notice stamps rather
     than anything scheduled. The due-notice sweep already stamped a card on
@@ -153,13 +162,11 @@ on `feat/tier2-links`, and time-based automation (11) on
 
 14. **Cycles / sprints with a backlog.** `boards_cycles`, `boards_cards.cycle`,
     a backlog view, rollover. Large; only for software-team personas.
-15. **Epics / milestones.** A lightweight `boards_epics` collection offered as
-    a grouping; roadmaps sit on top later.
 16. **Import and export.** CSV export (already filed in `TODO.md`) and a
     Trello JSON importer first. Prior art: `contacts/server/vcard_endpoints.go`,
     `calendar/server/ics_endpoints.go`, the `google-takeout-import` package.
 17. **Card covers.** First image attachment as the cover, via core's
-    thumbnail pipeline.
+    thumbnail pipeline.  Requires improving file handling so files can be sorted
 18. **Card and board templates.** An `is_template` flag using the duplicate
     path, and a template picker in the New board dialog.
 19. **Bulk operations.** Multi-select then move / label / assign / archive.
@@ -195,9 +202,6 @@ on `feat/tier2-links`, and time-based automation (11) on
 
 - Description cap is 5000 characters (`descriptionRuneLimit`); Trello allows
   16k, Jira 32k, Linear far more.
-- Shortcuts `d` / `l` / `a` / `p` / `f` are deferred on a core `Menu` bug: a
-  keyboard-opened menu never measures its trigger. Fix all five in one pass
-  using `triggerPosition`.
 - Editing an existing comment to add a mention does not notify.
 - No responsive pass: fixed `COLUMN_WIDTH` / `PEEK_WIDTH`. The list and
   timeline views read `useBreakpoint`; the canvas and peek do not.

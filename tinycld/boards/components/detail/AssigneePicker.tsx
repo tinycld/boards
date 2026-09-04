@@ -1,11 +1,11 @@
 import { MenuActionItem } from '@tinycld/core/components/DropdownMenu'
 import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { Menu } from '@tinycld/core/ui/menu'
-import type { ReactElement } from 'react'
 import { Text, View } from 'react-native'
 import type { BoardMember } from '../../types'
+import { menuPropsFor, type PickerAnchor } from './picker-anchor'
 
-interface AssigneePickerProps {
+type AssigneePickerProps = {
     /**
      * The PROJECT's members, not the org roster: a card can only be assigned to
      * someone who can actually open the board.
@@ -13,15 +13,14 @@ interface AssigneePickerProps {
     members: BoardMember[]
     assignedIds: string[]
     onToggle: (memberId: string, isSelected: boolean) => void
-    children: ReactElement
-}
+} & PickerAnchor
 
-export function AssigneePicker({ members, assignedIds, onToggle, children }: AssigneePickerProps) {
+export function AssigneePicker({ members, assignedIds, onToggle, ...anchor }: AssigneePickerProps) {
     const assigned = new Set(assignedIds)
 
     return (
-        <Menu>
-            <Menu.Trigger>{children}</Menu.Trigger>
+        <Menu {...menuPropsFor(anchor)}>
+            {anchor.children ? <Menu.Trigger>{anchor.children}</Menu.Trigger> : null}
             <Menu.Portal>
                 <Menu.Overlay />
                 <Menu.Content presentation="popover" placement="bottom" align="start">
