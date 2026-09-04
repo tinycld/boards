@@ -152,11 +152,14 @@ Open: 14, 16–21 and Tier 3.
     would have leaked every board's links. Self-links and reversed `blocks`
     pairs are a Go guard; `related`/`duplicates` are symmetric so their
     mirrors are allowed. History writes onto BOTH cards.
-    Deferred: CLI commands (need `boards_card_links` in core's
-    `collectionScopes` first — the cross-repo step that also defers reaction
-    CLI commands); a cross-board card picker (the schema and rules support
-    such links, but the picker offers the open board's cards); link-aware
-    board filtering; a blocked glyph on the card face.
+    CLI commands landed once core's `collectionScopes` granted
+    `boards_card_links`: `card link --blocks|--related|--duplicates`, `card
+    unlink` (direction-agnostic, removes every link between the pair), and a
+    Links section in `card view` that renders a far card the caller cannot
+    read AS REDACTED rather than omitting it.
+    Deferred: a cross-board card picker (the schema and rules support such
+    links, but the picker offers the open board's cards); link-aware board
+    filtering; a blocked glyph on the card face.
 
 ### Open
 

@@ -1487,3 +1487,186 @@ func TestCardEditRejectsEmptyParent(t *testing.T) {
 		t.Fatalf("the error should point at --clear-parent: %v", err)
 	}
 }
+
+// ── Card links ──────────────────────────────────────────────────────────────
+
+func TestCardLinkFilesTheRow(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	out, _, err := runCmd(t, c, "boards", "card", "link", "crdCopy", "crdVenue", "--blocks")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.lastLinkCreate == nil {
+		t.Fatal("no link was created")
+	}
+	for field, want := range map[string]string{
+		"source": "crdCopy",
+		"target": "crdVenue",
+		"type":   "blocks",
+	} {
+		if got := str(f.lastLinkCreate[field]); got != want {
+			t.Errorf("link %s = %q, want %q", field, got, want)
+		}
+	}
+	if !strings.Contains(out, "blocks") && !strings.Contains(out, "lnk") {
+		t.Errorf("link output names neither the type nor the row:\n%s", out)
+	}
+}
+
+// A link MAY cross boards — it is the only cards collection whose rules
+// resolve two projects — so the command must not quietly refuse one.
+func TestCardLinkMayCrossBoards(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	if _, _, err := runCmd(t, c, "boards", "card", "link",
+		"crdCopy", "crdFence", "--related"); err != nil {
+		t.Fatal(err)
+	}
+	if got := str(f.lastLinkCreate["target"]); got != "crdFence" {
+		t.Errorf("cross-board target = %q, want crdFence", got)
+	}
+}
+
+// The type is the whole meaning of the link, so a missing flag is an error
+// rather than a quiet default to `related`.
+func TestCardLinkRequiresExactlyOneType(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	if _, _, err := runCmd(t, c, "boards", "card", "link", "crdCopy", "crdVenue"); err == nil {
+		t.Error("a link with no type must be refused")
+	}
+	if _, _, err := runCmd(t, c, "boards", "card", "link",
+		"crdCopy", "crdVenue", "--blocks", "--related"); err == nil {
+		t.Error("a link with two types must be refused")
+	}
+}
+
+// `card view` renders the link from the end being read: the SOURCE says
+// "Blocks", and the target of the same row says "Blocked by". A row is stored
+// once, so this labelling is the only thing that distinguishes the two ends.
+func TestCardViewLabelsEachEndOfALink(t *testing.T) {
+	f := board(t)
+	f.links["lnk1"] = &cardLink{ID: "lnk1", Source: "crdCopy", Target: "crdVenue", Type: "blocks"}
+	_, c := f.serve()
+
+	fromSource, _, err := runCmd(t, c, "boards", "card", "view", "crdCopy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(fromSource, "Blocks") || !strings.Contains(fromSource, "Book venue") {
+		t.Errorf("the source end must read \"Blocks\" and name the far card:\n%s", fromSource)
+	}
+
+	fromTarget, _, err := runCmd(t, c, "boards", "card", "view", "crdVenue")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(fromTarget, "Blocked by") || !strings.Contains(fromTarget, "Write copy") {
+		t.Errorf("the target end must read \"Blocked by\":\n%s", fromTarget)
+	}
+}
+
+// THE REDACTION RULE, and the reason this file's link half exists at all.
+//
+// Read is either end, so a caller can hold a link row whose far card sits on a
+// board they cannot read. That link must still RENDER, marked as redacted — a
+// blocked card that prints as unblocked tells the reader something false about
+// whether the work can proceed. The same doctrine as the unreadable assignee
+// above, applied across a board boundary.
+func TestCardViewRedactsAnUnreadableFarCard(t *testing.T) {
+	f := board(t)
+	f.links["lnk1"] = &cardLink{ID: "lnk1", Source: "crdCopy", Target: "ghostCard", Type: "blocks"}
+	_, c := f.serve()
+
+	out, _, err := runCmd(t, c, "boards", "card", "view", "crdCopy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "Blocks") {
+		t.Errorf("a link to an unreadable card must not vanish — the card would "+
+			"read as unblocked:\n%s", out)
+	}
+	if !strings.Contains(out, redactedFarCard) {
+		t.Errorf("an unreadable far card must render as redacted, got:\n%s", out)
+	}
+}
+
+// --json carries the redaction as a FIELD, so a script can tell a withheld
+// far card from a resolved one without parsing rendered text.
+func TestCardViewJSONMarksARedactedLink(t *testing.T) {
+	f := board(t)
+	f.links["lnk1"] = &cardLink{ID: "lnk1", Source: "crdCopy", Target: "ghostCard", Type: "blocks"}
+	_, c := f.serve()
+
+	out, _, err := runCmd(t, c, "boards", "card", "view", "crdCopy", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var detail struct {
+		Links []struct {
+			Label     string `json:"label"`
+			Redacted  bool   `json:"redacted"`
+			FarCardID string `json:"far_card_id"`
+		} `json:"links"`
+	}
+	if err := json.Unmarshal([]byte(out), &detail); err != nil {
+		t.Fatalf("card view --json is not valid JSON: %v\n%s", err, out)
+	}
+	if len(detail.Links) != 1 {
+		t.Fatalf("want one link, got %d", len(detail.Links))
+	}
+	if !detail.Links[0].Redacted {
+		t.Error("a withheld far card must be marked redacted in JSON")
+	}
+	// The id is readable even when the card is not, which is what lets a
+	// script correlate the link without being able to open its far end.
+	if detail.Links[0].FarCardID != "ghostCard" {
+		t.Errorf("far_card_id = %q, want ghostCard", detail.Links[0].FarCardID)
+	}
+}
+
+// A link is one row read from both ends, so the direction given to `unlink`
+// must not matter.
+func TestCardUnlinkRemovesFromEitherDirection(t *testing.T) {
+	for _, args := range [][2]string{{"crdCopy", "crdVenue"}, {"crdVenue", "crdCopy"}} {
+		f := board(t)
+		f.links["lnk1"] = &cardLink{ID: "lnk1", Source: "crdCopy", Target: "crdVenue", Type: "blocks"}
+		_, c := f.serve()
+
+		if _, _, err := runCmd(t, c, "boards", "card", "unlink", args[0], args[1]); err != nil {
+			t.Fatalf("unlink %v: %v", args, err)
+		}
+		if len(f.deletedLinks) != 1 || f.deletedLinks[0] != "lnk1" {
+			t.Errorf("unlink %v deleted %v, want [lnk1]", args, f.deletedLinks)
+		}
+	}
+}
+
+// Two cards can carry more than one link — the symmetric types may coexist —
+// and leaving one behind after "unlink" reads as the command having failed.
+func TestCardUnlinkRemovesEveryLinkBetweenThePair(t *testing.T) {
+	f := board(t)
+	f.links["lnk1"] = &cardLink{ID: "lnk1", Source: "crdCopy", Target: "crdVenue", Type: "related"}
+	f.links["lnk2"] = &cardLink{ID: "lnk2", Source: "crdVenue", Target: "crdCopy", Type: "duplicates"}
+	_, c := f.serve()
+
+	if _, _, err := runCmd(t, c, "boards", "card", "unlink", "crdCopy", "crdVenue"); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.deletedLinks) != 2 {
+		t.Errorf("deleted %v, want both links", f.deletedLinks)
+	}
+}
+
+func TestCardUnlinkSaysSoWhenThereIsNoLink(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	if _, _, err := runCmd(t, c, "boards", "card", "unlink", "crdCopy", "crdVenue"); err == nil {
+		t.Error("unlinking two unlinked cards must be an error, not a silent no-op")
+	}
+}

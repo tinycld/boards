@@ -40,6 +40,7 @@ type fakeCards struct {
 	checklist map[string]*checklistItem
 	comments  map[string]*comment
 	users     map[string]*user
+	links     map[string]*cardLink
 
 	seq int
 
@@ -52,6 +53,8 @@ type fakeCards struct {
 	lastProjectPatch map[string]any
 	lastMoveBody     map[string]any
 	createdChecklist []map[string]any
+	lastLinkCreate   map[string]any
+	deletedLinks     []string
 	deletedCards     []string
 	deletedLists     []string
 	deletedProjects  []string
@@ -78,6 +81,7 @@ func newFakeCards(t *testing.T) *fakeCards {
 		checklist: map[string]*checklistItem{},
 		comments:  map[string]*comment{},
 		users:     map[string]*user{},
+		links:     map[string]*cardLink{},
 	}
 }
 
@@ -118,7 +122,13 @@ var (
 	reCardEq            = regexp.MustCompile(`^card = "((?:[^"\\]|\\.)*)"$`)
 	reIDTerm            = regexp.MustCompile(`id = "((?:[^"\\]|\\.)*)"`)
 	reIDList            = regexp.MustCompile(`^id = "((?:[^"\\]|\\.)*)"( \|\| id = "(?:(?:[^"\\]|\\.)*)")*$`)
-	reUnquote           = strings.NewReplacer(`\"`, `"`, `\\`, `\`)
+	// `card view` reads every link with this card at EITHER end.
+	reLinkEitherEnd = regexp.MustCompile(`^source = "((?:[^"\\]|\\.)*)" \|\| target = "((?:[^"\\]|\\.)*)"$`)
+	// `card unlink` reads both orientations of one pair.
+	reLinkBetween = regexp.MustCompile(
+		`^\(source = "((?:[^"\\]|\\.)*)" && target = "((?:[^"\\]|\\.)*)"\) \|\| ` +
+			`\(source = "((?:[^"\\]|\\.)*)" && target = "((?:[^"\\]|\\.)*)"\)$`)
+	reUnquote = strings.NewReplacer(`\"`, `"`, `\\`, `\`)
 )
 
 func unquote(s string) string { return reUnquote.Replace(s) }
@@ -493,6 +503,55 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		}
 		sort.Slice(out, func(i, j int) bool { return out[i].Created < out[j].Created })
 		listResponse(w, out)
+	})
+	// boards_card_links — GET for `card view` and `card unlink`, POST for
+	// `card link`, DELETE for the removal `unlink` performs.
+	mux.HandleFunc("GET /api/collections/boards_card_links/records", func(w http.ResponseWriter, r *http.Request) {
+		filter := r.URL.Query().Get("filter")
+		var out []cardLink
+		if m := reLinkEitherEnd.FindStringSubmatch(filter); m != nil {
+			cardID := unquote(m[1])
+			for _, l := range f.links {
+				if l.Source == cardID || l.Target == cardID {
+					out = append(out, *l)
+				}
+			}
+		} else if m := reLinkBetween.FindStringSubmatch(filter); m != nil {
+			a, b := unquote(m[1]), unquote(m[2])
+			for _, l := range f.links {
+				if (l.Source == a && l.Target == b) || (l.Source == b && l.Target == a) {
+					out = append(out, *l)
+				}
+			}
+		} else {
+			f.t.Errorf("unsupported links filter: %q", filter)
+			listResponse(w, []cardLink{})
+			return
+		}
+		sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+		listResponse(w, out)
+	})
+	mux.HandleFunc("POST /api/collections/boards_card_links/records", func(w http.ResponseWriter, r *http.Request) {
+		body := decodeBody(r)
+		f.lastLinkCreate = body
+		l := &cardLink{
+			ID:     f.nextID("lnk"),
+			Source: str(body["source"]),
+			Target: str(body["target"]),
+			Type:   str(body["type"]),
+		}
+		f.links[l.ID] = l
+		json.NewEncoder(w).Encode(l)
+	})
+	mux.HandleFunc("DELETE /api/collections/boards_card_links/records/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		if _, ok := f.links[id]; !ok {
+			notFound(w)
+			return
+		}
+		delete(f.links, id)
+		f.deletedLinks = append(f.deletedLinks, id)
+		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("GET /api/collections/boards_labels/records", func(w http.ResponseWriter, r *http.Request) {
 		filter := r.URL.Query().Get("filter")

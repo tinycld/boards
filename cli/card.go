@@ -28,6 +28,8 @@ func newCardCmd(c *client.Client) *cobra.Command {
 		newCardCopyCmd(c),
 		newCardArchiveCmd(c),
 		newCardRemoveCmd(c),
+		newCardLinkCmd(c),
+		newCardUnlinkCmd(c),
 	)
 	return card
 }
@@ -61,6 +63,10 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			links, err := cardLinks(ctx, c, cd.ID)
+			if err != nil {
+				return err
+			}
 
 			ids := append([]string{}, cd.Assignees...)
 			if reporterID := cd.reporterID(); reporterID != "" {
@@ -83,11 +89,19 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 			// what a CSV consumer can actually parse. Only JSON short-circuits
 			// here — passing nil headers and nil rows to a CSV render emits a
 			// bare newline and drops the record.
+			// Links are oriented for THIS card before they go anywhere: the
+			// stored row says nothing about which end you are reading from,
+			// and a consumer should not have to work that out. A far card the
+			// caller cannot read is carried as redacted, never dropped — see
+			// link.go's header.
+			linkRows := orientLinks(ctx, c, links, cd.ID, projectSlugs(ctx, c, links, cd))
+
 			detail := struct {
 				card      `json:",inline"`
 				Checklist []checklistItem `json:"checklist"`
 				Comments  []comment       `json:"comments"`
-			}{card: cd, Checklist: items, Comments: comments}
+				Links     []linkRow       `json:"links"`
+			}{card: cd, Checklist: items, Comments: comments, Links: linkRows}
 
 			if o.Format == output.JSON {
 				return o.Write(cmd.OutOrStdout(), nil, nil, detail)
@@ -191,6 +205,7 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 				}
 				rows = append(rows, []string{"comment", author + ": " + firstLine(cm.Body)})
 			}
+			rows = append(rows, linkTableRows(linkRows)...)
 			return o.Write(cmd.OutOrStdout(), []string{"FIELD", "VALUE"}, rows, detail)
 		},
 	}
