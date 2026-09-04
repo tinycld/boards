@@ -112,6 +112,13 @@ interface CardsUIState {
      */
     viewModeByProject: Record<string, ViewMode>
     setViewMode: (projectId: string, mode: ViewMode) => void
+    /**
+     * Whether My cards lists cards in done or canceled lists. PERSISTED, and
+     * off by default: it is a preference with no referent to go stale, and
+     * someone who wants to see finished work there wants it every time.
+     */
+    isMyCardsShowingClosed: boolean
+    toggleMyCardsShowClosed: () => void
 }
 
 export type ViewMode = 'board' | 'list'
@@ -200,6 +207,9 @@ export const useCardsUIStore = create<CardsUIState>()(
             viewModeByProject: {},
             setViewMode: (projectId, mode) =>
                 set(s => ({ viewModeByProject: { ...s.viewModeByProject, [projectId]: mode } })),
+            isMyCardsShowingClosed: false,
+            toggleMyCardsShowClosed: () =>
+                set(s => ({ isMyCardsShowingClosed: !s.isMyCardsShowingClosed })),
         }),
         {
             name: 'tinycld_cards_ui',
@@ -231,6 +241,7 @@ export const useCardsUIStore = create<CardsUIState>()(
                 collapsedColumnIds: s.collapsedColumnIds,
                 isCompactCards: s.isCompactCards,
                 viewModeByProject: s.viewModeByProject,
+                isMyCardsShowingClosed: s.isMyCardsShowingClosed,
             }),
         }
     )

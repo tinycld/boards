@@ -77,6 +77,7 @@ export function registerCollections(
             // an insert never carries them.
             'due_soon_notified_at',
             'overdue_notified_at',
+            'list_changed_at',
         ] as const,
         collectionOptions: indexed,
     })

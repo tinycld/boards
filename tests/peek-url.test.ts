@@ -48,7 +48,7 @@ function board(overrides: Partial<BoardProject> = {}): BoardProject {
                 id: 'l1',
                 name: 'To do',
                 position: 'a0',
-                isDone: false,
+                category: 'todo',
                 cards: [card('c1', 'HOME-1'), card('c2', 'HOME-2')],
             },
         ],
@@ -70,6 +70,7 @@ function card(id: string, key: string) {
         checklistDone: 0,
         commentCount: 0,
         attachmentCount: 0,
+        listCategory: 'todo',
     }
 }
 
@@ -188,7 +189,7 @@ describe('usePeekUrl', () => {
                     id: 'l1',
                     name: 'To do',
                     position: 'a0',
-                    isDone: false,
+                    category: 'todo',
                     cards: [card('c3', '')],
                 },
             ],
@@ -208,7 +209,7 @@ describe('usePeekUrl', () => {
                     id: 'l1',
                     name: 'To do',
                     position: 'a0',
-                    isDone: false,
+                    category: 'todo',
                     cards: [card('c3', 'HOME-3')],
                 },
             ],
@@ -243,7 +244,7 @@ describe('usePeekUrl', () => {
                     id: 'l1',
                     name: 'To do',
                     position: 'a0',
-                    isDone: false,
+                    category: 'todo',
                     cards: [card('c1', '')],
                 },
             ],

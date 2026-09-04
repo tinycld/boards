@@ -20,6 +20,7 @@ function card(id: string, overrides: Partial<BoardCardView> = {}): BoardCardView
         checklistDone: 0,
         commentCount: 0,
         attachmentCount: 0,
+        listCategory: 'todo',
         ...overrides,
     }
 }

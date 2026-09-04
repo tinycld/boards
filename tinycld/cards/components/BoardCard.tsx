@@ -4,6 +4,7 @@ import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import {
     CalendarDays,
     CircleCheck,
+    CircleX,
     Clock,
     Gauge,
     MessageSquare,
@@ -15,6 +16,7 @@ import type { RemoteCardsPresence } from '../hooks/useBoardPresence'
 import { useCardFileDrop } from '../hooks/useCardFileDrop'
 import { dueStateFor, formatDueDate } from '../lib/due-state'
 import { formatEstimate } from '../lib/estimate'
+import { isClosedCategory, type ListCategory } from '../lib/list-category'
 import type { CardPriority } from '../lib/priority'
 import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardCardView, BoardLabel, BoardMember } from '../types'
@@ -30,7 +32,8 @@ const MAX_WATCHERS = 3
 interface BoardCardProps {
     card: BoardCardView
     projectId: string
-    isDone?: boolean
+    /** The status of the card's list; done and canceled render the closed face. */
+    category: ListCategory
     /** A grab cursor on a card a viewer cannot drag is a lie — drop it. */
     canDrag: boolean
 }
@@ -67,7 +70,7 @@ function cardRingClass(isOpen: boolean, isFocused: boolean, idle: string, isDrop
     return idle
 }
 
-export function BoardCard({ card, projectId, isDone, canDrag }: BoardCardProps) {
+export function BoardCard({ card, projectId, category, canDrag }: BoardCardProps) {
     const { isOpen, isFocused, onPress } = useCardPress(card.id)
     // canDrag doubles as the edit gate: both come from the same role check.
     const { isDropTarget, dropRef } = useCardFileDrop(card.id, projectId, canDrag)
@@ -77,11 +80,12 @@ export function BoardCard({ card, projectId, isDone, canDrag }: BoardCardProps) 
     // is a deliberate action taken at rest, never mid-drag.
     const isCompact = useCardsUIStore(s => s.isCompactCards)
 
-    if (isDone) {
+    if (isClosedCategory(category)) {
         return (
-            <DoneCard
+            <ClosedCard
                 cardId={card.id}
                 title={card.title}
+                category={category}
                 isOpen={isOpen}
                 isFocused={isFocused}
                 onPress={onPress}
@@ -297,17 +301,36 @@ function CompactDueIcon({ due }: { due?: Date }) {
     )
 }
 
-interface DoneCardProps {
+interface ClosedCardProps {
     cardId: string
     title: string
+    category: ListCategory
     isOpen: boolean
     isFocused: boolean
     onPress: () => void
     canDrag: boolean
 }
 
-function DoneCard({ cardId, title, isOpen, isFocused, onPress, canDrag }: DoneCardProps) {
+/**
+ * The face of a card whose work has stopped: a check for done, a cross and a
+ * struck title for canceled. Everything else on the face is dropped — the
+ * point of a closed column is to be scanned past.
+ */
+function ClosedCard({
+    cardId,
+    title,
+    category,
+    isOpen,
+    isFocused,
+    onPress,
+    canDrag,
+}: ClosedCardProps) {
     const successColor = useThemeColor('success')
+    const mutedColor = useThemeColor('muted')
+    const isCanceled = category === 'canceled'
+    const Icon = isCanceled ? CircleX : CircleCheck
+    const iconColor = isCanceled ? mutedColor : successColor
+    const titleClass = isCanceled ? 'line-through' : ''
     return (
         <Pressable
             accessibilityRole="button"
@@ -321,10 +344,13 @@ function DoneCard({ cardId, title, isOpen, isFocused, onPress, canDrag }: DoneCa
         >
             <FocusMarker isFocused={isFocused} cardId={cardId} />
             <View className="flex-row items-start gap-2">
-                <View className="mt-px">
-                    <CircleCheck size={14} color={successColor} strokeWidth={2.4} />
+                <View className="mt-px" testID={`board-card-closed-${cardId}`}>
+                    <Icon size={14} color={iconColor} strokeWidth={2.4} />
                 </View>
-                <Text className="flex-1 text-[13.5px] leading-[18px] text-muted" numberOfLines={3}>
+                <Text
+                    className={`flex-1 text-[13.5px] leading-[18px] text-muted ${titleClass}`}
+                    numberOfLines={3}
+                >
                     {title}
                 </Text>
             </View>

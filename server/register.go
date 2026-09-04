@@ -115,6 +115,9 @@ func registerShared(app *pocketbase.PocketBase) {
 	// client-supplied value when it does not. See comment_edited.go.
 	registerCommentEditedAt(app)
 	registerCardArchivedAt(app)
+	// list_changed_at is server-owned the same way archived_at is; the
+	// auto-archive sweep counts from it. See list_changed_at.go.
+	registerListChangedAt(app)
 	registerActorCapture(app)
 	registerCardActivity(app)
 	registerAutoWatch(app)
@@ -155,6 +158,9 @@ func registerShareLinkEndpoints(app *pocketbase.PocketBase, rt *boardRealtime) {
 		// A minute ticker for due-date notices; bails out on its own once
 		// the app is torn down (cardsAppIsLive).
 		go startDueNoticeScheduler(app)
+		// A quarter-hour ticker archiving cards that have sat finished for
+		// longer than their board allows. See auto_archive.go.
+		go startAutoArchiveScheduler(app)
 		return e.Next()
 	})
 }

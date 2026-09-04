@@ -1,4 +1,5 @@
 import type PocketBase from 'pocketbase'
+import type { ListCategory } from './lib/list-category'
 import type { CardPriority } from './lib/priority'
 import { initialRanks } from './lib/rank'
 
@@ -66,7 +67,7 @@ interface CardSeed {
 
 interface ListSeed {
     name: string
-    isDone?: boolean
+    category?: ListCategory
     cards: CardSeed[]
 }
 
@@ -82,6 +83,8 @@ interface BoardSeed {
     slug: string
     color: string
     owner: Who
+    /** Days a finished card sits before the server archives it; 0 (the default) never does. */
+    autoArchiveDays?: number
     /**
      * Roles for the non-owner members, cycled in order. On a 'me'-owned board
      * every teammate gets a row (a populated ShareDialog roster); on a
@@ -102,6 +105,9 @@ const BOARDS: BoardSeed[] = [
         slug: 'PL',
         color: '#4A86E8',
         owner: 'me',
+        // Demonstrates the sweep without ever firing on fresh demo data: the
+        // seeded Done cards entered their list today.
+        autoArchiveDays: 30,
         memberRoles: ['editor', 'commentor', 'viewer'],
         labels: [
             { name: 'Bug', color: '#B00020' },
@@ -112,6 +118,7 @@ const BOARDS: BoardSeed[] = [
         lists: [
             {
                 name: 'Backlog',
+                category: 'backlog',
                 cards: [
                     {
                         title: 'Dark-mode audit of the marketing site',
@@ -196,6 +203,7 @@ const BOARDS: BoardSeed[] = [
             },
             {
                 name: 'Doing',
+                category: 'in_progress',
                 cards: [
                     {
                         title: 'Press kit landing page',
@@ -237,7 +245,7 @@ const BOARDS: BoardSeed[] = [
             },
             {
                 name: 'Done',
-                isDone: true,
+                category: 'done',
                 cards: [
                     { title: 'Rename workspace settings tabs' },
                     {
@@ -271,7 +279,7 @@ const BOARDS: BoardSeed[] = [
             },
             {
                 name: 'Done',
-                isDone: true,
+                category: 'done',
                 cards: [{ title: 'Clean the gutters' }],
             },
         ],
@@ -353,6 +361,7 @@ async function seedBoard(
         visibility: 'private',
         created_by: ownerId,
         archived: false,
+        auto_archive_days: board.autoArchiveDays ?? 0,
     })
 
     // Owner row first, mirroring useCreateProject's yield order. The superuser
@@ -394,7 +403,7 @@ async function seedBoard(
             project: project.id,
             name: list.name,
             position: listRanks[listIndex] ?? '',
-            is_done: list.isDone ?? false,
+            category: list.category ?? 'todo',
         })
 
         const cardRanks = initialRanks(list.cards.length)

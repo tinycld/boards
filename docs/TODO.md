@@ -7,8 +7,9 @@ infrastructure it can reuse. Ties go to the cheaper item.
 
 Status as of 2026-09-03: Tier 1 shipped on `feat/tier1-parity` (with the
 matching `feat/cards-notification-prefs` branch in `tinycld`). Tier 2 is in
-progress: 12 (estimates) shipped on `feat/tier2-estimates`; 13, 8 and 10 are
-next, in that order. Tier 3 is open.
+progress: 12 (estimates) shipped on `feat/tier2-estimates`, 13 (status
+categories + auto-archive) on `feat/tier2-status`; 8 and 10 are next, in that
+order. Tier 3 is open.
 
 ## Tier 1 — table stakes in all three ✅ shipped
 

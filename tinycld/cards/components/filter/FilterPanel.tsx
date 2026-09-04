@@ -12,8 +12,10 @@ import {
     ME,
     UNASSIGNED,
 } from '../../lib/board-filter'
+import { categoryLabel, LIST_CATEGORIES, type ListCategory } from '../../lib/list-category'
 import { type CardPriority, PRIORITIES, priorityLabel } from '../../lib/priority'
 import type { BoardProject } from '../../types'
+import { CategoryGlyph } from '../CategoryGlyph'
 import { PriorityGlyph } from '../PriorityGlyph'
 
 interface FilterPanelProps {
@@ -57,6 +59,14 @@ export function FilterPanel({ project, filter, onChange, onClear }: FilterPanelP
                 : [...current, priority],
         })
     }
+    const toggleStatus = (category: ListCategory) => {
+        const current = filter.statuses
+        onChange({
+            statuses: current.includes(category)
+                ? current.filter(c => c !== category)
+                : [...current, category],
+        })
+    }
     const setDue = (due: DueFilter) => onChange({ due: filter.due === due ? null : due })
     const setEstimate = (estimate: EstimateFilter) =>
         onChange({ estimate: filter.estimate === estimate ? null : estimate })
@@ -76,6 +86,17 @@ export function FilterPanel({ project, filter, onChange, onClear }: FilterPanelP
                 </View>
             </View>
             <ScrollView style={{ maxHeight: 400 }}>
+                <Section title="Status">
+                    {LIST_CATEGORIES.map(category => (
+                        <OptionRow
+                            key={category}
+                            label={categoryLabel(category)}
+                            isSelected={filter.statuses.includes(category)}
+                            leading={<CategoryGlyph category={category} size={12} />}
+                            onPress={() => toggleStatus(category)}
+                        />
+                    ))}
+                </Section>
                 <Section title="Priority">
                     {PRIORITIES.map(priority => (
                         <OptionRow

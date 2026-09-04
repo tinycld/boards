@@ -21,6 +21,7 @@ import { type BoardFilter, cardMatchesFilter } from './board-filter'
 import { type BoardSort, compareCards } from './board-sort'
 import { formatCardKey } from './card-key'
 import { normalizeEstimate } from './estimate'
+import { type ListCategory, normalizeListCategory } from './list-category'
 import { normalizePriority } from './priority'
 
 /** The subset of a user row the board actually renders. */
@@ -75,7 +76,8 @@ export function toBoardCard(
     card: CardsCards,
     labelsById: Map<string, BoardLabel>,
     usersById: Map<string, BoardMember>,
-    projectSlug: string
+    projectSlug: string,
+    listCategory: ListCategory
 ): BoardCardView {
     return {
         id: card.id,
@@ -109,6 +111,7 @@ export function toBoardCard(
         reporter: toReporter(card, usersById),
         priority: normalizePriority(card.priority),
         estimate: normalizeEstimate(card.estimate),
+        listCategory,
         created: card.created ?? '',
         checklistTotal: card.checklist_total,
         checklistDone: card.checklist_done,
@@ -232,6 +235,12 @@ export function buildBoardProject(
 
     const labelsById = new Map(labels.map(l => [l.id, toBoardLabel(l)]))
     const usersById = new Map(users.map(u => [u.id, toBoardMember(u)]))
+    // Resolved once here so a card can carry its list's status without a
+    // lookup at every filter. A card whose list has not synced yet reads as
+    // an ordinary working card — the same default an unmarked list gets.
+    const categoryByList = new Map(
+        lists.map(list => [list.id, normalizeListCategory(list.category)])
+    )
 
     // The filter is applied HERE, beside the archived skip, so `list.cards` and
     // what the column renders are one and the same array. Handing a column a
@@ -248,7 +257,13 @@ export function buildBoardProject(
         if (card.archived) continue
         cardTotal += 1
         totals.set(card.list, (totals.get(card.list) ?? 0) + 1)
-        const cardView = toBoardCard(card, labelsById, usersById, project.slug)
+        const cardView = toBoardCard(
+            card,
+            labelsById,
+            usersById,
+            project.slug,
+            categoryByList.get(card.list) ?? 'todo'
+        )
         if (view && !cardMatchesFilter(cardView, view.filter, view)) continue
         const bucket = cardsByList.get(card.list)
         if (bucket) bucket.push(cardView)
@@ -275,6 +290,7 @@ export function buildBoardProject(
         name: project.name,
         slug: project.slug,
         color: project.color,
+        autoArchiveDays: project.auto_archive_days,
         members: members.map(toBoardMember),
         // Sorted by name so the label picker has a stable order that does not
         // depend on insertion sequence.
@@ -283,7 +299,7 @@ export function buildBoardProject(
             id: list.id,
             name: list.name,
             position: list.position,
-            isDone: list.is_done,
+            category: categoryByList.get(list.id) ?? 'todo',
             cards: cardsByList.get(list.id) ?? [],
             totalCount: totals.get(list.id) ?? 0,
         })),
@@ -332,6 +348,7 @@ function sameCard(a: BoardCardView, b: BoardCardView): boolean {
         (a.due?.getTime() ?? null) === (b.due?.getTime() ?? null) &&
         a.priority === b.priority &&
         a.estimate === b.estimate &&
+        a.listCategory === b.listCategory &&
         a.created === b.created &&
         a.checklistTotal === b.checklistTotal &&
         a.checklistDone === b.checklistDone &&
@@ -398,7 +415,7 @@ function shareTree(previous: BoardProject, fresh: BoardProject): BoardProject {
             prior &&
             prior.name === list.name &&
             prior.position === list.position &&
-            prior.isDone === list.isDone &&
+            prior.category === list.category &&
             // A filter that hides a card changes the count but not the list's
             // own row; without this line the column keeps its stale "12".
             prior.totalCount === list.totalCount &&
@@ -429,6 +446,7 @@ function shareTree(previous: BoardProject, fresh: BoardProject): BoardProject {
         // node would still be reused, so the header would keep the old slug.
         previous.slug === fresh.slug &&
         previous.color === fresh.color &&
+        previous.autoArchiveDays === fresh.autoArchiveDays &&
         previous.cardTotal === fresh.cardTotal
     ) {
         return previous

@@ -8,10 +8,12 @@ order: 30
 ## Filtering the board
 
 Click the filter icon in the board's top bar to choose what to show. You can
-narrow by priority, label, who a card is assigned to (including **Assigned to
-me** and **Unassigned**), who reported it, its due state (overdue, due soon,
-with or without a date), whether it has an estimate, and a word from its title
-or key. Within one group any
+narrow by the status of a card's list (backlog, to do, in progress, done or
+canceled), priority, label, who a card is assigned to (including **Assigned
+to me** and **Unassigned**), who reported it, its due state (overdue, due
+soon, with or without a date), whether it has an estimate, and a word from
+its title or key. Cards in a done or canceled list never count as overdue or
+due soon. Within one group any
 match is enough; across groups a card has to match all of them.
 
 While a filter is on, a row of chips under the header shows exactly what is

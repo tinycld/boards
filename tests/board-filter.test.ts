@@ -33,6 +33,7 @@ function card(overrides: Partial<BoardCardView> = {}): BoardCardView {
         checklistDone: 0,
         commentCount: 0,
         attachmentCount: 0,
+        listCategory: 'todo',
         ...overrides,
     }
 }
@@ -146,6 +147,40 @@ describe('estimate', () => {
         expect(cardMatchesFilter(unsized, filter({ estimate: 'unestimated' }), ctx)).toBe(true)
         expect(cardMatchesFilter(sized, filter({ estimate: 'unestimated' }), ctx)).toBe(false)
         expect(activeFacetCount(filter({ estimate: 'estimated' }))).toBe(1)
+    })
+})
+
+describe('status', () => {
+    it('matches any selected list category', () => {
+        const f = filter({ statuses: ['in_progress', 'done'] })
+        expect(cardMatchesFilter(card({ listCategory: 'in_progress' }), f, ctx)).toBe(true)
+        expect(cardMatchesFilter(card({ listCategory: 'done' }), f, ctx)).toBe(true)
+        expect(cardMatchesFilter(card({ listCategory: 'todo' }), f, ctx)).toBe(false)
+        expect(activeFacetCount(f)).toBe(1)
+    })
+
+    it('never counts a closed card as overdue or due soon', () => {
+        const late = { due: days(-1) }
+        const soon = { due: days(1) }
+        for (const listCategory of ['done', 'canceled'] as const) {
+            expect(
+                cardMatchesFilter(card({ ...late, listCategory }), filter({ due: 'overdue' }), ctx)
+            ).toBe(false)
+            expect(
+                cardMatchesFilter(card({ ...soon, listCategory }), filter({ due: 'soon' }), ctx)
+            ).toBe(false)
+            // The date itself is still there.
+            expect(
+                cardMatchesFilter(card({ ...late, listCategory }), filter({ due: 'has' }), ctx)
+            ).toBe(true)
+        }
+        expect(
+            cardMatchesFilter(
+                card({ ...late, listCategory: 'backlog' }),
+                filter({ due: 'overdue' }),
+                ctx
+            )
+        ).toBe(true)
     })
 })
 

@@ -252,7 +252,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 			Project:  str(body["project"]),
 			Name:     str(body["name"]),
 			Position: str(body["position"]),
-			IsDone:   body["is_done"] == true,
+			Category: str(body["category"]),
 		}
 		f.lists[created.ID] = created
 		json.NewEncoder(w).Encode(created)
@@ -272,8 +272,8 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		if v, ok := body["position"].(string); ok {
 			l.Position = v
 		}
-		if v, ok := body["is_done"].(bool); ok {
-			l.IsDone = v
+		if v, ok := body["category"].(string); ok {
+			l.Category = v
 		}
 		json.NewEncoder(w).Encode(l)
 	})

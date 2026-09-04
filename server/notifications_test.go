@@ -176,19 +176,28 @@ func TestNotify_MoveAndCompleteReachWatchersWithTheEvent(t *testing.T) {
 
 	// Into the done list: the same event, named "completed".
 	done := cardsList(t, env.app, env.project, "Done", "a2")
-	done.Set("is_done", true)
+	done.Set("category", "done")
 	if err := env.app.Save(done); err != nil {
 		t.Fatal(err)
 	}
 	completed := loaded(t, env.app, env.card.Id)
 	completed.Set("list", done.Id)
 	notifyCardUpdate(env.app, completed, env.owner.Id)
+	// And into a canceled list: named "canceled", never "completed".
+	canceled := cardsList(t, env.app, env.project, "Won't do", "a3")
+	canceled.Set("category", "canceled")
+	if err := env.app.Save(canceled); err != nil {
+		t.Fatal(err)
+	}
+	dropped := loaded(t, env.app, env.card.Id)
+	dropped.Set("list", canceled.Id)
+	notifyCardUpdate(env.app, dropped, env.owner.Id)
 	events := map[string]bool{}
 	for _, n := range notificationsFor(t, env.app, env.viewer.Id) {
 		events[eventOf(t, n)] = true
 	}
-	if !events["completed"] || !events["moved"] {
-		t.Fatalf("viewer events = %v, want moved and completed", events)
+	if !events["completed"] || !events["moved"] || !events["canceled"] {
+		t.Fatalf("viewer events = %v, want moved, completed and canceled", events)
 	}
 }
 

@@ -4,9 +4,11 @@ import { X } from 'lucide-react-native'
 import type { ReactNode } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { isFilterActive, ME, UNASSIGNED } from '../../lib/board-filter'
+import { categoryLabel } from '../../lib/list-category'
 import { priorityLabel } from '../../lib/priority'
 import { selectBoardFilter, useCardsUIStore } from '../../stores/cards-ui-store'
 import type { BoardMember, BoardProject } from '../../types'
+import { CategoryGlyph } from '../CategoryGlyph'
 import { PriorityGlyph } from '../PriorityGlyph'
 
 const ESTIMATE_LABELS = {
@@ -49,6 +51,18 @@ export function FilterBar({ project }: { project: BoardProject }) {
                     onDismiss={() => setBoardFilter(project.id, { text: '' })}
                 />
             ) : null}
+            {filter.statuses.map(category => (
+                <Chip
+                    key={category}
+                    label={categoryLabel(category)}
+                    leading={<CategoryGlyph category={category} size={11} />}
+                    onDismiss={() =>
+                        setBoardFilter(project.id, {
+                            statuses: filter.statuses.filter(c => c !== category),
+                        })
+                    }
+                />
+            ))}
             {filter.priorities.map(priority => (
                 <Chip
                     key={priority}

@@ -9,7 +9,7 @@ not bundled), and the other feature packages.
 
 ## Automation rules
 
-The package publishes five triggers and four actions to the automation-rules
+The package publishes six triggers and four actions to the automation-rules
 engine, so a rule can fire on board activity:
 
 - **`cards:card-created`** — "A card is created". A `cards_cards` create.
@@ -19,10 +19,12 @@ engine, so a rule can fire on board activity:
   `list` only (not `position`), so drag-reordering within a column does not
   fire it.
 - **`cards:card-completed`** — "A card is completed". An update watching
-  `list`, gated in Go to lists marked `is_done`. It is a separate trigger
-  rather than a condition on "moved" because whether a list counts as done is
-  a property of the list, not the card, and conditions can only read the
+  `list`, gated in Go to lists whose `category` is `done`. It is a separate
+  trigger rather than a condition on "moved" because a list's status is a
+  property of the list, not the card, and conditions can only read the
   trigger record's own fields.
+- **`cards:card-canceled`** — "A card is canceled". The same event, gated to
+  lists whose `category` is `canceled`.
 - **`cards:card-assigned`** — "A card is assigned". An update watching
   `assignees`.
 - **`cards:card-priority-changed`** — "A card's priority changes". An update

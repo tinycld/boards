@@ -95,6 +95,7 @@ function TableRow({
         <CardRow
             card={row.card}
             listName={row.list.name}
+            listCategory={row.list.category}
             variant={isMobile ? 'stacked' : 'table'}
             isFocused={isFocused}
             onPress={onPress}

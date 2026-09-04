@@ -21,6 +21,7 @@ function project(id: string, name: string, overrides: Partial<CardsProjects> = {
         visibility: 'private',
         created_by: 'u1',
         archived: false,
+        auto_archive_days: 0,
         created: '',
         updated: '',
         ...overrides,
@@ -33,7 +34,7 @@ function list(id: string, projectId: string, name = 'To do'): CardsLists {
         project: projectId,
         name,
         position: 'a0',
-        is_done: false,
+        category: 'todo',
         created: '',
         updated: '',
     }
@@ -71,6 +72,19 @@ function row(cardRecord: CardsCards, projectRecord: CardsProjects): JoinedRow {
         card: cardRecord,
         project: projectRecord,
         list: list(`${projectRecord.id}-l`, projectRecord.id),
+    }
+}
+
+/** A row whose list is closed — done by default, or canceled. */
+function closedRow(
+    cardRecord: CardsCards,
+    projectRecord: CardsProjects,
+    category: 'done' | 'canceled' = 'done'
+): JoinedRow {
+    return {
+        card: cardRecord,
+        project: projectRecord,
+        list: { ...list(`${projectRecord.id}-done`, projectRecord.id, 'Done'), category },
     }
 }
 
@@ -122,6 +136,40 @@ describe('buildMyCardRows', () => {
         expect(rows[0]?.card.key).toBe('P1-4')
         expect(rows[0]?.board.name).toBe('Alpha board')
         expect(rows[0]?.list.name).toBe('To do')
+    })
+
+    it('leaves closed cards out unless asked, then lists them last', () => {
+        const input = {
+            rows: [
+                closedRow(card('finished', 'p1'), p1),
+                closedRow(card('dropped', 'p1'), p1, 'canceled'),
+                row(card('open', 'p1', { due: day(-3) }), p1),
+            ],
+            labels: [],
+            users,
+            mode: 'all' as const,
+            userId: 'u1',
+            text: '',
+        }
+        expect(buildMyCardRows(input).map(r => r.card.id)).toEqual(['open'])
+
+        const shown = sortMyCards(buildMyCardRows({ ...input, showClosed: true }), NOW)
+        expect(shown.map(r => r.card.id)).toEqual(['open', 'dropped', 'finished'])
+        expect(shown[1]?.list.category).toBe('canceled')
+        // Closed cards are not late, however overdue their date.
+        const groups = groupMyCards(
+            sortMyCards(
+                buildMyCardRows({
+                    ...input,
+                    rows: [closedRow(card('stale', 'p1', { due: day(-9) }), p1)],
+                    showClosed: true,
+                }),
+                NOW
+            ),
+            'due',
+            NOW
+        )
+        expect(groups.map(g => g.title)).toEqual(['Closed'])
     })
 
     it('applies the keyword to title and key', () => {

@@ -45,6 +45,7 @@ import type {
     CardsShareLinks,
     Users,
 } from '@tinycld/core/types/pbSchema'
+import type { ListCategory } from './lib/list-category'
 import type { CardPriority } from './lib/priority'
 
 export type {
@@ -223,6 +224,12 @@ export interface BoardCardView {
     /** Points. Undefined when unset (the row stores 0) — see lib/estimate.ts. */
     estimate?: number
     /**
+     * The status of the list the card sits in — what decides whether it is
+     * "closed" for the due filters and My cards. Copied onto the card view
+     * so those predicates need no list lookup.
+     */
+    listCategory: ListCategory
+    /**
      * ISO timestamp from `created`, '' for an optimistic insert the server has
      * not echoed yet. What "sort by created" orders on; see lib/created-order.
      */
@@ -239,7 +246,8 @@ export interface BoardListView {
     name: string
     /** Fractional rank — see lib/rank.ts. Sort by `position, id`. */
     position: string
-    isDone: boolean
+    /** Already normalized — never '' — see lib/list-category.ts. */
+    category: ListCategory
     /** The cards that pass the board filter, in the chosen sort order. */
     cards: BoardCardView[]
     /**
@@ -272,6 +280,8 @@ export interface BoardProject {
      */
     slug: string
     color: CardsColor
+    /** Days a card sits in a done or canceled list before the server archives it; 0 = never. */
+    autoArchiveDays: number
     members: BoardMember[]
     lists: BoardListView[]
     /** `lists` reduced to ranks — identity changes only when list ROWS change. */

@@ -31,6 +31,24 @@ To move a whole list, drag it by its name in the list header. A colored bar
 shows which side of the neighboring list it will land on. The list menu's
 **Move left** and **Move right** do the same thing one step at a time.
 
+## List status
+
+Every list has a **status** that says what being in it means: **Backlog**,
+**To do**, **In progress**, **Done** or **Canceled**. A small glyph next to
+the list's name shows which. To change it, open the list menu and choose
+**Status**, then pick one. A new board starts with a To do, an In progress and
+a Done list; a list you add is To do until you say otherwise.
+
+Cards in a **Done** list show a green check and lose their details; cards in a
+**Canceled** list show a cross and a struck-through title. Both are *closed*:
+they get no due-date reminders, never count as overdue, and stay out of
+[My cards](help://cards:my-cards) unless you ask for them. Moving a card into
+a Done list fires the **A card is completed** [rule](help://cards:rules);
+moving one into a Canceled list fires **A card is canceled**.
+
+**Backlog** and **In progress** are for scanning and filtering — a due date on
+a backlog card still reminds you, since you set it on purpose.
+
 ## Showing only some cards
 
 The filter and sort icons in the board's top bar narrow the board to the cards

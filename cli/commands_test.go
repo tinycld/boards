@@ -555,7 +555,7 @@ func TestListShowAndAdd(t *testing.T) {
 	}
 }
 
-func TestListRenameAndDoneFlag(t *testing.T) {
+func TestListRenameAndCategory(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
 
@@ -566,17 +566,32 @@ func TestListRenameAndDoneFlag(t *testing.T) {
 		t.Errorf("name = %q, want Backlog", f.lists["lstTodo"].Name)
 	}
 
+	// `done` is the shorthand for `category done`; --unset returns to todo.
 	if _, _, err := runCmd(t, c, "cards", "list", "done", "Done", "--board", "prjA"); err != nil {
 		t.Fatal(err)
 	}
-	if !f.lists["lstDone"].IsDone {
-		t.Error("is_done was not set")
+	if got := f.lists["lstDone"].Category; got != "done" {
+		t.Errorf("category = %q, want done", got)
 	}
 	if _, _, err := runCmd(t, c, "cards", "list", "done", "Done", "--board", "prjA", "--unset"); err != nil {
 		t.Fatal(err)
 	}
-	if f.lists["lstDone"].IsDone {
-		t.Error("--unset did not clear is_done")
+	if got := f.lists["lstDone"].Category; got != "todo" {
+		t.Errorf("--unset category = %q, want todo", got)
+	}
+
+	// "To do" was renamed to "Backlog" above.
+	if _, _, err := runCmd(t, c, "cards", "list", "category", "Backlog", "in_progress", "--board", "prjA"); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.lists["lstTodo"].Category; got != "in_progress" {
+		t.Errorf("category = %q, want in_progress", got)
+	}
+	if _, _, err := runCmd(t, c, "cards", "list", "category", "Backlog", "blocked", "--board", "prjA"); err == nil {
+		t.Error("expected an error for an unknown category")
+	}
+	if got := f.lists["lstTodo"].Category; got != "in_progress" {
+		t.Errorf("a rejected category must not reach the server: %q", got)
 	}
 }
 

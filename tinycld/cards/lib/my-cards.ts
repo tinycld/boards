@@ -16,6 +16,7 @@ import type {
 import { matchesKeyword } from './board-filter'
 import { toBoardCard } from './board-project'
 import { dueStateFor } from './due-state'
+import { isClosedCategory, type ListCategory, normalizeListCategory } from './list-category'
 
 export type MyCardsMode = 'assigned' | 'reported' | 'watching' | 'all'
 export type MyCardsGroup = 'board' | 'due'
@@ -30,7 +31,7 @@ export const MY_CARDS_MODE_LABELS: Record<MyCardsMode, string> = {
 export interface MyCardRow {
     card: BoardCardView
     board: { id: string; name: string; slug: string; color: string }
-    list: { id: string; name: string; isDone: boolean }
+    list: { id: string; name: string; category: ListCategory }
 }
 
 export interface MyCardsGroupView {
@@ -84,6 +85,12 @@ export interface BuildMyCardsInput {
     text: string
     /** Card ids from the caller's own cards_card_watchers rows. */
     watchedCardIds?: ReadonlySet<string>
+    /**
+     * Whether cards in done or canceled lists are listed. Off by default:
+     * "Assigned to me" is a to-do list, and finished cards piling up in it
+     * defeat that. On, they sort last and group under "Closed".
+     */
+    showClosed?: boolean
 }
 
 /**
@@ -108,13 +115,15 @@ export function buildMyCardRows(input: BuildMyCardsInput): MyCardRow[] {
     const out: MyCardRow[] = []
     for (const { card, project, list } of input.rows) {
         if (card.archived || project.archived) continue
+        const category = normalizeListCategory(list.category)
+        if (!input.showClosed && isClosedCategory(category)) continue
         if (!isMine(card, input.mode, input.userId, input.watchedCardIds)) continue
-        const view = toBoardCard(card, labelsById, usersById, project.slug)
+        const view = toBoardCard(card, labelsById, usersById, project.slug, category)
         if (!matchesKeyword(view, input.text)) continue
         out.push({
             card: view,
             board: { id: project.id, name: project.name, slug: project.slug, color: project.color },
-            list: { id: list.id, name: list.name, isDone: list.is_done },
+            list: { id: list.id, name: list.name, category },
         })
     }
     return sortMyCards(out)
@@ -124,6 +133,7 @@ export function buildMyCardRows(input: BuildMyCardsInput): MyCardRow[] {
  * Overdue first, then by due date with undated last, then board name, then
  * the card's own rank — so a list of everything I owe reads top-down as
  * "what is late, what is next, and then everything else where it lives".
+ * Closed cards, when shown at all, come after everything open.
  */
 export function sortMyCards(rows: MyCardRow[], now: Date = new Date()): MyCardRow[] {
     return [...rows].sort((a, b) => {
@@ -141,8 +151,9 @@ export function sortMyCards(rows: MyCardRow[], now: Date = new Date()): MyCardRo
     })
 }
 
-/** 0 overdue, 1 dated, 2 undated. */
+/** 0 overdue, 1 dated, 2 undated, 3 closed — finished work is not late. */
 function dueRank(card: BoardCardView, now: Date): number {
+    if (isClosedCategory(card.listCategory)) return 3
     if (!card.due) return 2
     return dueStateFor(card.due, now) === 'overdue' ? 0 : 1
 }
@@ -153,10 +164,11 @@ const DUE_BUCKETS = {
     soon: 'Next 2 days',
     later: 'Later',
     none: 'No due date',
+    closed: 'Closed',
 } as const
 
 type DueBucket = keyof typeof DUE_BUCKETS
-const DUE_BUCKET_ORDER: DueBucket[] = ['overdue', 'today', 'soon', 'later', 'none']
+const DUE_BUCKET_ORDER: DueBucket[] = ['overdue', 'today', 'soon', 'later', 'none', 'closed']
 
 /**
  * Group sorted rows. By board keeps board order (first appearance, which
@@ -202,6 +214,7 @@ export function groupMyCards(
 }
 
 function dueBucketFor(card: BoardCardView, now: Date): DueBucket {
+    if (isClosedCategory(card.listCategory)) return 'closed'
     if (!card.due) return 'none'
     const state = dueStateFor(card.due, now)
     if (state === 'overdue') return 'overdue'

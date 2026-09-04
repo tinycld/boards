@@ -1,11 +1,11 @@
 ---
 title: Board rules
-summary: React automatically when cards are created, moved, completed, or assigned
+summary: React automatically when cards are created, moved, completed, canceled, or assigned
 tags: [rules, automation, workflow, boards]
 order: 50
 ---
 
-Boards take part in [automation rules](help://core:rules) through five
+Boards take part in [automation rules](help://core:rules) through six
 triggers and four actions.
 
 ## What starts a rule
@@ -14,18 +14,20 @@ triggers and four actions.
 |---|---|
 | **A card is created** | a new card is added to any board you're a member of |
 | **A card moves to another list** | a card changes list — not when it's just reordered |
-| **A card is completed** | a card moves into a list marked as done |
+| **A card is completed** | a card moves into a list whose status is Done |
+| **A card is canceled** | a card moves into a list whose status is Canceled |
 | **A card is assigned** | a card's assignees change |
 | **A card's priority changes** | a card is set to a different priority, including back to none |
 
-All five cover every card on a board you belong to, not only cards you
+All six cover every card on a board you belong to, not only cards you
 created — so a rule fires when a colleague moves your card, which is usually
 the point.
 
-**Completed is its own event.** You could imagine expressing it as "moved, if
-the destination is the Done list", but you can't: a condition can only look at
-the card's own fields, and whether a list counts as done is a property of the
-list. So it's a separate trigger.
+**Completed and canceled are their own events.** You could imagine expressing
+either as "moved, if the destination is the Done list", but you can't: a
+condition can only look at the card's own fields, and a list's status is a
+property of the list. So each is a separate trigger. See
+[List status](help://cards:working-with-cards) for how a list gets its status.
 
 Reordering a card within a list is not a move. Only a change of list counts.
 
@@ -47,6 +49,9 @@ it to the Triage list.
 **Tell the team when something ships.** When a card is completed, send a
 notification — or an email, if you'd rather not rely on people watching the
 board.
+
+**Say why something was dropped.** When a card is canceled, send a
+notification to the team so nobody keeps waiting on it.
 
 **Follow up on assignment.** When a card is assigned, create a calendar
 reminder titled after the card. Needs the calendar package installed.

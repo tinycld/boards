@@ -22,6 +22,7 @@ import { selectBoardSort, useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardCardView, BoardListRank, BoardListView } from '../types'
 import { BoardCard } from './BoardCard'
 import { CardComposer } from './CardComposer'
+import { CategoryGlyph } from './CategoryGlyph'
 import { ColumnMenu } from './ColumnMenu'
 import { NoNativeDrag } from './NoNativeDrag'
 
@@ -566,10 +567,11 @@ function ColumnDragGhost({ list }: { list: BoardListView }) {
     )
 }
 
-/** The column name and its card count. */
+/** The column's status glyph, name and card count. */
 function ColumnTitle({ list }: { list: BoardListView }) {
     return (
         <>
+            <CategoryGlyph category={list.category} size={12} />
             {/* The name is the only part that gives way — it ellipsizes so the
                 count beside it stays readable. `numberOfLines` alone cannot do
                 that: it needs a width to ellipsize INTO, which is what the
@@ -804,7 +806,7 @@ const ColumnCards = memo(function ColumnCards({
                             <BoardCard
                                 card={card}
                                 projectId={projectId}
-                                isDone={list.isDone}
+                                category={list.category}
                                 canDrag={canEdit}
                             />
                         </NoNativeDrag>

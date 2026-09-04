@@ -26,8 +26,9 @@ import (
 // comparisons are on that frame. Time zone is the server's, as the calendar
 // reminders are.
 //
-// A card sitting in a done list, or archived, gets no notice: finished work
-// is not late.
+// A card sitting in a done or canceled list, or archived, gets no notice:
+// finished work is not late, whichever way it finished. A backlog card still
+// does — a due date on it is an explicit ask, not a scheduling accident.
 
 const notifyTypeDue = "cards_due"
 
@@ -102,7 +103,7 @@ func checkDueNotices(app core.App, now time.Time) {
 	}
 
 	for _, card := range rows {
-		if cardMovedToDoneList(app, card) {
+		if cardInClosedList(app, card) {
 			continue
 		}
 		due := card.GetDateTime("due").Time()

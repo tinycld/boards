@@ -66,8 +66,11 @@ func notifyCardUpdate(app core.App, card *core.Record, actor string) {
 
 	if original.GetString("list") != card.GetString("list") {
 		event, headline := "moved", who+" moved a card you watch"
-		if cardMovedToDoneList(app, card) {
+		switch category, _ := cardListCategory(app, card); category {
+		case "done":
 			event, headline = "completed", who+" completed a card you watch"
+		case "canceled":
+			event, headline = "canceled", who+" canceled a card you watch"
 		}
 		for _, userID := range watcherIDs(app, card.Id) {
 			if userID == actor {

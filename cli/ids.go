@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -36,7 +37,9 @@ type list struct {
 	Project  string `json:"project"`
 	Name     string `json:"name"`
 	Position string `json:"position"`
-	IsDone   bool   `json:"is_done"`
+	// One of listCategories, or "" on a row written before the column
+	// existed — which the app reads as "todo".
+	Category string `json:"category"`
 }
 
 type card struct {
@@ -155,6 +158,22 @@ func validPriority(v string) bool {
 		}
 	}
 	return false
+}
+
+// listCategories mirrors the select values in pb-migrations/1980000011.
+var listCategories = []string{"backlog", "todo", "in_progress", "done", "canceled"}
+
+func validListCategory(v string) bool {
+	return slices.Contains(listCategories, v)
+}
+
+// categoryCell renders a list's category for a table: "" reads as todo, the
+// same normalization the app applies.
+func categoryCell(l list) string {
+	if l.Category == "" {
+		return "todo"
+	}
+	return l.Category
 }
 
 // priorityCell renders a card's priority for a table. "" and "none" are the

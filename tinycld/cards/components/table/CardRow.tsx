@@ -5,8 +5,10 @@ import { CalendarDays, Clock, Gauge } from 'lucide-react-native'
 import { Pressable, Text, View } from 'react-native'
 import { dueStateFor, formatDueDate } from '../../lib/due-state'
 import { formatEstimate } from '../../lib/estimate'
+import type { ListCategory } from '../../lib/list-category'
 import { priorityLabel } from '../../lib/priority'
 import type { BoardCardView, BoardMember } from '../../types'
+import { CategoryGlyph } from '../CategoryGlyph'
 import { PriorityGlyph } from '../PriorityGlyph'
 
 export interface CardRowBoard {
@@ -18,6 +20,7 @@ export interface CardRowBoard {
 interface CardRowProps {
     card: BoardCardView
     listName: string
+    listCategory: ListCategory
     /** Present on the cross-board list; the board's own table omits it. */
     board?: CardRowBoard
     /** `table` lays cells out under DataTableHeader; `stacked` is the phone row. */
@@ -47,6 +50,7 @@ export const TABLE_COLUMNS = {
 export function CardRow({
     card,
     listName,
+    listCategory,
     board,
     variant,
     isFocused = false,
@@ -74,6 +78,7 @@ export function CardRow({
                 </View>
                 <View className="flex-row flex-wrap items-center gap-x-2 gap-y-1">
                     <BoardTile board={board} />
+                    <CategoryGlyph category={listCategory} size={11} />
                     <Meta text={[card.key, listName].filter(Boolean).join(' · ')} />
                     <DueCell due={card.due} />
                     <EstimateCell estimate={card.estimate} />
@@ -106,8 +111,12 @@ export function CardRow({
                     {card.title}
                 </Text>
             </View>
-            <View style={{ flex: TABLE_COLUMNS.list }} className="pr-2">
-                <Text className="text-[12.5px] text-muted" numberOfLines={1}>
+            <View
+                style={{ flex: TABLE_COLUMNS.list }}
+                className="flex-row items-center gap-1.5 pr-2"
+            >
+                <CategoryGlyph category={listCategory} size={11} />
+                <Text className="flex-1 text-[12.5px] text-muted" numberOfLines={1}>
                     {listName}
                 </Text>
             </View>

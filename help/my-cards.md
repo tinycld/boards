@@ -14,6 +14,11 @@ Three tabs at the top decide: **Assigned to me**, **Reported by me** (cards
 you filed or that name you as the person to ask), and **All cards**, which
 lists everything on every board you can see.
 
+Cards in a **Done** or **Canceled** list are left out, so the list stays a
+to-do list. Click **Show closed** to include them; they sort after everything
+open and, grouped by due date, sit in a **Closed** bucket of their own. The
+choice is remembered.
+
 Overdue cards come first, then everything with a due date in order, then the
 rest by board. Switch **Grouped by board** to **Grouped by due date** to see
 what is overdue, due today, due in the next two days, and later.

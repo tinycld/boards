@@ -14,8 +14,8 @@ desktop if you have push turned on — when:
 - someone replies to one of your comments
 - someone @mentions you on a card (see
   [Mentioning people](help://cards:mentioning-people))
-- a card you **watch** gains a comment, moves to another list, is completed,
-  or is archived
+- a card you **watch** gains a comment, moves to another list, is completed
+  or canceled, or is archived
 - a card you watch or are assigned is **due soon** (within two days) or
   becomes **overdue** — once each, per due date
 

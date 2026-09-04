@@ -53,13 +53,29 @@ const automation = {
             ],
         },
         {
-            // Same underlying event as card-moved, gated in Go to a list
-            // marked is_done. Users expect "done" as its own event rather
+            // Same underlying event as card-moved, gated in Go to a list whose
+            // category is `done`. Users expect "done" as its own event rather
             // than "moved + a condition on the destination", and a condition
-            // couldn't express it anyway: is_done lives on cards_lists, and
-            // conditions see only the trigger collection's own columns.
+            // couldn't express it anyway: the category lives on cards_lists,
+            // and conditions see only the trigger collection's own columns.
             id: 'card-completed',
             label: 'A card is completed',
+            collection: 'cards_cards',
+            on: 'update',
+            watch: ['list'],
+            fields: [
+                'title',
+                { key: 'list', label: 'List' },
+                { key: 'project', label: 'Board' },
+                { key: 'assignees', label: 'Assignees' },
+            ],
+        },
+        {
+            // The other way work stops: gated in Go to a `canceled` list.
+            // Separate from card-completed for the same reason that one is
+            // separate from card-moved.
+            id: 'card-canceled',
+            label: 'A card is canceled',
             collection: 'cards_cards',
             on: 'update',
             watch: ['list'],

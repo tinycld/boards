@@ -136,12 +136,15 @@ tinycld cards list show --board "Product launch"
 tinycld cards list add Blocked --board "Product launch"
 tinycld cards list rename "To do" Backlog --board "Product launch"
 tinycld cards list move Blocked 1 --board "Product launch"
+tinycld cards list category Blocked in_progress --board "Product launch"
 tinycld cards list done Shipped --board "Product launch"
 ```
 
 `list move` takes the position the column should end up in, counting from zero.
-`list done` marks a column as the one that means finished — cards there show as
-complete. Add `--unset` to clear it.
+`list category` sets what a column means: `backlog`, `todo`, `in_progress`,
+`done` or `canceled`. Cards in a done or canceled column show as finished and
+get no reminders. `list done` is shorthand for `category done`; add `--unset`
+to make it an ordinary `todo` column again.
 
 Deleting a column **also deletes every card in it**, which cannot be undone:
 

@@ -9,16 +9,18 @@ import (
 )
 
 // registerAutomation installs cards' automation surface: the owner resolver
-// shared by all four card triggers, the card-completed trigger filter, and the
-// native action handlers with the relation authorizers the engine requires
-// before it will run them. Called from registerShared before hooks load.
+// shared by all six card triggers, the card-completed and card-canceled
+// trigger filters, and the native action handlers with the relation
+// authorizers the engine requires before it will run them. Called from
+// registerShared before hooks load.
 func registerAutomation() {
-	// One resolver, five triggers: every card event belongs to the same
+	// One resolver, six triggers: every card event belongs to the same
 	// people — the members of the card's board.
 	for _, ref := range []string{
 		"cards:card-created",
 		"cards:card-moved",
 		"cards:card-completed",
+		"cards:card-canceled",
 		"cards:card-assigned",
 		"cards:card-priority-changed",
 	} {
@@ -26,6 +28,7 @@ func registerAutomation() {
 	}
 
 	automation.RegisterTriggerFilter("cards:card-completed", cardMovedToDoneList)
+	automation.RegisterTriggerFilter("cards:card-canceled", cardMovedToCanceledList)
 
 	// move-card declares a relation param, and the engine refuses to run an
 	// action whose relation param has no registered authorizer — without this
@@ -298,30 +301,59 @@ func cardOwnerResolver(app core.App, record *core.Record) []string {
 	return owners
 }
 
+// listCategory reads a list's status category. ” — a row written before the
+// column existed, or by a client that omitted it — reads as `todo`, exactly
+// as lib/list-category.ts normalizes it, so the two sides never disagree
+// about what an unmarked list is.
+func listCategory(list *core.Record) string {
+	if category := list.GetString("category"); category != "" {
+		return category
+	}
+	return "todo"
+}
+
+// cardListCategory resolves the category of the list a card sits in.
+//
+// Fails closed (ok = false) on a nil record, a blank list, or a list that
+// cannot be loaded: an unknown destination is neither done nor canceled, and
+// firing "card completed" on a card that merely moved is the worse error.
+func cardListCategory(app core.App, record *core.Record) (category string, ok bool) {
+	if record == nil {
+		return "", false
+	}
+	listID := record.GetString("list")
+	if listID == "" {
+		return "", false
+	}
+	list, err := app.FindRecordById("cards_lists", listID)
+	if err != nil {
+		return "", false
+	}
+	return listCategory(list), true
+}
+
 // cardMovedToDoneList is the TriggerFilter for "cards:card-completed".
 //
 // card-completed and card-moved fire on the same event — a change to the
-// card's `list`. What separates them is the DESTINATION list's is_done flag,
+// card's `list`. What separates them is the DESTINATION list's category,
 // which lives on cards_lists rather than on the card, so a rule condition
 // cannot express it: conditions see only the trigger collection's own
-// columns. Hence a filter.
-//
-// Fails closed on an unresolvable list: an unknown destination is not a
-// completion, and firing "card completed" on a card that merely moved is the
-// worse error.
+// columns. Hence a filter. Only `done` counts: a canceled list is closed, but
+// it is not a completion — that is cardMovedToCanceledList's event.
 func cardMovedToDoneList(app core.App, record *core.Record) bool {
-	if record == nil {
-		return false
-	}
+	category, ok := cardListCategory(app, record)
+	return ok && category == "done"
+}
 
-	listID := record.GetString("list")
-	if listID == "" {
-		return false
-	}
+// cardMovedToCanceledList is the TriggerFilter for "cards:card-canceled".
+func cardMovedToCanceledList(app core.App, record *core.Record) bool {
+	category, ok := cardListCategory(app, record)
+	return ok && category == "canceled"
+}
 
-	list, err := app.FindRecordById("cards_lists", listID)
-	if err != nil {
-		return false
-	}
-	return list.GetBool("is_done")
+// cardInClosedList: the card's work has stopped, one way or the other. What
+// the due-date reminders and the auto-archive sweep ask.
+func cardInClosedList(app core.App, record *core.Record) bool {
+	category, ok := cardListCategory(app, record)
+	return ok && (category == "done" || category == "canceled")
 }

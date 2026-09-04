@@ -11,6 +11,7 @@
 
 import type { BoardCardView } from '../types'
 import { dueStateFor } from './due-state'
+import { isClosedCategory, type ListCategory } from './list-category'
 import type { CardPriority } from './priority'
 
 export type DueFilter = 'overdue' | 'soon' | 'has' | 'none'
@@ -31,6 +32,8 @@ export interface BoardFilter {
     due: DueFilter | null
     priorities: CardPriority[]
     estimate: EstimateFilter | null
+    /** The status of the card's list. OR within the facet. */
+    statuses: ListCategory[]
     /** Case-insensitive substring over the title and the key. */
     text: string
 }
@@ -47,6 +50,7 @@ export const EMPTY_FILTER: BoardFilter = Object.freeze({
     due: null,
     priorities: [],
     estimate: null,
+    statuses: [],
     text: '',
 })
 
@@ -63,6 +67,7 @@ export function activeFacetCount(filter: BoardFilter): number {
     if (filter.due !== null) count += 1
     if (filter.priorities.length > 0) count += 1
     if (filter.estimate !== null) count += 1
+    if (filter.statuses.length > 0) count += 1
     if (filter.text.trim() !== '') count += 1
     return count
 }
@@ -94,6 +99,7 @@ export function cardMatchesFilter(
     if (filter.due !== null && !matchesDue(card, filter.due, ctx.now)) return false
     if (filter.priorities.length > 0 && !filter.priorities.includes(card.priority)) return false
     if (filter.estimate !== null && !matchesEstimate(card, filter.estimate)) return false
+    if (filter.statuses.length > 0 && !filter.statuses.includes(card.listCategory)) return false
     if (!matchesKeyword(card, filter.text)) return false
     return true
 }
@@ -115,6 +121,11 @@ function matchesReporter(card: BoardCardView, wanted: string[], userId: string):
     })
 }
 
+/**
+ * A card in a done or canceled list is never overdue or due soon — finished
+ * work is not late, which is also the rule the server's reminders follow.
+ * `has` and `none` are about the date itself and ignore the list.
+ */
 function matchesDue(card: BoardCardView, due: DueFilter, now?: Date): boolean {
     switch (due) {
         case 'none':
@@ -122,10 +133,14 @@ function matchesDue(card: BoardCardView, due: DueFilter, now?: Date): boolean {
         case 'has':
             return card.due !== undefined
         case 'overdue':
-            return card.due !== undefined && dueStateFor(card.due, now) === 'overdue'
+            return isOpenDue(card) && dueStateFor(card.due, now) === 'overdue'
         case 'soon':
-            return card.due !== undefined && dueStateFor(card.due, now) === 'soon'
+            return isOpenDue(card) && dueStateFor(card.due, now) === 'soon'
     }
+}
+
+function isOpenDue(card: BoardCardView): card is BoardCardView & { due: Date } {
+    return card.due !== undefined && !isClosedCategory(card.listCategory)
 }
 
 function matchesEstimate(card: BoardCardView, estimate: EstimateFilter): boolean {

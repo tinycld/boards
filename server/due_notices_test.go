@@ -90,7 +90,7 @@ func TestDueNotices_ChangingTheDueDateResetsTheStamps(t *testing.T) {
 	}
 }
 
-func TestDueNotices_ArchivedAndDoneCardsAreSkipped(t *testing.T) {
+func TestDueNotices_ArchivedAndClosedCardsAreSkipped(t *testing.T) {
 	env := setupDueEnv(t)
 	now := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
 	setDue(t, env.app, env.card.Id, now.AddDate(0, 0, -1), env.editor.Id)
@@ -103,7 +103,7 @@ func TestDueNotices_ArchivedAndDoneCardsAreSkipped(t *testing.T) {
 	requireTypes(t, notificationTypes(t, env.app, env.editor.Id))
 
 	done := cardsList(t, env.app, env.project, "Done", "a2")
-	done.Set("is_done", true)
+	done.Set("category", "done")
 	if err := env.app.Save(done); err != nil {
 		t.Fatal(err)
 	}
@@ -111,6 +111,33 @@ func TestDueNotices_ArchivedAndDoneCardsAreSkipped(t *testing.T) {
 	setDue(t, env.app, other.Id, now.AddDate(0, 0, -1), env.editor.Id)
 	checkDueNotices(env.app, now)
 	requireTypes(t, notificationTypes(t, env.app, env.editor.Id))
+
+	// Canceled is finished too: dropped work is not late either.
+	canceled := cardsList(t, env.app, env.project, "Won't do", "a3")
+	canceled.Set("category", "canceled")
+	if err := env.app.Save(canceled); err != nil {
+		t.Fatal(err)
+	}
+	dropped := cardsCard(t, env.app, env.project, canceled, "dropped", "a0", env.owner)
+	setDue(t, env.app, dropped.Id, now.AddDate(0, 0, -1), env.editor.Id)
+	checkDueNotices(env.app, now)
+	requireTypes(t, notificationTypes(t, env.app, env.editor.Id))
+}
+
+// A backlog list is not closed: a due date there is an explicit ask, and the
+// reminder still fires.
+func TestDueNotices_BacklogCardsStillNotify(t *testing.T) {
+	env := setupDueEnv(t)
+	now := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
+	backlog := cardsList(t, env.app, env.project, "Backlog", "a2")
+	backlog.Set("category", "backlog")
+	if err := env.app.Save(backlog); err != nil {
+		t.Fatal(err)
+	}
+	card := cardsCard(t, env.app, env.project, backlog, "someday", "a0", env.owner)
+	setDue(t, env.app, card.Id, now.AddDate(0, 0, -1), env.editor.Id)
+	checkDueNotices(env.app, now)
+	requireTypes(t, notificationTypes(t, env.app, env.editor.Id), notifyTypeDue)
 }
 
 func TestDueNotices_ClientCannotForgeOrEraseAStamp(t *testing.T) {
