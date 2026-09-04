@@ -77,6 +77,16 @@ interface CardSeed {
     priority?: CardPriority
     /** Points. Left unset on most cards so the demo shows both states. */
     estimate?: number
+    /**
+     * The TITLE of the card this one is a sub-task of, resolved after every
+     * card exists.
+     *
+     * By title rather than id because the seed is declarative and ids are not
+     * known until insert; by a second pass because a parent may be seeded into
+     * a later list than its child. Must name a card on the SAME board — the
+     * rule refuses anything else.
+     */
+    parentTitle?: string
     checklist?: { title: string; done?: boolean }[]
     comments?: CommentSeed[]
 }
@@ -217,12 +227,33 @@ const BOARDS: BoardSeed[] = [
                             { title: 'Keyboard shortcuts tour' },
                         ],
                     },
+                    // Sub-tasks of the announcement above. Seeded as ordinary
+                    // cards — which is what they are — spread across lists so a
+                    // reset shows the rollup counting a DONE one (the list's
+                    // category is what "done" means) rather than a flat 0/3.
+                    {
+                        title: 'Write the headline and subhead',
+                        parentTitle: 'Draft the launch announcement',
+                        estimate: 1,
+                        assignees: ['me'],
+                    },
+                    {
+                        title: 'Get legal sign-off on the claims',
+                        parentTitle: 'Draft the launch announcement',
+                        priority: 'high',
+                        assignees: ['teammate'],
+                    },
                 ],
             },
             {
                 name: 'Doing',
                 category: 'in_progress',
                 cards: [
+                    {
+                        title: 'Pick the hero screenshot',
+                        parentTitle: 'Draft the launch announcement',
+                        labels: ['Design'],
+                    },
                     {
                         title: 'Press kit landing page',
                         description: [
@@ -421,6 +452,9 @@ async function seedBoard(
     }
 
     const listRanks = initialRanks(board.lists.length)
+    // Card ids by title, for the sub-task pass below.
+    const cardIdsByTitle: Record<string, string> = {}
+
     for (const [listIndex, list] of board.lists.entries()) {
         const listRecord = await pb.collection('cards_lists').create({
             project: project.id,
@@ -468,6 +502,32 @@ async function seedBoard(
             }
 
             await seedComments(pb, project.id, cardRecord.id, card.comments ?? [], who)
+            cardIdsByTitle[card.title] = cardRecord.id
+        }
+    }
+
+    await seedSubtasks(pb, board, cardIdsByTitle)
+}
+
+/**
+ * Link the seeded sub-tasks to their parents.
+ *
+ * A second pass, not an inline write: a parent may be seeded into a later list
+ * than its child, so no single ordering of the card loop would have both ids in
+ * hand. Titles are the seed's stable handle — ids do not exist until insert.
+ */
+async function seedSubtasks(
+    pb: PocketBase,
+    board: BoardSeed,
+    cardIdsByTitle: Record<string, string>
+) {
+    for (const list of board.lists) {
+        for (const card of list.cards) {
+            if (!card.parentTitle) continue
+            const cardId = cardIdsByTitle[card.title]
+            const parentId = cardIdsByTitle[card.parentTitle]
+            if (!cardId || !parentId) continue
+            await pb.collection('cards_cards').update(cardId, { parent: parentId })
         }
     }
 }

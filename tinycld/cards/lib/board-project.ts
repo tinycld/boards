@@ -78,7 +78,15 @@ export function toBoardCard(
     labelsById: Map<string, BoardLabel>,
     usersById: Map<string, BoardMember>,
     projectSlug: string,
-    listCategory: ListCategory
+    listCategory: ListCategory,
+    /**
+     * The parent's key, resolved by the caller because a card row carries no
+     * reference to its parent's `number` — the same reason `key` itself is
+     * precomputed here rather than formatted at each render site. '' when the
+     * card is top level, and when its parent has been deleted (the relation
+     * does not cascade, so a dangling id is an ordinary state).
+     */
+    parentKey = ''
 ): BoardCardView {
     return {
         id: card.id,
@@ -119,6 +127,10 @@ export function toBoardCard(
         checklistDone: card.checklist_done,
         commentCount: card.comment_count,
         attachmentCount: card.attachment_count,
+        parent: card.parent,
+        parentKey,
+        subtaskTotal: card.subtask_total,
+        subtaskDone: card.subtask_done,
     }
 }
 
@@ -230,6 +242,15 @@ export function buildBoardProject(
     // cards keep their ranks; a card dropped between two visible neighbours
     // lands between them in rank order, which is where it reappears once the
     // filter clears.
+    // Parent keys, resolved once for the whole board rather than per card.
+    // Built from the RAW rows, before the archived skip and the filter below:
+    // a sub-task whose parent is archived or filtered out still shows the
+    // chip, because the chip says which card this is part of, not which cards
+    // happen to be on screen.
+    const keyByCardId = new Map(
+        cards.map(card => [card.id, formatCardKey(project.slug, card.number)])
+    )
+
     const cardsByList = new Map<string, BoardCardView[]>()
     const totals = new Map<string, number>()
     let cardTotal = 0
@@ -242,7 +263,8 @@ export function buildBoardProject(
             labelsById,
             usersById,
             project.slug,
-            categoryByList.get(card.list) ?? 'todo'
+            categoryByList.get(card.list) ?? 'todo',
+            (card.parent && keyByCardId.get(card.parent)) || ''
         )
         if (view && !cardMatchesFilter(cardView, view.filter, view)) continue
         const bucket = cardsByList.get(card.list)
@@ -336,6 +358,10 @@ function sameCard(a: BoardCardView, b: BoardCardView): boolean {
         a.checklistDone === b.checklistDone &&
         a.commentCount === b.commentCount &&
         a.attachmentCount === b.attachmentCount &&
+        a.parent === b.parent &&
+        a.parentKey === b.parentKey &&
+        a.subtaskTotal === b.subtaskTotal &&
+        a.subtaskDone === b.subtaskDone &&
         sameElements(a.labels, b.labels, sameLabel) &&
         sameElements(a.assignees, b.assignees, sameMember) &&
         // Reassigning a reporter changes nothing else on the card, so without

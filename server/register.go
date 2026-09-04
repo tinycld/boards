@@ -105,11 +105,19 @@ func registerShared(app *pocketbase.PocketBase) {
 	registerAutomation()
 
 	registerBoardCounters(app)
+	// The sub-task rollup is a counter in the sense above — recompute, never
+	// delta, never fail the write — but it recounts the card's PARENT rather
+	// than the card written, and a re-parent recounts two. See card_parent.go.
+	registerCardParentRollup(app)
 	// Unrelated to the counters above despite the adjacency, and the opposite
 	// of them in every invariant: this one is a monotonic sequence, it runs
 	// before the row lands, and it FAILS the write when it cannot allocate.
 	// See card_number.go.
 	registerCardNumbers(app)
+	// Cycle and depth on the sub-task tree — the two things the same-board
+	// rule in 1980000015 cannot express, because a rule sees one row and
+	// cannot walk a chain. Fails the write, like registerCardNumbers.
+	registerCardParentGuard(app)
 	// edited_at on comments is server-owned the same way `number` is: the
 	// hook stamps it when the body actually changes and discards any
 	// client-supplied value when it does not. See comment_edited.go.

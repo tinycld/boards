@@ -36,11 +36,17 @@ function MoveToBoardDialogBody({ card, projectId, onClose, onMoved }: MoveToBoar
     const boards = useWritableProjects().filter(project => project.id !== projectId)
     const [targetId, setTargetId] = useState<string>('')
     const [listId, setListId] = useState<string>('')
+    // Unset until chosen, deliberately: the server refuses a family move with
+    // no answer rather than picking one, so there is no default to preselect.
+    const [family, setFamily] = useState<'move' | 'unlink' | ''>('')
     const { project: target } = useBoardContent(targetId)
     const moveCard = useMoveCardToBoard()
 
     const list = target?.lists.find(l => l.id === listId) ?? target?.lists[0]
-    const canMove = !!target && !!list && !moveCard.isPending
+    // A card in a family cannot move until the question is answered — the
+    // server would refuse it, so the button says so first.
+    const hasFamily = card.subtaskTotal > 0 || card.parent !== ''
+    const canMove = !!target && !!list && !moveCard.isPending && (!hasFamily || family !== '')
 
     const confirm = () => {
         if (!target || !list) return
@@ -50,6 +56,7 @@ function MoveToBoardDialogBody({ card, projectId, onClose, onMoved }: MoveToBoar
                 projectId: target.id,
                 listId: list.id,
                 position: rankForAppend(list.cards),
+                family: family || undefined,
             },
             {
                 onSuccess: result => {
@@ -82,6 +89,7 @@ function MoveToBoardDialogBody({ card, projectId, onClose, onMoved }: MoveToBoar
                         }}
                     />
                     <ListChoices target={target} selectedId={list?.id ?? ''} onSelect={setListId} />
+                    <FamilyChoices card={card} selected={family} onSelect={setFamily} />
                     <Preview card={card} target={target} />
                 </ScrollView>
                 <View className="flex-row gap-3 justify-end p-3 border-t border-border">
@@ -195,6 +203,60 @@ function ListChoices({
                     onPress={() => onSelect(list.id)}
                 />
             ))}
+        </View>
+    )
+}
+
+/**
+ * What happens to the card's sub-tasks — asked, never assumed.
+ *
+ * Both answers move work the user cannot see from this dialog: either sub-tasks
+ * leave the board they were looking at, or a family they built comes apart. So
+ * there is no preselected option and the Move button stays disabled until one
+ * is picked, which is also what the server enforces.
+ *
+ * A card that is itself a SUB-TASK has no choice to offer: its parent cannot
+ * follow it across (no cross-board parent is expressible), so the row states
+ * that as a fact rather than pretending it is a decision.
+ */
+function FamilyChoices({
+    card,
+    selected,
+    onSelect,
+}: {
+    card: BoardCardView
+    selected: 'move' | 'unlink' | ''
+    onSelect: (choice: 'move' | 'unlink') => void
+}) {
+    const count = card.subtaskTotal
+    if (count === 0 && !card.parent) return null
+
+    return (
+        <View>
+            <SectionTitle>Sub-tasks</SectionTitle>
+            {card.parent ? (
+                <Text className="px-4 pb-2 text-[12px] text-muted">
+                    This card stops being a sub-task — a parent cannot follow it to another board.
+                </Text>
+            ) : null}
+            {count > 0 ? (
+                <>
+                    <ChoiceRow
+                        label={`Bring ${count === 1 ? 'the sub-task' : `all ${count} sub-tasks`} along`}
+                        isSelected={selected === 'move'}
+                        testID="cards-move-family-move"
+                        onPress={() => onSelect('move')}
+                    />
+                    <ChoiceRow
+                        label={`Leave ${count === 1 ? 'it' : 'them'} here as ${
+                            count === 1 ? 'a top-level card' : 'top-level cards'
+                        }`}
+                        isSelected={selected === 'unlink'}
+                        testID="cards-move-family-unlink"
+                        onPress={() => onSelect('unlink')}
+                    />
+                </>
+            ) : null}
         </View>
     )
 }

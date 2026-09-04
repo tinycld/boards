@@ -97,7 +97,9 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 			// swallowed: a missing board slug costs a row, not the whole view
 			// of a card the caller already fetched.
 			cardKey := ""
+			boardSlug := ""
 			if board, boardErr := resolveProject(ctx, c, cd.Project); boardErr == nil {
+				boardSlug = board.Slug
 				cardKey = formatCardKey(board.Slug, cd.Number)
 			}
 
@@ -150,6 +152,28 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 			if cd.Estimate > 0 {
 				rows = append(rows, []string{"Estimate", estimateCell(cd.Estimate)})
 			}
+			// The parent's KEY rather than its record id — the same thing a
+			// person would quote — resolved through the same lookup `card
+			// view <key>` accepts. Falls back to the id when the parent has
+			// been deleted, which un-parents the card without clearing it.
+			if cd.Parent != "" {
+				parentCell := cd.Parent
+				// The parent is always on the same board, so its key shares
+				// this card's slug — no second board lookup.
+				if pd, parentErr := getCard(ctx, c, cd.Parent); parentErr == nil {
+					if key := formatCardKey(boardSlug, pd.Number); key != "" {
+						parentCell = key
+					}
+				}
+				rows = append(rows, []string{"Sub-task of", parentCell})
+			}
+			// Only when the card has sub-tasks, as Estimate is.
+			if cd.SubtaskTotal > 0 {
+				rows = append(rows, []string{
+					"Sub-tasks",
+					fmt.Sprintf("%d/%d done", cd.SubtaskDone, cd.SubtaskTotal),
+				})
+			}
 			if cd.Description != "" {
 				rows = append(rows, []string{"Description", firstLine(cd.Description)})
 			}
@@ -174,7 +198,7 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 }
 
 func newCardAddCmd(c *client.Client) *cobra.Command {
-	var boardRef, listRef, description, due, start, reporter, priority string
+	var boardRef, listRef, description, due, start, reporter, priority, parent string
 	var index, estimate int
 	cmd := &cobra.Command{
 		Use:   "add <title>",
@@ -236,6 +260,17 @@ func newCardAddCmd(c *client.Client) *cobra.Command {
 			// the column is DENORMALIZED onto the card so the access rules can
 			// resolve membership without a two-hop back-relation, and the
 			// create rule reads it. A card without it is refused.
+			// A sub-task's parent must be on the same board; the server
+			// refuses anything else. Resolved through getCard so a key works
+			// here as it does everywhere else.
+			parentID := ""
+			if parent != "" {
+				pd, err := getCard(ctx, c, parent)
+				if err != nil {
+					return err
+				}
+				parentID = pd.ID
+			}
 			body := map[string]any{
 				"project":      p.ID,
 				"list":         l.ID,
@@ -249,6 +284,7 @@ func newCardAddCmd(c *client.Client) *cobra.Command {
 				"reporter":     reporterID,
 				"priority":     priority,
 				"estimate":     estimate,
+				"parent":       parentID,
 				"archived":     false,
 			}
 			created, err := client.CreateRecord[card](ctx, c, cardsCollection, body)
@@ -272,16 +308,17 @@ func newCardAddCmd(c *client.Client) *cobra.Command {
 	cmd.Flags().StringVar(&reporter, "reporter", "", "user id to report to (default: you)")
 	cmd.Flags().StringVar(&priority, "priority", "none", "one of "+strings.Join(priorities, ", "))
 	cmd.Flags().IntVar(&estimate, "estimate", 0, "points (0 = no estimate)")
+	cmd.Flags().StringVar(&parent, "parent", "", "make this a sub-task of a card on the same board (id or key)")
 	return cmd
 }
 
 func newCardEditCmd(c *client.Client) *cobra.Command {
-	var title, description, due, start, reporter, priority string
+	var title, description, due, start, reporter, priority, parent string
 	var estimate int
-	var clearDue, clearStart, clearReporter bool
+	var clearDue, clearStart, clearReporter, clearParent bool
 	cmd := &cobra.Command{
 		Use:   "edit <id>",
-		Short: "Change a card's title, description, dates, reporter, priority, or estimate",
+		Short: "Change a card's title, description, dates, reporter, priority, estimate, or parent",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			o, _, err := output.FromCommand(cmd)
@@ -361,8 +398,27 @@ func newCardEditCmd(c *client.Client) *cobra.Command {
 				}
 				body["estimate"] = estimate
 			}
+			// A relation has no sentinel "empty" value the way priority and
+			// estimate do, so clearing needs its own flag — the --reporter
+			// shape. The parent must be a card on the SAME board; the server
+			// refuses anything else (pb-migrations/1980000015).
+			switch {
+			case clearParent && cmd.Flags().Changed("parent"):
+				return fmt.Errorf("--parent and --clear-parent contradict each other")
+			case clearParent:
+				body["parent"] = ""
+			case cmd.Flags().Changed("parent"):
+				if strings.TrimSpace(parent) == "" {
+					return fmt.Errorf("--parent cannot be empty (use --clear-parent)")
+				}
+				pd, err := getCard(ctx, c, parent)
+				if err != nil {
+					return err
+				}
+				body["parent"] = pd.ID
+			}
 			if len(body) == 0 {
-				return fmt.Errorf("nothing to change — pass --title, --description, --due, --clear-due, --start, --clear-start, --reporter, --clear-reporter, --priority, or --estimate")
+				return fmt.Errorf("nothing to change — pass --title, --description, --due, --clear-due, --start, --clear-start, --reporter, --clear-reporter, --priority, --estimate, --parent, or --clear-parent")
 			}
 			// Through getCard so a card key (OTTER-12) works here exactly as it
 			// does in `card view`/`card move` — the id is what the API needs.
@@ -388,6 +444,8 @@ func newCardEditCmd(c *client.Client) *cobra.Command {
 	cmd.Flags().BoolVar(&clearReporter, "clear-reporter", false, "report to the card's creator again")
 	cmd.Flags().StringVar(&priority, "priority", "", "one of "+strings.Join(priorities, ", ")+" (none clears it)")
 	cmd.Flags().IntVar(&estimate, "estimate", 0, "points (0 clears it)")
+	cmd.Flags().StringVar(&parent, "parent", "", "make this a sub-task of a card on the same board (id or key)")
+	cmd.Flags().BoolVar(&clearParent, "clear-parent", false, "stop being a sub-task")
 	return cmd
 }
 
@@ -397,7 +455,7 @@ func newCardEditCmd(c *client.Client) *cobra.Command {
 // the card momentarily in the target column at its OLD rank, which every other
 // client would render — and if the second call failed, permanently.
 func newCardMoveCmd(c *client.Client) *cobra.Command {
-	var boardRef, listRef string
+	var boardRef, listRef, family string
 	var index int
 	cmd := &cobra.Command{
 		Use:   "move <id>",
@@ -428,7 +486,7 @@ func newCardMoveCmd(c *client.Client) *cobra.Command {
 					return err
 				}
 				if p.ID != projectID {
-					return moveCardToBoard(cmd, c, o, cd, p, listRef, hasList)
+					return moveCardToBoard(cmd, c, o, cd, p, listRef, hasList, family)
 				}
 			}
 			if !hasList && !hasIndex {
@@ -479,6 +537,11 @@ func newCardMoveCmd(c *client.Client) *cobra.Command {
 	addBoardFlag(cmd, &boardRef)
 	cmd.Flags().StringVarP(&listRef, "list", "l", "", "destination list id or name")
 	cmd.Flags().IntVar(&index, "index", 0, "destination position within the column")
+	// Required by the server for a cross-board move of a card in a sub-task
+	// family, and meaningless otherwise. No default: the server refuses rather
+	// than guessing, because both answers move work the caller cannot see.
+	cmd.Flags().StringVar(&family, "family", "",
+		"with --board, what to do with sub-tasks: move or unlink")
 	return cmd
 }
 
@@ -564,7 +627,7 @@ func newCardRemoveCmd(c *client.Client) *cobra.Command {
 // POST /api/cards/cards/{id}/move. The destination list defaults to the
 // target board's first column; the rank appends, as a cross-column move
 // with no --index does.
-func moveCardToBoard(cmd *cobra.Command, c *client.Client, o output.Options, cd card, target project, listRef string, hasList bool) error {
+func moveCardToBoard(cmd *cobra.Command, c *client.Client, o output.Options, cd card, target project, listRef string, hasList bool, family string) error {
 	ctx := cmd.Context()
 	lists, err := projectLists(ctx, c, target.ID)
 	if err != nil {
@@ -589,14 +652,18 @@ func moveCardToBoard(cmd *cobra.Command, c *client.Client, o output.Options, cd 
 		return err
 	}
 	var result struct {
-		Card          card     `json:"card"`
-		PreviousKey   string   `json:"previous_key"`
-		DroppedLabels []string `json:"dropped_labels"`
+		Card             card     `json:"card"`
+		PreviousKey      string   `json:"previous_key"`
+		DroppedLabels    []string `json:"dropped_labels"`
+		MovedChildren    int      `json:"moved_children"`
+		OrphanedChildren int      `json:"orphaned_children"`
+		ClearedParent    bool     `json:"cleared_parent"`
 	}
 	err = c.PostJSON(ctx, "/api/cards/cards/"+cd.ID+"/move", map[string]any{
 		"project_id": target.ID,
 		"list_id":    dest.ID,
 		"position":   position,
+		"family":     family,
 	}, &result)
 	if err != nil {
 		return err
@@ -606,6 +673,19 @@ func moveCardToBoard(cmd *cobra.Command, c *client.Client, o output.Options, cd 
 	if len(result.DroppedLabels) > 0 {
 		o.Info(cmd.ErrOrStderr(), "dropped labels not on %s: %s", target.Name,
 			strings.Join(result.DroppedLabels, ", "))
+	}
+	// Say what happened to the family, for the reason dropped labels are
+	// reported: a card arriving with fewer relations than it left is a
+	// surprise unless it is stated.
+	if result.MovedChildren > 0 {
+		o.Info(cmd.ErrOrStderr(), "brought %d sub-task(s) along", result.MovedChildren)
+	}
+	if result.OrphanedChildren > 0 {
+		o.Info(cmd.ErrOrStderr(), "left %d sub-task(s) behind as top-level cards",
+			result.OrphanedChildren)
+	}
+	if result.ClearedParent {
+		o.Info(cmd.ErrOrStderr(), "this card is no longer a sub-task — a parent cannot follow it")
 	}
 	return writeCardResult(cmd, o, result.Card)
 }

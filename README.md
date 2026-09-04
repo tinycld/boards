@@ -36,11 +36,19 @@ engine, so a rule can fire on board activity:
 - **`cards:card-archived`** — "A card is archived". An update watching
   `archived`, gated in Go to the archive (never the restore). The auto-archive
   sweep's saves fire it too.
+- **`cards:card-parented`** — "A card's parent changes". An update watching
+  `parent`, firing in both directions — a card becoming a sub-task and one
+  leaving its family — since "it left my epic" is as worth a rule as the
+  reverse. A condition on `parent` separates them.
 - **`cards:comment-reacted`** — "Someone reacts to a comment". A
   `cards_comment_reactions` create; condition fields `emoji`, `user`, `card`,
   `comment`, `project`.
 - **`cards:move-card`** — "Move the card to a list". A `kind: 'record-op'`
   action: an update targeting the trigger record, with a `list` param.
+- **`cards:set-parent`** — "Make the card a sub-task". A `kind: 'record-op'`
+  action with a `parent` param. Its authorizer refuses a parent on another
+  board (the same-board invariant the rules pin) and one that is itself a
+  sub-task — the engine saves as a superuser, so the rules do not run.
 - **`cards:add-assignee`** — "Assign the card to someone". A `kind: 'native'`
   action with a `user` relation param.
 - **`cards:add-label`** — "Add a label to the card". A `kind: 'native'` action

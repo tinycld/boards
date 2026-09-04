@@ -7,7 +7,7 @@ import { Maximize2, X } from 'lucide-react-native'
 import { type RefObject, useMemo, useRef } from 'react'
 import { Platform, Pressable, StyleSheet, View } from 'react-native'
 import { useProjectRole } from '../hooks/useProjectRole'
-import { type CardEntry, findCardEntry, neighborCardId } from '../lib/board-cards'
+import { type CardEntry, findCardEntry, flattenCards, neighborCardId } from '../lib/board-cards'
 import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardProject } from '../types'
 import { CardActionsMenu } from './detail/CardActionsMenu'
@@ -109,6 +109,12 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
     const insets = useDeviceInsets()
     const titleRef = useRef<EditableTextHandle>(null)
     usePeekShortcuts(project, entry.card.id, canEdit, titleRef)
+    // Board order, so the sub-task section and the parent picker list cards in
+    // the order the board shows them.
+    const boardCards = useMemo(
+        () => flattenCards(project).map(cardEntry => cardEntry.card),
+        [project]
+    )
 
     // Prefer the KEY in the URL so what lands in someone's address bar — and in
     // whatever they paste it into — is `OTTER-123` rather than a 15-character
@@ -180,6 +186,7 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
                     projectLabels={project.labels}
                     projectMembers={project.members}
                     projectLists={project.lists}
+                    projectCards={boardCards}
                     titleRef={titleRef}
                 />
             </View>

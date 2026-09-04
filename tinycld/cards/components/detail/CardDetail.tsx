@@ -25,6 +25,7 @@ import { DetailActivity } from './DetailActivity'
 import { DetailAttachments, filesToPicked } from './DetailAttachments'
 import { DetailChecklist } from './DetailChecklist'
 import { DetailProperties } from './DetailProperties'
+import { DetailSubtasks } from './DetailSubtasks'
 import { EditableText, type EditableTextHandle } from './EditableText'
 import { MarkdownText } from './MarkdownText'
 
@@ -32,7 +33,8 @@ type DetailVariant = 'peek' | 'page'
 
 /**
  * Which ScrollView child the description header is, counting from zero:
- * title, properties, HEADER (label / toolbar), editor, checklist, activity.
+ * title, properties, HEADER (label / toolbar), editor, attachments, checklist,
+ * sub-tasks, activity.
  *
  * Keep in step with the JSX below. React Native pins by index, so a section
  * inserted above it silently pins the wrong thing rather than failing.
@@ -55,6 +57,15 @@ interface CardDetailProps {
     projectMembers: BoardMember[]
     /** The board's lists, so history can name where a card moved. */
     projectLists: { id: string; name: string }[]
+    /**
+     * The board's cards — what the sub-task section lists and the parent
+     * picker offers, and what lets history name a parent by its key.
+     *
+     * The whole board's cards rather than this card's children: choosing a
+     * parent means choosing among the others, so a pre-filtered list could not
+     * serve both. lib/subtasks.ts does the filtering.
+     */
+    projectCards: BoardCardView[]
     /**
      * Lets the container start a title edit for the `e` shortcut.
      *
@@ -81,6 +92,7 @@ export function CardDetail({
     projectLabels,
     projectMembers,
     projectLists,
+    projectCards,
     titleRef,
 }: CardDetailProps) {
     const [isManagingLabels, setIsManagingLabels] = useState(false)
@@ -89,8 +101,13 @@ export function CardDetail({
     // both get it without either container knowing about on-demand collections.
     const { checklist, comments, attachments, activity, isReady } = useCardDetail(card.id)
     const activityContext = useMemo(
-        () => ({ lists: projectLists, labels: projectLabels, members: projectMembers }),
-        [projectLists, projectLabels, projectMembers]
+        () => ({
+            lists: projectLists,
+            labels: projectLabels,
+            members: projectMembers,
+            cards: projectCards,
+        }),
+        [projectLists, projectLabels, projectMembers, projectCards]
     )
     // Resolved here for the same reason — both containers share the gates.
     const { canEdit, canComment, isOwner } = useProjectRole(projectId)
@@ -231,6 +248,20 @@ export function CardDetail({
                             cardId={card.id}
                             projectId={projectId}
                             canEdit={canEditChildren}
+                        />
+                    </View>
+                    <View className={`px-6 ${widthClass}`}>
+                        {/* Below TOOLBAR_INDEX, so the sticky header keeps its
+                            position — see the constant's comment. Gated on
+                            `canEdit`, not `canEditChildren`: a sub-task is a
+                            card of its own, so filing one needs card-write, and
+                            it does not wait on the on-demand children query the
+                            way the checklist and comments do. */}
+                        <DetailSubtasks
+                            card={card}
+                            projectCards={projectCards}
+                            projectId={projectId}
+                            canEdit={canEdit}
                         />
                     </View>
                     <View className={`px-6 pb-6 ${widthClass}`}>

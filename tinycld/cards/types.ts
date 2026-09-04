@@ -245,6 +245,32 @@ export interface BoardCardView {
     checklistDone: number
     commentCount: number
     attachmentCount: number
+    /**
+     * The card this one is a sub-task of, '' when it is top level.
+     *
+     * Always a card on the SAME board — pinned by the rule in migration
+     * 1980000015 — so a resolver never has to look outside the loaded set.
+     * A dangling id (the parent was deleted; the relation deliberately does
+     * not cascade) reads as top level, the way comment threading treats a
+     * missing parent.
+     */
+    parent: string
+    /**
+     * The parent's card key — `OTTER-4` — for the "↳ OTTER-4" chip on a
+     * sub-task's face. '' when top level, when the board has no slug, and when
+     * the parent has been deleted. Precomputed for the reason `key` is: a card
+     * node carries no reference to the parent's row.
+     */
+    parentKey: string
+    /**
+     * The sub-task rollup, maintained by server/card_parent.go. `done` counts
+     * children in a done or canceled list, so it agrees with the list header
+     * glyph. Denormalized rather than counted from the loaded cards because a
+     * card face renders where the board's card set is not loaded — My cards,
+     * search results.
+     */
+    subtaskTotal: number
+    subtaskDone: number
 }
 
 export interface BoardListView {

@@ -1413,3 +1413,77 @@ func TestCardCopyCreatesCardAndChecklist(t *testing.T) {
 		}
 	}
 }
+
+func TestCardAddAndEditParent(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	// Omitted → "", written explicitly, like every other relation the create
+	// body carries: PocketBase fills nothing in for an absent field.
+	_, _, err := runCmd(t, c, "cards", "card", "add", "Top level", "--board", "prjA", "--list", "To do")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := f.lastCardCreate["parent"]; got != "" {
+		t.Fatalf("parent default = %v, want \"\"", got)
+	}
+
+	_, _, err = runCmd(t, c, "cards", "card", "add", "A sub-task",
+		"--board", "prjA", "--list", "To do", "--parent", "crdCopy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := f.lastCardCreate["parent"]; got != "crdCopy" {
+		t.Fatalf("parent = %v, want crdCopy", got)
+	}
+
+	_, _, err = runCmd(t, c, "cards", "card", "edit", "crdVenue", "--parent", "crdCopy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := f.lastCardPatch["parent"]; got != "crdCopy" {
+		t.Fatalf("patched parent = %v, want crdCopy", got)
+	}
+	if _, sent := f.lastCardPatch["title"]; sent {
+		t.Fatalf("edit --parent must not touch the title: %v", f.lastCardPatch)
+	}
+}
+
+// A relation has no sentinel empty value, so clearing needs its own flag —
+// and the two must not be passable together, the --reporter shape.
+func TestCardEditClearParent(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	_, _, err := runCmd(t, c, "cards", "card", "edit", "crdVenue", "--clear-parent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, sent := f.lastCardPatch["parent"]; !sent || v != "" {
+		t.Fatalf("--clear-parent must send \"\": %v", f.lastCardPatch)
+	}
+
+	_, _, err = runCmd(t, c, "cards", "card", "edit", "crdVenue",
+		"--parent", "crdCopy", "--clear-parent")
+	if err == nil {
+		t.Fatal("--parent and --clear-parent together must be refused")
+	}
+	if !strings.Contains(err.Error(), "contradict") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// An empty --parent is a mistake rather than a clear: the clear has its own
+// flag, and silently treating "" as one would make a typo destructive.
+func TestCardEditRejectsEmptyParent(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	_, _, err := runCmd(t, c, "cards", "card", "edit", "crdVenue", "--parent", "  ")
+	if err == nil {
+		t.Fatal("an empty --parent must be refused")
+	}
+	if !strings.Contains(err.Error(), "clear-parent") {
+		t.Fatalf("the error should point at --clear-parent: %v", err)
+	}
+}

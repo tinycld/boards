@@ -56,6 +56,20 @@ func TestCardsShippedRules_CarryTheirGuards(t *testing.T) {
 			`trap 1 — ?!= "viewer" admits every role that is not viewer, which is how drive silently granted commentor UPDATE (drive/pb-migrations/1782100000)`},
 		{"cards_cards", "update", `project.cards_project_members_via_project.role ?= "editor"`,
 			"same idiom on the update path, which is what a drag-and-drop board exercises constantly"},
+
+		// --- the sub-task same-board pin (1980000015) ---
+		//
+		// The clause every downstream simplification rests on: a sub-task may
+		// only name a card on its own board, so the rollup cannot count a card
+		// the viewer is unable to read and the Go recount never spans projects.
+		// Both paths, because a create-only or update-only pin leaves the other
+		// half of the hole open.
+		{"cards_cards", "create", `@request.body.parent.project = project`,
+			"without it a writer on two boards can file a card whose parent is on the other one, and the board query — which joins on project — shows a chip pointing at a card the viewer cannot open"},
+		{"cards_cards", "update", `@request.body.parent.project = project`,
+			"the repoint form of the same hole: PATCH an editable card's parent onto a foreign board"},
+		{"cards_cards", "update", `@request.body.parent = ""`,
+			`the clear branch — without it un-parenting has to satisfy "".project = project and a card is stuck as a sub-task forever`},
 		{"cards_lists", "create", `project.cards_project_members_via_project.role ?= "editor"`,
 			"a viewer must not add columns"},
 		{"cards_labels", "create", `project.cards_project_members_via_project.role ?= "editor"`,

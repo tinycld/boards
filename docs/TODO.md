@@ -10,7 +10,8 @@ four chosen items — 8, 10, 12, 13 — and their rule/notification follow-ups
 shipped as five stacked branches (`feat/tier2-estimates` → `-status` →
 `-reactions` → `-timeline` → `-events`, PRs #46–#50), with the matching
 notification preferences on `tinycld`'s `feat/cards-notification-prefs`
-(PR #229). Open: 9, 11, 14–21 and Tier 3.
+(PR #229). Sub-tasks (9a) followed on `feat/tier2-subtasks`. Open: 9b, 11,
+14–21 and Tier 3.
 
 ## Tier 1 — table stakes in all three ✅ shipped
 
@@ -82,14 +83,30 @@ notification preferences on `tinycld`'s `feat/cards-notification-prefs`
     15-minute sweep. `list category` on the CLI, with `list done` as
     shorthand.
 
+9a. **Sub-tasks** — landed as `cards_cards.parent` (a card that names another
+    card, `cascadeDelete: false` so deleting a parent ORPHANS its children
+    rather than destroying them) plus a `subtask_total` / `subtask_done`
+    rollup on the face. The same-board invariant is a rule pin
+    (`@request.body.parent.project = project` on create and update, asserted
+    literally in `shipped_rules_test.go`); cycle and one-level depth are the
+    Go guard beside it, since a rule sees one row and cannot walk a chain.
+    `subtask_done` counts children in a done/canceled LIST, so "2/5" agrees
+    with the list header glyph. Children stay on the board as ordinary cards
+    with a `↳ PARENT-KEY` chip. Cross-board move now ASKS
+    (`family: move|unlink`) rather than picking for the user, and reports what
+    it did. `--parent` / `--clear-parent` on the CLI, `--family` on
+    `card move`, the `card-parented` trigger and the `set-parent` action.
+    Fixed alongside: `cards_comment_reactions` was missing from the move
+    endpoint's re-projection list, so a cross-board move left reaction rows
+    naming the source board — unreadable to everyone on the target.
+
 ### Open
 
-9. **Sub-tasks and card relations.** Jira sub-tasks, Linear sub-issues and
-   relations (blocks / blocked by / related / duplicate). Needs
-   `cards_cards.parent` with a face rollup (a `counters.go` counter) and a
-   `cards_card_links` collection; pin `parent` to the same project as the
-   anti-repoint rules do — a rule cannot cross-check it, so it is a Go guard
-   or a denormalized pin like the watchers'.
+9b. **Card relations.** `cards_card_links` (blocks / blocked by / related /
+    duplicate), reusing 9a's card picker. Needs the same-board pin on both
+    ends of the link, and `cards_card_links` added to core's
+    `collectionScopes` before any CLI command can write it — the cross-repo
+    step that also defers the reaction CLI commands.
 11. **Time-based automation and missing actions.** Core has `core:schedule`,
     which fires with no record, and every cards relation authorizer refuses
     that. Overdue / due-soon triggers are more naturally RECORD triggers the

@@ -80,6 +80,8 @@ tinycld cards card edit <card> --reporter <user id>
 tinycld cards card edit <card> --clear-reporter
 tinycld cards card edit <card> --priority high
 tinycld cards card edit <card> --estimate 5
+tinycld cards card edit <card> --parent OTTER-4
+tinycld cards card edit <card> --clear-parent
 ```
 
 `edit` only changes what you name. Editing the title leaves the description
@@ -92,6 +94,11 @@ well as `edit`. A new card has no priority; `--priority none` clears one.
 
 `--estimate` takes a whole number of points, on `add` as well as `edit`. A new
 card has no estimate; `--estimate 0` clears one.
+
+`--parent` makes the card a sub-task of another, on `add` as well as `edit`. It
+takes a card id or a key, and the parent must be on the **same board**. Since a
+relation has no "empty" value to write, `--clear-parent` is what stops a card
+being a sub-task. A sub-task cannot have sub-tasks of its own.
 
 A new card reports to you. Pass `--reporter` on `add` or `edit` to point it at
 someone else — useful when a script or a shared account files cards that a real
@@ -112,6 +119,7 @@ is where a dragged card lands when you do not aim at a particular slot.
 ```
 tinycld cards card move <card> --board "Roadmap"               # to another board's first list
 tinycld cards card move <card> --board "Roadmap" --list Backlog
+tinycld cards card move <card> --board "Roadmap" --family move # bring sub-tasks
 tinycld cards card copy <card>                                 # "Copy of …", same list
 tinycld cards card copy <card> --title "Second attempt"
 ```
@@ -120,6 +128,12 @@ A move to another board keeps the checklist, comments and attachments,
 matches labels by name (dropping the rest, which the command reports), and
 gives the card a new key. `copy` duplicates a card with its checklist;
 attachments are not copied.
+
+Moving a card that has sub-tasks — or is one — needs `--family`, because a card
+and its parent always live on the same board: `--family move` brings the
+sub-tasks along, `--family unlink` leaves them behind as top-level cards. The
+command refuses rather than guessing, and says what it did. A card that is
+itself a sub-task always stops being one when it moves.
 
 ## Archiving and deleting
 

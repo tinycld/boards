@@ -1,6 +1,6 @@
 ---
 title: Board rules
-summary: React automatically when cards are created, moved, completed, canceled, assigned, estimated, rescheduled, archived, or reacted to
+summary: React automatically when cards are created, moved, completed, canceled, assigned, estimated, rescheduled, archived, parented, or reacted to
 tags: [rules, automation, workflow, boards]
 order: 50
 ---
@@ -21,9 +21,10 @@ triggers and five actions.
 | **A card's estimate changes** | a card is sized, resized, or its estimate cleared |
 | **A card's dates change** | a start date or due date is set, moved or cleared, or a time is added to or taken off a deadline |
 | **A card is archived** | a card is archived, by a person or by the board's auto-archive — not when it is restored |
+| **A card's parent changes** | a card becomes a sub-task of another, or stops being one |
 | **Someone reacts to a comment** | an emoji reaction is added to a comment on a card |
 
-All ten cover every card on a board you belong to, not only cards you
+All eleven cover every card on a board you belong to, not only cards you
 created — so a rule fires when a colleague moves your card, which is usually
 the point.
 
@@ -47,6 +48,11 @@ raise it.
 
 **Set the card estimate** sizes the card that started the rule in points; `0`
 clears the estimate.
+
+**Make the card a sub-task** files the card that started the rule under another
+card. The parent has to be on the same board, and cannot itself be a sub-task —
+the rule fails with a message saying so rather than filing the card somewhere
+you cannot see it.
 
 ## Recipes
 

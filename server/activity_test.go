@@ -299,3 +299,37 @@ func TestActivity_DeletingTheActorKeepsTheRow(t *testing.T) {
 		t.Fatalf("actor = %q after the user was deleted, want cleared", got)
 	}
 }
+
+// A parent set and cleared writes one row each, both of kind `parent` — the
+// self-describing convention: `to` names the new parent, and a blank `to` is
+// the card leaving its family.
+func TestActivity_ParentChangesAreRecorded(t *testing.T) {
+	env := setupActivityEnv(t)
+	child := cardsCard(t, env.app, env.project, env.list, "child", "a1", env.owner)
+
+	updateCardAs(t, env.app, env.editor, child.Id, func(r *core.Record) {
+		r.Set("parent", env.card.Id)
+	})
+	// `created` comes from seeding the child itself; the parent row is the
+	// one this test is about.
+	rows := activityRows(t, env.app, child.Id)
+	requireKinds(t, rows, "created", "parent")
+	set := rowOfKind(t, rows, "parent")
+	if got := set.GetString("to"); got != env.card.Id {
+		t.Fatalf("parent row `to` = %q, want the parent %q", got, env.card.Id)
+	}
+	if got := set.GetString("actor"); got != env.editor.Id {
+		t.Fatalf("actor = %q, want the editor %q", got, env.editor.Id)
+	}
+
+	updateCardAs(t, env.app, env.editor, child.Id, func(r *core.Record) {
+		r.Set("parent", "")
+	})
+	rows = activityRows(t, env.app, child.Id)
+	requireKinds(t, rows, "created", "parent", "parent")
+	cleared := rows[len(rows)-1]
+	if cleared.GetString("from") != env.card.Id || cleared.GetString("to") != "" {
+		t.Fatalf("clear row carries %q → %q, want %q → \"\"",
+			cleared.GetString("from"), cleared.GetString("to"), env.card.Id)
+	}
+}

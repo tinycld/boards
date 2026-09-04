@@ -1,7 +1,7 @@
 ---
 title: Working with cards
 summary: Opening a card, editing its details, and moving it between lists
-tags: [cards, board, kanban, detail, shortcuts, formatting, "drag and drop"]
+tags: [cards, board, kanban, detail, shortcuts, formatting, "drag and drop", "sub-tasks", subtasks]
 order: 20
 ---
 
@@ -79,6 +79,51 @@ button again to bring the full cards back.
 
 In an open card, drag a checklist item by the grip at the start of its row.
 On a computer the grip appears when you point at the row.
+
+## Sub-tasks
+
+When a card is too big to be one job, break it into **sub-tasks**. Open the
+card and use **Add sub-task** to name each piece. Each one becomes a real card
+of its own, on the same board, in the same list as its parent — so it has its
+own key, assignee, due date and comments, and you can drag it wherever the
+work actually belongs.
+
+The parent card shows how the set is going: a small "1/3" on its face, next to
+the checklist and comment counts. A sub-task counts as done when it reaches a
+list whose status is **Done** or **Canceled** — the same thing the list header
+glyph shows. There is no tick-box on the sub-task row, because moving the card
+is what completes it.
+
+A sub-task's face shows **↳** and its parent's key, so you can tell at a glance
+which cards on the board are part of something larger. Click the row in the
+parent's Sub-tasks section to open one.
+
+**Sub-tasks or a checklist?** A checklist item is a line of text that lives on
+one card — right for "don't forget these five steps". A sub-task is a card, so
+choose one when the piece needs its own owner, its own due date, or a
+conversation of its own.
+
+Sub-tasks go one level deep: a sub-task cannot have sub-tasks of its own, and
+a card and its sub-tasks always live on the same board.
+
+To un-link a sub-task, open it and clear its parent — the card stays exactly
+where it is and simply stops being part of the set. Deleting a parent never
+deletes its sub-tasks; they become ordinary cards.
+
+## Moving a card that has sub-tasks
+
+When you move a card to another board, sub-tasks cannot come along
+automatically, because a card and its parent always live on the same board.
+The move dialog asks what you want:
+
+- **Bring the sub-tasks along** moves the whole set to the new board. Each one
+  gets a new key there, and any label the target board doesn't have is
+  dropped.
+- **Leave them here** keeps the sub-tasks on the current board as ordinary
+  top-level cards.
+
+Moving a card that is *itself* a sub-task always detaches it — its parent stays
+behind. The dialog says so before you confirm.
 
 ## The list stepper
 

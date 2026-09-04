@@ -207,3 +207,193 @@ func TestMoveCard_RequiresAuth(t *testing.T) {
 		before: mountCardRoutes,
 	}.run(t, env.cardsEnv)
 }
+
+// --- the sub-task family, and the reaction rows that ride along ---
+
+// moveFamilyBody is moveBody plus the family answer the endpoint demands of a
+// card that has one.
+func moveFamilyBody(env *moveEnv, family string) string {
+	return `{"project_id":"` + env.target.Id + `","list_id":"` + env.targetList.Id +
+		`","position":"a0","family":"` + family + `"}`
+}
+
+// seedChild parents a fresh card to the moved one.
+func seedChild(t *testing.T, env *moveEnv, title, position string) *core.Record {
+	t.Helper()
+	child := cardsCard(t, env.app, env.project, env.list, title, position, env.owner)
+	child.Set("parent", env.card.Id)
+	if err := env.app.Save(child); err != nil {
+		t.Fatalf("seed child: %v", err)
+	}
+	return child
+}
+
+// The endpoint REFUSES rather than guessing. Both answers move work the caller
+// cannot see from the dialog, so silently picking one is the wrong default.
+func TestMoveCard_FamilyAnswerIsRequired(t *testing.T) {
+	env := setupMoveEnv(t)
+	seedChild(t, env, "child", "a1")
+
+	req{
+		method: http.MethodPost,
+		url:    "/api/cards/cards/" + env.card.Id + "/move",
+		token:  env.editorToken,
+		body:   moveBody(env),
+		want:   http.StatusBadRequest,
+		before: mountCardRoutes,
+		after: func(t testing.TB, app *tests.TestApp) {
+			moved, err := app.FindRecordById("cards_cards", env.card.Id)
+			if err != nil {
+				t.Fatalf("reload card: %v", err)
+			}
+			if moved.GetString("project") != env.project.Id {
+				t.Fatal("the card moved despite the refusal")
+			}
+		},
+	}.run(t, env.cardsEnv)
+}
+
+// A card with no family needs no answer — the question never arises.
+func TestMoveCard_NoFamilyNeedsNoAnswer(t *testing.T) {
+	env := setupMoveEnv(t)
+
+	req{
+		method:  http.MethodPost,
+		url:     "/api/cards/cards/" + env.card.Id + "/move",
+		token:   env.editorToken,
+		body:    moveBody(env),
+		want:    http.StatusOK,
+		content: []string{`"moved_children":0`},
+		before:  mountCardRoutes,
+	}.run(t, env.cardsEnv)
+}
+
+func TestMoveCard_FamilyMoveCarriesTheChildren(t *testing.T) {
+	env := setupMoveEnv(t)
+	child := seedChild(t, env, "child", "a1")
+
+	req{
+		method:  http.MethodPost,
+		url:     "/api/cards/cards/" + env.card.Id + "/move",
+		token:   env.editorToken,
+		body:    moveFamilyBody(env, "move"),
+		want:    http.StatusOK,
+		content: []string{`"moved_children":1`},
+		before:  mountCardRoutes,
+		after: func(t testing.TB, app *tests.TestApp) {
+			moved, err := app.FindRecordById("cards_cards", child.Id)
+			if err != nil {
+				t.Fatalf("reload child: %v", err)
+			}
+			if moved.GetString("project") != env.target.Id {
+				t.Fatalf("child is on %s, want the target", moved.GetString("project"))
+			}
+			if moved.GetString("list") != env.targetList.Id {
+				t.Fatal("child did not land in the target list")
+			}
+			// The family survives: it is still a sub-task of the same card.
+			if moved.GetString("parent") != env.card.Id {
+				t.Fatal("child lost its parent during a family move")
+			}
+		},
+	}.run(t, env.cardsEnv)
+}
+
+// Unlink leaves the children where they are, as ordinary cards. Nothing is
+// deleted — a sub-task is real work, which is why the relation does not
+// cascade in the first place.
+func TestMoveCard_FamilyUnlinkOrphansTheChildren(t *testing.T) {
+	env := setupMoveEnv(t)
+	child := seedChild(t, env, "child", "a1")
+
+	req{
+		method:  http.MethodPost,
+		url:     "/api/cards/cards/" + env.card.Id + "/move",
+		token:   env.editorToken,
+		body:    moveFamilyBody(env, "unlink"),
+		want:    http.StatusOK,
+		content: []string{`"orphaned_children":1`},
+		before:  mountCardRoutes,
+		after: func(t testing.TB, app *tests.TestApp) {
+			left, err := app.FindRecordById("cards_cards", child.Id)
+			if err != nil {
+				t.Fatalf("the child was destroyed: %v", err)
+			}
+			if left.GetString("project") != env.project.Id {
+				t.Fatal("an unlinked child should stay on the source board")
+			}
+			if left.GetString("parent") != "" {
+				t.Fatal("an unlinked child kept its parent")
+			}
+			n, _ := app.CountRecords("cards_activity",
+				dbx.HashExp{"card": child.Id, "kind": "parent"})
+			if n != 1 {
+				t.Fatalf("parent activity rows on the orphan = %d, want 1", n)
+			}
+		},
+	}.run(t, env.cardsEnv)
+}
+
+// A moved card's OWN parent stays behind under either answer: the same-board
+// pin admits no cross-board parent, so there is nowhere to carry it to.
+func TestMoveCard_TheCardsOwnParentIsCleared(t *testing.T) {
+	env := setupMoveEnv(t)
+	parent := cardsCard(t, env.app, env.project, env.list, "parent", "a1", env.owner)
+	card, _ := env.app.FindRecordById("cards_cards", env.card.Id)
+	card.Set("parent", parent.Id)
+	if err := env.app.Save(card); err != nil {
+		t.Fatalf("seed parent: %v", err)
+	}
+
+	req{
+		method:  http.MethodPost,
+		url:     "/api/cards/cards/" + env.card.Id + "/move",
+		token:   env.editorToken,
+		body:    moveFamilyBody(env, "unlink"),
+		want:    http.StatusOK,
+		content: []string{`"cleared_parent":true`},
+		before:  mountCardRoutes,
+		after:   requireCardParent(env.card.Id, ""),
+	}.run(t, env.cardsEnv)
+}
+
+// Reaction rows carry `project` and resolve membership through it, so one left
+// naming the source board is unreadable to everyone on the target. They were
+// missing from the endpoint's re-projection list.
+func TestMoveCard_CarriesCommentReactions(t *testing.T) {
+	env := setupMoveEnv(t)
+	comment := cardsComment(t, env.app, env.project, env.card, env.editor, "note")
+
+	col, err := env.app.FindCollectionByNameOrId("cards_comment_reactions")
+	if err != nil {
+		t.Fatalf("find reactions: %v", err)
+	}
+	reaction := core.NewRecord(col)
+	reaction.Set("project", env.project.Id)
+	reaction.Set("card", env.card.Id)
+	reaction.Set("comment", comment.Id)
+	reaction.Set("user", env.editor.Id)
+	reaction.Set("emoji", "👍")
+	if err := env.app.Save(reaction); err != nil {
+		t.Fatalf("seed reaction: %v", err)
+	}
+
+	req{
+		method:  http.MethodPost,
+		url:     "/api/cards/cards/" + env.card.Id + "/move",
+		token:   env.editorToken,
+		body:    moveBody(env),
+		want:    http.StatusOK,
+		content: []string{`"previous_key"`},
+		before:  mountCardRoutes,
+		after: func(t testing.TB, app *tests.TestApp) {
+			row, err := app.FindRecordById("cards_comment_reactions", reaction.Id)
+			if err != nil {
+				t.Fatalf("reload reaction: %v", err)
+			}
+			if row.GetString("project") != env.target.Id {
+				t.Fatal("the reaction still names the source project, so the target cannot read it")
+			}
+		},
+	}.run(t, env.cardsEnv)
+}

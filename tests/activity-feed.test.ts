@@ -25,6 +25,11 @@ const ctx = {
     ],
     labels: [{ id: 'lb1', name: 'Bug', color: '#f00' }],
     members: [maya, { id: 'u2', firstName: 'Sam', lastName: 'Doe' }],
+    cards: [
+        { id: 'cd1', key: 'OTTER-4', title: 'Ship auth' },
+        // A board with no slug has no keys, so the title is the fallback.
+        { id: 'cd2', key: '', title: 'Untitled epic' },
+    ],
 }
 
 describe('buildActivityFeed', () => {
@@ -133,6 +138,21 @@ describe('describeActivity', () => {
         expect(
             describeActivity(activity('a', 'attachment_added', '', { to: 'x.png' }), ctx).text
         ).toBe('attached x.png')
+        expect(describeActivity(activity('a', 'parent', '', { to: 'cd1' }), ctx).text).toBe(
+            'made this a sub-task of OTTER-4'
+        )
+        expect(describeActivity(activity('a', 'parent', '', { from: 'cd1' }), ctx).text).toBe(
+            'removed this from OTTER-4'
+        )
+        // A keyless board falls back to the title rather than a raw record id.
+        expect(describeActivity(activity('a', 'parent', '', { to: 'cd2' }), ctx).text).toBe(
+            'made this a sub-task of Untitled epic'
+        )
+        // Un-parenting BY DELETING the parent is ordinary — the relation does
+        // not cascade — so the row outlives the card it names.
+        expect(describeActivity(activity('a', 'parent', '', { from: 'gone' }), ctx).text).toBe(
+            'removed this from another card'
+        )
         expect(describeActivity(activity('a', 'archived', ''), ctx).text).toBe('archived this card')
         expect(describeActivity(activity('a', 'restored', ''), ctx).text).toBe('restored this card')
         expect(describeActivity(activity('a', 'description', ''), ctx).text).toBe(

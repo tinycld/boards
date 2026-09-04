@@ -27,6 +27,7 @@ func registerAutomation() {
 		"cards:card-estimate-changed",
 		"cards:card-rescheduled",
 		"cards:card-archived",
+		"cards:card-parented",
 		"cards:comment-reacted",
 	} {
 		automation.RegisterOwnerResolver(ref, cardOwnerResolver)
@@ -43,6 +44,9 @@ func registerAutomation() {
 	// action whose relation param has no registered authorizer — without this
 	// the action is greyed out in the catalog and fails at execution.
 	automation.RegisterRelationAuthorizer("cards:move-card", "list", moveDestinationAuthorizer)
+	// set-parent is a record-op like move-card — a single-valued relation, so
+	// `set` is the right verb — and needs an authorizer for the same reason.
+	automation.RegisterRelationAuthorizer("cards:set-parent", "parent", parentAuthorizer)
 
 	automation.RegisterAction("cards:add-assignee", addAssignee)
 	automation.RegisterRelationAuthorizer("cards:add-assignee", "user", assigneeAuthorizer)
@@ -239,6 +243,41 @@ func moveDestinationAuthorizer(app core.App, req automation.ActionRequest, destI
 	if projectID == "" || dest.GetString("project") != projectID {
 		return fmt.Errorf(
 			"destination list %s is on a different board than the card", destID)
+	}
+	return checkBoardWrite(app, req.OwnerID, projectID)
+}
+
+// parentAuthorizer answers the which-record question for cards:set-parent's
+// `parent` param. moveDestinationAuthorizer's shape, reading cards_cards
+// instead of cards_lists, and for the same two reasons — visibility is not
+// writability, and any card the owner can see would otherwise do.
+//
+// The third check has no analogue there and is the one this feature turns on:
+// the parent must not itself be a sub-task. The engine saves as a superuser
+// and so bypasses the rules AND the OnRecordUpdate guard's siblings, which
+// makes this the only place a rule-driven set-parent can be stopped from
+// building a three-level tree. (checkParent still runs — it is bound on the
+// model hook, not the request hook — but refusing here names the rule and the
+// param in the error the user reads.)
+//
+// Fails closed on anything unresolvable.
+func parentAuthorizer(app core.App, req automation.ActionRequest, parentID string) error {
+	if req.Record == nil {
+		return fmt.Errorf("cards:set-parent: no trigger card to re-parent")
+	}
+	if parentID == req.Record.Id {
+		return fmt.Errorf("a card cannot be its own sub-task")
+	}
+	parent, err := app.FindRecordById("cards_cards", parentID)
+	if err != nil {
+		return fmt.Errorf("parent card %s: %w", parentID, err)
+	}
+	projectID := req.Record.GetString("project")
+	if projectID == "" || parent.GetString("project") != projectID {
+		return fmt.Errorf("parent card %s is on a different board than the card", parentID)
+	}
+	if parent.GetString("parent") != "" {
+		return fmt.Errorf("parent card %s is itself a sub-task", parentID)
 	}
 	return checkBoardWrite(app, req.OwnerID, projectID)
 }

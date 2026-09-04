@@ -38,12 +38,31 @@ type moveCardRequest struct {
 	ProjectID string `json:"project_id"`
 	ListID    string `json:"list_id"`
 	Position  string `json:"position"`
+	// What to do with the card's sub-task family, when it has one:
+	// "move" brings the children along, "unlink" leaves them behind.
+	//
+	// Deliberately has NO default that silently picks one. A sub-task family is
+	// the user's structure, and both answers are destructive in a way they
+	// cannot see from the move dialog — either work leaves the board they were
+	// looking at, or a family they built quietly comes apart. The client asks,
+	// and a card with no family needs no answer at all (see familyChoice).
+	Family string `json:"family"`
 }
+
+const (
+	familyMove   = "move"
+	familyUnlink = "unlink"
+)
 
 type moveCardResponse struct {
 	Card          map[string]any `json:"card"`
 	PreviousKey   string         `json:"previous_key"`
 	DroppedLabels []string       `json:"dropped_labels"`
+	// How the family was handled, so the client can say what happened rather
+	// than guessing from what it asked for.
+	MovedChildren    int  `json:"moved_children"`
+	OrphanedChildren int  `json:"orphaned_children"`
+	ClearedParent    bool `json:"cleared_parent"`
 }
 
 // boardRealtime is what registerRealtime hands the endpoint: enough to flush
@@ -52,6 +71,74 @@ type boardRealtime struct {
 	state    *boardDocState
 	runtime  *yjsdoc.Runtime
 	flushNow func(roomID string) error
+}
+
+// moveFamily settles what happens to the moved card's sub-tasks.
+//
+// UNLINK orphans them: each child's `parent` is cleared where it stands, with a
+// history row, and it stays on the source board as an ordinary top-level card.
+// Nothing is deleted — a sub-task is real work, and the relation deliberately
+// does not cascade.
+//
+// MOVE carries them across, re-stamping `project`/`list` and re-keying each one
+// through the same card_number.go update hook the parent goes through. Their
+// own children do not need considering: the depth cap is one level, so a child
+// has none.
+//
+// What a moved child does NOT get, and the asymmetry is deliberate: its labels
+// are dropped rather than remapped, and its non-member assignees are cleared.
+// A child follows its parent as a unit of work, not as a second full move —
+// remapping every child's labels would make one drag a silent bulk edit across
+// two boards, which is not what "bring the sub-tasks" reads as.
+func moveFamily(
+	tx core.App,
+	actorID string,
+	children []*core.Record,
+	body moveCardRequest,
+	cardID string,
+) error {
+	for _, child := range children {
+		if body.Family == familyUnlink {
+			child.Set("parent", "")
+			if err := tx.Save(child); err != nil {
+				return err
+			}
+			writeActivity(tx, child, actorID, "parent", cardID, "")
+			continue
+		}
+
+		previousKey := ""
+		if slugRow, err := tx.FindRecordById("cards_projects", child.GetString("project")); err == nil {
+			previousKey = formatCardKey(slugRow.GetString("slug"), child.GetInt("number"))
+		}
+		child.Set("project", body.ProjectID)
+		child.Set("list", body.ListID)
+		child.Set("labels", []string{})
+		child.Set("assignees", membersOnly(tx, body.ProjectID, child.GetStringSlice("assignees")))
+		if reporter := child.GetString("reporter"); reporter != "" &&
+			len(membersOnly(tx, body.ProjectID, []string{reporter})) == 0 {
+			child.Set("reporter", "")
+		}
+		if err := tx.Save(child); err != nil {
+			return err
+		}
+		// The child's own rows carry the denormalized project too.
+		for _, collection := range []string{"cards_checklist_items", "cards_comments", "cards_attachments", "cards_comment_reactions", "cards_activity", "cards_card_watchers"} {
+			rows, err := tx.FindRecordsByFilter(
+				collection, "card = {:card}", "", 0, 0, dbx.Params{"card": child.Id})
+			if err != nil {
+				return err
+			}
+			for _, row := range rows {
+				row.Set("project", body.ProjectID)
+				if err := tx.Save(row); err != nil {
+					return err
+				}
+			}
+		}
+		writeActivity(tx, child, actorID, "moved_board", previousKey, "")
+	}
+	return nil
 }
 
 func isProjectWriter(app core.App, projectID, userID string) bool {
@@ -106,6 +193,20 @@ func handleMoveCard(app core.App, rt *boardRealtime, re *core.RequestEvent) erro
 		return re.BadRequestError("list_id must name a list on the target board", nil)
 	}
 
+	// The sub-task family. A card's `parent` cannot survive the move under any
+	// answer — the same-board pin (1980000015) admits no cross-board parent —
+	// so the only real question is what happens to its CHILDREN.
+	children, err := app.FindRecordsByFilter(
+		"cards_cards", "parent = {:card}", "", 0, 0, dbx.Params{"card": cardID})
+	if err != nil {
+		return re.InternalServerError("failed to read the card's sub-tasks", err)
+	}
+	hasFamily := len(children) > 0 || card.GetString("parent") != ""
+	if hasFamily && body.Family != familyMove && body.Family != familyUnlink {
+		return re.BadRequestError(
+			`this card is part of a sub-task family; family must be "move" or "unlink"`, nil)
+	}
+
 	// The description is current only once the source room has flushed.
 	if rt != nil && rt.flushNow != nil {
 		if err := rt.flushNow(source); err != nil {
@@ -129,6 +230,14 @@ func handleMoveCard(app core.App, rt *boardRealtime, re *core.RequestEvent) erro
 		reporter = ""
 	}
 
+	clearedParent := card.GetString("parent") != ""
+	movedChildren, orphanedChildren := 0, 0
+	if body.Family == familyMove {
+		movedChildren = len(children)
+	} else {
+		orphanedChildren = len(children)
+	}
+
 	err = app.RunInTransaction(func(tx core.App) error {
 		card.Set("project", body.ProjectID)
 		card.Set("list", body.ListID)
@@ -136,10 +245,25 @@ func handleMoveCard(app core.App, rt *boardRealtime, re *core.RequestEvent) erro
 		card.Set("labels", kept)
 		card.Set("assignees", assignees)
 		card.Set("reporter", reporter)
+		// The card's own parent stays behind whatever the answer: the
+		// same-board pin admits no cross-board parent, so there is nothing to
+		// carry it to. Recorded in history like any other un-parenting.
+		if clearedParent {
+			previousParent := card.GetString("parent")
+			card.Set("parent", "")
+			writeActivity(tx, card, re.Auth.Id, "parent", previousParent, "")
+		}
 		if err := tx.Save(card); err != nil {
 			return err
 		}
-		for _, child := range []string{"cards_checklist_items", "cards_comments", "cards_attachments", "cards_activity", "cards_card_watchers"} {
+		if err := moveFamily(tx, re.Auth.Id, children, body, cardID); err != nil {
+			return err
+		}
+		// cards_comment_reactions belongs in this list for the same reason the
+		// rest do — a reaction row carries `project`, and its read rule
+		// resolves membership through it, so a row left naming the source
+		// board becomes unreadable to everyone on the target.
+		for _, child := range []string{"cards_checklist_items", "cards_comments", "cards_attachments", "cards_comment_reactions", "cards_activity", "cards_card_watchers"} {
 			rows, err := tx.FindRecordsByFilter(child, "card = {:card}", "", 0, 0, dbx.Params{"card": cardID})
 			if err != nil {
 				return err
@@ -177,9 +301,12 @@ func handleMoveCard(app core.App, rt *boardRealtime, re *core.RequestEvent) erro
 		return re.InternalServerError("failed to reload card", err)
 	}
 	return re.JSON(http.StatusOK, moveCardResponse{
-		Card:          fresh.PublicExport(),
-		PreviousKey:   previousKey,
-		DroppedLabels: dropped,
+		Card:             fresh.PublicExport(),
+		PreviousKey:      previousKey,
+		DroppedLabels:    dropped,
+		MovedChildren:    movedChildren,
+		OrphanedChildren: orphanedChildren,
+		ClearedParent:    clearedParent,
 	})
 }
 

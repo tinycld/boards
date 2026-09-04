@@ -74,9 +74,12 @@ type card struct {
 	Priority string `json:"priority"`
 	// Points. 0 is the stored form of "no estimate" (the app normalizes it
 	// away), so there is no --clear-estimate: --estimate 0 is the clear.
-	Estimate int    `json:"estimate"`
-	Created  string `json:"created"`
-	Updated  string `json:"updated"`
+	Estimate int `json:"estimate"`
+	// The card this one is a sub-task of, "" when top level. Writable, and
+	// always a card on the SAME board — the server refuses anything else.
+	Parent  string `json:"parent"`
+	Created string `json:"created"`
+	Updated string `json:"updated"`
 
 	// Denormalized counters, maintained by server/counters.go. Read-only —
 	// the CLI must never write one: counters.go always RECOMPUTES, so a
@@ -86,6 +89,10 @@ type card struct {
 	ChecklistDone   int `json:"checklist_done"`
 	CommentCount    int `json:"comment_count"`
 	AttachmentCount int `json:"attachment_count"`
+	// The sub-task rollup, maintained by server/card_parent.go. Read-only for
+	// the same reason as the counters above.
+	SubtaskTotal int `json:"subtask_total"`
+	SubtaskDone  int `json:"subtask_done"`
 }
 
 // reporterID is who the card reports to, falling back to whoever created it.

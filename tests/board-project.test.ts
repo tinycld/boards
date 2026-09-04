@@ -77,6 +77,9 @@ function card(
         checklist_done: 0,
         comment_count: 0,
         attachment_count: 0,
+        parent: '',
+        subtask_total: 0,
+        subtask_done: 0,
         created: '',
         updated: '',
         ...overrides,
@@ -433,6 +436,48 @@ describe('buildBoardProject', () => {
             cards: [card('c1', 'list1', 'a0'), card('c2', 'list2', 'a0')],
         })
         expect(result?.lists.map(l => l.cards.map(c => c.id))).toEqual([['c1'], ['c2']])
+    })
+
+    it('resolves a sub-task’s parentKey from the parent’s number', () => {
+        const result = buildBoardProject({
+            ...base,
+            project: project(),
+            lists: [list('list1', 'a0')],
+            cards: [
+                card('c1', 'list1', 'a0', { number: 4 }),
+                card('c2', 'list1', 'a1', { parent: 'c1', number: 5 }),
+            ],
+        })
+        const cards = result?.lists[0]?.cards ?? []
+        expect(cards.map(c => c.parentKey)).toEqual(['', 'OTTER-4'])
+    })
+
+    // The chip says which card this is part of, not which cards are on screen,
+    // so it survives the parent being archived — the parent is skipped by the
+    // archived guard, but the key map is built from the raw rows.
+    it('keeps parentKey when the parent is archived', () => {
+        const result = buildBoardProject({
+            ...base,
+            project: project(),
+            lists: [list('list1', 'a0')],
+            cards: [
+                card('c1', 'list1', 'a0', { number: 4, archived: true }),
+                card('c2', 'list1', 'a1', { parent: 'c1', number: 5 }),
+            ],
+        })
+        expect(result?.lists[0]?.cards[0]?.parentKey).toBe('OTTER-4')
+    })
+
+    // Deleting a parent orphans its children rather than destroying them, so a
+    // dangling id must render no chip instead of a broken one.
+    it('leaves parentKey empty when the parent is gone', () => {
+        const result = buildBoardProject({
+            ...base,
+            project: project(),
+            lists: [list('list1', 'a0')],
+            cards: [card('c2', 'list1', 'a0', { parent: 'deleted' })],
+        })
+        expect(result?.lists[0]?.cards[0]?.parentKey).toBe('')
     })
 
     // An empty column must still render — it is where the first card gets added.

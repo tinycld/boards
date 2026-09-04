@@ -114,6 +114,13 @@ func logCardChanges(app core.App, card *core.Record, actor string) {
 	if from, to := original.GetString("priority"), card.GetString("priority"); from != to {
 		writeActivity(app, card, actor, "priority", from, to)
 	}
+	// One kind for both directions, the self-describing convention dueText and
+	// estimateText use: a blank `to` is a card that stopped being a sub-task,
+	// a blank `from` one that became one. Raw ids, resolved to card keys at
+	// render like every other relation here.
+	if from, to := original.GetString("parent"), card.GetString("parent"); from != to {
+		writeActivity(app, card, actor, "parent", from, to)
+	}
 	if from, to := original.GetInt("estimate"), card.GetInt("estimate"); from != to {
 		writeActivity(app, card, actor, "estimate", estimateText(from), estimateText(to))
 	}

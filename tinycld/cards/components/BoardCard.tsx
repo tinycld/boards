@@ -7,6 +7,7 @@ import {
     CircleX,
     Clock,
     Gauge,
+    ListTree,
     MessageSquare,
     Paperclip,
     SquareCheck,
@@ -19,6 +20,7 @@ import { formatSchedule } from '../lib/due-time'
 import { formatEstimate } from '../lib/estimate'
 import { isClosedCategory, type ListCategory } from '../lib/list-category'
 import type { CardPriority } from '../lib/priority'
+import { subtasksComplete } from '../lib/subtasks'
 import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardCardView, BoardLabel, BoardMember } from '../types'
 import { useCardPresence } from './BoardPresenceProvider'
@@ -157,7 +159,12 @@ function CardFace({ card, isCompact }: { card: BoardCardView; isCompact: boolean
     }
     return (
         <>
-            <CardTopRow labels={card.labels ?? []} cardKey={card.key} priority={card.priority} />
+            <CardTopRow
+                labels={card.labels ?? []}
+                cardKey={card.key}
+                priority={card.priority}
+                parentKey={card.parentKey}
+            />
             <Text
                 testID="cards-card-title"
                 className="text-[13.5px] font-medium leading-[18px] text-foreground"
@@ -191,19 +198,46 @@ function CardTopRow({
     labels,
     cardKey,
     priority,
+    parentKey,
 }: {
     labels: BoardLabel[]
     cardKey: string
     priority: CardPriority
+    parentKey: string
 }) {
-    if (labels.length === 0 && !cardKey && priority === 'none') return null
+    if (labels.length === 0 && !cardKey && !parentKey && priority === 'none') return null
     return (
         <View className="flex-row items-center gap-1">
             <PriorityGlyph priority={priority} />
+            <ParentChip parentKey={parentKey} />
             <CardLabels labels={labels} />
             <View className="flex-1" />
             <CardKey cardKey={cardKey} />
         </View>
+    )
+}
+
+/**
+ * "↳ OTTER-4" — the card this one is a sub-task of.
+ *
+ * On the TOP row beside the labels rather than in the meta row, because it
+ * identifies the card the way its own key does; a reader scanning a column for
+ * "what is this part of" is looking at the same band both keys live in.
+ *
+ * Renders nothing when the card is top level, and also when the parent has
+ * been deleted — `parentKey` is '' in both cases, and a chip pointing at a
+ * card that no longer exists is worse than none.
+ */
+function ParentChip({ parentKey }: { parentKey: string }) {
+    if (!parentKey) return null
+    return (
+        <Text
+            testID="cards-parent-chip"
+            className="text-[10.5px] font-medium text-muted"
+            numberOfLines={1}
+        >
+            ↳ {parentKey}
+        </Text>
     )
 }
 
@@ -385,6 +419,7 @@ function CardMeta({ card }: { card: BoardCardView }) {
         card.due ||
         card.start ||
         card.checklistTotal > 0 ||
+        card.subtaskTotal > 0 ||
         card.commentCount > 0 ||
         card.attachmentCount > 0 ||
         card.estimate !== undefined
@@ -396,6 +431,7 @@ function CardMeta({ card }: { card: BoardCardView }) {
         <View className="flex-row items-center gap-2.5 min-h-[20px]">
             <SchedulePill start={card.start} due={card.due} dueHasTime={card.dueHasTime} />
             <ChecklistPill done={card.checklistDone} total={card.checklistTotal} />
+            <SubtasksPill done={card.subtaskDone} total={card.subtaskTotal} />
             <CommentsPill count={card.commentCount} />
             <AttachmentsPill count={card.attachmentCount} />
             <EstimatePill estimate={card.estimate} />
@@ -501,6 +537,38 @@ function ChecklistPill({ done, total }: { done: number; total: number }) {
     return (
         <View className="flex-row items-center gap-1">
             <SquareCheck size={12} color={color} strokeWidth={2.2} />
+            <Text
+                className={`text-[11px] font-medium ${isComplete ? 'text-success' : 'text-muted'}`}
+            >
+                {done}/{total}
+            </Text>
+        </View>
+    )
+}
+
+/**
+ * The sub-task rollup — "2/5".
+ *
+ * Reads the denormalized counters for the reason ChecklistPill does, with one
+ * difference worth knowing: the children here ARE cards, and cards sync
+ * eagerly, so this one could be counted from the loaded board. It is not,
+ * because a card face also renders where the board's card set is absent — My
+ * cards, search results — and a badge that appears on one surface and not
+ * another reads as a bug. server/card_parent.go keeps them current.
+ *
+ * "Done" is the child's LIST category, not a flag, so this agrees with the
+ * list header glyph a reader is looking at.
+ */
+function SubtasksPill({ done, total }: { done: number; total: number }) {
+    const mutedColor = useThemeColor('muted')
+    const successColor = useThemeColor('success')
+    if (total === 0) return null
+
+    const isComplete = subtasksComplete({ subtaskTotal: total, subtaskDone: done })
+    const color = isComplete ? successColor : mutedColor
+    return (
+        <View className="flex-row items-center gap-1" testID="cards-subtask-pill">
+            <ListTree size={12} color={color} strokeWidth={2.2} />
             <Text
                 className={`text-[11px] font-medium ${isComplete ? 'text-success' : 'text-muted'}`}
             >

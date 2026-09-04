@@ -45,6 +45,13 @@ export interface ActivityContext {
     lists: { id: string; name: string }[]
     labels: BoardLabel[]
     members: BoardMember[]
+    /**
+     * The board's cards, for resolving a `parent` row's raw id to a key.
+     *
+     * Only id and key are needed, so this takes the narrowest shape that will
+     * do — the same reason `lists` is `{ id, name }` rather than BoardListView.
+     */
+    cards: { id: string; key: string; title: string }[]
 }
 
 export interface ActivityDescription {
@@ -61,6 +68,14 @@ export interface ActivityDescription {
 export function describeActivity(item: BoardActivity, ctx: ActivityContext): ActivityDescription {
     const listName = (id: string) => ctx.lists.find(list => list.id === id)?.name ?? 'a list'
     const labelName = (id: string) => ctx.labels.find(label => label.id === id)?.name ?? 'a label'
+    // Prefers the key ("OTTER-4") and falls back to the title, because a board
+    // with no slug has no keys at all — and to a generic noun when the card is
+    // gone, which un-parenting by DELETING the parent makes an ordinary case.
+    const cardName = (id: string) => {
+        const card = ctx.cards.find(entry => entry.id === id)
+        if (!card) return 'another card'
+        return card.key || card.title || 'another card'
+    }
     const memberName = (id: string) => {
         const member = ctx.members.find(m => m.id === id)
         return member ? `${member.firstName} ${member.lastName}`.trim() : 'someone'
@@ -128,6 +143,11 @@ export function describeActivity(item: BoardActivity, ctx: ActivityContext): Act
             break
         case 'estimate':
             text = item.to ? `set the estimate to ${estimateText(item.to)}` : 'cleared the estimate'
+            break
+        case 'parent':
+            text = item.to
+                ? `made this a sub-task of ${cardName(item.to)}`
+                : `removed this from ${cardName(item.from)}`
             break
         case 'archived':
             text = 'archived this card'

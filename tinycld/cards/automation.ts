@@ -174,6 +174,24 @@ const automation = {
             ],
         },
         {
+            // Fires in both directions — a card that becomes a sub-task and
+            // one that stops being one — because "it left my epic" is as
+            // worth a rule as "it joined it". A condition on `parent` being
+            // empty separates them in the builder.
+            id: 'card-parented',
+            label: "A card's parent changes",
+            collection: 'cards_cards',
+            on: 'update',
+            watch: ['parent'],
+            fields: [
+                'title',
+                { key: 'parent', label: 'Parent card' },
+                { key: 'list', label: 'List' },
+                { key: 'project', label: 'Board' },
+                { key: 'assignees', label: 'Assignees' },
+            ],
+        },
+        {
             id: 'comment-reacted',
             label: 'Someone reacts to a comment',
             collection: 'cards_comment_reactions',
@@ -236,6 +254,25 @@ const automation = {
                 set: { estimate: { param: 'estimate' } },
             },
             params: [{ key: 'estimate', field: 'estimate', label: 'Estimate (points, 0 clears)' }],
+        },
+        {
+            // A record-op like move-card: `parent` is a single relation, so a
+            // `set` replaces nothing the user wanted kept. Naming the real
+            // column gives the builder a card picker.
+            //
+            // The engine saves as a superuser and so bypasses the same-board
+            // rule; parentAuthorizer in server/automation.go is what refuses a
+            // parent on another board, or one that is itself a sub-task.
+            id: 'set-parent',
+            label: 'Make the card a sub-task',
+            kind: 'record-op',
+            collection: 'cards_cards',
+            op: {
+                type: 'update',
+                target: 'trigger-record',
+                set: { parent: { param: 'parent' } },
+            },
+            params: [{ key: 'parent', field: 'parent', label: 'Parent card' }],
         },
         {
             // Native, not a record-op: `assignees` is a multi-value relation
