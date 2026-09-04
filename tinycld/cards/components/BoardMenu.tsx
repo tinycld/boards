@@ -7,6 +7,7 @@ import { Modal, ModalBackdrop, ModalContent } from '@tinycld/core/ui/modal'
 import {
     Archive,
     ArchiveRestore,
+    Layers,
     MoreHorizontal,
     Palette,
     Pencil,
@@ -23,6 +24,7 @@ import {
 import type { BoardProject } from '../types'
 import { BoardSettingsDialog } from './BoardSettingsDialog'
 import { DeleteBoardDialog } from './DeleteBoardDialog'
+import { EpicManagerDialog } from './EpicManagerDialog'
 
 interface BoardMenuProps {
     project: BoardProject
@@ -42,6 +44,7 @@ interface BoardMenuProps {
 export function BoardMenu({ project, cardCount, isArchived, onRename }: BoardMenuProps) {
     const [isPickingColor, setIsPickingColor] = useState(false)
     const [isEditingSettings, setIsEditingSettings] = useState(false)
+    const [isManagingEpics, setIsManagingEpics] = useState(false)
     const [isConfirmingArchive, setIsConfirmingArchive] = useState(false)
     const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
     const mutedColor = useThemeColor('muted')
@@ -70,6 +73,12 @@ export function BoardMenu({ project, cardCount, isArchived, onRename }: BoardMen
                             icon={Palette}
                             colorDot={project.color}
                             onPress={() => setIsPickingColor(true)}
+                        />
+                        <MenuActionItem
+                            label="Epics…"
+                            icon={Layers}
+                            testID="cards-manage-epics"
+                            onPress={() => setIsManagingEpics(true)}
                         />
                         <MenuActionItem
                             label="Board settings…"
@@ -118,6 +127,13 @@ export function BoardMenu({ project, cardCount, isArchived, onRename }: BoardMen
                     </View>
                 </ModalContent>
             </Modal>
+
+            <EpicManagerDialog
+                isVisible={isManagingEpics}
+                onClose={() => setIsManagingEpics(false)}
+                projectId={project.id}
+                epics={project.epics}
+            />
 
             <BoardSettingsDialog
                 project={project}

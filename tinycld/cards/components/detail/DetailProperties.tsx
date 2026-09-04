@@ -1,7 +1,7 @@
 import { LabelBadge } from '@tinycld/core/components/LabelBadge'
 import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
-import { CalendarDays, Clock, Gauge } from 'lucide-react-native'
+import { CalendarDays, Clock, Gauge, Layers } from 'lucide-react-native'
 import { forwardRef, type ReactNode } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useToggleCardRelation, useUpdateCard } from '../../hooks/useCardMutations'
@@ -9,10 +9,11 @@ import { dueStateFor, formatDueDate } from '../../lib/due-state'
 import { formatSchedule } from '../../lib/due-time'
 import { formatEstimate } from '../../lib/estimate'
 import { type CardPriority, priorityLabel } from '../../lib/priority'
-import type { BoardCardView, BoardLabel, BoardMember } from '../../types'
+import type { BoardCardView, BoardEpic, BoardLabel, BoardMember } from '../../types'
 import { PriorityGlyph } from '../PriorityGlyph'
 import { AssigneePicker } from './AssigneePicker'
 import { DuePicker } from './DuePicker'
+import { EpicPicker } from './EpicPicker'
 import { EstimatePicker } from './EstimatePicker'
 import { LabelPicker } from './LabelPicker'
 import { PriorityPicker } from './PriorityPicker'
@@ -22,6 +23,8 @@ interface DetailPropertiesProps {
     card: BoardCardView
     /** The board's labels — the picker offers these, not the card's own. */
     projectLabels: BoardLabel[]
+    /** The board's epics — the picker offers these, not the card's own. */
+    projectEpics: BoardEpic[]
     /** The board's roster, so a card is only assignable to someone who can open it. */
     projectMembers: BoardMember[]
     onManageLabels: () => void
@@ -32,6 +35,7 @@ interface DetailPropertiesProps {
 export function DetailProperties({
     card,
     projectLabels,
+    projectEpics,
     projectMembers,
     onManageLabels,
     canEdit,
@@ -57,6 +61,18 @@ export function DetailProperties({
                 </PropertyRow>
                 <PropertyRow name="Labels">
                     <LabelsValue card={card} />
+                </PropertyRow>
+                <PropertyRow name="Epic">
+                    <EpicValue epic={card.epic} />
+                </PropertyRow>
+                <PropertyRow name="Epic">
+                    <EpicPicker
+                        epics={projectEpics}
+                        selectedId={card.epic?.id ?? ''}
+                        onSelect={epic => updateCard.mutate({ cardId: card.id, epic })}
+                    >
+                        <EpicValue epic={card.epic} />
+                    </EpicPicker>
                 </PropertyRow>
                 <PropertyRow name="Start">
                     <StartValue start={card.start} />
@@ -104,6 +120,15 @@ export function DetailProperties({
                     <LabelsValue card={card} />
                 </LabelPicker>
             </PropertyRow>
+            <PropertyRow name="Epic">
+                <EpicPicker
+                    epics={projectEpics}
+                    selectedId={card.epic?.id ?? ''}
+                    onSelect={epic => updateCard.mutate({ cardId: card.id, epic })}
+                >
+                    <EpicValue epic={card.epic} />
+                </EpicPicker>
+            </PropertyRow>
             <PropertyRow name="Start">
                 <DuePicker
                     value={card.start}
@@ -149,6 +174,43 @@ export function DetailProperties({
 }
 
 /** The estimate chip, and the EstimatePicker's trigger — the PriorityValue shape. */
+const EpicValue = forwardRef<View, { epic: BoardEpic | null; onPress?: () => void }>(
+    function EpicValue({ epic, onPress }, ref) {
+        const mutedColor = useThemeColor('muted')
+        if (!epic) {
+            if (!onPress) return <EmptyValue />
+            return <GhostChip ref={ref} label="Add to epic" onPress={onPress} />
+        }
+
+        const chipContent = (
+            <>
+                <Layers size={12} color={epic.color || mutedColor} strokeWidth={2.2} />
+                <Text className="text-[12.5px] font-medium text-foreground">{epic.title}</Text>
+            </>
+        )
+
+        if (!onPress) {
+            return (
+                <View className="flex-row items-center gap-[5px] rounded-md px-2 py-[3px] bg-foreground/[0.06]">
+                    {chipContent}
+                </View>
+            )
+        }
+
+        return (
+            <Pressable
+                ref={ref}
+                accessibilityRole="button"
+                accessibilityLabel={`Epic ${epic.title}. Change epic`}
+                onPress={onPress}
+                className="flex-row items-center gap-[5px] rounded-md px-2 py-[3px] bg-foreground/[0.06] web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+            >
+                {chipContent}
+            </Pressable>
+        )
+    }
+)
+
 const EstimateValue = forwardRef<View, { estimate?: number; onPress?: () => void }>(
     function EstimateValue({ estimate, onPress }, ref) {
         const mutedColor = useThemeColor('muted')

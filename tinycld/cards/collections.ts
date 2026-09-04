@@ -48,6 +48,14 @@ export function registerCollections(
         collectionOptions: indexed,
     })
 
+    // Eager like cards_labels, and for the same reason: an epic chip renders on
+    // the card face, so every card on screen needs its epic's name and color
+    // resolvable without a per-card fetch. A board holds a handful of epics.
+    const cards_epics = newCollection('cards_epics', {
+        omitOnInsert: ['created', 'updated'] as const,
+        collectionOptions: indexed,
+    })
+
     const cards_lists = newCollection('cards_lists', {
         omitOnInsert: ['created', 'updated'] as const,
         collectionOptions: indexed,
@@ -162,6 +170,7 @@ export function registerCollections(
         cards_project_members,
         cards_share_links,
         cards_labels,
+        cards_epics,
         cards_lists,
         cards_cards,
         cards_checklist_items,

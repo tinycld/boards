@@ -47,11 +47,23 @@ type moveCardRequest struct {
 	// looking at, or a family they built quietly comes apart. The client asks,
 	// and a card with no family needs no answer at all (see familyChoice).
 	Family string `json:"family"`
+	// What to do with the card's epic, when it has one: "move" recreates the
+	// epic on the target board by name and files the card under it, "unlink"
+	// leaves the card unfiled.
+	//
+	// Asks rather than defaulting, for the reason `family` does: both answers
+	// lose something the user cannot see from the move dialog — either the
+	// card drops out of a plan they were tracking, or the target board gains
+	// an epic they did not make. A card with no epic needs no answer (see
+	// epicChoice).
+	Epic string `json:"epic"`
 }
 
 const (
 	familyMove   = "move"
 	familyUnlink = "unlink"
+	epicMove     = "move"
+	epicUnlink   = "unlink"
 )
 
 type moveCardResponse struct {
@@ -63,6 +75,12 @@ type moveCardResponse struct {
 	MovedChildren    int  `json:"moved_children"`
 	OrphanedChildren int  `json:"orphaned_children"`
 	ClearedParent    bool `json:"cleared_parent"`
+	// How the epic was handled. `MovedEpic` names the epic on the TARGET board
+	// when one was matched or created, so the client can say which plan the
+	// card landed in rather than guessing from what it asked for.
+	MovedEpic   string `json:"moved_epic"`
+	ClearedEpic bool   `json:"cleared_epic"`
+	CreatedEpic bool   `json:"created_epic"`
 }
 
 // boardRealtime is what registerRealtime hands the endpoint: enough to flush
@@ -207,6 +225,15 @@ func handleMoveCard(app core.App, rt *boardRealtime, re *core.RequestEvent) erro
 			`this card is part of a sub-task family; family must be "move" or "unlink"`, nil)
 	}
 
+	// The epic, asked the same way and for the same reason. An epic id is
+	// board-scoped (the same-board pin, 1980000017), so it cannot survive the
+	// move as-is — the only question is whether the plan comes along.
+	sourceEpic := card.GetString("epic")
+	if sourceEpic != "" && body.Epic != epicMove && body.Epic != epicUnlink {
+		return re.BadRequestError(
+			`this card is filed under an epic; epic must be "move" or "unlink"`, nil)
+	}
+
 	// The description is current only once the source room has flushed.
 	if rt != nil && rt.flushNow != nil {
 		if err := rt.flushNow(source); err != nil {
@@ -238,13 +265,33 @@ func handleMoveCard(app core.App, rt *boardRealtime, re *core.RequestEvent) erro
 		orphanedChildren = len(children)
 	}
 
+	movedEpic, createdEpic := "", false
+	clearedEpic := sourceEpic != "" && body.Epic == epicUnlink
+
 	err = app.RunInTransaction(func(tx core.App) error {
+		// Inside the transaction: "move" can CREATE an epic on the target
+		// board, and a create that survived a failed move would leave an empty
+		// epic behind on a board nobody asked to change.
+		targetEpic, created, epicErr := resolveTargetEpic(tx, sourceEpic, body.ProjectID, body.Epic)
+		if epicErr != nil {
+			return epicErr
+		}
+		movedEpic, createdEpic = targetEpic, created
+
 		card.Set("project", body.ProjectID)
 		card.Set("list", body.ListID)
 		card.Set("position", body.Position)
 		card.Set("labels", kept)
 		card.Set("assignees", assignees)
 		card.Set("reporter", reporter)
+		// The epic is repointed at the target board's equivalent, or cleared.
+		// Either way the stored id changes, because an epic id is board-scoped
+		// and the same-board pin admits no cross-board epic. History records it
+		// like any other re-filing.
+		if sourceEpic != "" {
+			card.Set("epic", targetEpic)
+			writeActivity(tx, card, re.Auth.Id, "epic", sourceEpic, targetEpic)
+		}
 		// The card's own parent stays behind whatever the answer: the
 		// same-board pin admits no cross-board parent, so there is nothing to
 		// carry it to. Recorded in history like any other un-parenting.
@@ -307,6 +354,9 @@ func handleMoveCard(app core.App, rt *boardRealtime, re *core.RequestEvent) erro
 		MovedChildren:    movedChildren,
 		OrphanedChildren: orphanedChildren,
 		ClearedParent:    clearedParent,
+		MovedEpic:        movedEpic,
+		ClearedEpic:      clearedEpic,
+		CreatedEpic:      createdEpic,
 	})
 }
 
@@ -338,6 +388,66 @@ func remapLabels(app core.App, labelIDs []string, targetProject string) (kept []
 		}
 	}
 	return kept, droppedNames
+}
+
+// resolveTargetEpic settles which epic on the TARGET board the moved card
+// should be filed under, creating one if the answer was "move" and the target
+// has no epic by that name.
+//
+// Matched by NAME, case- and space-insensitively, exactly as remapLabels does
+// — and for the same reason: an epic id is board-scoped, so the id itself
+// cannot cross, and a name is the only thing the two boards share. Where this
+// DIVERGES from remapLabels is the miss: a label with no counterpart is
+// dropped, because a label is a tag and losing one is visible and cheap. An
+// epic is a plan the card belongs to, and silently unfiling it is the outcome
+// the "move" answer exists to avoid — so a miss creates the epic instead.
+//
+// The created epic carries the source epic's title and color and nothing else:
+// not its description (which may name work that did not come along) and not
+// its points, which the rollup recomputes from the cards actually filed under
+// it.
+//
+// Returns ("", false, nil) when there is nothing to do — no source epic, or
+// the answer was "unlink".
+func resolveTargetEpic(
+	app core.App, sourceEpicID, targetProject, answer string,
+) (epicID string, created bool, err error) {
+	if sourceEpicID == "" || answer != epicMove {
+		return "", false, nil
+	}
+	source, err := app.FindRecordById("cards_epics", sourceEpicID)
+	if err != nil {
+		// A dangling epic id — the row was deleted, which orphans rather than
+		// cascades. Nothing to carry, and not an error.
+		return "", false, nil
+	}
+	title := source.GetString("title")
+	key := strings.ToLower(strings.TrimSpace(title))
+
+	existing, err := app.FindRecordsByFilter(
+		"cards_epics", "project = {:p}", "", 0, 0, dbx.Params{"p": targetProject})
+	if err != nil {
+		return "", false, err
+	}
+	for _, candidate := range existing {
+		if strings.ToLower(strings.TrimSpace(candidate.GetString("title"))) == key {
+			return candidate.Id, false, nil
+		}
+	}
+
+	col, err := app.FindCollectionByNameOrId("cards_epics")
+	if err != nil {
+		return "", false, err
+	}
+	made := core.NewRecord(col)
+	made.Set("project", targetProject)
+	made.Set("title", title)
+	made.Set("color", source.GetString("color"))
+	made.Set("position", source.GetString("position"))
+	if err := app.Save(made); err != nil {
+		return "", false, err
+	}
+	return made.Id, true, nil
 }
 
 // membersOnly keeps the ids that hold a membership on the project.

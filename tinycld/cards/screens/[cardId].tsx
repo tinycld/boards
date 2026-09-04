@@ -178,6 +178,7 @@ function CardPage({ project, entry, cardId, navigateBack }: CardPageProps) {
                 variant="page"
                 projectId={project.id}
                 projectLabels={project.labels}
+                projectEpics={project.epics}
                 projectMembers={project.members}
                 projectLists={project.lists}
                 projectCards={boardCards}

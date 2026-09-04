@@ -148,9 +148,26 @@ jobs:
         run: |
           go mod download
           go build ./...
+      # -timeout, explicitly, because Go's 10-minute DEFAULT is now the
+      # binding constraint rather than any test being slow: this suite is 432
+      # tests that each build a TestApp and replay every migration (~1s of
+      # fixed setup apiece), and it measured 9m40s on main — 20 seconds inside
+      # the default — before the epics migration made it 19 migrations.
+      #
+      # This is a BUDGET matched to the suite's real size, not a workaround for
+      # a hang. The distinction matters and was checked: the timeout panic
+      # caught a test at (0s), freshly started, and the suite passes locally.
+      #
+      # The actual fix is to stop paying that setup 432 times. Two routes were
+      # tried and rejected for now: a larger runner (the org has none — the job
+      # sat unclaimed waiting for ubuntu-latest-4-cores) and t.Parallel() (the
+      # PocketBase test harness is not parallel-safe; the tests panic with an
+      # index-out-of-range immediately). What is left is sharing one migrated
+      # database across tests, which belongs in core's rlstest and in its own
+      # change rather than in a feature PR.
       - name: Go test (access rules)
         working-directory: ws/${{ env.PACKAGE }}/server
-        run: go test ./...
+        run: go test -timeout 25m ./...
 
   e2e:
     name: E2E

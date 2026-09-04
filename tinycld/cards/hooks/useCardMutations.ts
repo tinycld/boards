@@ -62,6 +62,11 @@ export interface UpdateCardInput {
      * id to set, '' to clear, absent to leave alone.
      */
     parent?: string
+    /**
+     * The epic, or '' to unfile. Same convention. Always an epic on the SAME
+     * board — the pin in 1980000017 refuses anything else.
+     */
+    epic?: string
 }
 
 /**
@@ -129,6 +134,9 @@ export function useCreateCard(projectId: string) {
                 attachment_count: 0,
                 subtask_total: 0,
                 subtask_done: 0,
+                // A new card is unfiled; an epic is chosen from the detail row
+                // afterwards, the way a parent is.
+                epic: '',
             })
 
             return cardId
@@ -191,6 +199,9 @@ export function useDuplicateCard(projectId: string) {
                 attachment_count: 0,
                 subtask_total: 0,
                 subtask_done: 0,
+                // A copy stays in the same plan — the epic is on the same
+                // board, so the id carries over as-is.
+                epic: card.epic?.id ?? '',
             })
 
             const items = itemsCollection.toArray
@@ -240,6 +251,7 @@ export function useUpdateCard() {
                 if (input.priority !== undefined) draft.priority = input.priority
                 if (input.estimate !== undefined) draft.estimate = input.estimate
                 if (input.parent !== undefined) draft.parent = input.parent
+                if (input.epic !== undefined) draft.epic = input.epic
             })
         }),
     })

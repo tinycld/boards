@@ -22,7 +22,7 @@ var allCardsCollections = []string{
 	"cards_projects", "cards_project_members", "cards_share_links",
 	"cards_labels", "cards_lists", "cards_cards",
 	"cards_checklist_items", "cards_comments", "cards_attachments",
-	"cards_card_links",
+	"cards_card_links", "cards_epics",
 }
 
 var allRuleKinds = []string{"list", "view", "create", "update", "delete"}
@@ -117,7 +117,7 @@ func TestCardsShippedRules_EveryUpdateRuleIsPinned(t *testing.T) {
 	for _, collection := range []string{
 		"cards_project_members", "cards_share_links", "cards_labels",
 		"cards_lists", "cards_cards", "cards_checklist_items",
-		"cards_comments", "cards_attachments",
+		"cards_comments", "cards_attachments", "cards_epics",
 	} {
 		t.Run(collection+".update pinProject", func(t *testing.T) {
 			rlstest.RequireRuleContains(t, env.app, collection, "update", pinProject)
@@ -343,6 +343,12 @@ func TestCardsShippedRules_ShareTokenIsAbsentEverywhereElse(t *testing.T) {
 		// prevent is covered behaviourally in share_token_rls_test.go
 		// (TestShareToken_DoesNotReachLinksBetweenOtherBoards).
 		"cards_card_links": true,
+		// A public board renders the epic chip on its cards, so a visitor must
+		// be able to resolve the epic's name. The cards_labels case exactly —
+		// a board-scoped grouping row whose whole content is already visible
+		// on the cards it groups. One project, one disjunct, unlike the links
+		// row above.
+		"cards_epics": true,
 	}
 
 	for _, collection := range allCardsCollections {

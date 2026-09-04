@@ -7,6 +7,7 @@ import {
     isFilterActive,
     ME,
     matchesKeyword,
+    NO_EPIC,
     UNASSIGNED,
 } from '../tinycld/cards/lib/board-filter'
 import type { BoardCardView, BoardMember } from '../tinycld/cards/types'
@@ -69,6 +70,49 @@ describe('labels', () => {
         expect(cardMatchesFilter(card({ labels: [bug] }), filter({ labelIds: ['l2'] }), ctx)).toBe(
             false
         )
+    })
+})
+
+describe('epics', () => {
+    const auth = {
+        id: 'e1',
+        title: 'Auth',
+        color: '#f00',
+        position: 'a0',
+        archived: false,
+        pointsTotal: 5,
+        pointsDone: 0,
+    }
+    const billing = { ...auth, id: 'e2', title: 'Billing', position: 'a1' }
+
+    it('passes a card filed under ANY selected epic', () => {
+        const f = filter({ epicIds: ['e1', 'e2'] })
+        expect(cardMatchesFilter(card({ epic: billing }), f, ctx)).toBe(true)
+        expect(cardMatchesFilter(card({ epic: null }), f, ctx)).toBe(false)
+        expect(cardMatchesFilter(card({ epic: auth }), filter({ epicIds: ['e2'] }), ctx)).toBe(
+            false
+        )
+    })
+
+    // An orphaned card — its epic was deleted, which orphans rather than
+    // cascades — resolves to null and so reads as unfiled, matching what the
+    // card face shows.
+    it('matches an unfiled card on NO_EPIC', () => {
+        const f = filter({ epicIds: [NO_EPIC] })
+        expect(cardMatchesFilter(card({ epic: null }), f, ctx)).toBe(true)
+        expect(cardMatchesFilter(card({ epic: auth }), f, ctx)).toBe(false)
+    })
+
+    it('ORs a named epic with the unfiled facet', () => {
+        const f = filter({ epicIds: ['e1', NO_EPIC] })
+        expect(cardMatchesFilter(card({ epic: auth }), f, ctx)).toBe(true)
+        expect(cardMatchesFilter(card({ epic: null }), f, ctx)).toBe(true)
+        expect(cardMatchesFilter(card({ epic: billing }), f, ctx)).toBe(false)
+    })
+
+    it('counts as one active facet', () => {
+        expect(activeFacetCount(filter({ epicIds: ['e1', 'e2'] }))).toBe(1)
+        expect(isFilterActive(filter({ epicIds: [NO_EPIC] }))).toBe(true)
     })
 })
 

@@ -52,6 +52,11 @@ export interface ActivityContext {
      * do — the same reason `lists` is `{ id, name }` rather than BoardListView.
      */
     cards: { id: string; key: string; title: string }[]
+    /**
+     * The board's epics, for resolving an `epic` row's raw id to a title.
+     * Narrowest shape that will do, as `lists` is.
+     */
+    epics: { id: string; title: string }[]
 }
 
 export interface ActivityDescription {
@@ -86,6 +91,11 @@ export function describeActivity(item: BoardActivity, ctx: ActivityContext): Act
         if (!card) return 'another card'
         return card.key || card.title || 'another card'
     }
+    // Falls back to a generic noun for the same reason cardName does: an epic
+    // that has been deleted leaves its id behind on the history row, which
+    // orphaning (rather than cascading) makes an ordinary case.
+    const epicName = (id: string) => ctx.epics.find(epic => epic.id === id)?.title ?? 'an epic'
+
     const memberName = (id: string) => {
         const member = ctx.members.find(m => m.id === id)
         return member ? `${member.firstName} ${member.lastName}`.trim() : 'someone'
@@ -158,6 +168,14 @@ export function describeActivity(item: BoardActivity, ctx: ActivityContext): Act
             text = item.to
                 ? `made this a sub-task of ${cardName(item.to)}`
                 : `removed this from ${cardName(item.from)}`
+            break
+        // One kind for both directions, as `parent` is: `to` empty is an
+        // un-filing, `from` empty a first filing. A cross-board move writes
+        // both halves, so neither is empty there.
+        case 'epic':
+            text = item.to
+                ? `filed this under ${epicName(item.to)}`
+                : `removed this from ${epicName(item.from)}`
             break
         // `from` carries the link type and `to` the OTHER card — see
         // server/card_links.go, which writes one row on each end.

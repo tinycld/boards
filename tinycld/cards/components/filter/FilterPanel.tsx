@@ -10,6 +10,7 @@ import {
     type EstimateFilter,
     isFilterActive,
     ME,
+    NO_EPIC,
     UNASSIGNED,
 } from '../../lib/board-filter'
 import { categoryLabel, LIST_CATEGORIES, type ListCategory } from '../../lib/list-category'
@@ -45,7 +46,7 @@ const DUE_OPTIONS: { value: DueFilter; label: string }[] = [
  * need reopening for every label. The host decides what wraps this.
  */
 export function FilterPanel({ project, filter, onChange, onClear }: FilterPanelProps) {
-    const toggleIn = (key: 'labelIds' | 'assigneeIds' | 'reporterIds', id: string) => {
+    const toggleIn = (key: 'labelIds' | 'epicIds' | 'assigneeIds' | 'reporterIds', id: string) => {
         const current = filter[key]
         onChange({
             [key]: current.includes(id) ? current.filter(x => x !== id) : [...current, id],
@@ -118,6 +119,26 @@ export function FilterPanel({ project, filter, onChange, onClear }: FilterPanelP
                             onPress={() => toggleIn('labelIds', label.id)}
                         />
                     ))}
+                </Section>
+                {/* Archived epics are offered: a filter is for FINDING work,
+                    and cards filed under a closed epic are exactly what someone
+                    looks for when they ask what is left in it. The picker hides
+                    them for the opposite reason — it files NEW work. */}
+                <Section title="Epics" isVisible={project.epics.length > 0}>
+                    {project.epics.map(epic => (
+                        <OptionRow
+                            key={epic.id}
+                            label={epic.title}
+                            isSelected={filter.epicIds.includes(epic.id)}
+                            leading={<ColorDot color={epic.color} />}
+                            onPress={() => toggleIn('epicIds', epic.id)}
+                        />
+                    ))}
+                    <OptionRow
+                        label="No epic"
+                        isSelected={filter.epicIds.includes(NO_EPIC)}
+                        onPress={() => toggleIn('epicIds', NO_EPIC)}
+                    />
                 </Section>
                 <Section title="Assignees">
                     <OptionRow
