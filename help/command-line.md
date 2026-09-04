@@ -44,6 +44,18 @@ tinycld cards card view OTTER-12            # one card, in full
 include them. `card view` shows the description, checklist and comments that
 the board view leaves out.
 
+## Archiving and deleting a board
+
+```
+tinycld cards board archive "Product launch"            # out of the way, reversibly
+tinycld cards board archive "Product launch" --unset    # bring it back
+tinycld cards board remove "Product launch" --yes       # delete it for good
+```
+
+`remove` deletes every list, card, comment and attachment on the board along
+with its members and share links, and tells you how many before it asks for
+`--yes`. Only a board's owner can archive or remove it.
+
 ## Adding and editing cards
 
 ```
@@ -60,14 +72,33 @@ any other number places it at that position, counting from zero.
 ```
 tinycld cards card edit <card> --title "Write the launch post"
 tinycld cards card edit <card> --due 2026-09-15
+tinycld cards card edit <card> --due "2026-09-15 14:30"
 tinycld cards card edit <card> --clear-due
+tinycld cards card edit <card> --start 2026-09-10
+tinycld cards card edit <card> --clear-start
 tinycld cards card edit <card> --reporter <user id>
 tinycld cards card edit <card> --clear-reporter
+tinycld cards card edit <card> --priority high
+tinycld cards card edit <card> --estimate 5
+tinycld cards card edit <card> --parent OTTER-4
+tinycld cards card edit <card> --clear-parent
 ```
 
 `edit` only changes what you name. Editing the title leaves the description
-alone, so you cannot blank a field by not mentioning it. Due dates are whole
-days, written as `YYYY-MM-DD`.
+alone, so you cannot blank a field by not mentioning it. Dates are written as
+`YYYY-MM-DD`; a due date may add a time as `"YYYY-MM-DD HH:MM"`, read in your
+terminal's local time zone. `--start` takes a day only.
+
+`--priority` takes `urgent`, `high`, `medium`, `low` or `none`, on `add` as
+well as `edit`. A new card has no priority; `--priority none` clears one.
+
+`--estimate` takes a whole number of points, on `add` as well as `edit`. A new
+card has no estimate; `--estimate 0` clears one.
+
+`--parent` makes the card a sub-task of another, on `add` as well as `edit`. It
+takes a card id or a key, and the parent must be on the **same board**. Since a
+relation has no "empty" value to write, `--clear-parent` is what stops a card
+being a sub-task. A sub-task cannot have sub-tasks of its own.
 
 A new card reports to you. Pass `--reporter` on `add` or `edit` to point it at
 someone else — useful when a script or a shared account files cards that a real
@@ -84,6 +115,25 @@ tinycld cards card move <card> --list Done --index 0
 
 Moving to another column with no `--index` puts the card at the bottom, which
 is where a dragged card lands when you do not aim at a particular slot.
+
+```
+tinycld cards card move <card> --board "Roadmap"               # to another board's first list
+tinycld cards card move <card> --board "Roadmap" --list Backlog
+tinycld cards card move <card> --board "Roadmap" --family move # bring sub-tasks
+tinycld cards card copy <card>                                 # "Copy of …", same list
+tinycld cards card copy <card> --title "Second attempt"
+```
+
+A move to another board keeps the checklist, comments and attachments,
+matches labels by name (dropping the rest, which the command reports), and
+gives the card a new key. `copy` duplicates a card with its checklist;
+attachments are not copied.
+
+Moving a card that has sub-tasks — or is one — needs `--family`, because a card
+and its parent always live on the same board: `--family move` brings the
+sub-tasks along, `--family unlink` leaves them behind as top-level cards. The
+command refuses rather than guessing, and says what it did. A card that is
+itself a sub-task always stops being one when it moves.
 
 ## Archiving and deleting
 
@@ -104,12 +154,15 @@ tinycld cards list show --board "Product launch"
 tinycld cards list add Blocked --board "Product launch"
 tinycld cards list rename "To do" Backlog --board "Product launch"
 tinycld cards list move Blocked 1 --board "Product launch"
+tinycld cards list category Blocked in_progress --board "Product launch"
 tinycld cards list done Shipped --board "Product launch"
 ```
 
 `list move` takes the position the column should end up in, counting from zero.
-`list done` marks a column as the one that means finished — cards there show as
-complete. Add `--unset` to clear it.
+`list category` sets what a column means: `backlog`, `todo`, `in_progress`,
+`done` or `canceled`. Cards in a done or canceled column show as finished and
+get no reminders. `list done` is shorthand for `category done`; add `--unset`
+to make it an ordinary `todo` column again.
 
 Deleting a column **also deletes every card in it**, which cannot be undone:
 

@@ -144,6 +144,30 @@ func TestCardsMatrix_ViewerCannotUpdateCardTitle(t *testing.T) {
 // drag-and-drop board issues constantly. It goes through the same updateRule,
 // and proving it explicitly stops a future "moves are cheap, relax the rule"
 // change from being silent.
+// Restoring goes through the same updateRule as archiving; named so the
+// archived-items panel's Restore button is provably viewer-proof.
+func TestCardsMatrix_ViewerCannotRestoreCard(t *testing.T) {
+	env := setupCardsEnv(t)
+	req{
+		method: http.MethodPatch,
+		url:    "/api/collections/cards_cards/records/" + env.card.Id,
+		token:  env.viewerToken,
+		body:   `{"archived":false}`,
+		want:   http.StatusNotFound,
+	}.run(t, env)
+}
+
+func TestCardsMatrix_ViewerCannotSetPriority(t *testing.T) {
+	env := setupCardsEnv(t)
+	req{
+		method: http.MethodPatch,
+		url:    "/api/collections/cards_cards/records/" + env.card.Id,
+		token:  env.viewerToken,
+		body:   `{"priority":"urgent"}`,
+		want:   http.StatusNotFound,
+	}.run(t, env)
+}
+
 func TestCardsMatrix_ViewerCannotMoveCard(t *testing.T) {
 	env := setupCardsEnv(t)
 	req{
@@ -285,6 +309,34 @@ func TestCardsMatrix_EditorCanUpdateCardTitle(t *testing.T) {
 		body:    `{"title":"renamed-by-editor"}`,
 		want:    http.StatusOK,
 		content: []string{`"title":"renamed-by-editor"`},
+	}.run(t, env)
+}
+
+// Priority goes through the same updateRule as a title edit — the rules are
+// per-row, not per-field — but naming the column in a case means a future
+// field-level rule cannot quietly leave it out.
+func TestCardsMatrix_EditorCanSetPriority(t *testing.T) {
+	env := setupCardsEnv(t)
+	req{
+		method:  http.MethodPatch,
+		url:     "/api/collections/cards_cards/records/" + env.card.Id,
+		token:   env.editorToken,
+		body:    `{"priority":"urgent"}`,
+		want:    http.StatusOK,
+		content: []string{`"priority":"urgent"`},
+	}.run(t, env)
+}
+
+// The select is the schema's whole vocabulary: a value outside it is refused
+// by the validator, which is what lets every client trust the stored value.
+func TestCardsMatrix_EditorPriorityMustBeInTheEnum(t *testing.T) {
+	env := setupCardsEnv(t)
+	req{
+		method: http.MethodPatch,
+		url:    "/api/collections/cards_cards/records/" + env.card.Id,
+		token:  env.editorToken,
+		body:   `{"priority":"blocker"}`,
+		want:   http.StatusBadRequest,
 	}.run(t, env)
 }
 

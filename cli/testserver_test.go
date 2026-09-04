@@ -46,12 +46,16 @@ type fakeCards struct {
 	// Recorded writes, so a test can assert what was SENT rather than only
 	// what came back — a fake that echoes its input proves nothing about the
 	// body the command built.
-	lastCardPatch  map[string]any
-	lastCardCreate map[string]any
-	lastListPatch  map[string]any
-	deletedCards   []string
-	deletedLists   []string
-	patchCount     int
+	lastCardPatch    map[string]any
+	lastCardCreate   map[string]any
+	lastListPatch    map[string]any
+	lastProjectPatch map[string]any
+	lastMoveBody     map[string]any
+	createdChecklist []map[string]any
+	deletedCards     []string
+	deletedLists     []string
+	deletedProjects  []string
+	patchCount       int
 
 	// cardListCount counts LIST reads of cards_cards, so a test can prove the
 	// board view stays one request rather than one per column.
@@ -168,6 +172,41 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 		listResponse(w, out)
 	})
+	mux.HandleFunc("PATCH /api/collections/cards_projects/records/{id}", func(w http.ResponseWriter, r *http.Request) {
+		p, ok := f.projects[r.PathValue("id")]
+		if !ok {
+			notFound(w)
+			return
+		}
+		body := decodeBody(r)
+		f.lastProjectPatch = body
+		if v, ok := body["archived"].(bool); ok {
+			p.Archived = v
+		}
+		json.NewEncoder(w).Encode(p)
+	})
+	mux.HandleFunc("DELETE /api/collections/cards_projects/records/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		if _, ok := f.projects[id]; !ok {
+			notFound(w)
+			return
+		}
+		f.deletedProjects = append(f.deletedProjects, id)
+		delete(f.projects, id)
+		// Every child relates to `project` with cascadeDelete; the fake
+		// mirrors the cascade so a count taken after a delete is honest.
+		for lid, l := range f.lists {
+			if l.Project == id {
+				delete(f.lists, lid)
+			}
+		}
+		for cid, c := range f.cards {
+			if c.Project == id {
+				delete(f.cards, cid)
+			}
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 
 	// --- lists --------------------------------------------------------------
 	mux.HandleFunc("GET /api/collections/cards_lists/records", func(w http.ResponseWriter, r *http.Request) {
@@ -213,7 +252,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 			Project:  str(body["project"]),
 			Name:     str(body["name"]),
 			Position: str(body["position"]),
-			IsDone:   body["is_done"] == true,
+			Category: str(body["category"]),
 		}
 		f.lists[created.ID] = created
 		json.NewEncoder(w).Encode(created)
@@ -233,8 +272,8 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		if v, ok := body["position"].(string); ok {
 			l.Position = v
 		}
-		if v, ok := body["is_done"].(bool); ok {
-			l.IsDone = v
+		if v, ok := body["category"].(string); ok {
+			l.Category = v
 		}
 		json.NewEncoder(w).Encode(l)
 	})
@@ -334,8 +373,11 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 			Title:       str(body["title"]),
 			Description: str(body["description"]),
 			Due:         str(body["due"]),
+			DueHasTime:  body["due_has_time"] == true,
+			Start:       str(body["start"]),
 			CreatedBy:   str(body["created_by"]),
 			Reporter:    str(body["reporter"]),
+			Estimate:    num(body["estimate"]),
 		}
 		f.cards[created.ID] = created
 		json.NewEncoder(w).Encode(created)
@@ -357,6 +399,15 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		}
 		if v, ok := body["due"].(string); ok {
 			c.Due = v
+		}
+		if v, ok := body["due_has_time"].(bool); ok {
+			c.DueHasTime = v
+		}
+		if v, ok := body["start"].(string); ok {
+			c.Start = v
+		}
+		if _, ok := body["estimate"]; ok {
+			c.Estimate = num(body["estimate"])
 		}
 		if v, ok := body["reporter"].(string); ok {
 			c.Reporter = v
@@ -380,6 +431,37 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 	})
 
 	// --- checklist, comments, labels, users ---------------------------------
+	// The cross-board move endpoint (server/endpoints_move_card.go). The fake
+	// repoints the card and echoes it back the way the server does.
+	mux.HandleFunc("POST /api/cards/cards/{id}/move", func(w http.ResponseWriter, r *http.Request) {
+		c, ok := f.cards[r.PathValue("id")]
+		if !ok {
+			notFound(w)
+			return
+		}
+		body := decodeBody(r)
+		f.lastMoveBody = body
+		c.Project = str(body["project_id"])
+		c.List = str(body["list_id"])
+		c.Position = str(body["position"])
+		c.Number = 99
+		json.NewEncoder(w).Encode(map[string]any{
+			"card": c, "previous_key": "", "dropped_labels": []string{},
+		})
+	})
+	mux.HandleFunc("POST /api/collections/cards_checklist_items/records", func(w http.ResponseWriter, r *http.Request) {
+		body := decodeBody(r)
+		f.createdChecklist = append(f.createdChecklist, body)
+		created := &checklistItem{
+			ID:       f.nextID("chk"),
+			Card:     str(body["card"]),
+			Title:    str(body["title"]),
+			IsDone:   body["is_done"] == true,
+			Position: str(body["position"]),
+		}
+		f.checklist[created.ID] = created
+		json.NewEncoder(w).Encode(created)
+	})
 	mux.HandleFunc("GET /api/collections/cards_checklist_items/records", func(w http.ResponseWriter, r *http.Request) {
 		m := reCardEq.FindStringSubmatch(r.URL.Query().Get("filter"))
 		if m == nil {
@@ -505,6 +587,12 @@ func (f *fakeCards) assertGroupedRankSort(r *http.Request) {
 func notFound(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNotFound)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Not found"})
+}
+
+// num reads a JSON number (decoded as float64) as the int the CLI sent.
+func num(v any) int {
+	f, _ := v.(float64)
+	return int(f)
 }
 
 func str(v any) string {

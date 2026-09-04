@@ -1,12 +1,13 @@
 import { DropZone } from '@tinycld/core/components/DropZone'
 import { MARKDOWN_TRAILING_SPACE } from '@tinycld/core/components/help/MarkdownRenderer'
 import { useAuth } from '@tinycld/core/lib/auth'
-import { type RefObject, useRef, useState } from 'react'
+import { type RefObject, useMemo, useRef, useState } from 'react'
 import { ScrollView, Text, View } from 'react-native'
 import { useAttachmentMutations } from '../../hooks/useAttachmentMutations'
 import { useCardDetail } from '../../hooks/useCardDetail'
 import { useUpdateCard } from '../../hooks/useCardMutations'
 import { useCommentMutations } from '../../hooks/useCommentMutations'
+import { useCommentReactions } from '../../hooks/useCommentReactions'
 import { useProjectRole } from '../../hooks/useProjectRole'
 import { type DescriptionMode, descriptionMode } from '../../lib/description-mode'
 import type { BoardAttachment, BoardCardView, BoardLabel, BoardMember } from '../../types'
@@ -23,7 +24,9 @@ import {
 import { DetailActivity } from './DetailActivity'
 import { DetailAttachments, filesToPicked } from './DetailAttachments'
 import { DetailChecklist } from './DetailChecklist'
+import { DetailLinks } from './DetailLinks'
 import { DetailProperties } from './DetailProperties'
+import { DetailSubtasks } from './DetailSubtasks'
 import { EditableText, type EditableTextHandle } from './EditableText'
 import { MarkdownText } from './MarkdownText'
 
@@ -31,7 +34,8 @@ type DetailVariant = 'peek' | 'page'
 
 /**
  * Which ScrollView child the description header is, counting from zero:
- * title, properties, HEADER (label / toolbar), editor, checklist, activity.
+ * title, properties, HEADER (label / toolbar), editor, attachments, checklist,
+ * sub-tasks, activity.
  *
  * Keep in step with the JSX below. React Native pins by index, so a section
  * inserted above it silently pins the wrong thing rather than failing.
@@ -52,6 +56,17 @@ interface CardDetailProps {
     /** The board's labels and roster — what the pickers offer. */
     projectLabels: BoardLabel[]
     projectMembers: BoardMember[]
+    /** The board's lists, so history can name where a card moved. */
+    projectLists: { id: string; name: string }[]
+    /**
+     * The board's cards — what the sub-task section lists and the parent
+     * picker offers, and what lets history name a parent by its key.
+     *
+     * The whole board's cards rather than this card's children: choosing a
+     * parent means choosing among the others, so a pre-filtered list could not
+     * serve both. lib/subtasks.ts does the filtering.
+     */
+    projectCards: BoardCardView[]
     /**
      * Lets the container start a title edit for the `e` shortcut.
      *
@@ -77,13 +92,31 @@ export function CardDetail({
     projectId,
     projectLabels,
     projectMembers,
+    projectLists,
+    projectCards,
     titleRef,
 }: CardDetailProps) {
     const [isManagingLabels, setIsManagingLabels] = useState(false)
     const widthClass = variant === 'page' ? 'w-full max-w-[1200px] self-center' : ''
     // Fetched here rather than threaded in as props, so the peek and the page
     // both get it without either container knowing about on-demand collections.
-    const { checklist, comments, attachments, isReady } = useCardDetail(card.id)
+    const { checklist, comments, attachments, activity, isReady } = useCardDetail(card.id)
+    // The board's cards by id, for resolving a link's far end. Only THIS
+    // board's, which is the point: a cross-board link's far card is absent
+    // here and renders redacted (lib/card-links.ts).
+    const cardsById = useMemo(
+        () => new Map(projectCards.map(entry => [entry.id, entry])),
+        [projectCards]
+    )
+    const activityContext = useMemo(
+        () => ({
+            lists: projectLists,
+            labels: projectLabels,
+            members: projectMembers,
+            cards: projectCards,
+        }),
+        [projectLists, projectLabels, projectMembers, projectCards]
+    )
     // Resolved here for the same reason — both containers share the gates.
     const { canEdit, canComment, isOwner } = useProjectRole(projectId)
     // The card's CHILDREN are not editable until the detail query has SETTLED,
@@ -109,6 +142,8 @@ export function CardDetail({
     const { user } = useAuth({ throwIfAnon: false })
     const { uploadFiles } = useAttachmentMutations(card.id, projectId, user?.id ?? '')
     const { createComment, updateComment, deleteComment } = useCommentMutations(card.id, projectId)
+    // Its own query, not a fifth join in useCardDetail — see the hook.
+    const { reactionsFor, toggleReaction } = useCommentReactions(projectId, card.id)
     // Which comment the composer is replying to. Local because it is transient
     // UI state that dies with the open card, and it lives HERE rather than in
     // the composer because the activity list is what sets it.
@@ -223,11 +258,52 @@ export function CardDetail({
                             canEdit={canEditChildren}
                         />
                     </View>
+                    <View className={`px-6 ${widthClass}`}>
+                        {/* Below TOOLBAR_INDEX, so the sticky header keeps its
+                            position — see the constant's comment. Gated on
+                            `canEdit`, not `canEditChildren`: a sub-task is a
+                            card of its own, so filing one needs card-write, and
+                            it does not wait on the on-demand children query the
+                            way the checklist and comments do. */}
+                        <DetailSubtasks
+                            card={card}
+                            projectCards={projectCards}
+                            projectId={projectId}
+                            canEdit={canEdit}
+                        />
+                    </View>
+                    <View className={`px-6 ${widthClass}`}>
+                        {/* Below TOOLBAR_INDEX, so the sticky header keeps its
+                            position. `cardsById` is this board's cards only:
+                            the far end of a CROSS-BOARD link is deliberately
+                            unresolvable here, which is what the redacted row
+                            renders. */}
+                        <DetailLinks
+                            card={card}
+                            cardsById={cardsById}
+                            // Always true here, by construction rather than by
+                            // luck: the peek renders nothing until it finds the
+                            // open card inside an already-built BoardProject,
+                            // and the full-page screen returns <LoadingState/>
+                            // while its query is in flight. Either way this
+                            // board's cards ARE loaded by the time we render,
+                            // so a far card still missing is genuinely
+                            // unreadable rather than late — the distinction the
+                            // redacted row depends on.
+                            isCardSetReady
+                            pickerCards={projectCards}
+                            canEdit={canEdit}
+                        />
+                    </View>
                     <View className={`px-6 pb-6 ${widthClass}`}>
                         <DetailActivity
                             comments={comments}
+                            activity={activity}
+                            activityContext={activityContext}
                             canComment={canCommentNow}
                             canModerate={isOwner}
+                            reactionsFor={reactionsFor}
+                            onToggleReaction={toggleReaction}
                             cardId={card.id}
                             projectId={projectId}
                             attachments={attachments}

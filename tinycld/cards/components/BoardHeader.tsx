@@ -3,7 +3,7 @@ import { PresenceAvatars } from '@tinycld/core/components/PresenceAvatars'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useCurrentRole } from '@tinycld/core/lib/use-current-role'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
-import { Rows2, Rows3 } from 'lucide-react-native'
+import { Archive, Rows2, Rows3 } from 'lucide-react-native'
 import { useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useUpdateProject } from '../hooks/useProjectMutations'
@@ -12,68 +12,93 @@ import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardProject, CardsMemberRole } from '../types'
 import { BoardMenu } from './BoardMenu'
 import { useBoardPresenceContext } from './BoardPresenceProvider'
+import { FilterBar } from './filter/FilterBar'
+import { FilterPopover } from './filter/FilterPopover'
+import { SortMenu } from './filter/SortMenu'
 import { roleLabel } from './sharing/roles'
 import { ShareDialog } from './sharing/ShareDialog'
+import { ViewToggle } from './table/ViewToggle'
 
 interface BoardHeaderProps {
     project: BoardProject
     cardCount: number
+    isArchived: boolean
 }
 
 function pluralize(count: number, noun: string): string {
     return `${count} ${noun}${count === 1 ? '' : 's'}`
 }
 
-export function BoardHeader({ project, cardCount }: BoardHeaderProps) {
+export function BoardHeader({ project, cardCount, isArchived }: BoardHeaderProps) {
     const [isRenaming, setIsRenaming] = useState(false)
     const [isSharing, setIsSharing] = useState(false)
     const { isOwner, role, isReady, canEdit } = useProjectRole(project.id)
     // The ORG axis: a share-link guest cannot read the roster, so for them the
     // stack stays a plain display instead of opening an empty dialog.
     const { isGuest } = useCurrentRole()
-    const subtitle = `${pluralize(cardCount, 'card')} in ${pluralize(project.lists.length, 'list')}`
+    // "12 of 40 cards" only while a filter hides some: the ordinary subtitle
+    // must not grow a redundant "40 of 40".
+    const shown =
+        cardCount === project.cardTotal
+            ? pluralize(cardCount, 'card')
+            : `${cardCount} of ${pluralize(project.cardTotal, 'card')}`
+    const subtitle = `${shown} in ${pluralize(project.lists.length, 'list')}`
 
     return (
-        <View className="flex-row items-center gap-3 px-5 pt-3.5 pb-2.5">
-            <ProjectTile name={project.name} color={project.color} />
-            <View className="shrink">
-                {isRenaming ? (
-                    // Keyed on the name so each rename mounts a fresh input
-                    // seeded from the current value — see BoardColumn for the
-                    // same pattern and the stale-draft bug it avoids.
-                    <BoardNameInput
-                        key={project.name}
-                        project={project}
-                        onDone={() => setIsRenaming(false)}
-                    />
-                ) : (
-                    <Text className="text-[17px] font-semibold tracking-tight text-foreground">
-                        {project.name}
-                    </Text>
-                )}
-                <Text className="text-[12.5px] text-muted mt-px">{subtitle}</Text>
-            </View>
-            <RoleChip role={role} isVisible={isReady && !canEdit} />
-            <View className="flex-1" />
-            {/* Who is here NOW, distinct from who the board belongs to — hence
+        <>
+            <View className="flex-row items-center gap-3 px-5 pt-3.5 pb-2.5">
+                <ProjectTile name={project.name} color={project.color} />
+                <View className="shrink">
+                    {isRenaming ? (
+                        // Keyed on the name so each rename mounts a fresh input
+                        // seeded from the current value — see BoardColumn for the
+                        // same pattern and the stale-draft bug it avoids.
+                        <BoardNameInput
+                            key={project.name}
+                            project={project}
+                            onDone={() => setIsRenaming(false)}
+                        />
+                    ) : (
+                        <Text className="text-[17px] font-semibold tracking-tight text-foreground">
+                            {project.name}
+                        </Text>
+                    )}
+                    <Text className="text-[12.5px] text-muted mt-px">{subtitle}</Text>
+                </View>
+                <RoleChip role={role} isVisible={isReady && !canEdit} />
+                <View className="flex-1" />
+                {/* Who is here NOW, distinct from who the board belongs to — hence
                 its own stack rather than a state on TeamAvatars. Renders null
                 when nobody else is connected, so a solo board looks unchanged. */}
-            <LivePresence />
-            <TeamAvatars
-                project={project}
-                onPress={isGuest ? undefined : () => setIsSharing(true)}
-            />
-            <DensityToggle />
-            {/* Rename, recolor and archive are all owner-only by rule; hiding
+                <LivePresence />
+                <TeamAvatars
+                    project={project}
+                    onPress={isGuest ? undefined : () => setIsSharing(true)}
+                />
+                <ViewToggle projectId={project.id} />
+                <FilterPopover project={project} />
+                <SortMenu projectId={project.id} />
+                <ArchivedCardsButton />
+                <DensityToggle />
+                {/* Rename, recolor and archive are all owner-only by rule; hiding
                 the menu also removes the only rename entry point, so
                 BoardNameInput needs no gate of its own. */}
-            {isOwner ? <BoardMenu project={project} onRename={() => setIsRenaming(true)} /> : null}
-            <ShareDialog
-                isVisible={isSharing}
-                onClose={() => setIsSharing(false)}
-                project={project}
-            />
-        </View>
+                {isOwner ? (
+                    <BoardMenu
+                        project={project}
+                        cardCount={cardCount}
+                        isArchived={isArchived}
+                        onRename={() => setIsRenaming(true)}
+                    />
+                ) : null}
+                <ShareDialog
+                    isVisible={isSharing}
+                    onClose={() => setIsSharing(false)}
+                    project={project}
+                />
+            </View>
+            <FilterBar project={project} />
+        </>
     )
 }
 
@@ -149,6 +174,29 @@ function DensityToggle() {
             className="w-7 h-7 items-center justify-center rounded-md hover:bg-foreground/10 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
         >
             <Icon size={15} color={mutedColor} strokeWidth={2} />
+        </Pressable>
+    )
+}
+
+/**
+ * Opens the archived-cards panel, for every role — the same reasoning as
+ * DensityToggle: looking at what was archived changes nothing on the server,
+ * and a viewer wondering where a card went is exactly who needs it. Restore
+ * and delete inside the panel are gated on the role there.
+ */
+function ArchivedCardsButton() {
+    const openArchivedPanel = useCardsUIStore(s => s.openArchivedPanel)
+    const mutedColor = useThemeColor('muted')
+
+    return (
+        <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Archived cards"
+            testID="cards-archived-button"
+            onPress={openArchivedPanel}
+            className="w-7 h-7 items-center justify-center rounded-md hover:bg-foreground/10 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+        >
+            <Archive size={15} color={mutedColor} strokeWidth={2} />
         </Pressable>
     )
 }

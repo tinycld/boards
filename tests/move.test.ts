@@ -35,6 +35,15 @@ function afterInsert(cards: Card[], rank: string, id = 'new'): string[] {
 }
 
 describe('rankForAppend', () => {
+    // Under a non-manual sort the column arrives out of rank order; append
+    // must still land after the HIGHEST rank, not after whichever card
+    // happened to render last.
+    it('sorts after every existing card even when the input is unsorted', () => {
+        const cards = column(3)
+        const shuffled = [cards[2], cards[0], cards[1]].filter(c => c !== undefined)
+        expect(afterInsert(cards, rankForAppend(shuffled))).toEqual(['c0', 'c1', 'c2', 'new'])
+    })
+
     it('sorts after every existing card', () => {
         const cards = column(3)
         expect(afterInsert(cards, rankForAppend(cards))).toEqual(['c0', 'c1', 'c2', 'new'])

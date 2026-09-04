@@ -61,3 +61,7 @@ turning into a code. The text still makes sense months later.
 The `@` picker works the same way in the mobile app: type `@`, keep typing to
 narrow the list, and tap a name. The keyboard stays up while you type, so you
 can filter without losing your place.
+
+Mentions are one kind of card notification. For assignments, replies, watched
+cards and due-date reminders — and how to turn any of them off — see
+[Notifications and watching cards](help://cards:notifications).

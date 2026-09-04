@@ -105,17 +105,40 @@ func registerShared(app *pocketbase.PocketBase) {
 	registerAutomation()
 
 	registerBoardCounters(app)
+	// The sub-task rollup is a counter in the sense above — recompute, never
+	// delta, never fail the write — but it recounts the card's PARENT rather
+	// than the card written, and a re-parent recounts two. See card_parent.go.
+	registerCardParentRollup(app)
 	// Unrelated to the counters above despite the adjacency, and the opposite
 	// of them in every invariant: this one is a monotonic sequence, it runs
 	// before the row lands, and it FAILS the write when it cannot allocate.
 	// See card_number.go.
 	registerCardNumbers(app)
+	// Cycle and depth on the sub-task tree — the two things the same-board
+	// rule in 1980000015 cannot express, because a rule sees one row and
+	// cannot walk a chain. Fails the write, like registerCardNumbers.
+	registerCardParentGuard(app)
+	// Self-links and contradictory blocks-both-ways pairs: what the unique
+	// index and the rules cannot say. See card_links.go.
+	registerCardLinkGuard(app)
 	// edited_at on comments is server-owned the same way `number` is: the
 	// hook stamps it when the body actually changes and discards any
 	// client-supplied value when it does not. See comment_edited.go.
 	registerCommentEditedAt(app)
+	registerCardArchivedAt(app)
+	// list_changed_at is server-owned the same way archived_at is; the
+	// auto-archive sweep counts from it. See list_changed_at.go.
+	registerListChangedAt(app)
+	registerActorCapture(app)
+	registerCardActivity(app)
+	// Links write history onto BOTH cards, so this is separate from
+	// registerCardActivity's card-shaped diffs. See card_links.go.
+	registerCardLinkActivity(app)
+	registerAutoWatch(app)
+	registerCardNotifications(app)
+	registerDueNotices(app)
 	registerMemberLastOwnerGuard(app)
-	registerRealtime(app)
+	rt := registerRealtime(app)
 
 	// FTS index-sync record hooks only — deliberately NOT fts.Register, which
 	// would also mount GET /api/cards/search. Cards has no in-app search box,
@@ -128,7 +151,7 @@ func registerShared(app *pocketbase.PocketBase) {
 	// search identically.
 	search.RegisterSources(searchSource())
 
-	registerShareLinkEndpoints(app)
+	registerShareLinkEndpoints(app, rt)
 }
 
 // registerShareLinkEndpoints mounts cards' first HTTP routes (M6a).
@@ -142,9 +165,16 @@ func registerShared(app *pocketbase.PocketBase) {
 //
 // Every route requires auth. A public route here would be one that omits
 // requireAuth; there is no exemptPaths list to add to.
-func registerShareLinkEndpoints(app *pocketbase.PocketBase) {
+func registerShareLinkEndpoints(app *pocketbase.PocketBase, rt *boardRealtime) {
 	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
 		bindShareLinkRoutes(e)
+		bindCardRoutes(e, rt)
+		// A minute ticker for due-date notices; bails out on its own once
+		// the app is torn down (cardsAppIsLive).
+		go startDueNoticeScheduler(app)
+		// A quarter-hour ticker archiving cards that have sat finished for
+		// longer than their board allows. See auto_archive.go.
+		go startAutoArchiveScheduler(app)
 		return e.Next()
 	})
 }

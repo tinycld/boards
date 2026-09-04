@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 )
 
@@ -251,15 +252,20 @@ func TestCardMoveRequiresSomethingToDo(t *testing.T) {
 
 // A card names its own board, so --board is only for resolving a list NAME and
 // must agree. Letting the two disagree is how a command acts on another board.
-func TestCardMoveRefusesAMismatchedBoard(t *testing.T) {
+// A --board naming a different board is a cross-board move (through the
+// server endpoint), and --list then names a column on THAT board.
+func TestCardMoveWithABoardAndListGoesToThatBoardsList(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
 	_, _, err := runCmd(t, c, "cards", "card", "move", "crdCopy", "--board", "Home projects", "--list", "Someday")
-	if err == nil {
-		t.Fatal("moving a card onto another board's list was allowed")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), "not on board") {
-		t.Errorf("error should say the card is not on that board, got %q", err)
+	if got := str(f.lastMoveBody["list_id"]); got != "lstSomeday" {
+		t.Fatalf("list_id = %q, want lstSomeday", got)
+	}
+	if f.lastCardPatch != nil {
+		t.Fatalf("a cross-board move must not PATCH: %v", f.lastCardPatch)
 	}
 }
 
@@ -550,7 +556,7 @@ func TestListShowAndAdd(t *testing.T) {
 	}
 }
 
-func TestListRenameAndDoneFlag(t *testing.T) {
+func TestListRenameAndCategory(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
 
@@ -561,17 +567,32 @@ func TestListRenameAndDoneFlag(t *testing.T) {
 		t.Errorf("name = %q, want Backlog", f.lists["lstTodo"].Name)
 	}
 
+	// `done` is the shorthand for `category done`; --unset returns to todo.
 	if _, _, err := runCmd(t, c, "cards", "list", "done", "Done", "--board", "prjA"); err != nil {
 		t.Fatal(err)
 	}
-	if !f.lists["lstDone"].IsDone {
-		t.Error("is_done was not set")
+	if got := f.lists["lstDone"].Category; got != "done" {
+		t.Errorf("category = %q, want done", got)
 	}
 	if _, _, err := runCmd(t, c, "cards", "list", "done", "Done", "--board", "prjA", "--unset"); err != nil {
 		t.Fatal(err)
 	}
-	if f.lists["lstDone"].IsDone {
-		t.Error("--unset did not clear is_done")
+	if got := f.lists["lstDone"].Category; got != "todo" {
+		t.Errorf("--unset category = %q, want todo", got)
+	}
+
+	// "To do" was renamed to "Backlog" above.
+	if _, _, err := runCmd(t, c, "cards", "list", "category", "Backlog", "in_progress", "--board", "prjA"); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.lists["lstTodo"].Category; got != "in_progress" {
+		t.Errorf("category = %q, want in_progress", got)
+	}
+	if _, _, err := runCmd(t, c, "cards", "list", "category", "Backlog", "blocked", "--board", "prjA"); err == nil {
+		t.Error("expected an error for an unknown category")
+	}
+	if got := f.lists["lstTodo"].Category; got != "in_progress" {
+		t.Errorf("a rejected category must not reach the server: %q", got)
 	}
 }
 
@@ -1111,4 +1132,358 @@ func TestDestructiveCommandsPromptRatherThanDemandYes(t *testing.T) {
 			t.Fatalf("deleted = %v", f.deletedLists)
 		}
 	})
+}
+
+func TestCardAddAndEditPriority(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	// Omitted → "none", written explicitly so the row never carries ''.
+	_, _, err := runCmd(t, c, "cards", "card", "add", "Triage me", "--board", "prjA", "--list", "To do")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := str(f.lastCardCreate["priority"]); got != "none" {
+		t.Fatalf("priority default = %q, want none", got)
+	}
+
+	_, _, err = runCmd(t, c, "cards", "card", "add", "Hot fix", "--board", "prjA", "--list", "To do",
+		"--priority", "urgent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := str(f.lastCardCreate["priority"]); got != "urgent" {
+		t.Fatalf("priority = %q, want urgent", got)
+	}
+
+	_, _, err = runCmd(t, c, "cards", "card", "edit", "crdCopy", "--priority", "low")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := str(f.lastCardPatch["priority"]); got != "low" {
+		t.Fatalf("patched priority = %q, want low", got)
+	}
+	if _, sent := f.lastCardPatch["title"]; sent {
+		t.Fatalf("edit --priority must not touch the title: %v", f.lastCardPatch)
+	}
+}
+
+func TestCardAddAndEditEstimate(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	// Omitted → 0, written explicitly: 0 is the stored form of "no estimate".
+	_, _, err := runCmd(t, c, "cards", "card", "add", "Size me", "--board", "prjA", "--list", "To do")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := num(f.lastCardCreate["estimate"]); got != 0 {
+		t.Fatalf("estimate default = %d, want 0", got)
+	}
+
+	_, _, err = runCmd(t, c, "cards", "card", "add", "Big one", "--board", "prjA", "--list", "To do",
+		"--estimate", "8")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := num(f.lastCardCreate["estimate"]); got != 8 {
+		t.Fatalf("estimate = %d, want 8", got)
+	}
+
+	_, _, err = runCmd(t, c, "cards", "card", "edit", "crdCopy", "--estimate", "3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := num(f.lastCardPatch["estimate"]); got != 3 {
+		t.Fatalf("patched estimate = %d, want 3", got)
+	}
+	if _, sent := f.lastCardPatch["title"]; sent {
+		t.Fatalf("edit --estimate must not touch the title: %v", f.lastCardPatch)
+	}
+
+	// 0 IS the clear, and it must be sent rather than dropped as a zero value.
+	_, _, err = runCmd(t, c, "cards", "card", "edit", "crdCopy", "--estimate", "0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, sent := f.lastCardPatch["estimate"]; !sent || num(v) != 0 {
+		t.Fatalf("--estimate 0 must send 0: %v", f.lastCardPatch)
+	}
+}
+
+func TestCardStartAndTimedDue(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	_, _, err := runCmd(t, c, "cards", "card", "add", "Plan it", "--board", "prjA", "--list", "To do",
+		"--start", "2026-09-03", "--due", "2026-09-10 14:30")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := str(f.lastCardCreate["start"]); got != "2026-09-03 00:00:00.000Z" {
+		t.Fatalf("start = %q, want the stored midnight", got)
+	}
+	if got := f.lastCardCreate["due_has_time"]; got != true {
+		t.Fatalf("due_has_time = %v, want true for a timed --due", got)
+	}
+	// The instant round-trips through the local zone the flag was typed in.
+	at, err := time.Parse(pbDateFormat, str(f.lastCardCreate["due"]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if local := at.Local(); local.Hour() != 14 || local.Minute() != 30 || local.Day() != 10 {
+		t.Fatalf("due = %v, want 2026-09-10 14:30 local", local)
+	}
+
+	// A bare day keeps the flag off.
+	_, _, err = runCmd(t, c, "cards", "card", "edit", "crdCopy", "--due", "2026-09-11")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := f.lastCardPatch["due_has_time"]; got != false {
+		t.Fatalf("day-only --due must clear the flag: %v", f.lastCardPatch)
+	}
+	// Clearing clears both halves.
+	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--clear-due"); err != nil {
+		t.Fatal(err)
+	}
+	if f.lastCardPatch["due"] != "" || f.lastCardPatch["due_has_time"] != false {
+		t.Fatalf("--clear-due must clear the flag too: %v", f.lastCardPatch)
+	}
+	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--clear-start"); err != nil {
+		t.Fatal(err)
+	}
+	if got, sent := f.lastCardPatch["start"]; !sent || got != "" {
+		t.Fatalf("--clear-start must send an empty start: %v", f.lastCardPatch)
+	}
+	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--start", "2026-09-01", "--clear-start"); err == nil {
+		t.Error("--start together with --clear-start was accepted")
+	}
+	if _, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--due", "2026-09-10 25:00"); err == nil {
+		t.Error("a bad time was accepted")
+	}
+}
+
+func TestCardEditRejectsNegativeEstimate(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+	_, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--estimate", "-1")
+	if err == nil {
+		t.Fatal("expected an error for a negative estimate")
+	}
+	if f.lastCardPatch != nil {
+		t.Fatalf("a rejected estimate must not reach the server: %v", f.lastCardPatch)
+	}
+}
+
+func TestCardEditRejectsUnknownPriority(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+	_, _, err := runCmd(t, c, "cards", "card", "edit", "crdCopy", "--priority", "blocker")
+	if err == nil {
+		t.Fatal("expected an error for an unknown priority")
+	}
+	for _, want := range []string{"blocker", "urgent", "none"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q should name %q", err.Error(), want)
+		}
+	}
+	if f.lastCardPatch != nil {
+		t.Fatalf("nothing should have been sent, got %v", f.lastCardPatch)
+	}
+}
+
+func TestBoardArchiveAndRestore(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	if _, _, err := runCmd(t, c, "cards", "board", "archive", "Product launch"); err != nil {
+		t.Fatal(err)
+	}
+	if f.lastProjectPatch["archived"] != true {
+		t.Fatalf("archive sent %v, want archived:true", f.lastProjectPatch)
+	}
+	out, _, err := runCmd(t, c, "cards", "board", "list")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "Product launch") {
+		t.Fatalf("archived board still listed without --all:\n%s", out)
+	}
+
+	if _, _, err := runCmd(t, c, "cards", "board", "archive", "prjA", "--unset"); err != nil {
+		t.Fatal(err)
+	}
+	if f.lastProjectPatch["archived"] != false {
+		t.Fatalf("restore sent %v, want archived:false", f.lastProjectPatch)
+	}
+	out, _, err = runCmd(t, c, "cards", "board", "list")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "Product launch") {
+		t.Fatalf("restored board missing from list:\n%s", out)
+	}
+}
+
+func TestBoardRemoveNeedsConfirmationAndCounts(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	// No TTY and no --yes: refused, and the refusal names what would go.
+	_, _, err := runCmd(t, c, "cards", "board", "remove", "Product launch")
+	if err == nil {
+		t.Fatal("expected a refusal without --yes")
+	}
+	for _, want := range []string{"3 list", "3 card", "archive"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("refusal %q should mention %q", err.Error(), want)
+		}
+	}
+	if len(f.deletedProjects) != 0 {
+		t.Fatalf("board deleted despite the refusal: %v", f.deletedProjects)
+	}
+
+	if _, _, err := runCmd(t, c, "cards", "board", "remove", "Product launch", "--yes"); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.deletedProjects) != 1 || f.deletedProjects[0] != "prjA" {
+		t.Fatalf("deleted %v, want [prjA]", f.deletedProjects)
+	}
+	out, _, err := runCmd(t, c, "cards", "board", "list", "--all")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "Product launch") {
+		t.Fatalf("deleted board still listed:\n%s", out)
+	}
+}
+
+func TestCardMoveToAnotherBoardCallsTheEndpoint(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+	_, _, err := runCmd(t, c, "cards", "card", "move", "crdCopy", "--board", "Home projects")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.lastMoveBody == nil {
+		t.Fatal("the move endpoint was not called")
+	}
+	if got := str(f.lastMoveBody["project_id"]); got != "prjB" {
+		t.Fatalf("project_id = %q, want prjB", got)
+	}
+	// No --list: the target's first column.
+	if got := str(f.lastMoveBody["list_id"]); got != "lstSomeday" {
+		t.Fatalf("list_id = %q, want lstSomeday", got)
+	}
+	if str(f.lastMoveBody["position"]) == "" {
+		t.Fatal("position was not computed")
+	}
+	if f.lastCardPatch != nil {
+		t.Fatalf("a cross-board move must not PATCH: %v", f.lastCardPatch)
+	}
+}
+
+func TestCardCopyCreatesCardAndChecklist(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+	f.checklist["chk1"] = &checklistItem{ID: "chk1", Card: "crdCopy", Title: "Outline", IsDone: true, Position: "a0"}
+	f.checklist["chk2"] = &checklistItem{ID: "chk2", Card: "crdCopy", Title: "Draft", Position: "a1"}
+
+	_, _, err := runCmd(t, c, "cards", "card", "copy", "crdCopy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := str(f.lastCardCreate["title"]); got != "Copy of Write copy" {
+		t.Fatalf("title = %q, want the Copy of prefix", got)
+	}
+	if got := str(f.lastCardCreate["list"]); got != "lstTodo" {
+		t.Fatalf("list = %q, want the source column", got)
+	}
+	if len(f.createdChecklist) != 2 {
+		t.Fatalf("checklist rows created = %d, want 2", len(f.createdChecklist))
+	}
+	if f.createdChecklist[0]["is_done"] != true || str(f.createdChecklist[0]["title"]) != "Outline" {
+		t.Fatalf("first item = %v, want Outline done", f.createdChecklist[0])
+	}
+	newID := str(f.lastCardCreate["id"])
+	for _, row := range f.createdChecklist {
+		if newID != "" && str(row["card"]) != newID {
+			t.Fatalf("checklist row names card %q, want the copy", str(row["card"]))
+		}
+	}
+}
+
+func TestCardAddAndEditParent(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	// Omitted → "", written explicitly, like every other relation the create
+	// body carries: PocketBase fills nothing in for an absent field.
+	_, _, err := runCmd(t, c, "cards", "card", "add", "Top level", "--board", "prjA", "--list", "To do")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := f.lastCardCreate["parent"]; got != "" {
+		t.Fatalf("parent default = %v, want \"\"", got)
+	}
+
+	_, _, err = runCmd(t, c, "cards", "card", "add", "A sub-task",
+		"--board", "prjA", "--list", "To do", "--parent", "crdCopy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := f.lastCardCreate["parent"]; got != "crdCopy" {
+		t.Fatalf("parent = %v, want crdCopy", got)
+	}
+
+	_, _, err = runCmd(t, c, "cards", "card", "edit", "crdVenue", "--parent", "crdCopy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := f.lastCardPatch["parent"]; got != "crdCopy" {
+		t.Fatalf("patched parent = %v, want crdCopy", got)
+	}
+	if _, sent := f.lastCardPatch["title"]; sent {
+		t.Fatalf("edit --parent must not touch the title: %v", f.lastCardPatch)
+	}
+}
+
+// A relation has no sentinel empty value, so clearing needs its own flag —
+// and the two must not be passable together, the --reporter shape.
+func TestCardEditClearParent(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	_, _, err := runCmd(t, c, "cards", "card", "edit", "crdVenue", "--clear-parent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, sent := f.lastCardPatch["parent"]; !sent || v != "" {
+		t.Fatalf("--clear-parent must send \"\": %v", f.lastCardPatch)
+	}
+
+	_, _, err = runCmd(t, c, "cards", "card", "edit", "crdVenue",
+		"--parent", "crdCopy", "--clear-parent")
+	if err == nil {
+		t.Fatal("--parent and --clear-parent together must be refused")
+	}
+	if !strings.Contains(err.Error(), "contradict") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// An empty --parent is a mistake rather than a clear: the clear has its own
+// flag, and silently treating "" as one would make a typo destructive.
+func TestCardEditRejectsEmptyParent(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	_, _, err := runCmd(t, c, "cards", "card", "edit", "crdVenue", "--parent", "  ")
+	if err == nil {
+		t.Fatal("an empty --parent must be refused")
+	}
+	if !strings.Contains(err.Error(), "clear-parent") {
+		t.Fatalf("the error should point at --clear-parent: %v", err)
+	}
 }

@@ -7,7 +7,7 @@ import { Maximize2, X } from 'lucide-react-native'
 import { type RefObject, useMemo, useRef } from 'react'
 import { Platform, Pressable, StyleSheet, View } from 'react-native'
 import { useProjectRole } from '../hooks/useProjectRole'
-import { type CardEntry, findCardEntry, neighborCardId } from '../lib/board-cards'
+import { type CardEntry, findCardEntry, flattenCards, neighborCardId } from '../lib/board-cards'
 import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardProject } from '../types'
 import { CardActionsMenu } from './detail/CardActionsMenu'
@@ -16,6 +16,7 @@ import { CardKeyBadge } from './detail/CardKeyBadge'
 import type { EditableTextHandle } from './detail/EditableText'
 import { IconButton } from './detail/IconButton'
 import { ListStepper } from './detail/ListStepper'
+import { WatchButton } from './detail/WatchButton'
 import { ProjectWash } from './ProjectWash'
 
 interface CardPeekProps {
@@ -108,6 +109,12 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
     const insets = useDeviceInsets()
     const titleRef = useRef<EditableTextHandle>(null)
     usePeekShortcuts(project, entry.card.id, canEdit, titleRef)
+    // Board order, so the sub-task section and the parent picker list cards in
+    // the order the board shows them.
+    const boardCards = useMemo(
+        () => flattenCards(project).map(cardEntry => cardEntry.card),
+        [project]
+    )
 
     // Prefer the KEY in the URL so what lands in someone's address bar — and in
     // whatever they paste it into — is `OTTER-123` rather than a 15-character
@@ -149,13 +156,15 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
                     />
                     <CardKeyBadge cardKey={entry.card.key} />
                     <View className="flex-1" />
+                    <WatchButton projectId={project.id} cardId={entry.card.id} />
                     <IconButton label="Open full page" onPress={expandCard}>
                         <Maximize2 size={14} color={mutedColor} strokeWidth={2.2} />
                     </IconButton>
                     {canEdit ? (
                         <CardActionsMenu
-                            cardId={entry.card.id}
-                            cardTitle={entry.card.title}
+                            card={entry.card}
+                            list={entry.list}
+                            projectId={project.id}
                             onDismiss={closeCard}
                         />
                     ) : null}
@@ -176,6 +185,8 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
                     projectId={project.id}
                     projectLabels={project.labels}
                     projectMembers={project.members}
+                    projectLists={project.lists}
+                    projectCards={boardCards}
                     titleRef={titleRef}
                 />
             </View>

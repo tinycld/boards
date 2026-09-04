@@ -115,11 +115,22 @@ test.describe('Cards — board sharing and role gates', () => {
             // Card detail: the stepper stays visible as the status display but
             // its segments stop being buttons; no comment composer.
             await boardCard(bobPage, CARD_TITLE).click()
-            await expect(bobPage.getByText('No comments yet.', { exact: true })).toBeVisible()
+            // The panel being OPEN is what this needs to establish before
+            // asserting what is missing from it.
+            //
+            // This used to wait for the activity feed's empty state ("No
+            // comments yet.", later renamed). That was never a good proxy and
+            // is now unreachable: server/activity.go writes a `created` row
+            // for every card, so the feed is never empty and the empty-state
+            // branch cannot render. Assert the panel itself.
+            await expect(bobPage.getByTestId('cards-card-peek')).toBeVisible()
+            await expect(
+                bobPage.getByTestId('cards-card-peek').getByText('Activity', { exact: true })
+            ).toBeVisible()
             await expect(bobPage.getByRole('button', { name: 'Move to Doing' })).toHaveCount(0)
             await expect(bobPage.getByTestId('cards-comment-composer')).toHaveCount(0)
             await bobPage.keyboard.press('Escape')
-            await expect(bobPage.getByText('No comments yet.', { exact: true })).toHaveCount(0)
+            await expect(bobPage.getByTestId('cards-card-peek')).toHaveCount(0)
 
             // The roster is readable for a non-guest member, but not manageable.
             await openShareDialog(bobPage, boardName)

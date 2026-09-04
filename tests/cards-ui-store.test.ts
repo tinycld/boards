@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { EMPTY_FILTER } from '../tinycld/cards/lib/board-filter'
 import { useCardsUIStore } from '../tinycld/cards/stores/cards-ui-store'
 
 /**
@@ -74,6 +75,16 @@ describe('cards-ui-store view preferences', () => {
         })
     })
 
+    describe('toggleMyCardsShowClosed', () => {
+        it('flips, and starts off', () => {
+            useCardsUIStore.setState({ isMyCardsShowingClosed: false })
+            useCardsUIStore.getState().toggleMyCardsShowClosed()
+            expect(useCardsUIStore.getState().isMyCardsShowingClosed).toBe(true)
+            useCardsUIStore.getState().toggleMyCardsShowClosed()
+            expect(useCardsUIStore.getState().isMyCardsShowingClosed).toBe(false)
+        })
+    })
+
     describe('persistence', () => {
         /**
          * Reads what the persist middleware ACTUALLY wrote, rather than
@@ -87,17 +98,21 @@ describe('cards-ui-store view preferences', () => {
             return JSON.parse(raw as string).state
         }
 
-        it('keeps the active board and both view preferences', async () => {
+        it('keeps the active board and the view preferences', async () => {
             useCardsUIStore.setState({
                 activeProjectId: 'proj_1',
                 collapsedColumnIds: { list_a: true },
                 isCompactCards: true,
+                viewModeByProject: { proj_1: 'list' },
+                isMyCardsShowingClosed: true,
             })
 
             expect(await persisted()).toEqual({
                 activeProjectId: 'proj_1',
                 collapsedColumnIds: { list_a: true },
                 isCompactCards: true,
+                viewModeByProject: { proj_1: 'list' },
+                isMyCardsShowingClosed: true,
             })
         })
 
@@ -108,15 +123,23 @@ describe('cards-ui-store view preferences', () => {
                 isNewBoardOpen: true,
                 focusedCardId: 'card_2',
                 isCardDragging: true,
+                isArchivedPanelOpen: true,
+                isArchivedBoardsExpanded: true,
+                boardFilters: { proj_1: { ...EMPTY_FILTER, text: 'stale' } },
+                boardSorts: { proj_1: { field: 'due', direction: 'asc' } },
+                isFilterPanelOpen: true,
             })
 
             // Restoring any of these greets the user with a peek on a possibly
             // deleted card, an unrequested modal, or a ring pointing at a card
-            // that has since moved.
+            // that has since moved — and a restored filter is worse still: a
+            // near-empty board with no explanation of where the cards went.
             expect(Object.keys(await persisted()).sort()).toEqual([
                 'activeProjectId',
                 'collapsedColumnIds',
                 'isCompactCards',
+                'isMyCardsShowingClosed',
+                'viewModeByProject',
             ])
         })
     })

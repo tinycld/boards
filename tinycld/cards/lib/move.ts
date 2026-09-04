@@ -39,10 +39,23 @@ function widenBefore(cards: Ranked[], index: number, after: string | null): stri
     return null
 }
 
-/** The rank for a card appended to the end of `cards`. */
+/**
+ * The rank for a card appended AFTER every card in `cards`.
+ *
+ * The highest rank present, not the last element: under a non-manual sort
+ * (lib/board-sort.ts) the column the caller holds is no longer in rank order,
+ * and appending after whichever card happens to render last would drop the
+ * new card somewhere in the middle once the sort is cleared. Every other
+ * helper here keeps the sorted-input contract; this is the one reachable
+ * while a sort is on (a cross-column move or a composer add), so it is the
+ * one that has to be order-independent.
+ */
 export function rankForAppend(cards: Ranked[]): string {
-    const last = cards[cards.length - 1]
-    return rankBetween(last?.position ?? null, null)
+    let highest: string | null = null
+    for (const card of cards) {
+        if (highest === null || card.position > highest) highest = card.position
+    }
+    return rankBetween(highest, null)
 }
 
 /** The rank for a card placed at the start of `cards`. */

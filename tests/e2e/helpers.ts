@@ -477,6 +477,10 @@ export async function cardsInColumn(page: Page, name: string): Promise<string[]>
             })
             .sort((a, b) => a.rect.y - b.rect.y)
             .map(({ card }) => {
+                // The title alone: a face also carries its key, and pills
+                // (due, estimate) whose text would otherwise run into the name.
+                const title = card.querySelector('[data-testid="cards-card-title"]')
+                if (title?.textContent) return title.textContent.trim()
                 const key = card.querySelector('[data-testid="cards-card-key"]')
                 const text = card.textContent ?? ''
                 const keyText = key?.textContent ?? ''

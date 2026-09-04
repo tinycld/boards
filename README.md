@@ -9,28 +9,60 @@ not bundled), and the other feature packages.
 
 ## Automation rules
 
-The package publishes four triggers and one action to the automation-rules
+The package publishes ten triggers and five actions to the automation-rules
 engine, so a rule can fire on board activity:
 
 - **`cards:card-created`** — "A card is created". A `cards_cards` create.
   Condition fields: `title`, `description`, `list`, `project` (labelled
-  "Board"), `due`, `assignees`, `labels`.
+  "Board"), `due`, `start`, `assignees`, `labels`, `priority`, `estimate`.
 - **`cards:card-moved`** — "A card moves to another list". An update watching
   `list` only (not `position`), so drag-reordering within a column does not
   fire it.
 - **`cards:card-completed`** — "A card is completed". An update watching
-  `list`, gated in Go to lists marked `is_done`. It is a separate trigger
-  rather than a condition on "moved" because whether a list counts as done is
-  a property of the list, not the card, and conditions can only read the
+  `list`, gated in Go to lists whose `category` is `done`. It is a separate
+  trigger rather than a condition on "moved" because a list's status is a
+  property of the list, not the card, and conditions can only read the
   trigger record's own fields.
+- **`cards:card-canceled`** — "A card is canceled". The same event, gated to
+  lists whose `category` is `canceled`.
 - **`cards:card-assigned`** — "A card is assigned". An update watching
   `assignees`.
+- **`cards:card-priority-changed`** — "A card's priority changes". An update
+  watching `priority`.
+- **`cards:card-estimate-changed`** — "A card's estimate changes". An update
+  watching `estimate`.
+- **`cards:card-rescheduled`** — "A card's dates change". An update watching
+  `due`, `due_has_time` and `start`.
+- **`cards:card-archived`** — "A card is archived". An update watching
+  `archived`, gated in Go to the archive (never the restore). The auto-archive
+  sweep's saves fire it too.
+- **`cards:card-parented`** — "A card's parent changes". An update watching
+  `parent`, firing in both directions — a card becoming a sub-task and one
+  leaving its family — since "it left my epic" is as worth a rule as the
+  reverse. A condition on `parent` separates them.
+- **`cards:comment-reacted`** — "Someone reacts to a comment". A
+  `cards_comment_reactions` create; condition fields `emoji`, `user`, `card`,
+  `comment`, `project`.
+
+There is deliberately NO trigger or action for `cards_card_links`. A link row
+carries no `project`, and `cardOwnerResolver` — which every cards trigger
+shares — resolves a rule's owner through exactly that field. A link trigger
+would need a resolver that unions two boards' members and then decides whose
+rule may fire on a dependency that spans them, which is a policy question
+rather than a wiring one. Filed rather than guessed at.
 - **`cards:move-card`** — "Move the card to a list". A `kind: 'record-op'`
   action: an update targeting the trigger record, with a `list` param.
+- **`cards:set-parent`** — "Make the card a sub-task". A `kind: 'record-op'`
+  action with a `parent` param. Its authorizer refuses a parent on another
+  board (the same-board invariant the rules pin) and one that is itself a
+  sub-task — the engine saves as a superuser, so the rules do not run.
 - **`cards:add-assignee`** — "Assign the card to someone". A `kind: 'native'`
   action with a `user` relation param.
 - **`cards:add-label`** — "Add a label to the card". A `kind: 'native'` action
   with a `label` relation param targeting the board's own `cards_labels`.
+- **`cards:set-priority`** — "Set the card priority". A `kind: 'record-op'`
+  update of the trigger record's `priority` select; `none` is one of the
+  options so a rule can lower a card as well as raise it.
 
 The last two are native rather than record-ops because `assignees` and
 `labels` are multi-value relations, and a record-op `set` **replaces** the
@@ -38,9 +70,9 @@ whole value — appending one entry would silently drop the rest. Being native
 is also why each declares `relationTarget` explicitly: a native action names no
 collection, so its params have no column to inherit a target from.
 
-All four triggers cover every card on a board you belong to, not only cards you
+All five triggers cover every card on a board you belong to, not only cards you
 created. `server/automation.go` supplies the server-side pieces:
-`cardOwnerResolver` scopes personal rules by board membership across all four
+`cardOwnerResolver` scopes personal rules by board membership across all five
 triggers, a `cardMovedToDoneList` filter gates `cards:card-completed`, and a
 RelationAuthorizer guards every relation param — the `list` destination, the
 assignee's board membership, and a label's ownership by that same board.
@@ -65,11 +97,13 @@ the Go module and the OAuth scopes it needs (`cards:read`, `cards:write`). The
 server cross-compiles the binary; users download it from **Settings → Personal
 → About**.
 
-Fourteen commands:
+Eighteen commands:
 
 ```sh
 tinycld cards board list          # boards you can see
 tinycld cards board view
+tinycld cards board archive       # or --unset to restore
+tinycld cards board remove        # deletes everything on it; asks first
 tinycld cards list show           # the lists (columns) on a board
 tinycld cards list add
 tinycld cards list rename
@@ -79,7 +113,8 @@ tinycld cards list remove         # also deletes the cards in it
 tinycld cards card view
 tinycld cards card add            # requires both -b/--board and -l/--list
 tinycld cards card edit
-tinycld cards card move
+tinycld cards card move           # --board <other> moves it to another board
+tinycld cards card copy           # duplicate, with the checklist
 tinycld cards card archive
 tinycld cards card remove
 ```
@@ -163,3 +198,6 @@ exactly what a developer runs locally.
 - `tinycld/cards/` — the package's TypeScript surface (screens, collections, …)
 - `tinycld/cards/automation.ts` — the automation trigger + action catalog
 - `tests/` — vitest unit tests (and Playwright e2e specs — full preset only)
+
+- **`cards:set-estimate`** — "Set the card estimate". A `kind: 'record-op'`
+  update of the trigger record's `estimate` number; `0` clears it.

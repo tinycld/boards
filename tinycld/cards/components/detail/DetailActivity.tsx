@@ -3,19 +3,30 @@ import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useAuth } from '@tinycld/core/lib/auth'
 import { formatRelativeDate } from '@tinycld/core/lib/format-utils'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
+import { History } from 'lucide-react-native'
 import { useMemo } from 'react'
 import { Pressable, Text, View } from 'react-native'
+import { type ActivityContext, buildActivityFeed, describeActivity } from '../../lib/activity-feed'
 import { buildCommentThreads } from '../../lib/comment-threads'
-import type { BoardAttachment, BoardComment } from '../../types'
+import type { ReactionEmoji, ReactionGroup } from '../../lib/reactions'
+import type { BoardActivity, BoardAttachment, BoardComment } from '../../types'
 import { COMMENT_HEADER_HEIGHT, InlineCommentEditor } from './CommentEditor'
 import { MarkdownText } from './MarkdownText'
+import { ReactionBar } from './ReactionBar'
 
 interface DetailActivityProps {
     comments: BoardComment[]
+    /** Server-written history rows, interleaved with the comments by time. */
+    activity: BoardActivity[]
+    /** What history rows resolve their ids against. */
+    activityContext: ActivityContext
     /** viaCommenter — gates the Reply affordance and editing your own. */
     canComment: boolean
     /** Project owners may delete anyone's comment (author-or-owner rule). */
     canModerate: boolean
+    /** The reaction groups for a comment — a stable empty array when none. */
+    reactionsFor: (commentId: string) => ReactionGroup[]
+    onToggleReaction: (commentId: string, emoji: ReactionEmoji) => void
     /** For the inline editor's image inserts — they become card attachments. */
     cardId: string
     projectId: string
@@ -34,8 +45,12 @@ interface DetailActivityProps {
 
 export function DetailActivity({
     comments,
+    activity,
+    activityContext,
     canComment,
     canModerate,
+    reactionsFor,
+    onToggleReaction,
     cardId,
     projectId,
     attachments,
@@ -49,10 +64,13 @@ export function DetailActivity({
     onDelete,
 }: DetailActivityProps) {
     const threads = useMemo(() => buildCommentThreads(comments), [comments])
+    const feed = useMemo(() => buildActivityFeed(threads, activity), [threads, activity])
 
     const rowProps = {
         canComment,
         canModerate,
+        reactionsFor,
+        onToggleReaction,
         cardId,
         projectId,
         attachments,
@@ -72,26 +90,68 @@ export function DetailActivity({
                 <Text className="text-[13px] font-semibold text-foreground">Activity</Text>
                 <CommentCount count={comments.length} />
             </View>
-            {threads.length === 0 ? (
+            {feed.length === 0 ? (
                 <Text className="text-[13px] text-muted">
                     {canComment
-                        ? 'No comments yet — start the discussion below.'
-                        : 'No comments yet.'}
+                        ? 'No activity yet — start the discussion below.'
+                        : 'No activity yet.'}
                 </Text>
             ) : (
                 <View className="gap-4">
-                    {threads.map(thread => (
-                        <View key={thread.comment.id} className="gap-3">
-                            <CommentRow comment={thread.comment} {...rowProps} />
-                            {thread.replies.map(reply => (
-                                <View key={reply.id} className="pl-9">
-                                    <CommentRow comment={reply} {...rowProps} />
-                                </View>
-                            ))}
-                        </View>
-                    ))}
+                    {feed.map(entry =>
+                        entry.kind === 'thread' ? (
+                            <View key={entry.id} className="gap-3">
+                                <CommentRow comment={entry.thread.comment} {...rowProps} />
+                                {entry.thread.replies.map(reply => (
+                                    <View key={reply.id} className="pl-9">
+                                        <CommentRow comment={reply} {...rowProps} />
+                                    </View>
+                                ))}
+                            </View>
+                        ) : (
+                            <ActivityRow
+                                key={entry.id}
+                                item={entry.item}
+                                context={activityContext}
+                            />
+                        )
+                    )}
                 </View>
             )}
+        </View>
+    )
+}
+
+/**
+ * One history row: who, what, when. A person's row carries their avatar so
+ * it scans like a comment; a system row (no actor) carries a clock glyph and
+ * says so, because "Automatically moved this" is a fact the reader needs —
+ * it tells them a rule, not a colleague, did it.
+ */
+function ActivityRow({ item, context }: { item: BoardActivity; context: ActivityContext }) {
+    const mutedColor = useThemeColor('muted')
+    const { actor, text } = describeActivity(item, context)
+    const who = actor ? `${actor.firstName} ${actor.lastName}`.trim() : 'Automatically'
+    const timestamp = item.created ? formatRelativeDate(item.created) : 'Just now'
+
+    return (
+        <View testID={`cards-activity-${item.kind}`} className="flex-row items-center gap-2.5">
+            <View className="w-[26px] items-center">
+                {actor ? (
+                    <NameAvatar
+                        firstName={actor.firstName}
+                        lastName={actor.lastName}
+                        size={20}
+                        colorKey={actor.id}
+                    />
+                ) : (
+                    <History size={16} color={mutedColor} strokeWidth={2} />
+                )}
+            </View>
+            <Text className="flex-1 min-w-0 text-[12.5px] text-muted" numberOfLines={2}>
+                <Text className="font-semibold text-foreground">{who}</Text> {text}
+            </Text>
+            <Text className="shrink-0 text-[11.5px] text-muted">{timestamp}</Text>
         </View>
     )
 }
@@ -105,6 +165,8 @@ interface CommentRowProps {
     comment: BoardComment
     canComment: boolean
     canModerate: boolean
+    reactionsFor: (commentId: string) => ReactionGroup[]
+    onToggleReaction: (commentId: string, emoji: ReactionEmoji) => void
     cardId: string
     projectId: string
     attachments: BoardAttachment[]
@@ -123,6 +185,8 @@ function CommentRow({
     comment,
     canComment,
     canModerate,
+    reactionsFor,
+    onToggleReaction,
     cardId,
     projectId,
     attachments,
@@ -240,6 +304,15 @@ function CommentRow({
                         />
                     </>
                 )}
+                {/* OUTSIDE the edit swap above and the fixed-height header:
+                    the same element in both branches, so opening an edit
+                    neither hides the bar nor moves it. */}
+                <ReactionBar
+                    commentId={comment.id}
+                    groups={reactionsFor(comment.id)}
+                    canReact={canComment}
+                    onToggle={emoji => onToggleReaction(comment.id, emoji)}
+                />
             </View>
         </View>
     )

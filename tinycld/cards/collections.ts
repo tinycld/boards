@@ -65,8 +65,20 @@ export function registerCollections(
     // mail's `webhook_secret`. The optimistically-inserted card therefore has
     // no number — and so no key — until the server echo lands, which
     // formatCardKey renders as ''.
+    // `archived_at` is server-owned too (server/card_archived.go stamps it
+    // when `archived` flips), so an insert never carries it.
     const cards_cards = newCollection('cards_cards', {
-        omitOnInsert: ['created', 'updated', 'number'] as const,
+        omitOnInsert: [
+            'created',
+            'updated',
+            'number',
+            'archived_at',
+            // The due-notice stamps (server/due_notices.go) are the ticker's;
+            // an insert never carries them.
+            'due_soon_notified_at',
+            'overdue_notified_at',
+            'list_changed_at',
+        ] as const,
         collectionOptions: indexed,
     })
 
@@ -98,7 +110,54 @@ export function registerCollections(
         collectionOptions: indexed,
     })
 
+    // Server-written history (server/activity.go); the client only reads it,
+    // and only for the open card. No expand: `actor` resolves against the
+    // eager `users` store like every other user relation here.
+    const cards_activity = newCollection('cards_activity', {
+        omitOnInsert: ['created'] as const,
+        syncMode: 'on-demand' as const,
+        collectionOptions: indexed,
+    })
+
+    // Who follows a card. On-demand: read for the open card (the Watch
+    // button) and for the My cards "Watching" tab.
+    const cards_card_watchers = newCollection('cards_card_watchers', {
+        omitOnInsert: ['created'] as const,
+        syncMode: 'on-demand' as const,
+        collectionOptions: indexed,
+    })
+
+    // Emoji on comments. On-demand like the comments they hang off; read
+    // for the open card in one query keyed by `card` (see the migration for
+    // why the row carries it). No expand: `user` resolves against the eager
+    // `users` store, and the bar only counts.
+    const cards_comment_reactions = newCollection('cards_comment_reactions', {
+        omitOnInsert: ['created'] as const,
+        syncMode: 'on-demand' as const,
+        collectionOptions: indexed,
+    })
+
+    // Links between cards. On-demand like watchers and reactions: read for the
+    // open card only.
+    //
+    // THE ONE COLLECTION HERE THAT CROSSES BOARDS. Every other row names one
+    // `project` and syncs with the board it belongs to; a link names two cards
+    // and no project at all (see pb-migrations/1980000016 for why there is no
+    // denormalized column). A consequence the UI has to handle rather than
+    // wish away: the far card of a cross-board link is often NOT in the local
+    // store, either because the reader cannot see it or because that board has
+    // not synced — lib/card-links.ts is where those two are told apart.
+    const cards_card_links = newCollection('cards_card_links', {
+        omitOnInsert: ['created'] as const,
+        syncMode: 'on-demand' as const,
+        collectionOptions: indexed,
+    })
+
     return {
+        cards_activity,
+        cards_card_links,
+        cards_card_watchers,
+        cards_comment_reactions,
         cards_projects,
         cards_project_members,
         cards_share_links,

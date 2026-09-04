@@ -6,7 +6,7 @@ import { useMemo } from 'react'
 import { attachmentDisplayName } from '../lib/attachment-source'
 import { toBoardMember } from '../lib/board-project'
 import { byCreatedThenId } from '../lib/created-order'
-import type { BoardAttachment, BoardChecklistItem, BoardComment } from '../types'
+import type { BoardActivity, BoardAttachment, BoardChecklistItem, BoardComment } from '../types'
 
 /**
  * Row-wise joins across three to-many relations yield the cartesian product of
@@ -66,12 +66,14 @@ export function useCardDetail(cardId: string) {
         checklistCollection,
         commentsCollection,
         attachmentsCollection,
+        activityCollection,
         usersCollection,
     ] = useStore(
         'cards_cards',
         'cards_checklist_items',
         'cards_comments',
         'cards_attachments',
+        'cards_activity',
         'users'
     )
 
@@ -100,6 +102,17 @@ export function useCardDetail(cardId: string) {
                 )
                 .where(({ attachment }) => eq(attachment.card, cardId))
 
+            // `actor` is optional (a rule or seed has none), so this join is
+            // a LEFT one: a system row must survive with no user beside it.
+            const activity = query
+                .from({ entry: activityCollection })
+                .leftJoin({ actor: usersCollection }, ({ entry, actor }) =>
+                    eq(entry.actor, actor.id)
+                )
+                .where(({ entry }) => eq(entry.card, cardId))
+
+            // A fourth to-many join widens the cartesian product `collect`
+            // dedupes; at kanban scale (tens of rows each) that stays cheap.
             return query
                 .from({ card: cardsCollection })
                 .where(({ card }) => eq(card.id, cardId))
@@ -108,6 +121,7 @@ export function useCardDetail(cardId: string) {
                 .leftJoin({ attachments }, ({ card, attachments }) =>
                     eq(attachments.attachment.card, card.id)
                 )
+                .leftJoin({ activity }, ({ card, activity }) => eq(activity.entry.card, card.id))
         },
         [cardId]
     )
@@ -181,5 +195,23 @@ export function useCardDetail(cardId: string) {
         [rows]
     )
 
-    return { checklist, comments, attachments, isReady }
+    const activity = useMemo<BoardActivity[]>(
+        () =>
+            collect(
+                rows,
+                row => row.activity,
+                joined => joined.entry.id,
+                joined => ({
+                    id: joined.entry.id,
+                    kind: joined.entry.kind,
+                    actor: joined.actor ? toBoardMember(joined.actor) : undefined,
+                    from: joined.entry.from,
+                    to: joined.entry.to,
+                    created: joined.entry.created ?? '',
+                })
+            ).sort(byCreatedThenId),
+        [rows]
+    )
+
+    return { checklist, comments, attachments, activity, isReady }
 }

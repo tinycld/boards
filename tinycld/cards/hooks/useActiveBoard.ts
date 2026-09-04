@@ -1,9 +1,10 @@
 import { eq } from '@tanstack/db'
+import { useAuth } from '@tinycld/core/lib/auth'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
 import { useMemo, useRef } from 'react'
-import { buildBoardProject } from '../lib/board-project'
-import { useCardsUIStore } from '../stores/cards-ui-store'
+import { type BoardViewOptions, buildBoardProject } from '../lib/board-project'
+import { selectBoardFilter, selectBoardSort, useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardProject } from '../types'
 import { useBoardLiveQuery } from './useBoardLiveQuery'
 
@@ -39,30 +40,86 @@ export function useActiveBoard() {
             .where(({ member }) => eq(member.user, userId))
     )
 
-    const projects = useMemo(() => {
-        const rows = (projectRows ?? []).map(r => r.project).filter(p => !p.archived)
-        return rows.sort((a, b) => a.name.localeCompare(b.name) || (a.id < b.id ? -1 : 1))
+    // Split by `archived` rather than filtered: the sidebar lists both, in
+    // separate sections, and an archived board must still be openable so it
+    // can be looked at and restored.
+    const { projects, archivedProjects } = useMemo(() => {
+        const rows = (projectRows ?? [])
+            .map(r => r.project)
+            .sort((a, b) => a.name.localeCompare(b.name) || (a.id < b.id ? -1 : 1))
+        return {
+            projects: rows.filter(p => !p.archived),
+            archivedProjects: rows.filter(p => p.archived),
+        }
     }, [projectRows])
 
     // Resolve the active board DURING RENDER rather than syncing it back to the
     // store with an effect. The persisted id may name a board that was deleted
     // or that this user has been removed from, and on a cold start there is no
-    // id at all; both fall back to the first board. The store is never
-    // corrected — the next explicit setActiveProject overwrites it.
+    // id at all; both fall back to the first LIVE board — an archived one is
+    // only ever active by explicit choice. The store is never corrected — the
+    // next explicit setActiveProject overwrites it.
     const projectId = useMemo(() => {
         if (activeProjectId && projects.some(p => p.id === activeProjectId)) return activeProjectId
+        if (activeProjectId && archivedProjects.some(p => p.id === activeProjectId)) {
+            return activeProjectId
+        }
         return projects[0]?.id ?? ''
-    }, [activeProjectId, projects])
+    }, [activeProjectId, projects, archivedProjects])
 
-    const { project, cardCount, isLoading: contentLoading } = useBoardContent(projectId)
+    const isArchived = archivedProjects.some(p => p.id === projectId)
+
+    // The per-user view: filter + sort for THIS board, and who "me" is. The
+    // selectors return shared constants when nothing is set, so the memo
+    // below only rebuilds when a facet actually changes.
+    const filter = useCardsUIStore(s => selectBoardFilter(s, projectId))
+    const sort = useCardsUIStore(s => selectBoardSort(s, projectId))
+    const { user } = useAuth({ throwIfAnon: false })
+    const userId = user?.id ?? ''
+    const view = useMemo<BoardViewOptions>(() => ({ filter, sort, userId }), [filter, sort, userId])
+
+    const { project, cardCount, isLoading: contentLoading } = useBoardContent(projectId, view)
 
     return {
         projects,
+        archivedProjects,
         project,
+        isArchived,
         cardCount,
         isLoading: projectsLoading || contentLoading,
-        hasProjects: projects.length > 0,
+        hasProjects: projects.length > 0 || isArchived,
     }
+}
+
+/**
+ * The boards the caller may add cards to — owner or editor, not archived.
+ * What the "Move to board" picker offers.
+ */
+export function useWritableProjects() {
+    const [projectsCollection, membersCollection] = useStore(
+        'cards_projects',
+        'cards_project_members'
+    )
+    const { data: rows } = useOrgLiveQuery((query, { userId }) =>
+        query
+            .from({ member: membersCollection })
+            .innerJoin({ project: projectsCollection }, ({ member, project }) =>
+                eq(member.project, project.id)
+            )
+            .where(({ member }) => eq(member.user, userId))
+    )
+    return useMemo(
+        () =>
+            (rows ?? [])
+                .filter(
+                    r =>
+                        !r.project.archived &&
+                        (r.member.role === 'owner' || r.member.role === 'editor')
+                )
+                .map(r => r.project)
+                .sort((a, b) => a.name.localeCompare(b.name)),
+        [rows]
+    )
 }
 
 /**
@@ -78,7 +135,7 @@ export function useActiveBoard() {
  * The board UI therefore has ONE implementation, not a parallel read-only copy
  * that drifts from it.
  */
-export function useBoardContent(projectId: string) {
+export function useBoardContent(projectId: string, view?: BoardViewOptions) {
     const [
         projectsCollection,
         membersCollection,
@@ -191,10 +248,11 @@ export function useBoardContent(projectId: string) {
                     labels: labelRows ?? [],
                     members: (memberRows ?? []).map(r => r.user),
                     users: userRows ?? [],
+                    view,
                 },
                 previousProjectRef.current
             ),
-        [projectRows, listRows, cardRows, labelRows, memberRows, userRows]
+        [projectRows, listRows, cardRows, labelRows, memberRows, userRows, view]
     )
     previousProjectRef.current = project
 

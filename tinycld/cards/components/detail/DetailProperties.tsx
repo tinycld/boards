@@ -1,15 +1,21 @@
 import { LabelBadge } from '@tinycld/core/components/LabelBadge'
 import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
-import { CalendarDays, Clock } from 'lucide-react-native'
+import { CalendarDays, Clock, Gauge } from 'lucide-react-native'
 import { forwardRef, type ReactNode } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useToggleCardRelation, useUpdateCard } from '../../hooks/useCardMutations'
 import { dueStateFor, formatDueDate } from '../../lib/due-state'
+import { formatSchedule } from '../../lib/due-time'
+import { formatEstimate } from '../../lib/estimate'
+import { type CardPriority, priorityLabel } from '../../lib/priority'
 import type { BoardCardView, BoardLabel, BoardMember } from '../../types'
+import { PriorityGlyph } from '../PriorityGlyph'
 import { AssigneePicker } from './AssigneePicker'
 import { DuePicker } from './DuePicker'
+import { EstimatePicker } from './EstimatePicker'
 import { LabelPicker } from './LabelPicker'
+import { PriorityPicker } from './PriorityPicker'
 import { ReporterPicker } from './ReporterPicker'
 
 interface DetailPropertiesProps {
@@ -52,8 +58,17 @@ export function DetailProperties({
                 <PropertyRow name="Labels">
                     <LabelsValue card={card} />
                 </PropertyRow>
+                <PropertyRow name="Start">
+                    <StartValue start={card.start} />
+                </PropertyRow>
                 <PropertyRow name="Due">
-                    <DueValue due={card.due} />
+                    <DueValue due={card.due} dueHasTime={card.dueHasTime} />
+                </PropertyRow>
+                <PropertyRow name="Priority">
+                    <PriorityValue priority={card.priority} />
+                </PropertyRow>
+                <PropertyRow name="Estimate">
+                    <EstimateValue estimate={card.estimate} />
                 </PropertyRow>
             </View>
         )
@@ -89,17 +104,130 @@ export function DetailProperties({
                     <LabelsValue card={card} />
                 </LabelPicker>
             </PropertyRow>
+            <PropertyRow name="Start">
+                <DuePicker
+                    value={card.start}
+                    onChange={pick => updateCard.mutate({ cardId: card.id, start: pick.date })}
+                >
+                    <StartValue start={card.start} />
+                </DuePicker>
+            </PropertyRow>
             <PropertyRow name="Due">
                 <DuePicker
-                    due={card.due}
-                    onChange={due => updateCard.mutate({ cardId: card.id, due })}
+                    value={card.due}
+                    hasTime={card.dueHasTime}
+                    allowTime
+                    onChange={pick =>
+                        updateCard.mutate({
+                            cardId: card.id,
+                            due: pick.date,
+                            dueHasTime: pick.hasTime,
+                        })
+                    }
                 >
-                    <DueValue due={card.due} />
+                    <DueValue due={card.due} dueHasTime={card.dueHasTime} />
                 </DuePicker>
+            </PropertyRow>
+            <PropertyRow name="Priority">
+                <PriorityPicker
+                    selected={card.priority}
+                    onSelect={priority => updateCard.mutate({ cardId: card.id, priority })}
+                >
+                    <PriorityValue priority={card.priority} />
+                </PriorityPicker>
+            </PropertyRow>
+            <PropertyRow name="Estimate">
+                <EstimatePicker
+                    selected={card.estimate}
+                    onSelect={estimate => updateCard.mutate({ cardId: card.id, estimate })}
+                >
+                    <EstimateValue estimate={card.estimate} />
+                </EstimatePicker>
             </PropertyRow>
         </View>
     )
 }
+
+/** The estimate chip, and the EstimatePicker's trigger — the PriorityValue shape. */
+const EstimateValue = forwardRef<View, { estimate?: number; onPress?: () => void }>(
+    function EstimateValue({ estimate, onPress }, ref) {
+        const mutedColor = useThemeColor('muted')
+        if (estimate === undefined) {
+            if (!onPress) return <EmptyValue />
+            return <GhostChip ref={ref} label="Set estimate" onPress={onPress} />
+        }
+
+        const label = formatEstimate(estimate)
+        const chipContent = (
+            <>
+                <Gauge size={12} color={mutedColor} strokeWidth={2.2} />
+                <Text className="text-[12.5px] font-medium text-foreground">{label}</Text>
+            </>
+        )
+
+        if (!onPress) {
+            return (
+                <View className="flex-row items-center gap-[5px] rounded-md px-2 py-[3px] bg-foreground/[0.06]">
+                    {chipContent}
+                </View>
+            )
+        }
+
+        return (
+            <Pressable
+                ref={ref}
+                accessibilityRole="button"
+                accessibilityLabel={`Estimate ${label}. Change estimate`}
+                onPress={onPress}
+                className="flex-row items-center gap-[5px] rounded-md px-2 py-[3px] bg-foreground/[0.06] web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+            >
+                {chipContent}
+            </Pressable>
+        )
+    }
+)
+
+/**
+ * The priority chip, and the PriorityPicker's trigger — the DueValue shape:
+ * a Pressable root in every openable state so Menu.Trigger has something to
+ * clone onPress into, and a plain View when the card is read-only.
+ */
+const PriorityValue = forwardRef<View, { priority: CardPriority; onPress?: () => void }>(
+    function PriorityValue({ priority, onPress }, ref) {
+        if (priority === 'none') {
+            if (!onPress) return <EmptyValue />
+            return <GhostChip ref={ref} label="Set priority" onPress={onPress} />
+        }
+
+        const label = priorityLabel(priority)
+        const chipContent = (
+            <>
+                <PriorityGlyph priority={priority} size={12} />
+                <Text className="text-[12.5px] font-medium text-foreground">{label}</Text>
+            </>
+        )
+
+        if (!onPress) {
+            return (
+                <View className="flex-row items-center gap-[5px] rounded-md px-2 py-[3px] bg-foreground/[0.06]">
+                    {chipContent}
+                </View>
+            )
+        }
+
+        return (
+            <Pressable
+                ref={ref}
+                accessibilityRole="button"
+                accessibilityLabel={`Priority ${label}. Change priority`}
+                onPress={onPress}
+                className="flex-row items-center gap-[5px] rounded-md px-2 py-[3px] bg-foreground/[0.06] web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+            >
+                {chipContent}
+            </Pressable>
+        )
+    }
+)
 
 /** What an empty property shows on a read-only card, in place of a ghost chip. */
 function EmptyValue() {
@@ -278,63 +406,103 @@ function LabelChips({ card }: { card: BoardCardView }) {
     )
 }
 
-/**
- * The due chip — and the DuePicker's trigger, which is why its root is a
- * Pressable in both states: Menu.Trigger clones its child to inject onPress and
- * a ref, so a plain View here would render a chip that cannot be opened.
- */
-const DueValue = forwardRef<View, { due?: Date; onPress?: () => void }>(function DueValue(
-    { due, onPress },
+/** The start chip — the DueValue shape, always a plain day. */
+const StartValue = forwardRef<View, { start?: Date; onPress?: () => void }>(function StartValue(
+    { start, onPress },
     ref
 ) {
-    const warningColor = useThemeColor('warning')
-    const dangerColor = useThemeColor('danger')
     const mutedColor = useThemeColor('muted')
-
-    if (!due) {
+    if (!start) {
         if (!onPress) return <EmptyValue />
-        return <GhostChip ref={ref} label="Set due date" onPress={onPress} />
+        return <GhostChip ref={ref} label="Set start date" onPress={onPress} />
     }
-
-    const state = dueStateFor(due)
-    const isOverdue = state === 'overdue'
-    const color = isOverdue ? dangerColor : state === 'soon' ? warningColor : mutedColor
-    const Icon = isOverdue ? Clock : CalendarDays
-    const label = isOverdue ? `${formatDueDate(due)} · overdue` : formatDueDate(due)
-    const stateClass = isOverdue
-        ? 'bg-danger/10'
-        : state === 'soon'
-          ? 'bg-warning/10'
-          : 'bg-foreground/[0.06]'
+    const label = formatDueDate(start)
     const chipContent = (
         <>
-            <Icon size={12} color={color} strokeWidth={2.2} />
-            <Text className="text-[12.5px] font-medium" style={{ color }}>
-                {label}
-            </Text>
+            <CalendarDays size={12} color={mutedColor} strokeWidth={2.2} />
+            <Text className="text-[12.5px] font-medium text-foreground">{label}</Text>
         </>
     )
-
     if (!onPress) {
         return (
             <View
-                accessibilityLabel={`Due ${label}`}
-                className={`flex-row items-center gap-[5px] rounded-md px-2 py-[3px] ${stateClass}`}
+                accessibilityLabel={`Start ${label}`}
+                className="flex-row items-center gap-[5px] rounded-md px-2 py-[3px] bg-foreground/[0.06]"
             >
                 {chipContent}
             </View>
         )
     }
-
     return (
         <Pressable
             ref={ref}
             accessibilityRole="button"
-            accessibilityLabel={`Due ${label}. Change due date`}
+            accessibilityLabel={`Start ${label}. Change start date`}
             onPress={onPress}
-            className={`flex-row items-center gap-[5px] rounded-md px-2 py-[3px] web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${stateClass}`}
+            className="flex-row items-center gap-[5px] rounded-md px-2 py-[3px] bg-foreground/[0.06] web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
         >
             {chipContent}
         </Pressable>
     )
 })
+
+/**
+ * The due chip — and the DuePicker's trigger, which is why its root is a
+ * Pressable in both states: Menu.Trigger clones its child to inject onPress and
+ * a ref, so a plain View here would render a chip that cannot be opened.
+ */
+const DueValue = forwardRef<View, { due?: Date; dueHasTime: boolean; onPress?: () => void }>(
+    function DueValue({ due, dueHasTime, onPress }, ref) {
+        const warningColor = useThemeColor('warning')
+        const dangerColor = useThemeColor('danger')
+        const mutedColor = useThemeColor('muted')
+
+        if (!due) {
+            if (!onPress) return <EmptyValue />
+            return <GhostChip ref={ref} label="Set due date" onPress={onPress} />
+        }
+
+        const state = dueStateFor(due, undefined, dueHasTime)
+        const isOverdue = state === 'overdue'
+        const color = isOverdue ? dangerColor : state === 'soon' ? warningColor : mutedColor
+        const Icon = isOverdue ? Clock : CalendarDays
+        const text = formatSchedule(undefined, due, dueHasTime)
+        const label = isOverdue ? `${text} · overdue` : text
+        const stateClass = isOverdue
+            ? 'bg-danger/10'
+            : state === 'soon'
+              ? 'bg-warning/10'
+              : 'bg-foreground/[0.06]'
+        const chipContent = (
+            <>
+                <Icon size={12} color={color} strokeWidth={2.2} />
+                <Text className="text-[12.5px] font-medium" style={{ color }}>
+                    {label}
+                </Text>
+            </>
+        )
+
+        if (!onPress) {
+            return (
+                <View
+                    accessibilityLabel={`Due ${label}`}
+                    className={`flex-row items-center gap-[5px] rounded-md px-2 py-[3px] ${stateClass}`}
+                >
+                    {chipContent}
+                </View>
+            )
+        }
+
+        return (
+            <Pressable
+                ref={ref}
+                accessibilityRole="button"
+                accessibilityLabel={`Due ${label}. Change due date`}
+                onPress={onPress}
+                className={`flex-row items-center gap-[5px] rounded-md px-2 py-[3px] web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${stateClass}`}
+            >
+                {chipContent}
+            </Pressable>
+        )
+    }
+)

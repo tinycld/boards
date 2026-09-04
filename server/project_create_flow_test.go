@@ -66,7 +66,7 @@ func TestCardsCreateFlow_ListsNeedTheOwnerRowFirst(t *testing.T) {
 		method: http.MethodPost,
 		url:    "/api/collections/cards_lists/records",
 		token:  env.outsiderToken,
-		body:   `{"project":"` + fresh.Id + `","name":"To do","position":"a0","is_done":false}`,
+		body:   `{"project":"` + fresh.Id + `","name":"To do","position":"a0","category":"todo"}`,
 		want:   http.StatusBadRequest,
 	}.run(t, env)
 }
@@ -82,17 +82,17 @@ func TestCardsCreateFlow_ListsSucceedOnceOwnerExists(t *testing.T) {
 		method:  http.MethodPost,
 		url:     "/api/collections/cards_lists/records",
 		token:   env.outsiderToken,
-		body:    `{"project":"` + fresh.Id + `","name":"To do","position":"a0","is_done":false}`,
+		body:    `{"project":"` + fresh.Id + `","name":"To do","position":"a0","category":"todo"}`,
 		want:    http.StatusOK,
 		content: []string{`"name":"To do"`},
 	}.run(t, env)
 }
 
-// The "Done" column is the one that carries is_done, which the UI's done-state
-// rendering paths depend on. Asserted separately from "To do" above because one
+// The "Done" column is the one that carries the `done` category, which the
+// UI's closed-card rendering paths depend on. Asserted separately from "To do" above because one
 // ApiScenario per Test function is a hard constraint — Test re-triggers OnServe
 // and a second scenario on the same app panics on duplicate route registration.
-func TestCardsCreateFlow_DoneColumnCarriesIsDone(t *testing.T) {
+func TestCardsCreateFlow_DoneColumnCarriesCategory(t *testing.T) {
 	env := setupCardsEnv(t)
 	fresh := cardsProject(t, env.app, "Flow", env.outsider)
 	cardsMember(t, env.app, fresh, env.outsider, "owner")
@@ -101,8 +101,8 @@ func TestCardsCreateFlow_DoneColumnCarriesIsDone(t *testing.T) {
 		method:  http.MethodPost,
 		url:     "/api/collections/cards_lists/records",
 		token:   env.outsiderToken,
-		body:    `{"project":"` + fresh.Id + `","name":"Done","position":"a2","is_done":true}`,
+		body:    `{"project":"` + fresh.Id + `","name":"Done","position":"a2","category":"done"}`,
 		want:    http.StatusOK,
-		content: []string{`"is_done":true`},
+		content: []string{`"category":"done"`},
 	}.run(t, env)
 }

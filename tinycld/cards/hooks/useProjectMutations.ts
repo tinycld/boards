@@ -2,6 +2,7 @@ import { useAuth } from '@tinycld/core/lib/auth'
 import { mutation, useMutation } from '@tinycld/core/lib/mutations'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { newRecordId } from 'pbtsdb/core'
+import type { ListCategory } from '../lib/list-category'
 import { initialRanks } from '../lib/rank'
 import { useCardsUIStore } from '../stores/cards-ui-store'
 
@@ -12,15 +13,16 @@ import { useCardsUIStore } from '../stores/cards-ui-store'
  * list" — a dead end for someone who just asked for a board. Every kanban tool
  * ships default columns.
  *
- * The last one carries `is_done`, which is not decoration: BoardColumn,
- * BoardCard and ListStepper all have done-state rendering paths that stay dead
- * code until some list sets it.
+ * The categories are not decoration: BoardColumn, BoardCard and ListStepper
+ * all have closed-state rendering paths that stay dead code until some list
+ * is `done`, and the filter's status facet is only useful once the lists
+ * disagree.
  */
-const DEFAULT_LISTS = [
-    { name: 'To do', isDone: false },
-    { name: 'Doing', isDone: false },
-    { name: 'Done', isDone: true },
-] as const
+const DEFAULT_LISTS: { name: string; category: ListCategory }[] = [
+    { name: 'To do', category: 'todo' },
+    { name: 'Doing', category: 'in_progress' },
+    { name: 'Done', category: 'done' },
+]
 
 export interface CreateProjectInput {
     name: string
@@ -45,9 +47,11 @@ export interface UpdateProjectInput {
      * offering this should say so.
      */
     slug?: string
+    /** Days a card may sit in a done or canceled list before the server archives it; 0 = never. */
+    autoArchiveDays?: number
 }
 
-/** Rename a board or change its color. Owner-only, enforced by the PB rule. */
+/** Rename a board, change its color, or its settings. Owner-only, enforced by the PB rule. */
 export function useUpdateProject() {
     const [projectsCollection] = useStore('cards_projects')
 
@@ -58,19 +62,23 @@ export function useUpdateProject() {
                 if (input.name !== undefined) draft.name = input.name
                 if (input.color !== undefined) draft.color = input.color
                 if (input.slug !== undefined) draft.slug = input.slug
+                if (input.autoArchiveDays !== undefined) {
+                    draft.auto_archive_days = input.autoArchiveDays
+                }
             })
         }),
     })
 }
 
 /**
- * Archive a board — the only removal the UI offers.
+ * Archive a board — the removal the UI offers FIRST.
  *
- * `useActiveBoard` already filters archived projects out of the sidebar, so the
- * board disappears without destroying its lists, cards, members or history.
- * There is deliberately NO delete: a project cascades to everything beneath it,
- * and an owner who wants a board gone is almost always saying "get it out of my
- * sidebar", not "destroy six months of work".
+ * `useActiveBoard` moves archived projects out of the sidebar's Projects list
+ * and into its Archived section, so the board disappears from daily view
+ * without destroying its lists, cards, members or history. Delete exists too
+ * (useDeleteProject) but behind a typed-name confirm: a project cascades to
+ * everything beneath it, and an owner who wants a board gone is almost always
+ * saying "get it out of my sidebar", not "destroy six months of work".
  */
 export function useArchiveProject() {
     const [projectsCollection] = useStore('cards_projects')
@@ -86,6 +94,47 @@ export function useArchiveProject() {
         // Clearing the stored id lets useActiveBoard fall back to the first
         // remaining board; leaving it would point the store at a project the
         // query no longer returns.
+        onSuccess: () => setActiveProject(''),
+    })
+}
+
+/**
+ * Bring an archived board back. The active id is left alone: restoring is
+ * done from the board itself (the banner) or the sidebar's Archived section,
+ * and in both cases the user wants to stay where they are.
+ */
+export function useRestoreProject() {
+    const [projectsCollection] = useStore('cards_projects')
+
+    return useMutation<void, Error, string>({
+        mutationKey: ['cards', 'project', 'restore'],
+        mutationFn: mutation(function* (projectId: string) {
+            yield projectsCollection.update(projectId, draft => {
+                draft.archived = false
+            })
+        }),
+    })
+}
+
+/**
+ * Delete a board outright. Owner-only by rule.
+ *
+ * Every child collection relates to `project` with cascadeDelete, so the
+ * lists, cards, checklist items, comments, attachments, memberships and share
+ * links all go server-side in the same request. Other members see the board
+ * vanish through the membership cascade (useMembershipVisibilitySync), and
+ * server/realtime.go truncates the board's document journal. Callers MUST
+ * confirm first — DeleteBoardDialog requires the name to be typed.
+ */
+export function useDeleteProject() {
+    const [projectsCollection] = useStore('cards_projects')
+    const setActiveProject = useCardsUIStore(s => s.setActiveProject)
+
+    return useMutation<void, Error, string>({
+        mutationKey: ['cards', 'project', 'delete'],
+        mutationFn: mutation(function* (projectId: string) {
+            yield projectsCollection.delete(projectId)
+        }),
         onSuccess: () => setActiveProject(''),
     })
 }
@@ -137,6 +186,9 @@ export function useCreateProject(options: { onError?: (error: unknown) => void }
                 visibility: 'private',
                 created_by: userId,
                 archived: false,
+                // 0 is "never"; written rather than left to the column default
+                // for the reason every other insert here states its fields.
+                auto_archive_days: 0,
             })
 
             yield membersCollection.insert({
@@ -156,7 +208,7 @@ export function useCreateProject(options: { onError?: (error: unknown) => void }
                     project: projectId,
                     name: list.name,
                     position: ranks[index] ?? '',
-                    is_done: list.isDone,
+                    category: list.category,
                 })
             )
 

@@ -1,7 +1,7 @@
 ---
 title: Working with cards
 summary: Opening a card, editing its details, and moving it between lists
-tags: [cards, board, kanban, detail, shortcuts, formatting, "drag and drop"]
+tags: [cards, board, kanban, detail, shortcuts, formatting, "drag and drop", "sub-tasks", subtasks, links, blocks, dependencies]
 order: 20
 ---
 
@@ -31,6 +31,30 @@ To move a whole list, drag it by its name in the list header. A colored bar
 shows which side of the neighboring list it will land on. The list menu's
 **Move left** and **Move right** do the same thing one step at a time.
 
+## List status
+
+Every list has a **status** that says what being in it means: **Backlog**,
+**To do**, **In progress**, **Done** or **Canceled**. A small glyph next to
+the list's name shows which. To change it, open the list menu and choose
+**Status**, then pick one. A new board starts with a To do, an In progress and
+a Done list; a list you add is To do until you say otherwise.
+
+Cards in a **Done** list show a green check and lose their details; cards in a
+**Canceled** list show a cross and a struck-through title. Both are *closed*:
+they get no due-date reminders, never count as overdue, and stay out of
+[My cards](help://cards:my-cards) unless you ask for them. Moving a card into
+a Done list fires the **A card is completed** [rule](help://cards:rules);
+moving one into a Canceled list fires **A card is canceled**.
+
+**Backlog** and **In progress** are for scanning and filtering — a due date on
+a backlog card still reminds you, since you set it on purpose.
+
+## Showing only some cards
+
+The filter and sort icons in the board's top bar narrow the board to the cards
+you care about and order each list — see
+[Filtering and sorting a board](help://cards:filtering-and-sorting).
+
 ## Making room on a busy board
 
 Two controls change how much of the board you see at once. Both are yours
@@ -56,6 +80,89 @@ button again to bring the full cards back.
 In an open card, drag a checklist item by the grip at the start of its row.
 On a computer the grip appears when you point at the row.
 
+## Sub-tasks
+
+When a card is too big to be one job, break it into **sub-tasks**. Open the
+card and use **Add sub-task** to name each piece. Each one becomes a real card
+of its own, on the same board, in the same list as its parent — so it has its
+own key, assignee, due date and comments, and you can drag it wherever the
+work actually belongs.
+
+The parent card shows how the set is going: a small "1/3" on its face, next to
+the checklist and comment counts. A sub-task counts as done when it reaches a
+list whose status is **Done** or **Canceled** — the same thing the list header
+glyph shows. There is no tick-box on the sub-task row, because moving the card
+is what completes it.
+
+A sub-task's face shows **↳** and its parent's key, so you can tell at a glance
+which cards on the board are part of something larger. Click the row in the
+parent's Sub-tasks section to open one.
+
+**Sub-tasks or a checklist?** A checklist item is a line of text that lives on
+one card — right for "don't forget these five steps". A sub-task is a card, so
+choose one when the piece needs its own owner, its own due date, or a
+conversation of its own.
+
+Sub-tasks go one level deep: a sub-task cannot have sub-tasks of its own, and
+a card and its sub-tasks always live on the same board.
+
+To un-link a sub-task, open it and clear its parent — the card stays exactly
+where it is and simply stops being part of the set. Deleting a parent never
+deletes its sub-tasks; they become ordinary cards.
+
+## Linking cards
+
+Sometimes two cards are related without one being part of the other. Open a
+card, then **Add link** in its Links section, choose what kind of link it is,
+and pick the card:
+
+- **Blocks** — this card has to be finished before the other one can be. The
+  other card shows the same link as **Blocked by**.
+- **Related to** — the two are connected, with neither waiting on the other.
+- **Duplicates** — this card covers the same work as the other. The other shows
+  it as **Duplicated by**.
+
+A link is stored once and shown on both cards, so you only file it from one
+side and removing it from either removes it everywhere. Click a linked card to
+open it.
+
+Two cards cannot block each other in both directions — that would be a
+contradiction rather than a pair — and a card cannot be linked to itself.
+**Related to** has no such restriction, because it says the same thing whichever
+card you file it from.
+
+Deleting a card removes its links along with it. The cards at the other end
+stay exactly where they are.
+
+### Links to other boards
+
+Unlike sub-tasks, a link can point at a card on a **different board** — useful
+when your work waits on another team's.
+
+If you can see both boards, the link shows the other card's key and title and
+opens it like any other. If you are not a member of the other board, the link
+still appears, but as **a card on another board** with no name — enough to tell
+you a dependency exists, without showing you work from a board you have not
+been given access to.
+
+The Add link menu offers cards from the board you are on. To link across
+boards, ask someone on both boards to file it.
+
+## Moving a card that has sub-tasks
+
+When you move a card to another board, sub-tasks cannot come along
+automatically, because a card and its parent always live on the same board.
+The move dialog asks what you want:
+
+- **Bring the sub-tasks along** moves the whole set to the new board. Each one
+  gets a new key there, and any label the target board doesn't have is
+  dropped.
+- **Leave them here** keeps the sub-tasks on the current board as ordinary
+  top-level cards.
+
+Moving a card that is *itself* a sub-task always detaches it — its parent stays
+behind. The dialog says so before you confirm.
+
 ## The list stepper
 
 The row of small segments at the top of an open card shows where the card sits
@@ -70,7 +177,49 @@ the description, attachments, checklist, and comments. A due date turns amber
 when it's less than two days away and red once it has passed — the same colors
 the board shows on the card itself.
 
+A card can also carry a **start date**, and its due date can name a **time**.
+Click **Set start date** to pick a day; the face then reads "Sep 3 → Sep 10".
+In the due-date picker, the **Time** row offers a few common times and a box
+to type one — `14:30`, `2:30 pm` and `9` all work. A timed deadline is late
+the minute it passes rather than the next morning, and it lands on the
+calendar at its time rather than as an all-day item. **Clear time** turns it
+back into a plain day. Both dates appear in the card's history and in the
+[timeline view](help://cards:filtering-and-sorting).
+
 To add a file, see [Attaching files to cards](help://cards:attaching-files).
+
+## Card priority
+
+Each card can carry one of four priorities — **Urgent**, **High**, **Medium**
+or **Low** — or none at all, which is where every card starts. To set one, open
+the card and click **Set priority** (or the current priority) in the details,
+then pick a level. Choose **No priority** to clear it.
+
+A card with a priority shows a small glyph at the top-left of its face on the
+board: an alert octagon for urgent, and one to three signal bars for high,
+medium and low. Cards without a priority show nothing, so a board where only
+the important cards are marked stays easy to scan. The glyph is kept when you
+hide card details.
+
+Priority is also available to [board rules](help://cards:rules): a rule can
+react when a card's priority changes, and can set a card's priority as its
+action.
+
+## Estimates
+
+An estimate says how big a card is, in points. To set one, open the card and
+click **Set estimate** (or the current estimate) in the details, then pick a
+size from the ladder — 1, 2, 3, 5, 8 or 13 points. Choose **Clear estimate** to
+remove it.
+
+An estimated card shows its points at the bottom of its face on the board, and
+each list's header adds up the points of the cards it is showing — so a filter
+that hides half a column also halves its total. Lists with nothing estimated
+show no total at all.
+
+You can sort a list by estimate and filter the board to estimated or
+unestimated cards; see [Filtering and sorting](help://cards:filtering-and-sorting).
+Setting or clearing an estimate is recorded in the card's history.
 
 ## Who to ask about a card
 
@@ -139,6 +288,20 @@ description says when that is happening.
 People with **View** access can read a description but not change it, so the
 formatting buttons never appear for them.
 
+## Card history
+
+The **Activity** section of an open card lists everything that happened to
+it, in order, alongside the comments: who created it, moved it between lists,
+assigned or unassigned someone, added or removed a label, changed the due
+date, title, priority or reporter, edited the description, archived or
+restored it, ticked off a checklist item, or attached a file. Reordering a
+card within its list is not recorded — only a change of list is.
+
+Changes made by a board rule show as **Automatically**, and a description
+edited over a stretch of a few minutes shows as one entry rather than one per
+keystroke. History is visible to everyone who can see the card, including
+people reading a shared board by link.
+
 ## Comments
 
 Click the box at the bottom of an open card to write a comment. It works the
@@ -150,6 +313,12 @@ as a card attachment.
 Press ⌘↩ or the Send button to post. Plain Enter starts a new line, so a
 longer comment does not send itself half-written. Reply to a comment to keep a
 thread together.
+
+To react to a comment without writing one, click the smiley under it and pick
+an emoji — a thumbs up, a heart, a laugh, a party, eyes, or a rocket. The
+reaction appears as a chip with a count; click a chip to add yours to it or
+take yours back. Anyone who can comment can react, and anyone who can see the
+card, including people reading a shared board by link, sees the reactions.
 
 To fix or expand one of your own comments, click it — it opens for editing
 with the same formatting buttons. Save (⌘↩, or clicking elsewhere) keeps the
@@ -196,6 +365,30 @@ different card.
 
 A board without a key still works normally; its cards simply have no key to
 quote.
+
+## Duplicating a card
+
+To make a copy of a card on the same board, open it, click **More actions**,
+and choose **Duplicate card**. The copy lands right after the original with
+"Copy of" in front of its title, carrying the description, due date,
+priority, labels, assignees, reporter and checklist (with nothing ticked).
+Comments and attachments stay with the original.
+
+## Moving a card to another board
+
+Open the card, click **More actions**, and choose **Move to board…**. Pick any
+board you can edit, then the list it should land in. The card takes its
+checklist, comments, attachments and history with it. Because labels belong
+to a board, only labels with the same name on the new board are kept — the
+dialog tells you which will be dropped — and people who are not members of
+the new board are unassigned. The card gets a new key there; the old one
+stops working.
+
+## Archived cards
+
+A card you archived is not gone: the archive icon in the board's top bar opens
+the list of archived cards, where it can be restored or deleted for good. See
+[Archiving and deleting](help://cards:archiving-and-deleting).
 
 ## Finding a card
 

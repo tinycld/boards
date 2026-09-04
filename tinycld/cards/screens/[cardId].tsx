@@ -15,10 +15,11 @@ import { CardDetail } from '../components/detail/CardDetail'
 import { CardKeyBadge } from '../components/detail/CardKeyBadge'
 import type { EditableTextHandle } from '../components/detail/EditableText'
 import { ListStepper } from '../components/detail/ListStepper'
+import { WatchButton } from '../components/detail/WatchButton'
 import { ProjectWash } from '../components/ProjectWash'
 import { useCardRoute } from '../hooks/useCardRoute'
 import { useProjectRole } from '../hooks/useProjectRole'
-import { type CardEntry, findCardEntry, neighborCardId } from '../lib/board-cards'
+import { type CardEntry, findCardEntry, flattenCards, neighborCardId } from '../lib/board-cards'
 import type { BoardProject } from '../types'
 
 function usePageShortcuts(
@@ -139,6 +140,11 @@ function CardPage({ project, entry, cardId, navigateBack }: CardPageProps) {
     const titleRef = useRef<EditableTextHandle>(null)
     usePageShortcuts(project, cardId, navigateBack, canEdit, titleRef)
     const insets = useDeviceInsets()
+    // Board order — see CardPeek.
+    const boardCards = useMemo(
+        () => flattenCards(project).map(cardEntry => cardEntry.card),
+        [project]
+    )
 
     return (
         <View className="flex-1 bg-background">
@@ -154,10 +160,12 @@ function CardPage({ project, entry, cardId, navigateBack }: CardPageProps) {
                 />
                 <CardKeyBadge cardKey={entry.card.key} />
                 <View className="flex-1" />
+                <WatchButton projectId={project.id} cardId={entry.card.id} />
                 {canEdit ? (
                     <CardActionsMenu
-                        cardId={entry.card.id}
-                        cardTitle={entry.card.title}
+                        card={entry.card}
+                        list={entry.list}
+                        projectId={project.id}
                         onDismiss={navigateBack}
                     />
                 ) : null}
@@ -171,6 +179,8 @@ function CardPage({ project, entry, cardId, navigateBack }: CardPageProps) {
                 projectId={project.id}
                 projectLabels={project.labels}
                 projectMembers={project.members}
+                projectLists={project.lists}
+                projectCards={boardCards}
                 titleRef={titleRef}
             />
         </View>

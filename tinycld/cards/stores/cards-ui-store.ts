@@ -1,4 +1,6 @@
 import { asyncStorage, create, persist } from '@tinycld/core/lib/store'
+import { type BoardFilter, EMPTY_FILTER } from '../lib/board-filter'
+import { type BoardSort, MANUAL_SORT } from '../lib/board-sort'
 
 interface CardsUIState {
     activeProjectId: string | null
@@ -78,6 +80,64 @@ interface CardsUIState {
     /** The board's single "add list" composer — same idea, one instance. */
     isAddListOpen: boolean
     setAddListOpen: (isOpen: boolean) => void
+    /**
+     * The archived-cards panel. In the store because its entry point (the
+     * header button) and the panel itself (mounted by the screen, beside the
+     * peek) are in different subtrees — the NewBoardDialog arrangement.
+     */
+    isArchivedPanelOpen: boolean
+    openArchivedPanel: () => void
+    closeArchivedPanel: () => void
+    /** The sidebar's Archived section, folded by default. */
+    isArchivedBoardsExpanded: boolean
+    toggleArchivedBoards: () => void
+    /**
+     * Per-board filter and sort, keyed by project id so switching boards
+     * shows the other board unfiltered and switching back restores what was
+     * set. SESSION-ONLY — deliberately outside `partialize`. A persisted
+     * filter is not inert when stale: the user reloads into a near-empty
+     * board with no explanation of where their cards went.
+     */
+    boardFilters: Record<string, BoardFilter>
+    boardSorts: Record<string, BoardSort>
+    setBoardFilter: (projectId: string, patch: Partial<BoardFilter>) => void
+    clearBoardFilter: (projectId: string) => void
+    setBoardSort: (projectId: string, sort: BoardSort) => void
+    isFilterPanelOpen: boolean
+    setFilterPanelOpen: (isOpen: boolean) => void
+    /**
+     * Board, list or timeline, per board. PERSISTED: a stale board id here is
+     * inert (a missing key reads as "board"), and a view is exactly the kind
+     * of thing someone sets once and expects to keep.
+     */
+    viewModeByProject: Record<string, ViewMode>
+    setViewMode: (projectId: string, mode: ViewMode) => void
+    /**
+     * Whether My cards lists cards in done or canceled lists. PERSISTED, and
+     * off by default: it is a preference with no referent to go stale, and
+     * someone who wants to see finished work there wants it every time.
+     */
+    isMyCardsShowingClosed: boolean
+    toggleMyCardsShowClosed: () => void
+}
+
+export type ViewMode = 'board' | 'list' | 'timeline'
+
+export function selectViewMode(state: CardsUIState, projectId: string): ViewMode {
+    return state.viewModeByProject[projectId] ?? 'board'
+}
+
+/**
+ * Selector helpers, so an unset board yields the SAME constant every render —
+ * `??` inline in a selector would too, but naming it keeps every caller on
+ * the one identity that memoization depends on.
+ */
+export function selectBoardFilter(state: CardsUIState, projectId: string): BoardFilter {
+    return state.boardFilters[projectId] ?? EMPTY_FILTER
+}
+
+export function selectBoardSort(state: CardsUIState, projectId: string): BoardSort {
+    return state.boardSorts[projectId] ?? MANUAL_SORT
 }
 
 export const useCardsUIStore = create<CardsUIState>()(
@@ -117,6 +177,39 @@ export const useCardsUIStore = create<CardsUIState>()(
             openComposer: listId => set({ composerOpenListId: listId }),
             isAddListOpen: false,
             setAddListOpen: isOpen => set({ isAddListOpen: isOpen }),
+            isArchivedPanelOpen: false,
+            openArchivedPanel: () => set({ isArchivedPanelOpen: true }),
+            closeArchivedPanel: () => set({ isArchivedPanelOpen: false }),
+            isArchivedBoardsExpanded: false,
+            toggleArchivedBoards: () =>
+                set(s => ({ isArchivedBoardsExpanded: !s.isArchivedBoardsExpanded })),
+            boardFilters: {},
+            boardSorts: {},
+            setBoardFilter: (projectId, patch) =>
+                set(s => ({
+                    boardFilters: {
+                        ...s.boardFilters,
+                        [projectId]: { ...selectBoardFilter(s, projectId), ...patch },
+                    },
+                })),
+            // Deletes the key rather than storing EMPTY_FILTER, so the selector
+            // hands back the shared constant again.
+            clearBoardFilter: projectId =>
+                set(s => {
+                    const next = { ...s.boardFilters }
+                    delete next[projectId]
+                    return { boardFilters: next }
+                }),
+            setBoardSort: (projectId, sort) =>
+                set(s => ({ boardSorts: { ...s.boardSorts, [projectId]: sort } })),
+            isFilterPanelOpen: false,
+            setFilterPanelOpen: isOpen => set({ isFilterPanelOpen: isOpen }),
+            viewModeByProject: {},
+            setViewMode: (projectId, mode) =>
+                set(s => ({ viewModeByProject: { ...s.viewModeByProject, [projectId]: mode } })),
+            isMyCardsShowingClosed: false,
+            toggleMyCardsShowClosed: () =>
+                set(s => ({ isMyCardsShowingClosed: !s.isMyCardsShowingClosed })),
         }),
         {
             name: 'tinycld_cards_ui',
@@ -131,7 +224,11 @@ export const useCardsUIStore = create<CardsUIState>()(
             // persisted activeProjectId that no longer resolves is handled in
             // useActiveBoard, which falls back to the first board. The two
             // composer flags are excluded on the same grounds as the dialog:
-            // a reload should not land on a focused, empty input.
+            // a reload should not land on a focused, empty input, and the
+            // archived panel and sidebar section likewise: both are things
+            // someone opens to look, not settings they expect to keep. The
+            // filter and sort are excluded because a stale one is NOT inert —
+            // see the field comment.
             //
             // The two view preferences persist because a stale value of either
             // is INERT rather than wrong: a collapsed id naming a list that no
@@ -143,6 +240,8 @@ export const useCardsUIStore = create<CardsUIState>()(
                 activeProjectId: s.activeProjectId,
                 collapsedColumnIds: s.collapsedColumnIds,
                 isCompactCards: s.isCompactCards,
+                viewModeByProject: s.viewModeByProject,
+                isMyCardsShowingClosed: s.isMyCardsShowingClosed,
             }),
         }
     )
