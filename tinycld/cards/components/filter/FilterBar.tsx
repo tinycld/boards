@@ -3,7 +3,7 @@ import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { X } from 'lucide-react-native'
 import type { ReactNode } from 'react'
 import { Pressable, Text, View } from 'react-native'
-import { isFilterActive, ME, UNASSIGNED } from '../../lib/board-filter'
+import { isFilterActive, ME, NO_EPIC, UNASSIGNED } from '../../lib/board-filter'
 import { categoryLabel } from '../../lib/list-category'
 import { priorityLabel } from '../../lib/priority'
 import { selectBoardFilter, useCardsUIStore } from '../../stores/cards-ui-store'
@@ -37,7 +37,8 @@ export function FilterBar({ project }: { project: BoardProject }) {
 
     const membersById = new Map(project.members.map(member => [member.id, member]))
     const labelsById = new Map(project.labels.map(label => [label.id, label]))
-    const remove = (key: 'labelIds' | 'assigneeIds' | 'reporterIds', id: string) =>
+    const epicsById = new Map(project.epics.map(epic => [epic.id, epic]))
+    const remove = (key: 'labelIds' | 'epicIds' | 'assigneeIds' | 'reporterIds', id: string) =>
         setBoardFilter(project.id, { [key]: filter[key].filter(x => x !== id) })
 
     return (
@@ -83,6 +84,22 @@ export function FilterBar({ project }: { project: BoardProject }) {
                         label={label?.name ?? 'Label'}
                         color={label?.color}
                         onDismiss={() => remove('labelIds', id)}
+                    />
+                )
+            })}
+            {filter.epicIds.map(id => {
+                // NO_EPIC is a facet value, not an id, so it has no row to
+                // resolve — the same shape UNASSIGNED has among assigneeIds.
+                if (id === NO_EPIC) {
+                    return <Chip key={id} label="No epic" onDismiss={() => remove('epicIds', id)} />
+                }
+                const epic = epicsById.get(id)
+                return (
+                    <Chip
+                        key={id}
+                        label={epic?.title ?? 'Epic'}
+                        color={epic?.color}
+                        onDismiss={() => remove('epicIds', id)}
                     />
                 )
             })}
