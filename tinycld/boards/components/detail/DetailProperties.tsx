@@ -65,15 +65,6 @@ export function DetailProperties({
                 <PropertyRow name="Epic">
                     <EpicValue epic={card.epic} />
                 </PropertyRow>
-                <PropertyRow name="Epic">
-                    <EpicPicker
-                        epics={projectEpics}
-                        selectedId={card.epic?.id ?? ''}
-                        onSelect={epic => updateCard.mutate({ cardId: card.id, epic })}
-                    >
-                        <EpicValue epic={card.epic} />
-                    </EpicPicker>
-                </PropertyRow>
                 <PropertyRow name="Start">
                     <StartValue start={card.start} />
                 </PropertyRow>
