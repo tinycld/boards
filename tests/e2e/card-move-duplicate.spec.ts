@@ -58,13 +58,19 @@ test.describe('Cards — duplicate and move to board', () => {
         // Wait for the SERVER to have both items before duplicating.
         //
         // addChecklistItems waits only for each row to render, which an
-        // optimistic insert satisfies before the write has landed.
-        // useDuplicateCard copies from `itemsCollection.toArray` — the local
-        // store for an on-demand collection — so pressing Duplicate while the
-        // second insert is still in flight copies one item, and the copy reads
-        // "0/1". The face badge is server-owned (server/counters.go recomputes
-        // it from the rows that exist), so it reaching 0/2 is proof both rows
-        // are there to be copied.
+        // optimistic insert satisfies before the write has landed, and
+        // useDuplicateCard copies from `itemsCollection.toArray`. The face
+        // badge is server-owned (server/counters.go recomputes it from the
+        // rows that exist), so it reaching 0/2 is proof both rows are there to
+        // be copied.
+        //
+        // This guard is necessary but was NOT sufficient on its own: the copy
+        // still read "0/1" because the recount itself dropped a concurrent
+        // insert. useDuplicateCard yields its checklist inserts as an array —
+        // in parallel — and recountCard was a read-modify-write with no
+        // serialization, so both hooks counted before either row was visible
+        // and the second Save clobbered the first. Fixed in counters.go with a
+        // per-card lock; see TestRecountCard_ConcurrentInsertsAreAllCounted.
         await expect(boardCard(page, CARD_TITLE)).toContainText('0/2')
 
         await peek(page).getByRole('button', { name: 'More actions' }).click()

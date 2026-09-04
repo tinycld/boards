@@ -3,6 +3,9 @@ package cards
 import (
 	"fmt"
 	"slices"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/pocketbase/pocketbase/core"
 	"tinycld.org/core/automation"
@@ -26,6 +29,8 @@ func registerAutomation() {
 		"cards:card-priority-changed",
 		"cards:card-estimate-changed",
 		"cards:card-rescheduled",
+		"cards:card-overdue",
+		"cards:card-due-soon",
 		"cards:card-archived",
 		"cards:card-parented",
 		"cards:comment-reacted",
@@ -39,6 +44,11 @@ func registerAutomation() {
 	// visible in history and to watchers, but "a card is archived" firing on
 	// a restore would be the wrong surprise.
 	automation.RegisterTriggerFilter("cards:card-archived", cardIsArchived)
+	// Both deadline triggers watch a stamp column, which moves in BOTH
+	// directions: the sweep sets it, and rescheduling a card clears it
+	// (registerDueNotices). Only the set is the event.
+	automation.RegisterTriggerFilter("cards:card-overdue", cardBecameOverdue)
+	automation.RegisterTriggerFilter("cards:card-due-soon", cardBecameDueSoon)
 
 	// move-card declares a relation param, and the engine refuses to run an
 	// action whose relation param has no registered authorizer — without this
@@ -53,7 +63,34 @@ func registerAutomation() {
 
 	automation.RegisterAction("cards:add-label", addLabel)
 	automation.RegisterRelationAuthorizer("cards:add-label", "label", labelAuthorizer)
+
+	// create-card must be native: a record-op `create` cannot derive `project`
+	// from the chosen list, and the two disagreeing makes the card invisible.
+	automation.RegisterAction("cards:create-card", createCard)
+	automation.RegisterRelationAuthorizer("cards:create-card", "list", createCardListAuthorizer)
+
+	// set-due-date must be native for the date math; it declares no relation
+	// param, so it needs no authorizer — it checks board write itself.
+	automation.RegisterAction("cards:set-due-date", setDueDate)
 }
+
+// maxDueShiftDays bounds cards:set-due-date. A rule that re-fires on its own
+// write is already stopped by the chain-depth cap, so this is not a loop
+// guard: it is what keeps a typo'd offset from parking a card centuries out,
+// where every date reader (the sweep's filter, the timeline axis) still has to
+// cope with it. Ten years is far past any real deadline and far short of that.
+const maxDueShiftDays = 3650
+
+// cardTitleRuneLimit is cards_cards.title's own `max` (migration 1980000000).
+// Truncating to it rather than letting the save fail is what makes a rule's
+// title safe as a TEMPLATE: {{description}} can expand well past anything
+// anyone typed into the action, and a rule that dies in run history on a long
+// description is a worse answer than a clipped title.
+//
+// Counted in RUNES while the column's max is counted by PocketBase in the same
+// unit, so a multi-byte title clips where the validator would object and not
+// somewhere earlier.
+const cardTitleRuneLimit = 500
 
 // maxRelationValues mirrors the maxSelect on cards_cards' `assignees` and
 // `labels` (both 20, migration 1980000000). Checked in the handlers so an
@@ -206,6 +243,151 @@ func appendRelation(app core.App, req automation.ActionRequest, ref, field, id s
 	// terminates. `labels` is watched by no trigger today, but stamping is
 	// unconditional on purpose: that is a property of the current catalog, and a
 	// later card-labeled trigger would otherwise reopen the loop silently.
+	return automation.MarkEngineWrite(req, card.Id, func() error {
+		return app.Save(card)
+	})
+}
+
+// createCardListAuthorizer answers the which-record question for
+// cards:create-card's `list` param.
+//
+// Unlike every other authorizer here, this one does NOT compare against the
+// trigger card's board: the whole point of the action is to create a card
+// somewhere, and that somewhere is legitimately another board — "when a bug is
+// filed, open a QA task on the QA board" is the motivating rule. What keeps
+// that from being an escape hatch is the write check: the rule owner must be
+// able to write the DESTINATION board, so a rule can only create cards where
+// its owner could have created one by hand.
+//
+// It therefore does not require req.Record at all, which is deliberate — the
+// action is meaningful on a trigger whose record is not a card.
+//
+// Fails closed on anything unresolvable, per moveDestinationAuthorizer.
+func createCardListAuthorizer(app core.App, req automation.ActionRequest, listID string) error {
+	list, err := app.FindRecordById("cards_lists", listID)
+	if err != nil {
+		return fmt.Errorf("destination list %s: %w", listID, err)
+	}
+	projectID := list.GetString("project")
+	if projectID == "" {
+		return fmt.Errorf("destination list %s has no board", listID)
+	}
+	return checkBoardWrite(app, req.OwnerID, projectID)
+}
+
+// createCard makes one card at the end of a list.
+//
+// `project` is derived from the list rather than taken as a param: the two must
+// agree or the card is invisible (the board query joins on project), and a
+// derived value cannot disagree. `number` is NOT allocated here — the
+// OnRecordCreate hook in card_number.go owns that column for every caller, and
+// allocating again would burn a number per rule-created card.
+//
+// Authorization lives in createCardListAuthorizer, which the engine runs first.
+func createCard(app core.App, req automation.ActionRequest) error {
+	listID := req.Params["list"]
+	if listID == "" {
+		return fmt.Errorf("cards:create-card: no destination list")
+	}
+	title := strings.TrimSpace(req.Params["title"])
+	if title == "" {
+		return fmt.Errorf("cards:create-card: a card needs a title")
+	}
+	// -1 leaves room for the ellipsis truncateRunes appends: at exactly the
+	// column's max it would return max+1 runes and the save would fail
+	// validation, which is the outcome truncating exists to avoid.
+	title = truncateRunes(title, cardTitleRuneLimit-1)
+
+	list, err := app.FindRecordById("cards_lists", listID)
+	if err != nil {
+		return fmt.Errorf("destination list %s: %w", listID, err)
+	}
+	col, err := app.FindCollectionByNameOrId("cards_cards")
+	if err != nil {
+		return fmt.Errorf("cards_cards: %w", err)
+	}
+	position, err := rankAppendToList(app, listID)
+	if err != nil {
+		return fmt.Errorf("cards:create-card: rank for list %s: %w", listID, err)
+	}
+
+	card := core.NewRecord(col)
+	card.Set("project", list.GetString("project"))
+	card.Set("list", listID)
+	card.Set("title", title)
+	card.Set("position", position)
+	// The rule's owner is the author. Attributing to the person whose edit
+	// happened to trip the rule would credit them with a card they did not
+	// write, and history reads created_by.
+	card.Set("created_by", req.OwnerID)
+
+	// cards:card-created is a trigger, so this create re-enters the engine.
+	// Unstamped it would arrive as an ordinary user create at depth 0 and a
+	// create-on-create rule would never terminate — see appendRelation.
+	return automation.MarkEngineWrite(req, card.Id, func() error {
+		return app.Save(card)
+	})
+}
+
+// setDueDate moves the trigger card's deadline by a number of days.
+//
+// RELATIVE ONLY, and always to a DAY. The server has no user time zone —
+// nothing in core carries one — so it cannot honestly resolve "5pm" for the
+// rule's author; due_notices.go works in the same UTC day frame for the same
+// reason. An absolute time param would silently mean the SERVER's 5pm, which
+// is the wrong hour for anyone not sitting beside it.
+//
+// The consequence, accepted deliberately: a card whose deadline named a TIME
+// loses that time when a rule reschedules it. due_has_time goes false and the
+// card becomes due on a calendar day. Destroying a time the user chose is a
+// real cost, taken over a time that is quietly wrong in every zone but one.
+func setDueDate(app core.App, req automation.ActionRequest) error {
+	if req.Record == nil {
+		return fmt.Errorf("cards:set-due-date needs a card — attach it to a card trigger, not a schedule")
+	}
+	raw := strings.TrimSpace(req.Params["days"])
+	if raw == "" {
+		return fmt.Errorf("cards:set-due-date: no day offset given")
+	}
+	days, err := strconv.Atoi(raw)
+	if err != nil {
+		return fmt.Errorf("cards:set-due-date: %q is not a whole number of days", raw)
+	}
+	if days < -maxDueShiftDays || days > maxDueShiftDays {
+		return fmt.Errorf(
+			"cards:set-due-date: %d days is beyond the %d-day limit", days, maxDueShiftDays)
+	}
+
+	card, err := app.FindRecordById("cards_cards", req.Record.Id)
+	if err != nil {
+		return fmt.Errorf("load card %s: %w", req.Record.Id, err)
+	}
+	if err := checkBoardWrite(app, req.OwnerID, card.GetString("project")); err != nil {
+		return err
+	}
+
+	// Measured from the card's existing deadline when it has one, and from
+	// today when it does not — so "+7" both postpones a dated card by a week
+	// and gives an undated one a deadline a week out.
+	base := time.Now().UTC()
+	if due := card.GetDateTime("due"); !due.IsZero() {
+		base = due.Time().UTC()
+	}
+	next := time.Date(base.Year(), base.Month(), base.Day(), 0, 0, 0, 0, time.UTC).
+		AddDate(0, 0, days)
+
+	card.Set("due", next.Format(pbDateFormat))
+	card.Set("due_has_time", false)
+	// registerDueNotices clears the stamps on any due change, so the new
+	// deadline notifies again — but that hook is bound on the request path and
+	// this save is the engine's, so clear them here too rather than depend on
+	// which hooks a given composition happens to bind.
+	card.Set("due_soon_notified_at", "")
+	card.Set("overdue_notified_at", "")
+
+	// `due` is watched by cards:card-rescheduled (and the stamps by the two
+	// deadline triggers), so this write re-enters the engine — stamp it or a
+	// reschedule-on-reschedule rule never terminates.
 	return automation.MarkEngineWrite(req, card.Id, func() error {
 		return app.Save(card)
 	})
@@ -406,6 +588,50 @@ func cardMovedToCanceledList(app core.App, record *core.Record) bool {
 // sweep's archives too.
 func cardIsArchived(_ core.App, record *core.Record) bool {
 	return record != nil && record.GetBool("archived")
+}
+
+// stampJustSet reports that a notice stamp went from empty to set on this
+// save — the sweep marking a card, rather than registerDueNotices clearing the
+// stamps because someone moved the deadline.
+//
+// The watch list alone cannot express this. `watch` fires on any change to the
+// column, and a reschedule CLEARS both stamps, so without this gate moving a
+// due date would fire "card overdue" — precisely backwards.
+//
+// Fails closed on a nil record: an unreadable save is not evidence a deadline
+// passed, and a false "overdue" is the worse error.
+func stampJustSet(record *core.Record, field string) bool {
+	if record == nil {
+		return false
+	}
+	if record.GetDateTime(field).IsZero() {
+		return false
+	}
+	return record.Original().GetDateTime(field).IsZero()
+}
+
+// cardBecameOverdue is the TriggerFilter for "cards:card-overdue".
+//
+// The closed-list re-check is not redundant with the sweep's own: a rule fires
+// off whatever save reaches the hook, and a card can be moved to a done list in
+// the same window. Finished work is not late, whichever way it finished — the
+// invariant cardInClosedList exists to state.
+func cardBecameOverdue(app core.App, record *core.Record) bool {
+	return stampJustSet(record, "overdue_notified_at") && !cardInClosedList(app, record)
+}
+
+// cardBecameDueSoon is the TriggerFilter for "cards:card-due-soon".
+//
+// The sweep stamps due_soon_notified_at even when it sends no "soon" notice —
+// a card first seen already overdue gets the overdue notice only, and the soon
+// stamp is written to suppress stale news. Reading the stamp alone would fire
+// "due soon" on a card that is in fact late, so this asserts the card is not
+// yet overdue as well.
+func cardBecameDueSoon(app core.App, record *core.Record) bool {
+	if !stampJustSet(record, "due_soon_notified_at") || cardInClosedList(app, record) {
+		return false
+	}
+	return record.GetDateTime("overdue_notified_at").IsZero()
 }
 
 // cardInClosedList: the card's work has stopped, one way or the other. What

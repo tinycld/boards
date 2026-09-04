@@ -5,13 +5,14 @@ priority order. Ranked by (1) how many of the three treat a feature as core,
 (2) how often it is touched in daily use, and (3) how much existing core
 infrastructure it can reuse. Ties go to the cheaper item.
 
-Status as of 2026-09-03: Tier 1 shipped on `feat/tier1-parity`. Tier 2's
+Status as of 2026-09-04: Tier 1 shipped on `feat/tier1-parity`. Tier 2's
 four chosen items — 8, 10, 12, 13 — and their rule/notification follow-ups
 shipped as five stacked branches (`feat/tier2-estimates` → `-status` →
 `-reactions` → `-timeline` → `-events`, PRs #46–#50), with the matching
 notification preferences on `tinycld`'s `feat/cards-notification-prefs`
-(PR #229). Sub-tasks (9a) followed on `feat/tier2-subtasks`, and card links
-(9b) on `feat/tier2-links`. Open: 11, 14–21 and Tier 3.
+(PR #229). Sub-tasks (9a) followed on `feat/tier2-subtasks`, card links (9b)
+on `feat/tier2-links`, and time-based automation (11) on
+`feat/tier2-automation`. Open: 14–21 and Tier 3.
 
 ## Tier 1 — table stakes in all three ✅ shipped
 
@@ -83,6 +84,31 @@ notification preferences on `tinycld`'s `feat/cards-notification-prefs`
     15-minute sweep. `list category` on the CLI, with `list done` as
     shorthand.
 
+11. **Time-based automation and missing actions** — landed as `card-overdue`
+    and `card-due-soon`, RECORD triggers watching the two notice stamps rather
+    than anything scheduled. The due-notice sweep already stamped a card on
+    crossing a boundary and saved it, and that save runs the after-update hook
+    the engine binds, so the existing ticker became a trigger with no
+    scheduling of its own and "once per deadline" is inherited from the stamp
+    columns. `core:schedule` was rejected, not merely unused: it is synthetic
+    and fires with no record, so owners cannot resolve through the card's
+    board and every cards authorizer refuses it — and synthetic triggers
+    cannot carry conditions, which is most of the value. Both stamps move in
+    BOTH directions (a reschedule clears them), so each trigger has a filter
+    asserting the stamp was just SET; `card-due-soon` also refuses an
+    already-overdue card, since the sweep stamps the soon column even when it
+    sends no soon notice. `cards:create-card` derives `project` from the list
+    (a record-op cannot, and a mismatch makes the card invisible) and leaves
+    `number` to the OnRecordCreate hook that owns it; its destination MAY
+    cross boards, gated on write access there. `cards:set-due-date` is
+    relative-only and always lands on a day — the server has no user time
+    zone, so an absolute hour would mean the server's — and clears both stamps
+    so a rule-moved deadline notifies again. Adds `roci.dev/fracdex` to
+    `server/`, the first external dep in that module: the server is now the
+    third writer of the rank key space, and sharing the CLI's library makes
+    byte-compatibility structural. Deferred: an exact time of day (needs a
+    user time zone in core); removing an assignee or label.
+
 9a. **Sub-tasks** — landed as `cards_cards.parent` (a card that names another
     card, `cascadeDelete: false` so deleting a parent ORPHANS its children
     rather than destroying them) plus a `subtask_total` / `subtask_done`
@@ -125,13 +151,6 @@ notification preferences on `tinycld`'s `feat/cards-notification-prefs`
 
 ### Open
 
-11. **Time-based automation and missing actions.** Core has `core:schedule`,
-    which fires with no record, and every cards relation authorizer refuses
-    that. Overdue / due-soon triggers are more naturally RECORD triggers the
-    existing due-notice ticker enqueues, reusing the once-only stamps. Still
-    missing: `cards:create-card` (project from the list, `allocateNumber`)
-    and `cards:set-due-date` (date math). The event triggers that needed no
-    scheduling — estimate, dates, archive, reactions — shipped with Tier 2.
 14. **Cycles / sprints with a backlog.** `cards_cycles`, `cards_cards.cycle`,
     a backlog view, rollover. Large; only for software-team personas.
 15. **Epics / milestones.** A lightweight `cards_epics` collection offered as
@@ -184,6 +203,9 @@ notification preferences on `tinycld`'s `feat/cards-notification-prefs`
   timeline views read `useBreakpoint`; the canvas and peek do not.
 - Reactions have no CLI commands; the core CLI scope map would need to grant
   `cards_comment_reactions` first.
+- Rules cannot run at an exact time of day: the deadline triggers and
+  `set-due-date` both work in whole days, because core carries no user time
+  zone for the server to resolve an hour against.
 - The timeline is read-only (no drag-to-reschedule), and the calendar source
   shows the due date only — a start→due span is drawn nowhere but the
   timeline.

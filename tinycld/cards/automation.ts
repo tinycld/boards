@@ -157,6 +157,58 @@ const automation = {
             ],
         },
         {
+            // Time-based, without a schedule. The due-notice sweep
+            // (server/due_notices.go) already stamps a card when it crosses a
+            // deadline boundary and saves it, and that save runs the ordinary
+            // after-update hook — so watching the stamp turns the existing
+            // ticker into a trigger with no scheduling machinery of its own.
+            //
+            // Deliberately NOT core:schedule, which is synthetic and fires
+            // with no record: owners resolve through the card's board, and
+            // every cards authorizer refuses a record-less request. A record
+            // trigger also keeps conditions, which synthetic triggers cannot
+            // have — "overdue AND priority is urgent" is most of the value.
+            //
+            // "Once per deadline" is inherited rather than reimplemented: the
+            // stamp is a column, so it survives a restart, and rescheduling a
+            // card clears it so the next deadline notifies again.
+            id: 'card-overdue',
+            label: 'A card becomes overdue',
+            collection: 'cards_cards',
+            on: 'update',
+            watch: ['overdue_notified_at'],
+            fields: [
+                'title',
+                'due',
+                'start',
+                'priority',
+                'estimate',
+                { key: 'list', label: 'List' },
+                { key: 'project', label: 'Board' },
+                { key: 'assignees', label: 'Assignees' },
+            ],
+        },
+        {
+            // card-overdue's sibling on the other boundary. Gated in Go to a
+            // stamp that was just SET: rescheduling a card clears both stamps,
+            // and a cleared stamp is the opposite of the event.
+            id: 'card-due-soon',
+            label: 'A card is due soon',
+            collection: 'cards_cards',
+            on: 'update',
+            watch: ['due_soon_notified_at'],
+            fields: [
+                'title',
+                'due',
+                'start',
+                'priority',
+                'estimate',
+                { key: 'list', label: 'List' },
+                { key: 'project', label: 'Board' },
+                { key: 'assignees', label: 'Assignees' },
+            ],
+        },
+        {
             // `archived` flips both ways; gated in Go to the archive only, so
             // a restore never reads as "archived". Fires for the auto-archive
             // sweep's archives as well as a person's.
@@ -291,6 +343,57 @@ const automation = {
                     type: 'relation',
                     relationTarget: 'users',
                     label: 'Assignee',
+                },
+            ],
+        },
+        {
+            // Native, not a record-op `create`: the op cannot derive `project`
+            // from the chosen list, and a card whose project and list disagree
+            // is INVISIBLE (the board query joins on project). Deriving it in
+            // Go is what makes the two incapable of disagreeing.
+            //
+            // `number` is not a param and not set here — card_number.go's
+            // OnRecordCreate hook owns that column for every caller.
+            //
+            // The destination legitimately MAY be another board, unlike
+            // move-card's: "when a bug is filed, open a QA task on the QA
+            // board" is the motivating rule. createCardListAuthorizer requires
+            // the rule owner to be able to write the destination, so a rule can
+            // only create cards where its owner could have made one by hand.
+            id: 'create-card',
+            label: 'Create a card',
+            kind: 'native',
+            params: [
+                // Templatable, so "Follow up: {{title}}" reaches the trigger
+                // card's fields. Clipped to the column's max in Go, because a
+                // template can expand far past anything typed here.
+                { key: 'title', type: 'text', label: 'Title' },
+                {
+                    key: 'list',
+                    type: 'relation',
+                    relationTarget: 'cards_lists',
+                    label: 'In list',
+                },
+            ],
+        },
+        {
+            // Native for the date math. RELATIVE ONLY, and always to a day:
+            // the server has no user time zone, so it cannot honestly resolve
+            // an absolute "5pm" for the rule's author — it would mean the
+            // SERVER's 5pm, the wrong hour in every zone but one. The sweep
+            // works in the same UTC day frame for the same reason.
+            //
+            // A card whose deadline named a TIME loses it here (due_has_time
+            // goes false). A real cost, taken over a time that is quietly
+            // wrong for everyone but whoever sits beside the server.
+            id: 'set-due-date',
+            label: 'Move the due date',
+            kind: 'native',
+            params: [
+                {
+                    key: 'days',
+                    type: 'number',
+                    label: 'Days from the current due date (or from today if unset)',
                 },
             ],
         },

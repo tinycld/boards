@@ -18,5 +18,6 @@ go 1.26.3
 require (
 	github.com/pocketbase/dbx v1.12.0
 	github.com/pocketbase/pocketbase v0.39.8
+	roci.dev/fracdex v0.0.0-20241211175510-82d7df79e312
 	tinycld.org/core v0.0.0
 )
