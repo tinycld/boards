@@ -5,7 +5,6 @@ import { Menu } from '@tinycld/core/ui/menu'
 import {
     ArrowLeft,
     ArrowRight,
-    CheckCircle2,
     FoldHorizontal,
     MoreHorizontal,
     Pencil,
@@ -14,9 +13,11 @@ import {
 import { useState } from 'react'
 import { Pressable } from 'react-native'
 import { useDeleteList, useUpdateList } from '../hooks/useListMutations'
+import { categoryLabel, LIST_CATEGORIES, type ListCategory } from '../lib/list-category'
 import { rankForReorder } from '../lib/move'
 import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardListRank, BoardListView } from '../types'
+import { CategoryGlyph } from './CategoryGlyph'
 
 interface ColumnMenuProps {
     list: BoardListView
@@ -26,7 +27,7 @@ interface ColumnMenuProps {
 }
 
 /**
- * The column header menu: rename, move, mark as the done column, delete.
+ * The column header menu: rename, move, set the list's status, delete.
  *
  * Reorder lives here rather than behind a drag because the stepper/menu pair is
  * the accessible path — drag-and-drop is a later task and an addition, never the
@@ -87,13 +88,9 @@ export function ColumnMenu({ list, listOrder, onRename }: ColumnMenuProps) {
                             onPress={() => move(1)}
                             disabled={!canMoveRight}
                         />
-                        <MenuActionItem
-                            label={list.isDone ? 'Not the done list' : 'Mark as done list'}
-                            icon={CheckCircle2}
-                            isActive={list.isDone}
-                            onPress={() =>
-                                updateList.mutate({ listId: list.id, isDone: !list.isDone })
-                            }
+                        <StatusSubmenu
+                            selected={list.category}
+                            onSelect={category => updateList.mutate({ listId: list.id, category })}
                         />
                         <MenuActionItem
                             label="Delete list"
@@ -128,5 +125,38 @@ export function ColumnMenu({ list, listOrder, onRename }: ColumnMenuProps) {
                 isSubmitting={deleteList.isPending}
             />
         </>
+    )
+}
+
+/**
+ * The list's status, as a submenu: one row per category, the current one
+ * marked. A submenu rather than five top-level rows so the menu stays the
+ * length it was, and a single nesting level, which is all core's Menu offers.
+ */
+function StatusSubmenu({
+    selected,
+    onSelect,
+}: {
+    selected: ListCategory
+    onSelect: (category: ListCategory) => void
+}) {
+    return (
+        <Menu.Sub>
+            <Menu.SubTrigger>
+                <Menu.ItemTitle>{`Status: ${categoryLabel(selected)}`}</Menu.ItemTitle>
+            </Menu.SubTrigger>
+            <Menu.SubContent>
+                {LIST_CATEGORIES.map(category => (
+                    <MenuActionItem
+                        key={category}
+                        label={categoryLabel(category)}
+                        isActive={category === selected}
+                        leading={<CategoryGlyph category={category} size={14} />}
+                        testID={`cards-list-status-${category}`}
+                        onPress={() => onSelect(category)}
+                    />
+                ))}
+            </Menu.SubContent>
+        </Menu.Sub>
     )
 }

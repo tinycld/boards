@@ -6,7 +6,16 @@ import { Pressable } from 'react-native'
 import { SORT_FIELD_LABELS, type SortField } from '../../lib/board-sort'
 import { selectBoardSort, useCardsUIStore } from '../../stores/cards-ui-store'
 
-const FIELDS: SortField[] = ['manual', 'priority', 'due', 'created', 'title', 'key']
+const FIELDS: SortField[] = [
+    'manual',
+    'priority',
+    'due',
+    'start',
+    'estimate',
+    'created',
+    'title',
+    'key',
+]
 
 /**
  * Sort within every column. Single-select, so Menu.Item's close-on-press is

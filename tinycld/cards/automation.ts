@@ -14,6 +14,10 @@ import type { CardsSchema } from './types'
 // REPLACES, so append needs a handler), and set-due-date (date math) — are
 // deliberately absent. add-assignee and add-label additionally want a
 // relation param, which the catalog cannot express for a native action.
+//
+// A reaction is a row on cards_comment_reactions rather than a change to a
+// card, so `comment-reacted` is declared against that collection; it carries
+// `project` for the same owner resolver every card trigger uses.
 const automation = {
     triggers: [
         {
@@ -27,9 +31,11 @@ const automation = {
                 { key: 'list', label: 'List' },
                 { key: 'project', label: 'Board' },
                 'due',
+                'start',
                 { key: 'assignees', label: 'Assignees' },
                 'labels',
                 'priority',
+                'estimate',
             ],
         },
         {
@@ -46,18 +52,36 @@ const automation = {
                 { key: 'list', label: 'List' },
                 { key: 'project', label: 'Board' },
                 'due',
+                'start',
                 { key: 'assignees', label: 'Assignees' },
                 'priority',
+                'estimate',
             ],
         },
         {
-            // Same underlying event as card-moved, gated in Go to a list
-            // marked is_done. Users expect "done" as its own event rather
+            // Same underlying event as card-moved, gated in Go to a list whose
+            // category is `done`. Users expect "done" as its own event rather
             // than "moved + a condition on the destination", and a condition
-            // couldn't express it anyway: is_done lives on cards_lists, and
-            // conditions see only the trigger collection's own columns.
+            // couldn't express it anyway: the category lives on cards_lists,
+            // and conditions see only the trigger collection's own columns.
             id: 'card-completed',
             label: 'A card is completed',
+            collection: 'cards_cards',
+            on: 'update',
+            watch: ['list'],
+            fields: [
+                'title',
+                { key: 'list', label: 'List' },
+                { key: 'project', label: 'Board' },
+                { key: 'assignees', label: 'Assignees' },
+            ],
+        },
+        {
+            // The other way work stops: gated in Go to a `canceled` list.
+            // Separate from card-completed for the same reason that one is
+            // separate from card-moved.
+            id: 'card-canceled',
+            label: 'A card is canceled',
             collection: 'cards_cards',
             on: 'update',
             watch: ['list'],
@@ -80,7 +104,9 @@ const automation = {
                 { key: 'list', label: 'List' },
                 { key: 'project', label: 'Board' },
                 'due',
+                'start',
                 'priority',
+                'estimate',
             ],
         },
         {
@@ -95,6 +121,87 @@ const automation = {
                 { key: 'list', label: 'List' },
                 { key: 'project', label: 'Board' },
                 { key: 'assignees', label: 'Assignees' },
+            ],
+        },
+        {
+            id: 'card-estimate-changed',
+            label: "A card's estimate changes",
+            collection: 'cards_cards',
+            on: 'update',
+            watch: ['estimate'],
+            fields: [
+                'title',
+                'estimate',
+                'priority',
+                { key: 'list', label: 'List' },
+                { key: 'project', label: 'Board' },
+                { key: 'assignees', label: 'Assignees' },
+            ],
+        },
+        {
+            // Any of the three date columns: a start set, a due date moved,
+            // a time added to or taken off a deadline.
+            id: 'card-rescheduled',
+            label: "A card's dates change",
+            collection: 'cards_cards',
+            on: 'update',
+            watch: ['due', 'due_has_time', 'start'],
+            fields: [
+                'title',
+                'due',
+                'start',
+                'priority',
+                { key: 'list', label: 'List' },
+                { key: 'project', label: 'Board' },
+                { key: 'assignees', label: 'Assignees' },
+            ],
+        },
+        {
+            // `archived` flips both ways; gated in Go to the archive only, so
+            // a restore never reads as "archived". Fires for the auto-archive
+            // sweep's archives as well as a person's.
+            id: 'card-archived',
+            label: 'A card is archived',
+            collection: 'cards_cards',
+            on: 'update',
+            watch: ['archived'],
+            fields: [
+                'title',
+                { key: 'list', label: 'List' },
+                { key: 'project', label: 'Board' },
+                { key: 'assignees', label: 'Assignees' },
+                'priority',
+            ],
+        },
+        {
+            // Fires in both directions — a card that becomes a sub-task and
+            // one that stops being one — because "it left my epic" is as
+            // worth a rule as "it joined it". A condition on `parent` being
+            // empty separates them in the builder.
+            id: 'card-parented',
+            label: "A card's parent changes",
+            collection: 'cards_cards',
+            on: 'update',
+            watch: ['parent'],
+            fields: [
+                'title',
+                { key: 'parent', label: 'Parent card' },
+                { key: 'list', label: 'List' },
+                { key: 'project', label: 'Board' },
+                { key: 'assignees', label: 'Assignees' },
+            ],
+        },
+        {
+            id: 'comment-reacted',
+            label: 'Someone reacts to a comment',
+            collection: 'cards_comment_reactions',
+            on: 'create',
+            fields: [
+                'emoji',
+                { key: 'user', label: 'Who reacted' },
+                { key: 'card', label: 'Card' },
+                { key: 'comment', label: 'Comment' },
+                { key: 'project', label: 'Board' },
             ],
         },
     ],
@@ -132,6 +239,40 @@ const automation = {
                 set: { priority: { param: 'priority' } },
             },
             params: [{ key: 'priority', field: 'priority', label: 'Priority' }],
+        },
+        {
+            // A record-op like set-priority: one number column, so `set` is
+            // the right verb. 0 is the stored form of "no estimate"
+            // (lib/estimate.ts), so a rule can clear one as well as size it.
+            id: 'set-estimate',
+            label: 'Set the card estimate',
+            kind: 'record-op',
+            collection: 'cards_cards',
+            op: {
+                type: 'update',
+                target: 'trigger-record',
+                set: { estimate: { param: 'estimate' } },
+            },
+            params: [{ key: 'estimate', field: 'estimate', label: 'Estimate (points, 0 clears)' }],
+        },
+        {
+            // A record-op like move-card: `parent` is a single relation, so a
+            // `set` replaces nothing the user wanted kept. Naming the real
+            // column gives the builder a card picker.
+            //
+            // The engine saves as a superuser and so bypasses the same-board
+            // rule; parentAuthorizer in server/automation.go is what refuses a
+            // parent on another board, or one that is itself a sub-task.
+            id: 'set-parent',
+            label: 'Make the card a sub-task',
+            kind: 'record-op',
+            collection: 'cards_cards',
+            op: {
+                type: 'update',
+                target: 'trigger-record',
+                set: { parent: { param: 'parent' } },
+            },
+            params: [{ key: 'parent', field: 'parent', label: 'Parent card' }],
         },
         {
             // Native, not a record-op: `assignees` is a multi-value relation

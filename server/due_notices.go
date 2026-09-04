@@ -26,8 +26,13 @@ import (
 // comparisons are on that frame. Time zone is the server's, as the calendar
 // reminders are.
 //
-// A card sitting in a done list, or archived, gets no notice: finished work
-// is not late.
+// A card whose deadline names a TIME (`due_has_time`) is overdue from that
+// instant, not from the next morning — the one place the instant frame is
+// the right one. "Soon" stays on the day frame for both.
+//
+// A card sitting in a done or canceled list, or archived, gets no notice:
+// finished work is not late, whichever way it finished. A backlog card still
+// does — a due date on it is an explicit ask, not a scheduling accident.
 
 const notifyTypeDue = "cards_due"
 
@@ -46,8 +51,10 @@ func registerDueNotices(app core.App) {
 		if original.GetString("project") == "" {
 			return e.Next()
 		}
-		if original.GetString("due") != e.Record.GetString("due") {
-			// A new due date is a new deadline: both notices fire again.
+		if original.GetString("due") != e.Record.GetString("due") ||
+			original.GetBool("due_has_time") != e.Record.GetBool("due_has_time") {
+			// A new due date — or the same day given a time — is a new
+			// deadline: both notices fire again.
 			e.Record.Set("due_soon_notified_at", "")
 			e.Record.Set("overdue_notified_at", "")
 		} else {
@@ -92,9 +99,15 @@ func checkDueNotices(app core.App, now time.Time) {
 		"cards_cards",
 		"due != '' && archived = false && ("+
 			"(due_soon_notified_at = '' && due < {:soon}) || "+
-			"(overdue_notified_at = '' && due < {:today}))",
+			"(overdue_notified_at = '' && ("+
+			"(due_has_time = false && due < {:today}) || "+
+			"(due_has_time = true && due < {:now}))))",
 		"", 0, 0,
-		dbx.Params{"soon": soonUntil.Format(pbDateFormat), "today": today.Format(pbDateFormat)},
+		dbx.Params{
+			"soon":  soonUntil.Format(pbDateFormat),
+			"today": today.Format(pbDateFormat),
+			"now":   now.UTC().Format(pbDateFormat),
+		},
 	)
 	if err != nil {
 		activityLog.Warn("due notice sweep failed", "error", err)
@@ -102,11 +115,14 @@ func checkDueNotices(app core.App, now time.Time) {
 	}
 
 	for _, card := range rows {
-		if cardMovedToDoneList(app, card) {
+		if cardInClosedList(app, card) {
 			continue
 		}
 		due := card.GetDateTime("due").Time()
 		isOverdue := due.Before(today)
+		if card.GetBool("due_has_time") {
+			isOverdue = due.Before(now)
+		}
 		changed := false
 		if isOverdue && card.GetDateTime("overdue_notified_at").IsZero() {
 			notifyDue(app, card, "overdue", "A card you follow is overdue")

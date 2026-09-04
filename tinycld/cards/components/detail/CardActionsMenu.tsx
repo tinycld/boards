@@ -118,7 +118,17 @@ export function CardActionsMenu({ card, list, projectId, onDismiss }: CardAction
                 onClose={() => setIsConfirmingDelete(false)}
                 onConfirm={confirmDelete}
                 title="Delete card?"
-                message={`"${cardTitle}" and its checklist, comments and attachments will be permanently deleted.`}
+                // Sub-tasks are named explicitly BECAUSE they are the
+                // exception: everything else in this sentence is destroyed,
+                // and someone deleting a card with five sub-tasks needs to
+                // know they survive rather than assuming the worst and
+                // cancelling. `parent` is cascadeDelete: false for exactly
+                // this reason.
+                message={
+                    card.subtaskTotal > 0
+                        ? `"${cardTitle}" and its checklist, comments and attachments will be permanently deleted. Its ${card.subtaskTotal} sub-task${card.subtaskTotal === 1 ? '' : 's'} will stay on the board as top-level cards.`
+                        : `"${cardTitle}" and its checklist, comments and attachments will be permanently deleted.`
+                }
                 confirmLabel="Delete"
                 isDestructive
                 isSubmitting={deleteCard.isPending}

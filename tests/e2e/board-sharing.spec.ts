@@ -115,11 +115,11 @@ test.describe('Cards — board sharing and role gates', () => {
             // Card detail: the stepper stays visible as the status display but
             // its segments stop being buttons; no comment composer.
             await boardCard(bobPage, CARD_TITLE).click()
-            await expect(bobPage.getByText('No comments yet.', { exact: true })).toBeVisible()
+            await expect(bobPage.getByText('No activity yet.', { exact: true })).toBeVisible()
             await expect(bobPage.getByRole('button', { name: 'Move to Doing' })).toHaveCount(0)
             await expect(bobPage.getByTestId('cards-comment-composer')).toHaveCount(0)
             await bobPage.keyboard.press('Escape')
-            await expect(bobPage.getByText('No comments yet.', { exact: true })).toHaveCount(0)
+            await expect(bobPage.getByText('No activity yet.', { exact: true })).toHaveCount(0)
 
             // The roster is readable for a non-guest member, but not manageable.
             await openShareDialog(bobPage, boardName)

@@ -11,6 +11,7 @@ function card(id: string, overrides: Partial<BoardCardView> = {}): BoardCardView
         title: id,
         description: '',
         due: undefined,
+        dueHasTime: false,
         labels: [],
         assignees: [],
         reporter: undefined,
@@ -20,6 +21,7 @@ function card(id: string, overrides: Partial<BoardCardView> = {}): BoardCardView
         checklistDone: 0,
         commentCount: 0,
         attachmentCount: 0,
+        listCategory: 'todo',
         ...overrides,
     }
 }
@@ -57,6 +59,34 @@ describe('compareCards', () => {
             'early',
             'none',
         ])
+    })
+
+    it('orders by start date with unstarted cards last', () => {
+        const cards = [
+            card('none'),
+            card('late', { start: new Date(2026, 5, 1) }),
+            card('early', { start: new Date(2026, 0, 1) }),
+        ]
+        expect(ids([...cards].sort(compareCards({ field: 'start', direction: 'asc' })))).toEqual([
+            'early',
+            'late',
+            'none',
+        ])
+        expect(ids([...cards].sort(compareCards({ field: 'start', direction: 'desc' })))).toEqual([
+            'late',
+            'early',
+            'none',
+        ])
+    })
+
+    it('orders by estimate and puts unestimated cards last in both directions', () => {
+        const cards = [card('none'), card('big', { estimate: 8 }), card('small', { estimate: 2 })]
+        expect(ids([...cards].sort(compareCards({ field: 'estimate', direction: 'asc' })))).toEqual(
+            ['small', 'big', 'none']
+        )
+        expect(
+            ids([...cards].sort(compareCards({ field: 'estimate', direction: 'desc' })))
+        ).toEqual(['big', 'small', 'none'])
     })
 
     it('breaks a tie on the chosen field by rank', () => {

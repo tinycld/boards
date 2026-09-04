@@ -34,17 +34,17 @@ function project(): BoardProject {
                 id: 'todo',
                 name: 'Todo',
                 position: 'a0',
-                isDone: false,
+                category: 'todo',
                 cards: [card('a', 'todo', 'a0'), card('b', 'todo', 'a1'), card('c', 'todo', 'a2')],
             },
             {
                 id: 'doing',
                 name: 'Doing',
                 position: 'a1',
-                isDone: false,
+                category: 'todo',
                 cards: [card('d', 'doing', 'a0')],
             },
-            { id: 'done', name: 'Done', position: 'a2', isDone: true, cards: [] },
+            { id: 'done', name: 'Done', position: 'a2', category: 'done', cards: [] },
         ],
     }
 }

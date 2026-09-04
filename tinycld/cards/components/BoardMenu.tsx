@@ -10,6 +10,7 @@ import {
     MoreHorizontal,
     Palette,
     Pencil,
+    Settings2,
     Trash2,
 } from 'lucide-react-native'
 import { useState } from 'react'
@@ -20,6 +21,7 @@ import {
     useUpdateProject,
 } from '../hooks/useProjectMutations'
 import type { BoardProject } from '../types'
+import { BoardSettingsDialog } from './BoardSettingsDialog'
 import { DeleteBoardDialog } from './DeleteBoardDialog'
 
 interface BoardMenuProps {
@@ -30,7 +32,7 @@ interface BoardMenuProps {
 }
 
 /**
- * The board's own menu: rename, recolor, archive (or restore), delete.
+ * The board's own menu: rename, recolor, settings, archive (or restore), delete.
  *
  * Archive is offered first and confirms with a plain dialog, because the
  * board vanishing from the sidebar looks identical to losing it. Delete sits
@@ -39,6 +41,7 @@ interface BoardMenuProps {
  */
 export function BoardMenu({ project, cardCount, isArchived, onRename }: BoardMenuProps) {
     const [isPickingColor, setIsPickingColor] = useState(false)
+    const [isEditingSettings, setIsEditingSettings] = useState(false)
     const [isConfirmingArchive, setIsConfirmingArchive] = useState(false)
     const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
     const mutedColor = useThemeColor('muted')
@@ -67,6 +70,12 @@ export function BoardMenu({ project, cardCount, isArchived, onRename }: BoardMen
                             icon={Palette}
                             colorDot={project.color}
                             onPress={() => setIsPickingColor(true)}
+                        />
+                        <MenuActionItem
+                            label="Board settings…"
+                            icon={Settings2}
+                            testID="cards-board-settings"
+                            onPress={() => setIsEditingSettings(true)}
                         />
                         {isArchived ? (
                             <MenuActionItem
@@ -109,6 +118,12 @@ export function BoardMenu({ project, cardCount, isArchived, onRename }: BoardMen
                     </View>
                 </ModalContent>
             </Modal>
+
+            <BoardSettingsDialog
+                project={project}
+                isOpen={isEditingSettings}
+                onClose={() => setIsEditingSettings(false)}
+            />
 
             <ConfirmDialog
                 isOpen={isConfirmingArchive}

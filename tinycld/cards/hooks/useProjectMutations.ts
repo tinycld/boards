@@ -2,6 +2,7 @@ import { useAuth } from '@tinycld/core/lib/auth'
 import { mutation, useMutation } from '@tinycld/core/lib/mutations'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { newRecordId } from 'pbtsdb/core'
+import type { ListCategory } from '../lib/list-category'
 import { initialRanks } from '../lib/rank'
 import { useCardsUIStore } from '../stores/cards-ui-store'
 
@@ -12,15 +13,16 @@ import { useCardsUIStore } from '../stores/cards-ui-store'
  * list" — a dead end for someone who just asked for a board. Every kanban tool
  * ships default columns.
  *
- * The last one carries `is_done`, which is not decoration: BoardColumn,
- * BoardCard and ListStepper all have done-state rendering paths that stay dead
- * code until some list sets it.
+ * The categories are not decoration: BoardColumn, BoardCard and ListStepper
+ * all have closed-state rendering paths that stay dead code until some list
+ * is `done`, and the filter's status facet is only useful once the lists
+ * disagree.
  */
-const DEFAULT_LISTS = [
-    { name: 'To do', isDone: false },
-    { name: 'Doing', isDone: false },
-    { name: 'Done', isDone: true },
-] as const
+const DEFAULT_LISTS: { name: string; category: ListCategory }[] = [
+    { name: 'To do', category: 'todo' },
+    { name: 'Doing', category: 'in_progress' },
+    { name: 'Done', category: 'done' },
+]
 
 export interface CreateProjectInput {
     name: string
@@ -45,9 +47,11 @@ export interface UpdateProjectInput {
      * offering this should say so.
      */
     slug?: string
+    /** Days a card may sit in a done or canceled list before the server archives it; 0 = never. */
+    autoArchiveDays?: number
 }
 
-/** Rename a board or change its color. Owner-only, enforced by the PB rule. */
+/** Rename a board, change its color, or its settings. Owner-only, enforced by the PB rule. */
 export function useUpdateProject() {
     const [projectsCollection] = useStore('cards_projects')
 
@@ -58,6 +62,9 @@ export function useUpdateProject() {
                 if (input.name !== undefined) draft.name = input.name
                 if (input.color !== undefined) draft.color = input.color
                 if (input.slug !== undefined) draft.slug = input.slug
+                if (input.autoArchiveDays !== undefined) {
+                    draft.auto_archive_days = input.autoArchiveDays
+                }
             })
         }),
     })
@@ -179,6 +186,9 @@ export function useCreateProject(options: { onError?: (error: unknown) => void }
                 visibility: 'private',
                 created_by: userId,
                 archived: false,
+                // 0 is "never"; written rather than left to the column default
+                // for the reason every other insert here states its fields.
+                auto_archive_days: 0,
             })
 
             yield membersCollection.insert({
@@ -198,7 +208,7 @@ export function useCreateProject(options: { onError?: (error: unknown) => void }
                     project: projectId,
                     name: list.name,
                     position: ranks[index] ?? '',
-                    is_done: list.isDone,
+                    category: list.category,
                 })
             )
 

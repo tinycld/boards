@@ -70,7 +70,7 @@ function segmentFill(
     successColor: string
 ): string | null {
     if (index > currentIndex) return null
-    if (list.isDone && index === currentIndex) return successColor
+    if (list.category === 'done' && index === currentIndex) return successColor
     return project.color
 }
 

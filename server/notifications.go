@@ -9,13 +9,14 @@ import (
 // Card notifications beyond @mentions: assignment, replies, and changes to a
 // card someone watches.
 //
-// Four notification TYPES, and each is also a mute switch in core's
+// Five notification TYPES, and each is also a mute switch in core's
 // notification preferences (use-notification-preferences.ts):
 //
 //	cards_assigned  you were assigned
 //	cards_reply     someone replied to your comment
+//	cards_reaction  someone reacted to your comment
 //	cards_watched   a card you watch changed — Meta.event says how:
-//	                comment | moved | completed | archived
+//	                comment | moved | completed | canceled | archived
 //	cards_due       a card you watch or own is due soon / overdue (due_notices.go)
 //
 // PRECEDENCE, per event: one notification per person. A reply's author is
@@ -32,6 +33,7 @@ import (
 const (
 	notifyTypeAssigned = "cards_assigned"
 	notifyTypeReply    = "cards_reply"
+	notifyTypeReaction = "cards_reaction"
 	notifyTypeWatched  = "cards_watched"
 )
 
@@ -45,6 +47,32 @@ func registerCardNotifications(app core.App) {
 		go notifyNewComment(app, e.Record)
 		return e.Next()
 	})
+	app.OnRecordAfterCreateSuccess("cards_comment_reactions").BindFunc(func(e *core.RecordEvent) error {
+		go notifyReaction(app, e.Record)
+		return e.Next()
+	})
+}
+
+// notifyReaction tells a comment's author that someone reacted to it. Only
+// the author: a reaction is a nod to one person, not news about the card, so
+// the watchers are left alone. Reacting to your own comment tells nobody.
+func notifyReaction(app core.App, reaction *core.Record) {
+	comment, err := app.FindRecordById("cards_comments", reaction.GetString("comment"))
+	if err != nil {
+		return
+	}
+	author := comment.GetString("author")
+	reactor := reaction.GetString("user")
+	if author == "" || author == reactor {
+		return
+	}
+	card, err := app.FindRecordById("cards_cards", comment.GetString("card"))
+	if err != nil {
+		return
+	}
+	who := actorName(app, reactor)
+	title := truncateRunes(card.GetString("title"), 200)
+	deliver(app, author, notifyTypeReaction, who+" reacted "+reaction.GetString("emoji")+" to your comment", title, card, "reaction")
 }
 
 // notifyCardUpdate fans out the notifications one saved card implies.
@@ -66,8 +94,11 @@ func notifyCardUpdate(app core.App, card *core.Record, actor string) {
 
 	if original.GetString("list") != card.GetString("list") {
 		event, headline := "moved", who+" moved a card you watch"
-		if cardMovedToDoneList(app, card) {
+		switch category, _ := cardListCategory(app, card); category {
+		case "done":
 			event, headline = "completed", who+" completed a card you watch"
+		case "canceled":
+			event, headline = "canceled", who+" canceled a card you watch"
 		}
 		for _, userID := range watcherIDs(app, card.Id) {
 			if userID == actor {

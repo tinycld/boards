@@ -176,19 +176,53 @@ func TestNotify_MoveAndCompleteReachWatchersWithTheEvent(t *testing.T) {
 
 	// Into the done list: the same event, named "completed".
 	done := cardsList(t, env.app, env.project, "Done", "a2")
-	done.Set("is_done", true)
+	done.Set("category", "done")
 	if err := env.app.Save(done); err != nil {
 		t.Fatal(err)
 	}
 	completed := loaded(t, env.app, env.card.Id)
 	completed.Set("list", done.Id)
 	notifyCardUpdate(env.app, completed, env.owner.Id)
+	// And into a canceled list: named "canceled", never "completed".
+	canceled := cardsList(t, env.app, env.project, "Won't do", "a3")
+	canceled.Set("category", "canceled")
+	if err := env.app.Save(canceled); err != nil {
+		t.Fatal(err)
+	}
+	dropped := loaded(t, env.app, env.card.Id)
+	dropped.Set("list", canceled.Id)
+	notifyCardUpdate(env.app, dropped, env.owner.Id)
 	events := map[string]bool{}
 	for _, n := range notificationsFor(t, env.app, env.viewer.Id) {
 		events[eventOf(t, n)] = true
 	}
-	if !events["completed"] || !events["moved"] {
-		t.Fatalf("viewer events = %v, want moved and completed", events)
+	if !events["completed"] || !events["moved"] || !events["canceled"] {
+		t.Fatalf("viewer events = %v, want moved, completed and canceled", events)
+	}
+}
+
+func TestNotify_ReactionTellsTheCommentAuthorOnly(t *testing.T) {
+	env := setupNotifyEnv(t)
+	ensureWatcher(env.app, env.project.Id, env.card.Id, env.viewer.Id)
+	comment := cardsComment(t, env.app, env.project, env.card, env.editor, "hello")
+
+	notifyReaction(env.app, seedReaction(t, env, comment.Id, env.commentor.Id, "👍"))
+	editorNotes := notificationsFor(t, env.app, env.editor.Id)
+	if len(editorNotes) != 1 || editorNotes[0].GetString("type") != notifyTypeReaction {
+		t.Fatalf("author got %v, want one cards_reaction", notificationTypes(t, env.app, env.editor.Id))
+	}
+	if event := eventOf(t, editorNotes[0]); event != "reaction" {
+		t.Fatalf("event = %q, want reaction", event)
+	}
+	// A reaction is for the author alone: the watcher hears nothing, and so
+	// does the reactor.
+	requireTypes(t, notificationTypes(t, env.app, env.viewer.Id))
+	requireTypes(t, notificationTypes(t, env.app, env.commentor.Id))
+
+	// Reacting to your own comment tells nobody.
+	notifyReaction(env.app, seedReaction(t, env, comment.Id, env.editor.Id, "🎉"))
+	if got := len(notificationsFor(t, env.app, env.editor.Id)); got != 1 {
+		t.Fatalf("self-reaction notified: %d notifications", got)
 	}
 }
 

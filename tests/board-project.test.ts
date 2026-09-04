@@ -24,6 +24,7 @@ function project(overrides: Partial<CardsProjects> = {}): CardsProjects {
         visibility: 'private',
         created_by: 'u1',
         archived: false,
+        auto_archive_days: 0,
         created: '',
         updated: '',
         ...overrides,
@@ -36,7 +37,7 @@ function list(id: string, position: string, overrides: Partial<CardsLists> = {})
         project: 'p1',
         name: id,
         position,
-        is_done: false,
+        category: 'todo',
         created: '',
         updated: '',
         ...overrides,
@@ -57,6 +58,8 @@ function card(
         title: id,
         description: '',
         due: '',
+        due_has_time: false,
+        start: '',
         assignees: [],
         labels: [],
         created_by: 'u1',
@@ -65,6 +68,7 @@ function card(
         // below need both halves of that to be exercisable.
         reporter: '',
         priority: 'none',
+        estimate: 0,
         archived: false,
         // 1 rather than 0: a card that reached the server has a number, and 0
         // is specifically the not-yet-assigned state the key tests below cover.
@@ -73,6 +77,9 @@ function card(
         checklist_done: 0,
         comment_count: 0,
         attachment_count: 0,
+        parent: '',
+        subtask_total: 0,
+        subtask_done: 0,
         created: '',
         updated: '',
         ...overrides,
@@ -124,7 +131,9 @@ describe('toBoardCard', () => {
     // so this conversion is the only thing between the record and a visibly
     // broken due pill.
     it('maps an empty due date to undefined', () => {
-        expect(toBoardCard(card('c1', 'list1', 'a0'), labels, users, 'OTTER').due).toBeUndefined()
+        expect(
+            toBoardCard(card('c1', 'list1', 'a0'), labels, users, 'OTTER', 'todo').due
+        ).toBeUndefined()
     })
 
     it('maps an ISO due date to a Date', () => {
@@ -132,7 +141,8 @@ describe('toBoardCard', () => {
             card('c1', 'list1', 'a0', { due: '2026-08-05 00:00:00Z' }),
             labels,
             users,
-            'OTTER'
+            'OTTER',
+            'todo'
         ).due
         expect(due).toBeInstanceOf(Date)
         expect(Number.isNaN(due?.getTime())).toBe(false)
@@ -147,7 +157,8 @@ describe('toBoardCard', () => {
             card('c1', 'list1', 'a0', { due: '2026-08-05 00:00:00Z' }),
             labels,
             users,
-            'OTTER'
+            'OTTER',
+            'todo'
         ).due
         expect([due?.getFullYear(), (due?.getMonth() ?? 0) + 1, due?.getDate()]).toEqual([
             2026, 8, 5,
@@ -161,7 +172,8 @@ describe('toBoardCard', () => {
             card('c1', 'list1', 'a0', { due: 'not a date' }),
             labels,
             users,
-            'OTTER'
+            'OTTER',
+            'todo'
         ).due
         expect(due).toBeUndefined()
     })
@@ -171,7 +183,8 @@ describe('toBoardCard', () => {
             card('c1', 'list1', 'a0', { labels: ['l1'] }),
             labels,
             users,
-            'OTTER'
+            'OTTER',
+            'todo'
         )
         expect(result.labels).toEqual([{ id: 'l1', name: 'Bug', color: '#ef4444' }])
     })
@@ -183,7 +196,8 @@ describe('toBoardCard', () => {
             card('c1', 'list1', 'a0', { labels: ['l1', 'gone'] }),
             labels,
             users,
-            'OTTER'
+            'OTTER',
+            'todo'
         )
         expect(result.labels).toHaveLength(1)
         expect(result.labels[0]?.id).toBe('l1')
@@ -200,7 +214,8 @@ describe('toBoardCard', () => {
             card('c1', 'list1', 'a0', { assignees: ['gone'] }),
             labels,
             users,
-            'OTTER'
+            'OTTER',
+            'todo'
         )
         expect(result.assignees).toEqual([{ id: 'gone', firstName: 'Board', lastName: 'member' }])
     })
@@ -214,13 +229,15 @@ describe('toBoardCard', () => {
             card('c1', 'list1', 'a0', { assignees: ['gone'] }),
             labels,
             users,
-            'OTTER'
+            'OTTER',
+            'todo'
         )
         const second = toBoardCard(
             card('c1', 'list1', 'a0', { assignees: ['gone'] }),
             labels,
             users,
-            'OTTER'
+            'OTTER',
+            'todo'
         )
         expect(first.assignees).toEqual(second.assignees)
     })
@@ -230,7 +247,8 @@ describe('toBoardCard', () => {
             card('c1', 'list1', 'a0', { reporter: 'u1' }),
             labels,
             users,
-            'OTTER'
+            'OTTER',
+            'todo'
         )
         expect(result.reporter?.id).toBe('u1')
         expect(result.reporter?.firstName).toBe('Maya')
@@ -245,7 +263,8 @@ describe('toBoardCard', () => {
             card('c1', 'list1', 'a0', { reporter: '', created_by: 'u1' }),
             labels,
             users,
-            'OTTER'
+            'OTTER',
+            'todo'
         )
         expect(result.reporter?.id).toBe('u1')
     })
@@ -259,7 +278,8 @@ describe('toBoardCard', () => {
             card('c1', 'list1', 'a0', { reporter: 'u2', created_by: 'u1' }),
             labels,
             twoUsers,
-            'OTTER'
+            'OTTER',
+            'todo'
         )
         expect(result.reporter?.id).toBe('u2')
     })
@@ -272,7 +292,8 @@ describe('toBoardCard', () => {
             card('c1', 'list1', 'a0', { reporter: 'gone' }),
             labels,
             users,
-            'OTTER'
+            'OTTER',
+            'todo'
         )
         expect(result.reporter).toEqual({ id: 'gone', firstName: 'Board', lastName: 'member' })
     })
@@ -285,7 +306,8 @@ describe('toBoardCard', () => {
             card('c1', 'list1', 'a0', { reporter: '', created_by: '' }),
             labels,
             users,
-            'OTTER'
+            'OTTER',
+            'todo'
         )
         expect(result.reporter).toBeUndefined()
     })
@@ -300,7 +322,8 @@ describe('toBoardCard', () => {
             }),
             labels,
             users,
-            'OTTER'
+            'OTTER',
+            'todo'
         )
         expect(result.checklistTotal).toBe(7)
         expect(result.checklistDone).toBe(3)
@@ -309,11 +332,52 @@ describe('toBoardCard', () => {
     })
 
     it('carries the priority through', () => {
-        expect(toBoardCard(card('c1', 'l1', 'a0'), labels, users, 'OTTER').priority).toBe('none')
+        expect(toBoardCard(card('c1', 'l1', 'a0'), labels, users, 'OTTER', 'todo').priority).toBe(
+            'none'
+        )
         expect(
-            toBoardCard(card('c1', 'l1', 'a0', { priority: 'high' }), labels, users, 'OTTER')
-                .priority
+            toBoardCard(
+                card('c1', 'l1', 'a0', { priority: 'high' }),
+                labels,
+                users,
+                'OTTER',
+                'todo'
+            ).priority
         ).toBe('high')
+    })
+
+    it('carries the list category onto the card, and the raw column onto the list', () => {
+        expect(
+            toBoardCard(card('c1', 'l1', 'a0'), labels, users, 'OTTER', 'in_progress').listCategory
+        ).toBe('in_progress')
+    })
+
+    it('reads a timed due date as an instant and a start as a day', () => {
+        const instant = new Date(2026, 8, 12, 14, 30)
+        const view = toBoardCard(
+            card('c1', 'l1', 'a0', {
+                due: instant.toISOString(),
+                due_has_time: true,
+                start: '2026-09-10 00:00:00.000Z',
+            }),
+            labels,
+            users,
+            'OTTER',
+            'todo'
+        )
+        expect(view.due?.getTime()).toBe(instant.getTime())
+        expect(view.dueHasTime).toBe(true)
+        expect(view.start && [view.start.getMonth(), view.start.getDate()]).toEqual([8, 10])
+    })
+
+    it('reads the stored zero as no estimate', () => {
+        expect(
+            toBoardCard(card('c1', 'l1', 'a0'), labels, users, 'OTTER', 'todo').estimate
+        ).toBeUndefined()
+        expect(
+            toBoardCard(card('c1', 'l1', 'a0', { estimate: 5 }), labels, users, 'OTTER', 'todo')
+                .estimate
+        ).toBe(5)
     })
 
     it('formats the card key from the board slug and the card number', () => {
@@ -321,7 +385,8 @@ describe('toBoardCard', () => {
             card('c1', 'list1', 'a0', { number: 123 }),
             labels,
             users,
-            'OTTER'
+            'OTTER',
+            'todo'
         )
         expect(result.key).toBe('OTTER-123')
     })
@@ -330,12 +395,24 @@ describe('toBoardCard', () => {
     // server assigns its number. Rendering "OTTER-0" would be worse than
     // rendering nothing.
     it('leaves the key empty until the server assigns a number', () => {
-        const result = toBoardCard(card('c1', 'list1', 'a0', { number: 0 }), labels, users, 'OTTER')
+        const result = toBoardCard(
+            card('c1', 'list1', 'a0', { number: 0 }),
+            labels,
+            users,
+            'OTTER',
+            'todo'
+        )
         expect(result.key).toBe('')
     })
 
     it('leaves the key empty for a board with no slug', () => {
-        const result = toBoardCard(card('c1', 'list1', 'a0', { number: 7 }), labels, users, '')
+        const result = toBoardCard(
+            card('c1', 'list1', 'a0', { number: 7 }),
+            labels,
+            users,
+            '',
+            'todo'
+        )
         expect(result.key).toBe('')
     })
 })
@@ -359,6 +436,48 @@ describe('buildBoardProject', () => {
             cards: [card('c1', 'list1', 'a0'), card('c2', 'list2', 'a0')],
         })
         expect(result?.lists.map(l => l.cards.map(c => c.id))).toEqual([['c1'], ['c2']])
+    })
+
+    it('resolves a sub-task’s parentKey from the parent’s number', () => {
+        const result = buildBoardProject({
+            ...base,
+            project: project(),
+            lists: [list('list1', 'a0')],
+            cards: [
+                card('c1', 'list1', 'a0', { number: 4 }),
+                card('c2', 'list1', 'a1', { parent: 'c1', number: 5 }),
+            ],
+        })
+        const cards = result?.lists[0]?.cards ?? []
+        expect(cards.map(c => c.parentKey)).toEqual(['', 'OTTER-4'])
+    })
+
+    // The chip says which card this is part of, not which cards are on screen,
+    // so it survives the parent being archived — the parent is skipped by the
+    // archived guard, but the key map is built from the raw rows.
+    it('keeps parentKey when the parent is archived', () => {
+        const result = buildBoardProject({
+            ...base,
+            project: project(),
+            lists: [list('list1', 'a0')],
+            cards: [
+                card('c1', 'list1', 'a0', { number: 4, archived: true }),
+                card('c2', 'list1', 'a1', { parent: 'c1', number: 5 }),
+            ],
+        })
+        expect(result?.lists[0]?.cards[0]?.parentKey).toBe('OTTER-4')
+    })
+
+    // Deleting a parent orphans its children rather than destroying them, so a
+    // dangling id must render no chip instead of a broken one.
+    it('leaves parentKey empty when the parent is gone', () => {
+        const result = buildBoardProject({
+            ...base,
+            project: project(),
+            lists: [list('list1', 'a0')],
+            cards: [card('c2', 'list1', 'a0', { parent: 'deleted' })],
+        })
+        expect(result?.lists[0]?.cards[0]?.parentKey).toBe('')
     })
 
     // An empty column must still render — it is where the first card gets added.
@@ -523,6 +642,31 @@ describe('buildBoardProject with a view', () => {
         })
         const previous = buildBoardProject(input())
         expect(buildBoardProject(input(), previous)).toBe(previous)
+    })
+
+    it('replaces the list and card nodes when the list category changes', () => {
+        const previous = buildBoardProject({ ...base, cards: [card('a', 'l1', 'a0')] })
+        const result = buildBoardProject(
+            {
+                ...base,
+                lists: [list('l1', 'a0', { category: 'done' })],
+                cards: [card('a', 'l1', 'a0')],
+            },
+            previous
+        )
+        expect(result?.lists[0]).not.toBe(previous?.lists[0])
+        expect(result?.lists[0]?.category).toBe('done')
+        expect(result?.lists[0]?.cards[0]?.listCategory).toBe('done')
+    })
+
+    it('replaces the card node when only the estimate changes', () => {
+        const previous = buildBoardProject({ ...base, cards: [card('a', 'l1', 'a0')] })
+        const result = buildBoardProject(
+            { ...base, cards: [card('a', 'l1', 'a0', { estimate: 3 })] },
+            previous
+        )
+        expect(result?.lists[0]?.cards[0]).not.toBe(previous?.lists[0]?.cards[0])
+        expect(result?.lists[0]?.cards[0]?.estimate).toBe(3)
     })
 
     it('replaces the list node when the filter changes what it shows', () => {

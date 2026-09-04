@@ -145,17 +145,81 @@ func TestActivity_ScalarChangesAndArchiveFlip(t *testing.T) {
 	updateCardAs(t, env.app, env.owner, env.card.Id, func(r *core.Record) {
 		r.Set("title", "renamed")
 		r.Set("due", "2026-09-12 00:00:00.000Z")
+		r.Set("start", "2026-09-10 00:00:00.000Z")
 		r.Set("priority", "high")
+		r.Set("estimate", 5)
 		r.Set("archived", true)
 	})
 	updateCardAs(t, env.app, env.owner, env.card.Id, func(r *core.Record) {
 		r.Set("archived", false)
 	})
 	rows := activityRows(t, env.app, env.card.Id)
-	requireKinds(t, rows, "due", "title", "priority", "archived", "restored")
+	requireKinds(t, rows, "due", "start", "title", "priority", "estimate", "archived", "restored")
 	if got := rowOfKind(t, rows, "title").GetString("from"); got != "seeded-card" {
 		t.Fatalf("title row from = %q, want the old title", got)
 	}
+	if got := rowOfKind(t, rows, "estimate").GetString("to"); got != "5" {
+		t.Fatalf("estimate row to = %q, want 5", got)
+	}
+	// Day values are written as bare days, so the renderer needs no flag.
+	if got := rowOfKind(t, rows, "due").GetString("to"); got != "2026-09-12" {
+		t.Fatalf("due row to = %q, want the bare day", got)
+	}
+	if got := rowOfKind(t, rows, "start").GetString("to"); got != "2026-09-10" {
+		t.Fatalf("start row to = %q, want the bare day", got)
+	}
+}
+
+// A timed deadline is written as the instant, so the row says 2:30 PM rather
+// than the day alone — and flipping the flag on the same day is a change.
+func TestActivity_TimedDueWritesTheInstant(t *testing.T) {
+	env := setupActivityEnv(t)
+	updateCardAs(t, env.app, env.owner, env.card.Id, func(r *core.Record) {
+		r.Set("due", "2026-09-12 14:30:00.000Z")
+		r.Set("due_has_time", true)
+	})
+	rows := activityRows(t, env.app, env.card.Id)
+	requireKinds(t, rows, "due")
+	if got := rows[0].GetString("to"); got != "2026-09-12T14:30:00Z" {
+		t.Fatalf("timed due row to = %q, want the RFC 3339 instant", got)
+	}
+	updateCardAs(t, env.app, env.owner, env.card.Id, func(r *core.Record) {
+		r.Set("due_has_time", false)
+	})
+	rows = activityRows(t, env.app, env.card.Id)
+	requireKinds(t, rows, "due", "due")
+}
+
+func TestActivity_ClearingAnEstimateWritesAnEmptyTo(t *testing.T) {
+	env := setupActivityEnv(t)
+	updateCardAs(t, env.app, env.owner, env.card.Id, func(r *core.Record) {
+		r.Set("estimate", 8)
+	})
+	updateCardAs(t, env.app, env.owner, env.card.Id, func(r *core.Record) {
+		r.Set("estimate", 0)
+	})
+	rows := activityRows(t, env.app, env.card.Id)
+	requireKinds(t, rows, "estimate", "estimate")
+	// Matched by content rather than position: the two rows can share a
+	// `created` millisecond, and then their order is not promised (see
+	// requireKinds).
+	var sawSet, sawCleared bool
+	for _, row := range rows {
+		from, to := row.GetString("from"), row.GetString("to")
+		sawSet = sawSet || (from == "" && to == "8")
+		sawCleared = sawCleared || (from == "8" && to == "")
+	}
+	if !sawSet || !sawCleared {
+		t.Fatalf("estimate rows = %v, want one \"\"→8 and one 8→\"\"", rowsFromTo(rows))
+	}
+}
+
+func rowsFromTo(rows []*core.Record) []string {
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		out[i] = r.GetString("from") + "→" + r.GetString("to")
+	}
+	return out
 }
 
 func TestActivity_ChecklistCompletionAndAttachment(t *testing.T) {
@@ -233,5 +297,39 @@ func TestActivity_DeletingTheActorKeepsTheRow(t *testing.T) {
 	requireKinds(t, rows, "moved")
 	if got := rows[0].GetString("actor"); got != "" {
 		t.Fatalf("actor = %q after the user was deleted, want cleared", got)
+	}
+}
+
+// A parent set and cleared writes one row each, both of kind `parent` — the
+// self-describing convention: `to` names the new parent, and a blank `to` is
+// the card leaving its family.
+func TestActivity_ParentChangesAreRecorded(t *testing.T) {
+	env := setupActivityEnv(t)
+	child := cardsCard(t, env.app, env.project, env.list, "child", "a1", env.owner)
+
+	updateCardAs(t, env.app, env.editor, child.Id, func(r *core.Record) {
+		r.Set("parent", env.card.Id)
+	})
+	// `created` comes from seeding the child itself; the parent row is the
+	// one this test is about.
+	rows := activityRows(t, env.app, child.Id)
+	requireKinds(t, rows, "created", "parent")
+	set := rowOfKind(t, rows, "parent")
+	if got := set.GetString("to"); got != env.card.Id {
+		t.Fatalf("parent row `to` = %q, want the parent %q", got, env.card.Id)
+	}
+	if got := set.GetString("actor"); got != env.editor.Id {
+		t.Fatalf("actor = %q, want the editor %q", got, env.editor.Id)
+	}
+
+	updateCardAs(t, env.app, env.editor, child.Id, func(r *core.Record) {
+		r.Set("parent", "")
+	})
+	rows = activityRows(t, env.app, child.Id)
+	requireKinds(t, rows, "created", "parent", "parent")
+	cleared := rows[len(rows)-1]
+	if cleared.GetString("from") != env.card.Id || cleared.GetString("to") != "" {
+		t.Fatalf("clear row carries %q → %q, want %q → \"\"",
+			cleared.GetString("from"), cleared.GetString("to"), env.card.Id)
 	}
 }

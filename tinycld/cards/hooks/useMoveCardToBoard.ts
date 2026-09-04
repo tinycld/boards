@@ -9,18 +9,33 @@ export interface MoveCardToBoardInput {
     listId: string
     /** rankForAppend over the target list's cards, computed by the caller. */
     position: string
+    /**
+     * What to do with the card's sub-tasks. Required by the server whenever the
+     * card has a family — it refuses rather than guessing, because both answers
+     * move work the user cannot see from the dialog.
+     */
+    family?: 'move' | 'unlink'
 }
 
 export interface MoveCardToBoardResult {
     card: CardsCards
     previousKey: string
     droppedLabels: string[]
+    /** Sub-tasks carried across; 0 when they were left behind. */
+    movedChildren: number
+    /** Sub-tasks left behind as top-level cards on the source board. */
+    orphanedChildren: number
+    /** Whether the card stopped being a sub-task — a parent cannot follow it. */
+    clearedParent: boolean
 }
 
 interface MovePayload {
     card: CardsCards
     previous_key: string
     dropped_labels: string[]
+    moved_children: number
+    orphaned_children: number
+    cleared_parent: boolean
 }
 
 /**
@@ -50,6 +65,7 @@ export function useMoveCardToBoard() {
                             project_id: input.projectId,
                             list_id: input.listId,
                             position: input.position,
+                            family: input.family ?? '',
                         },
                     }
                 )
@@ -58,6 +74,9 @@ export function useMoveCardToBoard() {
                     card: payload.card,
                     previousKey: payload.previous_key,
                     droppedLabels: payload.dropped_labels ?? [],
+                    movedChildren: payload.moved_children ?? 0,
+                    orphanedChildren: payload.orphaned_children ?? 0,
+                    clearedParent: payload.cleared_parent ?? false,
                 }
             } catch (err) {
                 captureException('cards.card.moveToBoard', err, { ...input })

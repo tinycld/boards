@@ -25,6 +25,11 @@ const ctx = {
     ],
     labels: [{ id: 'lb1', name: 'Bug', color: '#f00' }],
     members: [maya, { id: 'u2', firstName: 'Sam', lastName: 'Doe' }],
+    cards: [
+        { id: 'cd1', key: 'OTTER-4', title: 'Ship auth' },
+        // A board with no slug has no keys, so the title is the fallback.
+        { id: 'cd2', key: '', title: 'Untitled epic' },
+    ],
 }
 
 describe('buildActivityFeed', () => {
@@ -108,6 +113,22 @@ describe('describeActivity', () => {
         expect(describeActivity(activity('a', 'priority', '', { to: 'high' }), ctx).text).toBe(
             'set the priority to High'
         )
+        expect(describeActivity(activity('a', 'estimate', '', { to: '5' }), ctx).text).toBe(
+            'set the estimate to 5 pts'
+        )
+        expect(
+            describeActivity(activity('a', 'start', '', { to: '2026-09-10' }), ctx).text
+        ).toMatch(/^set the start date to Sep 10$/)
+        expect(describeActivity(activity('a', 'start', '', { from: '2026-09-10' }), ctx).text).toBe(
+            'cleared the start date'
+        )
+        const instant = new Date(2026, 8, 12, 14, 30).toISOString()
+        expect(describeActivity(activity('a', 'due', '', { to: instant }), ctx).text).toMatch(
+            /^set the due date to Sep 12, 2:30 PM$/
+        )
+        expect(describeActivity(activity('a', 'estimate', '', { from: '5' }), ctx).text).toBe(
+            'cleared the estimate'
+        )
         expect(describeActivity(activity('a', 'title', '', { from: 'Old' }), ctx).text).toBe(
             'renamed this from “Old”'
         )
@@ -117,6 +138,43 @@ describe('describeActivity', () => {
         expect(
             describeActivity(activity('a', 'attachment_added', '', { to: 'x.png' }), ctx).text
         ).toBe('attached x.png')
+        expect(describeActivity(activity('a', 'parent', '', { to: 'cd1' }), ctx).text).toBe(
+            'made this a sub-task of OTTER-4'
+        )
+        expect(describeActivity(activity('a', 'parent', '', { from: 'cd1' }), ctx).text).toBe(
+            'removed this from OTTER-4'
+        )
+        // A keyless board falls back to the title rather than a raw record id.
+        expect(describeActivity(activity('a', 'parent', '', { to: 'cd2' }), ctx).text).toBe(
+            'made this a sub-task of Untitled epic'
+        )
+        // Un-parenting BY DELETING the parent is ordinary — the relation does
+        // not cascade — so the row outlives the card it names.
+        expect(describeActivity(activity('a', 'parent', '', { from: 'gone' }), ctx).text).toBe(
+            'removed this from another card'
+        )
+        // `from` is the link type and `to` the other card — the shape
+        // server/card_links.go writes onto BOTH ends.
+        expect(
+            describeActivity(activity('a', 'link_added', '', { from: 'blocks', to: 'cd1' }), ctx)
+                .text
+        ).toBe('linked this as blocking OTTER-4')
+        expect(
+            describeActivity(
+                activity('a', 'link_added', '', { from: 'duplicates', to: 'cd1' }),
+                ctx
+            ).text
+        ).toBe('linked this as a duplicate of OTTER-4')
+        expect(
+            describeActivity(activity('a', 'link_removed', '', { from: 'blocks', to: 'cd1' }), ctx)
+                .text
+        ).toBe('unlinked this from OTTER-4')
+        // A type this build does not know renders as a plain "to" rather than
+        // as itself, so a later addition cannot read like a bug.
+        expect(
+            describeActivity(activity('a', 'link_added', '', { from: 'mystery', to: 'cd1' }), ctx)
+                .text
+        ).toBe('linked this to OTTER-4')
         expect(describeActivity(activity('a', 'archived', ''), ctx).text).toBe('archived this card')
         expect(describeActivity(activity('a', 'restored', ''), ctx).text).toBe('restored this card')
         expect(describeActivity(activity('a', 'description', ''), ctx).text).toBe(

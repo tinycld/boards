@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -22,6 +23,7 @@ func newListCmd(c *client.Client) *cobra.Command {
 		newListAddCmd(c),
 		newListRenameCmd(c),
 		newListMoveCmd(c),
+		newListCategoryCmd(c),
 		newListDoneCmd(c),
 		newListRemoveCmd(c),
 	)
@@ -50,14 +52,10 @@ func newListShowCmd(c *client.Client) *cobra.Command {
 			}
 			rows := make([][]string, len(lists))
 			for i, l := range lists {
-				done := ""
-				if l.IsDone {
-					done = "done"
-				}
-				rows[i] = []string{strconv.Itoa(i), l.Name, done, l.ID}
+				rows[i] = []string{strconv.Itoa(i), l.Name, categoryCell(l), l.ID}
 			}
 			return o.Write(cmd.OutOrStdout(),
-				[]string{"#", "NAME", "KIND", "ID"}, rows, lists)
+				[]string{"#", "NAME", "STATUS", "ID"}, rows, lists)
 		},
 	}
 	addBoardFlag(cmd, &boardRef)
@@ -93,7 +91,7 @@ func newListAddCmd(c *client.Client) *cobra.Command {
 				"project":  p.ID,
 				"name":     args[0],
 				"position": position,
-				"is_done":  false,
+				"category": "todo",
 			})
 			if err != nil {
 				return err
@@ -188,39 +186,67 @@ func newListMoveCmd(c *client.Client) *cobra.Command {
 	return cmd
 }
 
+// newListCategoryCmd sets what a column means in the board's workflow.
+func newListCategoryCmd(c *client.Client) *cobra.Command {
+	var boardRef string
+	cmd := &cobra.Command{
+		Use:   "category <list> <" + strings.Join(listCategories, "|") + ">",
+		Short: "Set a column's status: backlog, todo, in_progress, done, or canceled",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !validListCategory(args[1]) {
+				return fmt.Errorf("category %q is not one of %s", args[1], strings.Join(listCategories, ", "))
+			}
+			return setListCategory(cmd, c, boardRef, args[0], args[1])
+		},
+	}
+	addBoardFlag(cmd, &boardRef)
+	return cmd
+}
+
+// newListDoneCmd is `list category <list> done`, kept as the shorthand it
+// always was; --unset makes the column an ordinary `todo` one again.
 func newListDoneCmd(c *client.Client) *cobra.Command {
 	var boardRef string
 	var unset bool
 	cmd := &cobra.Command{
 		Use:   "done <list>",
-		Short: "Mark a column as the done column (or --unset)",
+		Short: "Mark a column as done — shorthand for `category <list> done` (or --unset)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			o, _, err := output.FromCommand(cmd)
-			if err != nil {
-				return err
+			category := "done"
+			if unset {
+				category = "todo"
 			}
-			ctx := cmd.Context()
-			p, err := requireProjectFlag(cmd, c, boardRef)
-			if err != nil {
-				return err
-			}
-			l, err := resolveList(ctx, c, p.ID, args[0])
-			if err != nil {
-				return err
-			}
-			updated, err := client.UpdateRecord[list](ctx, c, listsCollection, l.ID,
-				map[string]any{"is_done": !unset})
-			if err != nil {
-				return err
-			}
-			o.Info(cmd.ErrOrStderr(), "%q is_done = %t", updated.Name, updated.IsDone)
-			return writeListResult(cmd, o, updated)
+			return setListCategory(cmd, c, boardRef, args[0], category)
 		},
 	}
 	addBoardFlag(cmd, &boardRef)
-	cmd.Flags().BoolVar(&unset, "unset", false, "clear the done flag instead of setting it")
+	cmd.Flags().BoolVar(&unset, "unset", false, "make the column an ordinary todo column again")
 	return cmd
+}
+
+func setListCategory(cmd *cobra.Command, c *client.Client, boardRef, listRef, category string) error {
+	o, _, err := output.FromCommand(cmd)
+	if err != nil {
+		return err
+	}
+	ctx := cmd.Context()
+	p, err := requireProjectFlag(cmd, c, boardRef)
+	if err != nil {
+		return err
+	}
+	l, err := resolveList(ctx, c, p.ID, listRef)
+	if err != nil {
+		return err
+	}
+	updated, err := client.UpdateRecord[list](ctx, c, listsCollection, l.ID,
+		map[string]any{"category": category})
+	if err != nil {
+		return err
+	}
+	o.Info(cmd.ErrOrStderr(), "%q is now %s", updated.Name, categoryCell(updated))
+	return writeListResult(cmd, o, updated)
 }
 
 // newListRemoveCmd deletes a column. `cards_cards.list` ships
@@ -331,8 +357,8 @@ func writeListResult(cmd *cobra.Command, o output.Options, l list) error {
 		return nil
 	case output.CSV:
 		return o.Write(cmd.OutOrStdout(),
-			[]string{"ID", "NAME", "IS_DONE", "POSITION"},
-			[][]string{{l.ID, l.Name, strconv.FormatBool(l.IsDone), l.Position}}, l)
+			[]string{"ID", "NAME", "STATUS", "POSITION"},
+			[][]string{{l.ID, l.Name, categoryCell(l), l.Position}}, l)
 	default:
 		return o.Write(cmd.OutOrStdout(), nil, nil, l)
 	}

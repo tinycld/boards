@@ -12,6 +12,14 @@ export interface CreateCardInput {
     title: string
     /** Computed by lib/move.ts against that column. */
     position: string
+    /**
+     * The card this one is a sub-task of. Omitted for an ordinary card.
+     *
+     * Must name a card on the SAME board — the rule in 1980000015 refuses
+     * anything else — which the sub-task composer satisfies by construction:
+     * it only ever passes the open card's id.
+     */
+    parent?: string
 }
 
 export interface MoveCardInput {
@@ -26,9 +34,11 @@ export interface MoveCardInput {
  * The card fields a user edits directly. Every one is optional: a caller
  * changing only the title must not have to restate the description.
  *
- * `due` is an ISO date string, or '' to clear it — NOT undefined. PocketBase
- * stores an unset date as '', and `toBoardCard` maps that back to undefined for
- * the UI, so '' is the wire value that actually clears the field.
+ * `due` is a bare `YYYY-MM-DD`, or an ISO instant when `dueHasTime` is true
+ * (lib/due-time.ts encodes both), or '' to clear it — NOT undefined.
+ * PocketBase stores an unset date as '', and `toBoardCard` maps that back to
+ * undefined for the UI, so '' is the wire value that actually clears the
+ * field. `start` is always a bare day, same convention.
  *
  * `reporter` follows the same convention: a users id to set it, '' to clear it,
  * absent to leave it alone. Note that clearing is not the same as showing no
@@ -40,9 +50,18 @@ export interface UpdateCardInput {
     title?: string
     description?: string
     due?: string
+    dueHasTime?: boolean
+    start?: string
     reporter?: string
     /** `none` is a real value, not a clear — see pb-migrations/1980000006. */
     priority?: CardPriority
+    /** Points; 0 clears — the row stores 0 for "unset", see lib/estimate.ts. */
+    estimate?: number
+    /**
+     * The parent card, or '' to un-parent. Follows `reporter`'s convention: an
+     * id to set, '' to clear, absent to leave alone.
+     */
+    parent?: string
 }
 
 /**
@@ -80,6 +99,8 @@ export function useCreateCard(projectId: string) {
                 title: input.title,
                 description: '',
                 due: '',
+                due_has_time: false,
+                start: '',
                 assignees: [],
                 labels: [],
                 created_by: user?.id ?? '',
@@ -95,6 +116,9 @@ export function useCreateCard(projectId: string) {
                 // normalizePriority but leaves the row looking half-written to
                 // anyone reading the database directly.
                 priority: 'none',
+                // 0 is the stored form of "no estimate" (lib/estimate.ts).
+                estimate: 0,
+                parent: input.parent ?? '',
                 archived: false,
                 // Counters are server-maintained (server/counters.go) and
                 // recomputed on every child write; these are the at-rest values
@@ -103,6 +127,8 @@ export function useCreateCard(projectId: string) {
                 checklist_done: 0,
                 comment_count: 0,
                 attachment_count: 0,
+                subtask_total: 0,
+                subtask_done: 0,
             })
 
             return cardId
@@ -144,17 +170,27 @@ export function useDuplicateCard(projectId: string) {
                 position,
                 title: `Copy of ${card.title}`,
                 description: card.description,
-                due: card.due ? toDateString(card.due) : '',
+                due: encodeStoredDue(card),
+                due_has_time: card.dueHasTime,
+                start: card.start ? toDateString(card.start) : '',
                 assignees: card.assignees.map(member => member.id),
                 labels: card.labels.map(label => label.id),
                 created_by: user?.id ?? '',
                 reporter: card.reporter?.id ?? user?.id ?? '',
                 priority: card.priority,
+                estimate: card.estimate ?? 0,
+                // A copy of a sub-task stays in the same family; a copy of a
+                // PARENT does not adopt its children — the checklist is copied
+                // below, but sub-tasks are cards of their own, and duplicating
+                // five of them silently is not what "copy this card" means.
+                parent: card.parent,
                 archived: false,
                 checklist_total: 0,
                 checklist_done: 0,
                 comment_count: 0,
                 attachment_count: 0,
+                subtask_total: 0,
+                subtask_done: 0,
             })
 
             const items = itemsCollection.toArray
@@ -198,8 +234,12 @@ export function useUpdateCard() {
                 if (input.title !== undefined) draft.title = input.title
                 if (input.description !== undefined) draft.description = input.description
                 if (input.due !== undefined) draft.due = input.due
+                if (input.dueHasTime !== undefined) draft.due_has_time = input.dueHasTime
+                if (input.start !== undefined) draft.start = input.start
                 if (input.reporter !== undefined) draft.reporter = input.reporter
                 if (input.priority !== undefined) draft.priority = input.priority
+                if (input.estimate !== undefined) draft.estimate = input.estimate
+                if (input.parent !== undefined) draft.parent = input.parent
             })
         }),
     })
@@ -301,4 +341,10 @@ export function useMoveCard() {
             })
         }),
     })
+}
+
+/** The stored form of a card view's due date, for a copy: a day, or the instant. */
+function encodeStoredDue(card: BoardCardView): string {
+    if (!card.due) return ''
+    return card.dueHasTime ? card.due.toISOString() : toDateString(card.due)
 }

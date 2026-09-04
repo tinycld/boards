@@ -12,6 +12,7 @@ function card(id: string, overrides: Partial<BoardCardView> = {}): BoardCardView
         title: id,
         description: '',
         due: undefined,
+        dueHasTime: false,
         labels: [],
         assignees: [],
         reporter: undefined,
@@ -21,6 +22,7 @@ function card(id: string, overrides: Partial<BoardCardView> = {}): BoardCardView
         checklistDone: 0,
         commentCount: 0,
         attachmentCount: 0,
+        listCategory: 'todo',
         ...overrides,
     }
 }
@@ -30,6 +32,7 @@ const project: BoardProject = {
     name: 'Board',
     slug: '',
     color: '#000',
+    autoArchiveDays: 0,
     members: [],
     labels: [],
     lists: [
@@ -37,7 +40,7 @@ const project: BoardProject = {
             id: 'l1',
             name: 'To do',
             position: 'a0',
-            isDone: false,
+            category: 'todo',
             totalCount: 2,
             cards: [card('a', { priority: 'low' }), card('b', { priority: 'urgent' })],
         },
@@ -45,7 +48,7 @@ const project: BoardProject = {
             id: 'l2',
             name: 'Done',
             position: 'a1',
-            isDone: true,
+            category: 'done',
             totalCount: 1,
             cards: [card('c', { priority: 'high', listId: 'l2' })],
         },

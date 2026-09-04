@@ -20,6 +20,9 @@ import type {
 import { type BoardFilter, cardMatchesFilter } from './board-filter'
 import { type BoardSort, compareCards } from './board-sort'
 import { formatCardKey } from './card-key'
+import { parseDayValue, parseDueValue } from './due-time'
+import { normalizeEstimate } from './estimate'
+import { type ListCategory, normalizeListCategory } from './list-category'
 import { normalizePriority } from './priority'
 
 /** The subset of a user row the board actually renders. */
@@ -74,7 +77,16 @@ export function toBoardCard(
     card: CardsCards,
     labelsById: Map<string, BoardLabel>,
     usersById: Map<string, BoardMember>,
-    projectSlug: string
+    projectSlug: string,
+    listCategory: ListCategory,
+    /**
+     * The parent's key, resolved by the caller because a card row carries no
+     * reference to its parent's `number` — the same reason `key` itself is
+     * precomputed here rather than formatted at each render site. '' when the
+     * card is top level, and when its parent has been deleted (the relation
+     * does not cascade, so a dangling id is an ordinary state).
+     */
+    parentKey = ''
 ): BoardCardView {
     return {
         id: card.id,
@@ -86,9 +98,10 @@ export function toBoardCard(
         position: card.position,
         title: card.title,
         description: card.description,
-        // PocketBase returns '' for an unset date, and new Date('') is an
-        // Invalid Date that formats as "Invalid Date" rather than throwing.
-        due: toDueDate(card.due),
+        // Two parse paths, chosen by the flag — see lib/due-time.ts.
+        due: parseDueValue(card.due, card.due_has_time),
+        dueHasTime: card.due_has_time,
+        start: parseDayValue(card.start),
         labels: card.labels.flatMap(id => {
             const label = labelsById.get(id)
             return label ? [label] : []
@@ -107,11 +120,17 @@ export function toBoardCard(
         assignees: card.assignees.map(id => usersById.get(id) ?? anonymousMember(id)),
         reporter: toReporter(card, usersById),
         priority: normalizePriority(card.priority),
+        estimate: normalizeEstimate(card.estimate),
+        listCategory,
         created: card.created ?? '',
         checklistTotal: card.checklist_total,
         checklistDone: card.checklist_done,
         commentCount: card.comment_count,
         attachmentCount: card.attachment_count,
+        parent: card.parent,
+        parentKey,
+        subtaskTotal: card.subtask_total,
+        subtaskDone: card.subtask_done,
     }
 }
 
@@ -145,28 +164,6 @@ function toReporter(
     const id = card.reporter || card.created_by
     if (id === '') return undefined
     return usersById.get(id) ?? anonymousMember(id)
-}
-
-/**
- * A stored due value → the LOCAL calendar day it names, or undefined.
- *
- * `due` is a day, not an instant: the picker writes `toDateString(date)` — a
- * bare `YYYY-MM-DD` — and PocketBase stores it in a `date` field, handing it
- * back as `YYYY-MM-DD 00:00:00Z`. That midnight is UTC, so `new Date(...)` on
- * it lands on the PREVIOUS day for every user west of Greenwich: picking
- * "Tomorrow" in US Central saved fine and read back as today, and a date set
- * for today read back as yesterday · overdue.
- *
- * Taking the UTC parts (never the local getters, which have already been
- * shifted) and rebuilding at local midnight recovers the day the user picked.
- * The result is what `dueStateFor` compares against `new Date()`, so it has to
- * sit in the same local frame as "now" for overdue/soon to mean anything.
- */
-function toDueDate(due: string): Date | undefined {
-    if (due === '') return undefined
-    const parsed = new Date(due)
-    if (Number.isNaN(parsed.getTime())) return undefined
-    return new Date(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate())
 }
 
 /**
@@ -230,6 +227,12 @@ export function buildBoardProject(
 
     const labelsById = new Map(labels.map(l => [l.id, toBoardLabel(l)]))
     const usersById = new Map(users.map(u => [u.id, toBoardMember(u)]))
+    // Resolved once here so a card can carry its list's status without a
+    // lookup at every filter. A card whose list has not synced yet reads as
+    // an ordinary working card — the same default an unmarked list gets.
+    const categoryByList = new Map(
+        lists.map(list => [list.id, normalizeListCategory(list.category)])
+    )
 
     // The filter is applied HERE, beside the archived skip, so `list.cards` and
     // what the column renders are one and the same array. Handing a column a
@@ -239,6 +242,15 @@ export function buildBoardProject(
     // cards keep their ranks; a card dropped between two visible neighbours
     // lands between them in rank order, which is where it reappears once the
     // filter clears.
+    // Parent keys, resolved once for the whole board rather than per card.
+    // Built from the RAW rows, before the archived skip and the filter below:
+    // a sub-task whose parent is archived or filtered out still shows the
+    // chip, because the chip says which card this is part of, not which cards
+    // happen to be on screen.
+    const keyByCardId = new Map(
+        cards.map(card => [card.id, formatCardKey(project.slug, card.number)])
+    )
+
     const cardsByList = new Map<string, BoardCardView[]>()
     const totals = new Map<string, number>()
     let cardTotal = 0
@@ -246,7 +258,14 @@ export function buildBoardProject(
         if (card.archived) continue
         cardTotal += 1
         totals.set(card.list, (totals.get(card.list) ?? 0) + 1)
-        const cardView = toBoardCard(card, labelsById, usersById, project.slug)
+        const cardView = toBoardCard(
+            card,
+            labelsById,
+            usersById,
+            project.slug,
+            categoryByList.get(card.list) ?? 'todo',
+            (card.parent && keyByCardId.get(card.parent)) || ''
+        )
         if (view && !cardMatchesFilter(cardView, view.filter, view)) continue
         const bucket = cardsByList.get(card.list)
         if (bucket) bucket.push(cardView)
@@ -273,6 +292,7 @@ export function buildBoardProject(
         name: project.name,
         slug: project.slug,
         color: project.color,
+        autoArchiveDays: project.auto_archive_days,
         members: members.map(toBoardMember),
         // Sorted by name so the label picker has a stable order that does not
         // depend on insertion sequence.
@@ -281,7 +301,7 @@ export function buildBoardProject(
             id: list.id,
             name: list.name,
             position: list.position,
-            isDone: list.is_done,
+            category: categoryByList.get(list.id) ?? 'todo',
             cards: cardsByList.get(list.id) ?? [],
             totalCount: totals.get(list.id) ?? 0,
         })),
@@ -328,12 +348,20 @@ function sameCard(a: BoardCardView, b: BoardCardView): boolean {
         a.title === b.title &&
         a.description === b.description &&
         (a.due?.getTime() ?? null) === (b.due?.getTime() ?? null) &&
+        a.dueHasTime === b.dueHasTime &&
+        (a.start?.getTime() ?? null) === (b.start?.getTime() ?? null) &&
         a.priority === b.priority &&
+        a.estimate === b.estimate &&
+        a.listCategory === b.listCategory &&
         a.created === b.created &&
         a.checklistTotal === b.checklistTotal &&
         a.checklistDone === b.checklistDone &&
         a.commentCount === b.commentCount &&
         a.attachmentCount === b.attachmentCount &&
+        a.parent === b.parent &&
+        a.parentKey === b.parentKey &&
+        a.subtaskTotal === b.subtaskTotal &&
+        a.subtaskDone === b.subtaskDone &&
         sameElements(a.labels, b.labels, sameLabel) &&
         sameElements(a.assignees, b.assignees, sameMember) &&
         // Reassigning a reporter changes nothing else on the card, so without
@@ -395,7 +423,7 @@ function shareTree(previous: BoardProject, fresh: BoardProject): BoardProject {
             prior &&
             prior.name === list.name &&
             prior.position === list.position &&
-            prior.isDone === list.isDone &&
+            prior.category === list.category &&
             // A filter that hides a card changes the count but not the list's
             // own row; without this line the column keeps its stale "12".
             prior.totalCount === list.totalCount &&
@@ -426,6 +454,7 @@ function shareTree(previous: BoardProject, fresh: BoardProject): BoardProject {
         // node would still be reused, so the header would keep the old slug.
         previous.slug === fresh.slug &&
         previous.color === fresh.color &&
+        previous.autoArchiveDays === fresh.autoArchiveDays &&
         previous.cardTotal === fresh.cardTotal
     ) {
         return previous

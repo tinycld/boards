@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -36,7 +37,9 @@ type list struct {
 	Project  string `json:"project"`
 	Name     string `json:"name"`
 	Position string `json:"position"`
-	IsDone   bool   `json:"is_done"`
+	// One of listCategories, or "" on a row written before the column
+	// existed — which the app reads as "todo".
+	Category string `json:"category"`
 }
 
 type card struct {
@@ -50,12 +53,17 @@ type card struct {
 	// server/card_number.go — read-only here, exactly like the counters below.
 	// The CLI must never write one: the hook overwrites whatever a body
 	// carries, so a written value is discarded.
-	Number    int      `json:"number"`
-	Due       string   `json:"due"`
-	Assignees []string `json:"assignees"`
-	Labels    []string `json:"labels"`
-	Archived  bool     `json:"archived"`
-	CreatedBy string   `json:"created_by"`
+	Number int    `json:"number"`
+	Due    string `json:"due"`
+	// Whether Due names a time as well as a day. A day-only due is a bare
+	// YYYY-MM-DD the server stores at midnight UTC; a timed one is an
+	// instant. See lib/due-time.ts for why one column carries both.
+	DueHasTime bool     `json:"due_has_time"`
+	Start      string   `json:"start"`
+	Assignees  []string `json:"assignees"`
+	Labels     []string `json:"labels"`
+	Archived   bool     `json:"archived"`
+	CreatedBy  string   `json:"created_by"`
 	// Who to ask about the card, as opposed to who inserted it (CreatedBy).
 	// Writable, unlike Number above: it defaults to the creator but exists
 	// precisely so it can be pointed at someone else.
@@ -64,8 +72,14 @@ type card struct {
 	// existed — which the app reads as "none". The CLI writes it only when
 	// asked, and validates against the same list the schema enforces.
 	Priority string `json:"priority"`
-	Created  string `json:"created"`
-	Updated  string `json:"updated"`
+	// Points. 0 is the stored form of "no estimate" (the app normalizes it
+	// away), so there is no --clear-estimate: --estimate 0 is the clear.
+	Estimate int `json:"estimate"`
+	// The card this one is a sub-task of, "" when top level. Writable, and
+	// always a card on the SAME board — the server refuses anything else.
+	Parent  string `json:"parent"`
+	Created string `json:"created"`
+	Updated string `json:"updated"`
 
 	// Denormalized counters, maintained by server/counters.go. Read-only —
 	// the CLI must never write one: counters.go always RECOMPUTES, so a
@@ -75,6 +89,10 @@ type card struct {
 	ChecklistDone   int `json:"checklist_done"`
 	CommentCount    int `json:"comment_count"`
 	AttachmentCount int `json:"attachment_count"`
+	// The sub-task rollup, maintained by server/card_parent.go. Read-only for
+	// the same reason as the counters above.
+	SubtaskTotal int `json:"subtask_total"`
+	SubtaskDone  int `json:"subtask_done"`
 }
 
 // reporterID is who the card reports to, falling back to whoever created it.
@@ -152,6 +170,22 @@ func validPriority(v string) bool {
 		}
 	}
 	return false
+}
+
+// listCategories mirrors the select values in pb-migrations/1980000011.
+var listCategories = []string{"backlog", "todo", "in_progress", "done", "canceled"}
+
+func validListCategory(v string) bool {
+	return slices.Contains(listCategories, v)
+}
+
+// categoryCell renders a list's category for a table: "" reads as todo, the
+// same normalization the app applies.
+func categoryCell(l list) string {
+	if l.Category == "" {
+		return "todo"
+	}
+	return l.Category
 }
 
 // priorityCell renders a card's priority for a table. "" and "none" are the

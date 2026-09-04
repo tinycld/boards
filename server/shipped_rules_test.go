@@ -22,6 +22,7 @@ var allCardsCollections = []string{
 	"cards_projects", "cards_project_members", "cards_share_links",
 	"cards_labels", "cards_lists", "cards_cards",
 	"cards_checklist_items", "cards_comments", "cards_attachments",
+	"cards_card_links",
 }
 
 var allRuleKinds = []string{"list", "view", "create", "update", "delete"}
@@ -56,6 +57,20 @@ func TestCardsShippedRules_CarryTheirGuards(t *testing.T) {
 			`trap 1 — ?!= "viewer" admits every role that is not viewer, which is how drive silently granted commentor UPDATE (drive/pb-migrations/1782100000)`},
 		{"cards_cards", "update", `project.cards_project_members_via_project.role ?= "editor"`,
 			"same idiom on the update path, which is what a drag-and-drop board exercises constantly"},
+
+		// --- the sub-task same-board pin (1980000015) ---
+		//
+		// The clause every downstream simplification rests on: a sub-task may
+		// only name a card on its own board, so the rollup cannot count a card
+		// the viewer is unable to read and the Go recount never spans projects.
+		// Both paths, because a create-only or update-only pin leaves the other
+		// half of the hole open.
+		{"cards_cards", "create", `@request.body.parent.project = project`,
+			"without it a writer on two boards can file a card whose parent is on the other one, and the board query — which joins on project — shows a chip pointing at a card the viewer cannot open"},
+		{"cards_cards", "update", `@request.body.parent.project = project`,
+			"the repoint form of the same hole: PATCH an editable card's parent onto a foreign board"},
+		{"cards_cards", "update", `@request.body.parent = ""`,
+			`the clear branch — without it un-parenting has to satisfy "".project = project and a card is stuck as a sub-task forever`},
 		{"cards_lists", "create", `project.cards_project_members_via_project.role ?= "editor"`,
 			"a viewer must not add columns"},
 		{"cards_labels", "create", `project.cards_project_members_via_project.role ?= "editor"`,
@@ -173,8 +188,25 @@ func TestCardsShippedRules_NoRuleComparesDisabledToFalse(t *testing.T) {
 func TestCardsShippedRules_NoCollectionIsPublicOrLocked(t *testing.T) {
 	env := setupCardsEnv(t)
 
+	// The ONE deliberate nil, named rather than tolerated by a loosened check.
+	//
+	// cards_card_links is a junction: a row is filed or removed, never edited,
+	// so an update rule would describe an operation the feature does not have.
+	// Retyping a link is a delete plus a create, which the unique index
+	// governs. cards_card_watchers and cards_comment_reactions are the same
+	// shape and are absent from allCardsCollections entirely — this collection
+	// is enrolled for the sweeps that DO apply to it, so its one exemption is
+	// stated here instead.
+	deliberatelyLocked := map[string]string{
+		"cards_card_links.update": "a link is toggled, never edited (1980000016)",
+	}
+
 	for _, collection := range allCardsCollections {
 		for _, kind := range allRuleKinds {
+			if why, exempt := deliberatelyLocked[collection+"."+kind]; exempt {
+				t.Logf("%s.%sRule is intentionally superuser-only: %s", collection, kind, why)
+				continue
+			}
 			rule, ok := rlstest.Rule(t, env.app, collection, kind)
 			if !ok {
 				t.Errorf("%s.%sRule is nil (superusers only) — no cards rule is meant to be",
@@ -229,6 +261,69 @@ func TestCardsShippedRules_ShareTokenDisjunctIsCorrelated(t *testing.T) {
 	}
 }
 
+// cards_card_links carries the disjunct TWICE, and neither copy is optional.
+//
+// A link row names two boards, so a single join could only ever unlock one end
+// — and because an unaliased @collection derives ONE alias and registerJoin
+// replaces on collision (1980000003 mechanic 4), writing the clause twice
+// WITHOUT aliases would silently collapse both ends onto the same joined row.
+// The `:src` / `:tgt` aliases are what make them independent.
+//
+// Each alias then needs its own correlation. Missing one does not fail
+// closed: it turns that half into mechanic 3's unconstrained cross join,
+// pairing any valid token with every board's links. The behavioural proof is
+// TestShareToken_DoesNotReachLinksBetweenOtherBoards; this says which clause
+// went missing.
+func TestCardsShippedRules_LinkTokenDisjunctIsCorrelatedOnBothEnds(t *testing.T) {
+	env := setupCardsEnv(t)
+
+	for _, end := range []struct{ alias, ref string }{
+		{"src", "source"},
+		{"tgt", "target"},
+	} {
+		c := `@collection.cards_share_links:` + end.alias
+		for _, kind := range []string{"list", "view"} {
+			t.Run(end.alias+"."+kind, func(t *testing.T) {
+				rlstest.RequireRuleContains(t, env.app, "cards_card_links", kind,
+					c+`.token ?= @request.headers.x_share_token`)
+				rlstest.RequireRuleContains(t, env.app, "cards_card_links", kind,
+					c+`.is_active ?= true`)
+				rlstest.RequireRuleContains(t, env.app, "cards_card_links", kind,
+					c+`.expires_at ?= ""`)
+				rlstest.RequireRuleContains(t, env.app, "cards_card_links", kind,
+					c+`.expires_at ?> @now`)
+				// The correlation — the clause whose absence is a silent leak.
+				rlstest.RequireRuleContains(t, env.app, "cards_card_links", kind,
+					c+`.project ?= `+end.ref+`.project`)
+			})
+		}
+	}
+}
+
+// The membership half of the same rule: BOTH ends, on two independent paths.
+// Losing either turns the union into a one-sided read and hides links from the
+// board on the other end.
+func TestCardsShippedRules_LinkRuleReadsBothEnds(t *testing.T) {
+	env := setupCardsEnv(t)
+
+	for _, ref := range []string{"source", "target"} {
+		clause := ref + `.project.cards_project_members_via_project.user ?= @request.auth.id`
+		for _, kind := range []string{"list", "view"} {
+			rlstest.RequireRuleContains(t, env.app, "cards_card_links", kind, clause)
+		}
+	}
+	// Create is asymmetric on purpose: WRITE on the source, membership on the
+	// target. The named roles guard trap 1 on the source side.
+	rlstest.RequireRuleContains(t, env.app, "cards_card_links", "create",
+		`source.project.cards_project_members_via_project.role ?= "editor"`)
+	rlstest.RequireRuleContains(t, env.app, "cards_card_links", "create",
+		`target.project.cards_project_members_via_project.user ?= @request.auth.id`)
+	// Delete follows the source alone — the far board may see a dependency but
+	// must not quietly detach it.
+	rlstest.RequireRuleContains(t, env.app, "cards_card_links", "delete",
+		`source.project.cards_project_members_via_project.role ?= "editor"`)
+}
+
 // The inverse, and the more important half: the disjunct must appear NOWHERE
 // else. A token that reached cards_project_members would read the org's member
 // names and emails — exactly what rosterRule and core's 1870000000 exist to
@@ -241,6 +336,13 @@ func TestCardsShippedRules_ShareTokenIsAbsentEverywhereElse(t *testing.T) {
 		"cards_projects": true, "cards_lists": true, "cards_cards": true,
 		"cards_labels": true, "cards_checklist_items": true,
 		"cards_comments": true, "cards_attachments": true,
+		// A public board shows its cards, so it shows their dependencies.
+		// Unlike the seven above, this one's disjunct is DOUBLED — two aliased
+		// joins, one per end — because a link row names two boards. Its
+		// correlation clauses are asserted in the test above, and the leak they
+		// prevent is covered behaviourally in share_token_rls_test.go
+		// (TestShareToken_DoesNotReachLinksBetweenOtherBoards).
+		"cards_card_links": true,
 	}
 
 	for _, collection := range allCardsCollections {

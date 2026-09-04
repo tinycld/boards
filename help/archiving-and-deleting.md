@@ -23,6 +23,17 @@ To bring a card back, click **Restore** — it returns to the list it left, in
 its old position. To delete a card for good, click the trash icon on its row
 and confirm. That removes the card's checklist, comments and attachments too.
 
+## Archiving finished cards automatically
+
+A board can tidy itself: open the board menu, choose **Board settings…**, and
+set how many days a card may sit in a **Done** or **Canceled** list before it
+is archived for you. `0`, the default, turns this off. The count starts when
+the card enters the list, so a card moved back into progress starts over.
+
+Cards archived this way land in **Archived cards** like any other, with
+"Automatically" as who archived them in the card's history, and restore the
+same way. Only a board's owner can change the setting.
+
 ## Archiving a board
 
 To put a whole board away, open its menu (the `…` at the top right) and choose

@@ -4,7 +4,10 @@ import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import {
     CalendarDays,
     CircleCheck,
+    CircleX,
     Clock,
+    Gauge,
+    ListTree,
     MessageSquare,
     Paperclip,
     SquareCheck,
@@ -12,8 +15,12 @@ import {
 import { Pressable, Text, View } from 'react-native'
 import type { RemoteCardsPresence } from '../hooks/useBoardPresence'
 import { useCardFileDrop } from '../hooks/useCardFileDrop'
-import { dueStateFor, formatDueDate } from '../lib/due-state'
+import { dueStateFor } from '../lib/due-state'
+import { formatSchedule } from '../lib/due-time'
+import { formatEstimate } from '../lib/estimate'
+import { isClosedCategory, type ListCategory } from '../lib/list-category'
 import type { CardPriority } from '../lib/priority'
+import { subtasksComplete } from '../lib/subtasks'
 import { useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardCardView, BoardLabel, BoardMember } from '../types'
 import { useCardPresence } from './BoardPresenceProvider'
@@ -28,7 +35,8 @@ const MAX_WATCHERS = 3
 interface BoardCardProps {
     card: BoardCardView
     projectId: string
-    isDone?: boolean
+    /** The status of the card's list; done and canceled render the closed face. */
+    category: ListCategory
     /** A grab cursor on a card a viewer cannot drag is a lie — drop it. */
     canDrag: boolean
 }
@@ -65,7 +73,7 @@ function cardRingClass(isOpen: boolean, isFocused: boolean, idle: string, isDrop
     return idle
 }
 
-export function BoardCard({ card, projectId, isDone, canDrag }: BoardCardProps) {
+export function BoardCard({ card, projectId, category, canDrag }: BoardCardProps) {
     const { isOpen, isFocused, onPress } = useCardPress(card.id)
     // canDrag doubles as the edit gate: both come from the same role check.
     const { isDropTarget, dropRef } = useCardFileDrop(card.id, projectId, canDrag)
@@ -75,11 +83,12 @@ export function BoardCard({ card, projectId, isDone, canDrag }: BoardCardProps) 
     // is a deliberate action taken at rest, never mid-drag.
     const isCompact = useCardsUIStore(s => s.isCompactCards)
 
-    if (isDone) {
+    if (isClosedCategory(category)) {
         return (
-            <DoneCard
+            <ClosedCard
                 cardId={card.id}
                 title={card.title}
+                category={category}
                 isOpen={isOpen}
                 isFocused={isFocused}
                 onPress={onPress}
@@ -137,20 +146,27 @@ function CardFace({ card, isCompact }: { card: BoardCardView; isCompact: boolean
                 <PriorityGlyph priority={card.priority} size={12} />
                 <CompactLabelDots labels={card.labels ?? []} />
                 <Text
+                    testID="cards-card-title"
                     className="flex-1 text-[13.5px] font-medium leading-[18px] text-foreground"
                     numberOfLines={1}
                 >
                     {card.title}
                 </Text>
-                <CompactDueIcon due={card.due} />
+                <CompactDueIcon due={card.due} dueHasTime={card.dueHasTime} />
                 <CardAssignees assignees={card.assignees} />
             </>
         )
     }
     return (
         <>
-            <CardTopRow labels={card.labels ?? []} cardKey={card.key} priority={card.priority} />
+            <CardTopRow
+                labels={card.labels ?? []}
+                cardKey={card.key}
+                priority={card.priority}
+                parentKey={card.parentKey}
+            />
             <Text
+                testID="cards-card-title"
                 className="text-[13.5px] font-medium leading-[18px] text-foreground"
                 numberOfLines={3}
             >
@@ -182,19 +198,46 @@ function CardTopRow({
     labels,
     cardKey,
     priority,
+    parentKey,
 }: {
     labels: BoardLabel[]
     cardKey: string
     priority: CardPriority
+    parentKey: string
 }) {
-    if (labels.length === 0 && !cardKey && priority === 'none') return null
+    if (labels.length === 0 && !cardKey && !parentKey && priority === 'none') return null
     return (
         <View className="flex-row items-center gap-1">
             <PriorityGlyph priority={priority} />
+            <ParentChip parentKey={parentKey} />
             <CardLabels labels={labels} />
             <View className="flex-1" />
             <CardKey cardKey={cardKey} />
         </View>
+    )
+}
+
+/**
+ * "↳ OTTER-4" — the card this one is a sub-task of.
+ *
+ * On the TOP row beside the labels rather than in the meta row, because it
+ * identifies the card the way its own key does; a reader scanning a column for
+ * "what is this part of" is looking at the same band both keys live in.
+ *
+ * Renders nothing when the card is top level, and also when the parent has
+ * been deleted — `parentKey` is '' in both cases, and a chip pointing at a
+ * card that no longer exists is worse than none.
+ */
+function ParentChip({ parentKey }: { parentKey: string }) {
+    if (!parentKey) return null
+    return (
+        <Text
+            testID="cards-parent-chip"
+            className="text-[10.5px] font-medium text-muted"
+            numberOfLines={1}
+        >
+            ↳ {parentKey}
+        </Text>
     )
 }
 
@@ -276,34 +319,53 @@ function CompactLabelDots({ labels }: { labels: BoardLabel[] }) {
  * for overdue, warning for soon, muted otherwise — because losing the date
  * text must not also lose the fact that something is late.
  */
-function CompactDueIcon({ due }: { due?: Date }) {
+function CompactDueIcon({ due, dueHasTime }: { due?: Date; dueHasTime: boolean }) {
     const warningColor = useThemeColor('warning')
     const dangerColor = useThemeColor('danger')
     const mutedColor = useThemeColor('muted')
     if (!due) return null
 
-    const state = dueStateFor(due)
+    const state = dueStateFor(due, undefined, dueHasTime)
     const isOverdue = state === 'overdue'
     const Icon = isOverdue ? Clock : CalendarDays
     const color = isOverdue ? dangerColor : state === 'soon' ? warningColor : mutedColor
     return (
-        <View accessibilityLabel={`Due ${formatDueDate(due)}`}>
+        <View accessibilityLabel={`Due ${formatSchedule(undefined, due, dueHasTime)}`}>
             <Icon size={12} color={color} strokeWidth={2.2} />
         </View>
     )
 }
 
-interface DoneCardProps {
+interface ClosedCardProps {
     cardId: string
     title: string
+    category: ListCategory
     isOpen: boolean
     isFocused: boolean
     onPress: () => void
     canDrag: boolean
 }
 
-function DoneCard({ cardId, title, isOpen, isFocused, onPress, canDrag }: DoneCardProps) {
+/**
+ * The face of a card whose work has stopped: a check for done, a cross and a
+ * struck title for canceled. Everything else on the face is dropped — the
+ * point of a closed column is to be scanned past.
+ */
+function ClosedCard({
+    cardId,
+    title,
+    category,
+    isOpen,
+    isFocused,
+    onPress,
+    canDrag,
+}: ClosedCardProps) {
     const successColor = useThemeColor('success')
+    const mutedColor = useThemeColor('muted')
+    const isCanceled = category === 'canceled'
+    const Icon = isCanceled ? CircleX : CircleCheck
+    const iconColor = isCanceled ? mutedColor : successColor
+    const titleClass = isCanceled ? 'line-through' : ''
     return (
         <Pressable
             accessibilityRole="button"
@@ -317,10 +379,13 @@ function DoneCard({ cardId, title, isOpen, isFocused, onPress, canDrag }: DoneCa
         >
             <FocusMarker isFocused={isFocused} cardId={cardId} />
             <View className="flex-row items-start gap-2">
-                <View className="mt-px">
-                    <CircleCheck size={14} color={successColor} strokeWidth={2.4} />
+                <View className="mt-px" testID={`cards-card-closed-${cardId}`}>
+                    <Icon size={14} color={iconColor} strokeWidth={2.4} />
                 </View>
-                <Text className="flex-1 text-[13.5px] leading-[18px] text-muted" numberOfLines={3}>
+                <Text
+                    className={`flex-1 text-[13.5px] leading-[18px] text-muted ${titleClass}`}
+                    numberOfLines={3}
+                >
                     {title}
                 </Text>
             </View>
@@ -351,17 +416,25 @@ function CardMeta({ card }: { card: BoardCardView }) {
     // between re-render.
     const watchers = useCardPresence(card.id)
     const hasPills =
-        card.due || card.checklistTotal > 0 || card.commentCount > 0 || card.attachmentCount > 0
+        card.due ||
+        card.start ||
+        card.checklistTotal > 0 ||
+        card.subtaskTotal > 0 ||
+        card.commentCount > 0 ||
+        card.attachmentCount > 0 ||
+        card.estimate !== undefined
     // Someone viewing this card is reason enough to render the row, even on a
     // card that has no other metadata at all.
     if (!hasPills && card.assignees.length === 0 && watchers.length === 0) return null
 
     return (
         <View className="flex-row items-center gap-2.5 min-h-[20px]">
-            <DuePill due={card.due} />
+            <SchedulePill start={card.start} due={card.due} dueHasTime={card.dueHasTime} />
             <ChecklistPill done={card.checklistDone} total={card.checklistTotal} />
+            <SubtasksPill done={card.subtaskDone} total={card.subtaskTotal} />
             <CommentsPill count={card.commentCount} />
             <AttachmentsPill count={card.attachmentCount} />
+            <EstimatePill estimate={card.estimate} />
             <View className="flex-1" />
             <CardWatchers watchers={watchers} cardId={card.id} />
             <CardAssignees assignees={card.assignees} />
@@ -403,14 +476,26 @@ function CardWatchers({ watchers, cardId }: { watchers: RemoteCardsPresence[]; c
     )
 }
 
-function DuePill({ due }: { due?: Date }) {
+/**
+ * The schedule on the face: "Sep 10", "Sep 3 → Sep 10", "Sep 10, 2:30 PM"
+ * — coloured by the due state, or muted when only a start is set.
+ */
+function SchedulePill({
+    start,
+    due,
+    dueHasTime,
+}: {
+    start?: Date
+    due?: Date
+    dueHasTime: boolean
+}) {
     const warningColor = useThemeColor('warning')
     const dangerColor = useThemeColor('danger')
     const mutedColor = useThemeColor('muted')
-    if (!due) return null
+    if (!due && !start) return null
 
-    const state = dueStateFor(due)
-    const label = formatDueDate(due)
+    const state = due ? dueStateFor(due, undefined, dueHasTime) : 'upcoming'
+    const label = formatSchedule(start, due, dueHasTime)
     if (state === 'upcoming') {
         return (
             <View className="flex-row items-center gap-1">
@@ -461,6 +546,38 @@ function ChecklistPill({ done, total }: { done: number; total: number }) {
     )
 }
 
+/**
+ * The sub-task rollup — "2/5".
+ *
+ * Reads the denormalized counters for the reason ChecklistPill does, with one
+ * difference worth knowing: the children here ARE cards, and cards sync
+ * eagerly, so this one could be counted from the loaded board. It is not,
+ * because a card face also renders where the board's card set is absent — My
+ * cards, search results — and a badge that appears on one surface and not
+ * another reads as a bug. server/card_parent.go keeps them current.
+ *
+ * "Done" is the child's LIST category, not a flag, so this agrees with the
+ * list header glyph a reader is looking at.
+ */
+function SubtasksPill({ done, total }: { done: number; total: number }) {
+    const mutedColor = useThemeColor('muted')
+    const successColor = useThemeColor('success')
+    if (total === 0) return null
+
+    const isComplete = subtasksComplete({ subtaskTotal: total, subtaskDone: done })
+    const color = isComplete ? successColor : mutedColor
+    return (
+        <View className="flex-row items-center gap-1" testID="cards-subtask-pill">
+            <ListTree size={12} color={color} strokeWidth={2.2} />
+            <Text
+                className={`text-[11px] font-medium ${isComplete ? 'text-success' : 'text-muted'}`}
+            >
+                {done}/{total}
+            </Text>
+        </View>
+    )
+}
+
 function CommentsPill({ count }: { count: number }) {
     const mutedColor = useThemeColor('muted')
     if (!count) return null
@@ -481,6 +598,18 @@ function AttachmentsPill({ count }: { count: number }) {
         <View className="flex-row items-center gap-1">
             <Paperclip size={12} color={mutedColor} strokeWidth={2.2} />
             <Text className="text-[11px] font-medium text-muted">{count}</Text>
+        </View>
+    )
+}
+
+function EstimatePill({ estimate }: { estimate?: number }) {
+    const mutedColor = useThemeColor('muted')
+    if (estimate === undefined) return null
+
+    return (
+        <View testID="cards-estimate-pill" className="flex-row items-center gap-1">
+            <Gauge size={12} color={mutedColor} strokeWidth={2.2} />
+            <Text className="text-[11px] font-medium text-muted">{formatEstimate(estimate)}</Text>
         </View>
     )
 }

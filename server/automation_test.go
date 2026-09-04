@@ -18,8 +18,8 @@ import (
 // their relation authorizers.
 //
 // Run against the package's real migrations (newCardsApp / rlstest), because
-// both answers are only correct relative to the actual schema — is_done lives
-// on cards_lists, and membership on cards_project_members.
+// both answers are only correct relative to the actual schema — `category`
+// lives on cards_lists, and membership on cards_project_members.
 
 type cardsAutomationEnv struct {
 	app      *tests.TestApp
@@ -45,7 +45,7 @@ func setupCardsAutomation(t *testing.T) *cardsAutomationEnv {
 
 	todo := cardsList(t, app, project, "To do", "a")
 	done := cardsList(t, app, project, "Done", "b")
-	done.Set("is_done", true)
+	done.Set("category", "done")
 	if err := app.Save(done); err != nil {
 		t.Fatalf("mark list done: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestCardOwnerResolver_MalformedRecordsResolveNil(t *testing.T) {
 }
 
 // card-completed and card-moved fire on the SAME event. What separates them is
-// the destination list's is_done flag — which lives on cards_lists, so a rule
+// the destination list's category — which lives on cards_lists, so a rule
 // condition could never express it.
 func TestCardMovedToDoneList(t *testing.T) {
 	env := setupCardsAutomation(t)
@@ -133,8 +133,73 @@ func TestCardMovedToDoneList(t *testing.T) {
 		t.Error("a card in an ordinary list must NOT be treated as completed")
 	}
 
+	// Canceled is closed, but it is not a completion.
+	canceled := cardsList(t, env.app, env.project, "Won't do", "c")
+	canceled.Set("category", "canceled")
+	if err := env.app.Save(canceled); err != nil {
+		t.Fatal(err)
+	}
+	inCanceled := cardsCard(t, env.app, env.project, canceled, "Dropped", "c", env.owner)
+	if cardMovedToDoneList(env.app, inCanceled) {
+		t.Error("a card in a canceled list must NOT be treated as completed")
+	}
+	if !cardMovedToCanceledList(env.app, inCanceled) {
+		t.Error("a card in a canceled list must be admitted as canceled")
+	}
+	if cardMovedToCanceledList(env.app, inDone) {
+		t.Error("a card in a done list must NOT be treated as canceled")
+	}
+
 	if cardMovedToDoneList(env.app, nil) {
 		t.Error("a nil record must not be treated as completed")
+	}
+}
+
+// The archive filter admits an archive and refuses a restore (and nothing).
+func TestCardIsArchived(t *testing.T) {
+	env := setupCardsAutomation(t)
+	card := cardsCard(t, env.app, env.project, env.todo, "card", "a", env.owner)
+	if cardIsArchived(env.app, card) {
+		t.Error("a live card must not be treated as archived")
+	}
+	card.Set("archived", true)
+	if !cardIsArchived(env.app, card) {
+		t.Error("an archived card must be admitted")
+	}
+	if cardIsArchived(env.app, nil) {
+		t.Error("a nil record must not be treated as archived")
+	}
+}
+
+// Closed is done OR canceled: what the reminders and the auto-archive sweep
+// ask. An unmarked list (” category) is an ordinary working list.
+func TestCardInClosedList(t *testing.T) {
+	env := setupCardsAutomation(t)
+
+	canceled := cardsList(t, env.app, env.project, "Won't do", "c")
+	canceled.Set("category", "canceled")
+	if err := env.app.Save(canceled); err != nil {
+		t.Fatal(err)
+	}
+	unmarked := cardsList(t, env.app, env.project, "Unmarked", "d")
+
+	cases := []struct {
+		list *core.Record
+		want bool
+	}{
+		{env.done, true},
+		{canceled, true},
+		{env.todo, false},
+		{unmarked, false},
+	}
+	for _, tc := range cases {
+		card := cardsCard(t, env.app, env.project, tc.list, "card", "a", env.owner)
+		if got := cardInClosedList(env.app, card); got != tc.want {
+			t.Errorf("cardInClosedList in %q = %v, want %v", tc.list.GetString("name"), got, tc.want)
+		}
+	}
+	if cardInClosedList(env.app, nil) {
+		t.Error("a nil record must not be treated as closed")
 	}
 }
 

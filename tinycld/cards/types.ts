@@ -34,9 +34,11 @@
 import type {
     CardsActivity,
     CardsAttachments,
+    CardsCardLinks,
     CardsCards,
     CardsCardWatchers,
     CardsChecklistItems,
+    CardsCommentReactions,
     CardsComments,
     CardsLabels,
     CardsLists,
@@ -45,14 +47,17 @@ import type {
     CardsShareLinks,
     Users,
 } from '@tinycld/core/types/pbSchema'
+import type { ListCategory } from './lib/list-category'
 import type { CardPriority } from './lib/priority'
 
 export type {
     CardsActivity,
     CardsAttachments,
+    CardsCardLinks,
     CardsCards,
     CardsCardWatchers,
     CardsChecklistItems,
+    CardsCommentReactions,
     CardsComments,
     CardsLabels,
     CardsLists,
@@ -204,8 +209,12 @@ export interface BoardCardView {
     title: string
     /** Markdown source. '' when unset. */
     description: string
-    /** undefined when no due date is set. */
+    /** undefined when no due date is set. A local day, or an instant when `dueHasTime`. */
     due?: Date
+    /** Whether `due` names a time as well as a day — see lib/due-time.ts. */
+    dueHasTime: boolean
+    /** undefined when no start date is set. Always a local day. */
+    start?: Date
     labels: BoardLabel[]
     assignees: BoardMember[]
     /**
@@ -220,6 +229,14 @@ export interface BoardCardView {
     reporter?: BoardMember
     /** Already normalized — never '' — see lib/priority.ts. */
     priority: CardPriority
+    /** Points. Undefined when unset (the row stores 0) — see lib/estimate.ts. */
+    estimate?: number
+    /**
+     * The status of the list the card sits in — what decides whether it is
+     * "closed" for the due filters and My cards. Copied onto the card view
+     * so those predicates need no list lookup.
+     */
+    listCategory: ListCategory
     /**
      * ISO timestamp from `created`, '' for an optimistic insert the server has
      * not echoed yet. What "sort by created" orders on; see lib/created-order.
@@ -230,6 +247,32 @@ export interface BoardCardView {
     checklistDone: number
     commentCount: number
     attachmentCount: number
+    /**
+     * The card this one is a sub-task of, '' when it is top level.
+     *
+     * Always a card on the SAME board — pinned by the rule in migration
+     * 1980000015 — so a resolver never has to look outside the loaded set.
+     * A dangling id (the parent was deleted; the relation deliberately does
+     * not cascade) reads as top level, the way comment threading treats a
+     * missing parent.
+     */
+    parent: string
+    /**
+     * The parent's card key — `OTTER-4` — for the "↳ OTTER-4" chip on a
+     * sub-task's face. '' when top level, when the board has no slug, and when
+     * the parent has been deleted. Precomputed for the reason `key` is: a card
+     * node carries no reference to the parent's row.
+     */
+    parentKey: string
+    /**
+     * The sub-task rollup, maintained by server/card_parent.go. `done` counts
+     * children in a done or canceled list, so it agrees with the list header
+     * glyph. Denormalized rather than counted from the loaded cards because a
+     * card face renders where the board's card set is not loaded — My cards,
+     * search results.
+     */
+    subtaskTotal: number
+    subtaskDone: number
 }
 
 export interface BoardListView {
@@ -237,7 +280,8 @@ export interface BoardListView {
     name: string
     /** Fractional rank — see lib/rank.ts. Sort by `position, id`. */
     position: string
-    isDone: boolean
+    /** Already normalized — never '' — see lib/list-category.ts. */
+    category: ListCategory
     /** The cards that pass the board filter, in the chosen sort order. */
     cards: BoardCardView[]
     /**
@@ -270,6 +314,8 @@ export interface BoardProject {
      */
     slug: string
     color: CardsColor
+    /** Days a card sits in a done or canceled list before the server archives it; 0 = never. */
+    autoArchiveDays: number
     members: BoardMember[]
     lists: BoardListView[]
     /** `lists` reduced to ranks — identity changes only when list ROWS change. */

@@ -8,9 +8,11 @@ import { useMemo } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { type ActivityContext, buildActivityFeed, describeActivity } from '../../lib/activity-feed'
 import { buildCommentThreads } from '../../lib/comment-threads'
+import type { ReactionEmoji, ReactionGroup } from '../../lib/reactions'
 import type { BoardActivity, BoardAttachment, BoardComment } from '../../types'
 import { COMMENT_HEADER_HEIGHT, InlineCommentEditor } from './CommentEditor'
 import { MarkdownText } from './MarkdownText'
+import { ReactionBar } from './ReactionBar'
 
 interface DetailActivityProps {
     comments: BoardComment[]
@@ -22,6 +24,9 @@ interface DetailActivityProps {
     canComment: boolean
     /** Project owners may delete anyone's comment (author-or-owner rule). */
     canModerate: boolean
+    /** The reaction groups for a comment — a stable empty array when none. */
+    reactionsFor: (commentId: string) => ReactionGroup[]
+    onToggleReaction: (commentId: string, emoji: ReactionEmoji) => void
     /** For the inline editor's image inserts — they become card attachments. */
     cardId: string
     projectId: string
@@ -44,6 +49,8 @@ export function DetailActivity({
     activityContext,
     canComment,
     canModerate,
+    reactionsFor,
+    onToggleReaction,
     cardId,
     projectId,
     attachments,
@@ -62,6 +69,8 @@ export function DetailActivity({
     const rowProps = {
         canComment,
         canModerate,
+        reactionsFor,
+        onToggleReaction,
         cardId,
         projectId,
         attachments,
@@ -156,6 +165,8 @@ interface CommentRowProps {
     comment: BoardComment
     canComment: boolean
     canModerate: boolean
+    reactionsFor: (commentId: string) => ReactionGroup[]
+    onToggleReaction: (commentId: string, emoji: ReactionEmoji) => void
     cardId: string
     projectId: string
     attachments: BoardAttachment[]
@@ -174,6 +185,8 @@ function CommentRow({
     comment,
     canComment,
     canModerate,
+    reactionsFor,
+    onToggleReaction,
     cardId,
     projectId,
     attachments,
@@ -291,6 +304,15 @@ function CommentRow({
                         />
                     </>
                 )}
+                {/* OUTSIDE the edit swap above and the fixed-height header:
+                    the same element in both branches, so opening an edit
+                    neither hides the bar nor moves it. */}
+                <ReactionBar
+                    commentId={comment.id}
+                    groups={reactionsFor(comment.id)}
+                    canReact={canComment}
+                    onToggle={emoji => onToggleReaction(comment.id, emoji)}
+                />
             </View>
         </View>
     )

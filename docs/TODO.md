@@ -5,9 +5,13 @@ priority order. Ranked by (1) how many of the three treat a feature as core,
 (2) how often it is touched in daily use, and (3) how much existing core
 infrastructure it can reuse. Ties go to the cheaper item.
 
-Status as of 2026-09-03: Tier 1 shipped on `feat/tier1-parity` (with the
-matching `feat/cards-notification-prefs` branch in `tinycld`). Tiers 2 and 3
-are open.
+Status as of 2026-09-03: Tier 1 shipped on `feat/tier1-parity`. Tier 2's
+four chosen items — 8, 10, 12, 13 — and their rule/notification follow-ups
+shipped as five stacked branches (`feat/tier2-estimates` → `-status` →
+`-reactions` → `-timeline` → `-events`, PRs #46–#50), with the matching
+notification preferences on `tinycld`'s `feat/cards-notification-prefs`
+(PR #229). Sub-tasks (9a) followed on `feat/tier2-subtasks`, and card links
+(9b) on `feat/tier2-links`. Open: 11, 14–21 and Tier 3.
 
 ## Tier 1 — table stakes in all three ✅ shipped
 
@@ -42,24 +46,92 @@ are open.
 
 ## Tier 2 — expected by two of the three, or all three at low cost
 
-8. **Comment reactions.** All three. A `cards_comment_reactions (comment,
-   user, emoji)` junction with a unique index.
-9. **Sub-tasks and card relations.** Jira sub-tasks, Linear sub-issues and
-   relations (blocks / blocked by / related / duplicate). Needs
-   `cards_cards.parent` with a face rollup and a `cards_card_links` collection;
-   pin `parent` to the same project as the anti-repoint rules do.
-10. **Start date, due time, timeline view.** `due` is a day only. A `start`
-    column and a time component are small; a timeline screen builds on the
-    list-view plumbing.
-11. **Time-based automation and missing actions.** Core has `core:schedule`
-    but cards declares no scheduled trigger; add overdue / due-soon triggers,
-    `cards:create-card` and `cards:set-due-date`. Note the shipped core bug:
-    `core:send-email`'s loop cap fails open.
-12. **Estimates / story points.** One numeric (or t-shirt select) column,
-    rolled up per list. Prerequisite for reports.
-13. **Status categories beyond `is_done`.** backlog / todo / in_progress /
-    done / canceled on `cards_lists`, plus auto-archive of completed cards
-    after N days.
+### Shipped ✅
+
+8. **Comment reactions** — landed as the `cards_comment_reactions (comment,
+   user, emoji)` junction over a six-emoji select (so byte-variant sequences
+   cannot defeat the unique index), carrying `card` so the open card reads its
+   reactions in one query. Commentors and up react, anyone removes only their
+   own, members and live share links read. A reaction bar under each comment
+   sits outside the inline-edit swap; the author gets a `cards_reaction`
+   notification (own mute switch); the `comment-reacted` trigger fires for
+   rules. Deferred: CLI reaction commands (need the core scope map widened).
+10. **Start date, due time, timeline view** — landed as `cards_cards.start`
+    (a day) and a `due_has_time` flag that lets `due` carry an instant; day
+    values keep the calendar-day semantics everywhere, timed ones are
+    overdue from their instant (face, filter, reminder sweep) and land on
+    the calendar at their time. The due picker gained a time row, the face
+    reads "Sep 3 → Sep 10, 2:30 PM", the list view a Start column, sort by
+    start, history rows for both, `--start` / `--due "YYYY-MM-DD HH:MM"` on
+    the CLI, and the `card-rescheduled` trigger. The timeline is a third
+    view: a day axis, one row per dated card grouped by list, bars and dots,
+    today marked, `j`/`k`/`Enter`, persisted per board. Deferred:
+    drag-to-reschedule on the timeline; start→due spans on the calendar.
+12. **Estimates** — landed as an integer `estimate` column (0 = unset) with a
+    preset picker, a face pill, a list-view column, a sort field, an
+    estimated/unestimated facet, a per-column points total that follows the
+    filter, history rows, `--estimate` on the CLI, the
+    `card-estimate-changed` trigger and the `set-estimate` action.
+13. **Status categories and auto-archive** — `is_done` is gone; lists carry
+    backlog / todo / in_progress / done / canceled with a header glyph, a
+    status submenu and a filter facet. Done and canceled are closed: the
+    closed face (a cross and struck title for canceled), no reminders, never
+    overdue, hidden from My cards behind Show closed. `card-canceled` joins
+    `card-completed` as a trigger, and `card-archived` fires on an archive
+    (never a restore). Auto-archive is a per-board days setting (Board
+    settings…) and a server-owned `list_changed_at` stamp driving a
+    15-minute sweep. `list category` on the CLI, with `list done` as
+    shorthand.
+
+9a. **Sub-tasks** — landed as `cards_cards.parent` (a card that names another
+    card, `cascadeDelete: false` so deleting a parent ORPHANS its children
+    rather than destroying them) plus a `subtask_total` / `subtask_done`
+    rollup on the face. The same-board invariant is a rule pin
+    (`@request.body.parent.project = project` on create and update, asserted
+    literally in `shipped_rules_test.go`); cycle and one-level depth are the
+    Go guard beside it, since a rule sees one row and cannot walk a chain.
+    `subtask_done` counts children in a done/canceled LIST, so "2/5" agrees
+    with the list header glyph. Children stay on the board as ordinary cards
+    with a `↳ PARENT-KEY` chip. Cross-board move now ASKS
+    (`family: move|unlink`) rather than picking for the user, and reports what
+    it did. `--parent` / `--clear-parent` on the CLI, `--family` on
+    `card move`, the `card-parented` trigger and the `set-parent` action.
+    Fixed alongside: `cards_comment_reactions` was missing from the move
+    endpoint's re-projection list, so a cross-board move left reaction rows
+    naming the source board — unreadable to everyone on the target.
+
+9b. **Card links** — landed as `cards_card_links (source, target, type)` over
+    blocks / related / duplicates, stored ONCE and read from both ends
+    ("blocked by" is `blocks` seen from the target, not a fourth type).
+    Unlike sub-tasks these MAY CROSS BOARDS, which made it the first
+    collection in the package whose rules resolve two projects. No
+    denormalized `project` column: membership resolves through
+    `source.project` / `target.project`, which cannot desync and left
+    `endpoints_move_card.go` needing no change at all. Read is EITHER end,
+    with the far card REDACTED when unreadable — the anonymous-assignee
+    doctrine, so a blocked card never reads as unblocked to the people it
+    blocks. Write is asymmetric (writer on the source, member of the target),
+    delete follows the source alone. Share-link visitors read links via two
+    ALIASED token joins, each separately correlated; a single unaliased join
+    would have collapsed both ends onto one row and a missing correlation
+    would have leaked every board's links. Self-links and reversed `blocks`
+    pairs are a Go guard; `related`/`duplicates` are symmetric so their
+    mirrors are allowed. History writes onto BOTH cards.
+    Deferred: CLI commands (need `cards_card_links` in core's
+    `collectionScopes` first — the cross-repo step that also defers reaction
+    CLI commands); a cross-board card picker (the schema and rules support
+    such links, but the picker offers the open board's cards); link-aware
+    board filtering; a blocked glyph on the card face.
+
+### Open
+
+11. **Time-based automation and missing actions.** Core has `core:schedule`,
+    which fires with no record, and every cards relation authorizer refuses
+    that. Overdue / due-soon triggers are more naturally RECORD triggers the
+    existing due-notice ticker enqueues, reusing the once-only stamps. Still
+    missing: `cards:create-card` (project from the list, `allocateNumber`)
+    and `cards:set-due-date` (date math). The event triggers that needed no
+    scheduling — estimate, dates, archive, reactions — shipped with Tier 2.
 14. **Cycles / sprints with a backlog.** `cards_cycles`, `cards_cards.cycle`,
     a backlog view, rollover. Large; only for software-team personas.
 15. **Epics / milestones.** A lightweight `cards_epics` collection offered as
@@ -76,8 +148,9 @@ are open.
     batch mutation.
 20. **WIP limits and card aging.** `wip_limit` on lists with a warning header;
     aging as a face tint from `updated`.
-21. **Reports.** Burndown, velocity, cumulative flow. Depends on 12, 13 and
-    14; cumulative flow reads the activity table.
+21. **Reports.** Burndown, velocity, cumulative flow. 12 and 13 are in;
+    velocity still needs 14. Cumulative flow reads the activity table, and
+    the auto-archive sweep's rows count as system moves.
 
 ## Tier 3 — single-product differentiators
 
@@ -107,14 +180,18 @@ are open.
   keyboard-opened menu never measures its trigger. Fix all five in one pass
   using `triggerPosition`.
 - Editing an existing comment to add a mention does not notify.
-- No responsive pass: fixed `COLUMN_WIDTH` / `PEEK_WIDTH`, no `useBreakpoint`
-  usage in cards.
+- No responsive pass: fixed `COLUMN_WIDTH` / `PEEK_WIDTH`. The list and
+  timeline views read `useBreakpoint`; the canvas and peek do not.
+- Reactions have no CLI commands; the core CLI scope map would need to grant
+  `cards_comment_reactions` first.
+- The timeline is read-only (no drag-to-reschedule), and the calendar source
+  shows the due date only — a start→due span is drawn nowhere but the
+  timeline.
 - Share links: no per-link use caps or access log; `visibility` goes stale
   when a link expires.
 
 ## Persona note
 
-This ranking targets parity with all three. For a **Trello-style** product,
-drop 12, 13's canceled state, 14, 21 and 24 to Tier 3 and pull 17, 18, 22 and
-30 up. For a **Linear-style** tracker, 12, 13, 14 and 24 move to the top of
-Tier 2.
+This ranking targets parity with all three. With 12 and 13 shipped, a
+**Trello-style** product would drop 14, 21 and 24 to Tier 3 and pull 17, 18,
+22 and 30 up. A **Linear-style** tracker would take 9 and 14 next, then 24.

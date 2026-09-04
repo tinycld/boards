@@ -252,7 +252,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 			Project:  str(body["project"]),
 			Name:     str(body["name"]),
 			Position: str(body["position"]),
-			IsDone:   body["is_done"] == true,
+			Category: str(body["category"]),
 		}
 		f.lists[created.ID] = created
 		json.NewEncoder(w).Encode(created)
@@ -272,8 +272,8 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		if v, ok := body["position"].(string); ok {
 			l.Position = v
 		}
-		if v, ok := body["is_done"].(bool); ok {
-			l.IsDone = v
+		if v, ok := body["category"].(string); ok {
+			l.Category = v
 		}
 		json.NewEncoder(w).Encode(l)
 	})
@@ -373,8 +373,11 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 			Title:       str(body["title"]),
 			Description: str(body["description"]),
 			Due:         str(body["due"]),
+			DueHasTime:  body["due_has_time"] == true,
+			Start:       str(body["start"]),
 			CreatedBy:   str(body["created_by"]),
 			Reporter:    str(body["reporter"]),
+			Estimate:    num(body["estimate"]),
 		}
 		f.cards[created.ID] = created
 		json.NewEncoder(w).Encode(created)
@@ -396,6 +399,15 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		}
 		if v, ok := body["due"].(string); ok {
 			c.Due = v
+		}
+		if v, ok := body["due_has_time"].(bool); ok {
+			c.DueHasTime = v
+		}
+		if v, ok := body["start"].(string); ok {
+			c.Start = v
+		}
+		if _, ok := body["estimate"]; ok {
+			c.Estimate = num(body["estimate"])
 		}
 		if v, ok := body["reporter"].(string); ok {
 			c.Reporter = v
@@ -575,6 +587,12 @@ func (f *fakeCards) assertGroupedRankSort(r *http.Request) {
 func notFound(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNotFound)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Not found"})
+}
+
+// num reads a JSON number (decoded as float64) as the int the CLI sent.
+func num(v any) int {
+	f, _ := v.(float64)
+	return int(f)
 }
 
 func str(v any) string {

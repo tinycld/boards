@@ -8,9 +8,18 @@
 import type { BoardCardView } from '../types'
 import { parseCardKey } from './card-key'
 import { byCreatedThenId } from './created-order'
+import { compareEstimate } from './estimate'
 import { comparePriority } from './priority'
 
-export type SortField = 'manual' | 'due' | 'created' | 'title' | 'key' | 'priority'
+export type SortField =
+    | 'manual'
+    | 'due'
+    | 'start'
+    | 'created'
+    | 'title'
+    | 'key'
+    | 'priority'
+    | 'estimate'
 export type SortDirection = 'asc' | 'desc'
 
 export interface BoardSort {
@@ -24,10 +33,12 @@ export const MANUAL_SORT: BoardSort = Object.freeze({ field: 'manual', direction
 export const SORT_FIELD_LABELS: Record<SortField, string> = {
     manual: 'Manual order',
     due: 'Due date',
+    start: 'Start date',
     created: 'Created',
     title: 'Title',
     key: 'Key',
     priority: 'Priority',
+    estimate: 'Estimate',
 }
 
 type Comparator = (a: BoardCardView, b: BoardCardView) => number
@@ -59,18 +70,22 @@ export function compareCards(sort: BoardSort): Comparator {
 
 /**
  * A card with nothing to sort by on this field. Undated, unkeyed (the
- * optimistic beat before the server assigns a number) and unstamped (same
- * beat, for `created`) cards all belong at the end whichever way the rest
- * are ordered.
+ * optimistic beat before the server assigns a number), unstamped (same
+ * beat, for `created`) and unestimated cards all belong at the end whichever
+ * way the rest are ordered.
  */
 function isMissing(field: Exclude<SortField, 'manual'>, card: BoardCardView): boolean {
     switch (field) {
         case 'due':
             return card.due === undefined
+        case 'start':
+            return card.start === undefined
         case 'key':
             return keyNumber(card.key) === null
         case 'created':
             return card.created === ''
+        case 'estimate':
+            return card.estimate === undefined
         default:
             return false
     }
@@ -84,6 +99,10 @@ function byRank(a: BoardCardView, b: BoardCardView): number {
 /** Both dated — compareCards has already sent the undated to the end. */
 function byDue(a: BoardCardView, b: BoardCardView): number {
     return (a.due?.getTime() ?? 0) - (b.due?.getTime() ?? 0)
+}
+
+function byStart(a: BoardCardView, b: BoardCardView): number {
+    return (a.start?.getTime() ?? 0) - (b.start?.getTime() ?? 0)
 }
 
 function byTitle(a: BoardCardView, b: BoardCardView): number {
@@ -106,10 +125,12 @@ function keyNumber(key: string): number | null {
 
 const PRIMARY: Record<Exclude<SortField, 'manual'>, Comparator> = {
     due: byDue,
+    start: byStart,
     created: byCreatedThenId,
     title: byTitle,
     key: byKey,
     priority: (a, b) => comparePriority(a.priority, b.priority),
+    estimate: (a, b) => compareEstimate(a.estimate, b.estimate),
 }
 
 /**

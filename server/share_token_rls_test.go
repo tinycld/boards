@@ -886,3 +886,126 @@ func TestShareToken_ServesNoFileWithoutAToken(t *testing.T) {
 		want: http.StatusNotFound,
 	}.run(t, env)
 }
+
+// --- cards_card_links: the doubled token hazard -----------------------------
+//
+// Links are the only collection whose token disjunct needs TWO @collection
+// joins, because a link row points at two boards. Each join gets its own alias
+// (`:src`, `:tgt`) and its own correlation clause, and both properties are
+// load-bearing:
+//
+//   - Without the aliases, both ends' clauses would land on the same joined
+//     row (mechanic 4) and a cross-board link could never be read by anyone.
+//   - Without a correlation on EACH, an unconstrained cross join pairs any
+//     valid token with every board's links — mechanic 3's leak, doubled.
+
+// seedTokenLink writes a link row directly, bypassing the create rule: these
+// cases are about the READ path.
+func seedTokenLink(t *testing.T, env *shareTokenEnv, source, target *core.Record) *core.Record {
+	t.Helper()
+	col, err := env.app.FindCollectionByNameOrId("cards_card_links")
+	if err != nil {
+		t.Fatalf("find cards_card_links: %v", err)
+	}
+	row := core.NewRecord(col)
+	row.Set("source", source.Id)
+	row.Set("target", target.Id)
+	row.Set("type", "blocks")
+	if err := env.app.Save(row); err != nil {
+		t.Fatalf("seed link: %v", err)
+	}
+	return row
+}
+
+// A token for board A reads a link whose SOURCE is on A — the `:src` join.
+func TestShareToken_ReadsLinkBySourceEnd(t *testing.T) {
+	env := setupShareTokenEnv(t)
+	crossing := seedTokenLink(t, env, env.card, env.bCard)
+
+	anonReq{
+		method:     http.MethodGet,
+		url:        "/api/collections/cards_card_links/records",
+		shareToken: env.tokLive,
+		want:       http.StatusOK,
+		content:    []string{`"totalItems":1`, crossing.Id},
+		// The far card's title must not ride along, exactly as for a member.
+		notContent: []string{"b-secret-card"},
+	}.run(t, env)
+}
+
+// And one whose TARGET is on A — the `:tgt` join. Without the second alias
+// this returns nothing, which is the failure the aliasing exists to prevent.
+func TestShareToken_ReadsLinkByTargetEnd(t *testing.T) {
+	env := setupShareTokenEnv(t)
+	crossing := seedTokenLink(t, env, env.bCard, env.card)
+
+	anonReq{
+		method:     http.MethodGet,
+		url:        "/api/collections/cards_card_links/records",
+		shareToken: env.tokLive,
+		want:       http.StatusOK,
+		content:    []string{`"totalItems":1`, crossing.Id},
+		notContent: []string{"b-secret-card"},
+	}.run(t, env)
+}
+
+// THE LEAK THIS DESIGN MUST NOT HAVE: a token for board A must not surface a
+// link whose two ends are both on B. This is what a missing correlation clause
+// would break, and it would break silently.
+func TestShareToken_DoesNotReachLinksBetweenOtherBoards(t *testing.T) {
+	env := setupShareTokenEnv(t)
+	bSecond := cardsCard(t, env.app, env.bProject, env.bList, "b-second", "a1", env.owner)
+	hidden := seedTokenLink(t, env, env.bCard, bSecond)
+
+	anonReq{
+		method:     http.MethodGet,
+		url:        "/api/collections/cards_card_links/records",
+		shareToken: env.tokLive,
+		want:       http.StatusOK,
+		content:    emptyList,
+		notContent: []string{hidden.Id},
+	}.run(t, env)
+}
+
+// A revoked token reads nothing, on links as everywhere else — proof the
+// is_active clause is present on BOTH aliased joins rather than one.
+func TestShareToken_RevokedTokenReadsNoLinks(t *testing.T) {
+	env := setupShareTokenEnv(t)
+	seedTokenLink(t, env, env.card, env.bCard)
+
+	anonReq{
+		method:     http.MethodGet,
+		url:        "/api/collections/cards_card_links/records",
+		shareToken: env.tokRevoked,
+		want:       http.StatusOK,
+		content:    emptyList,
+	}.run(t, env)
+}
+
+// No header at all: an anonymous caller with no token reads no links.
+func TestShareToken_NoTokenReadsNoLinks(t *testing.T) {
+	env := setupShareTokenEnv(t)
+	seedTokenLink(t, env, env.card, env.bCard)
+
+	anonReq{
+		method:  http.MethodGet,
+		url:     "/api/collections/cards_card_links/records",
+		want:    http.StatusOK,
+		content: emptyList,
+	}.run(t, env)
+}
+
+// A share-link visitor may READ links but never file one: the create rule
+// demands a real membership, which a token holder does not have.
+func TestShareToken_CannotCreateALink(t *testing.T) {
+	env := setupShareTokenEnv(t)
+	other := cardsCard(t, env.app, env.project, env.list, "other", "a1", env.owner)
+
+	anonReq{
+		method:     http.MethodPost,
+		url:        "/api/collections/cards_card_links/records",
+		shareToken: env.tokEditor,
+		body:       `{"source":"` + env.card.Id + `","target":"` + other.Id + `","type":"blocks"}`,
+		want:       http.StatusBadRequest,
+	}.run(t, env)
+}

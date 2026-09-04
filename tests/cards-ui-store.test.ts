@@ -75,6 +75,16 @@ describe('cards-ui-store view preferences', () => {
         })
     })
 
+    describe('toggleMyCardsShowClosed', () => {
+        it('flips, and starts off', () => {
+            useCardsUIStore.setState({ isMyCardsShowingClosed: false })
+            useCardsUIStore.getState().toggleMyCardsShowClosed()
+            expect(useCardsUIStore.getState().isMyCardsShowingClosed).toBe(true)
+            useCardsUIStore.getState().toggleMyCardsShowClosed()
+            expect(useCardsUIStore.getState().isMyCardsShowingClosed).toBe(false)
+        })
+    })
+
     describe('persistence', () => {
         /**
          * Reads what the persist middleware ACTUALLY wrote, rather than
@@ -94,6 +104,7 @@ describe('cards-ui-store view preferences', () => {
                 collapsedColumnIds: { list_a: true },
                 isCompactCards: true,
                 viewModeByProject: { proj_1: 'list' },
+                isMyCardsShowingClosed: true,
             })
 
             expect(await persisted()).toEqual({
@@ -101,6 +112,7 @@ describe('cards-ui-store view preferences', () => {
                 collapsedColumnIds: { list_a: true },
                 isCompactCards: true,
                 viewModeByProject: { proj_1: 'list' },
+                isMyCardsShowingClosed: true,
             })
         })
 
@@ -126,6 +138,7 @@ describe('cards-ui-store view preferences', () => {
                 'activeProjectId',
                 'collapsedColumnIds',
                 'isCompactCards',
+                'isMyCardsShowingClosed',
                 'viewModeByProject',
             ])
         })

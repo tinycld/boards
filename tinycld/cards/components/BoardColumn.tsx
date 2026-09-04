@@ -16,11 +16,13 @@ import {
     isCardDragPayload,
     isColumnDragPayload,
 } from '../lib/dnd'
+import { formatEstimate, sumEstimates } from '../lib/estimate'
 import { rankForAppend, rankForReorder } from '../lib/move'
 import { selectBoardSort, useCardsUIStore } from '../stores/cards-ui-store'
 import type { BoardCardView, BoardListRank, BoardListView } from '../types'
 import { BoardCard } from './BoardCard'
 import { CardComposer } from './CardComposer'
+import { CategoryGlyph } from './CategoryGlyph'
 import { ColumnMenu } from './ColumnMenu'
 import { NoNativeDrag } from './NoNativeDrag'
 
@@ -565,10 +567,11 @@ function ColumnDragGhost({ list }: { list: BoardListView }) {
     )
 }
 
-/** The column name and its card count. */
+/** The column's status glyph, name and card count. */
 function ColumnTitle({ list }: { list: BoardListView }) {
     return (
         <>
+            <CategoryGlyph category={list.category} size={12} />
             {/* The name is the only part that gives way — it ellipsizes so the
                 count beside it stays readable. `numberOfLines` alone cannot do
                 that: it needs a width to ellipsize INTO, which is what the
@@ -588,7 +591,28 @@ function ColumnTitle({ list }: { list: BoardListView }) {
                     {countLabel(list)}
                 </Text>
             </View>
+            <EstimateTotal list={list} />
         </>
+    )
+}
+
+/**
+ * The points in the column, summed over the cards it SHOWS — so a filter
+ * narrows the total the same way it narrows the count beside it. Absent when
+ * nothing in the column is estimated, so an unestimated board looks as it did.
+ */
+function EstimateTotal({ list }: { list: BoardListView }) {
+    const total = sumEstimates(list.cards)
+    if (total === 0) return null
+    return (
+        <View className="bg-foreground/[0.06] rounded-full px-1.5 py-px shrink-0">
+            <Text
+                className="text-[11px] font-semibold text-muted"
+                testID={`cards-column-estimate-${list.id}`}
+            >
+                {formatEstimate(total)}
+            </Text>
+        </View>
     )
 }
 
@@ -782,7 +806,7 @@ const ColumnCards = memo(function ColumnCards({
                             <BoardCard
                                 card={card}
                                 projectId={projectId}
-                                isDone={list.isDone}
+                                category={list.category}
                                 canDrag={canEdit}
                             />
                         </NoNativeDrag>

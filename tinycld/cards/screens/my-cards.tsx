@@ -23,6 +23,7 @@ import {
     type MyCardsGroupView,
     type MyCardsMode,
 } from '../lib/my-cards'
+import { useCardsUIStore } from '../stores/cards-ui-store'
 
 const MODES: MyCardsMode[] = ['assigned', 'reported', 'watching', 'all']
 
@@ -46,6 +47,8 @@ export default function MyCardsScreen() {
     const orgHref = useOrgHref()
     const { user } = useAuth({ throwIfAnon: false })
     const userId = user?.id ?? ''
+    const showClosed = useCardsUIStore(s => s.isMyCardsShowingClosed)
+    const toggleShowClosed = useCardsUIStore(s => s.toggleMyCardsShowClosed)
 
     const [
         cardsCollection,
@@ -97,9 +100,10 @@ export default function MyCardsScreen() {
             userId,
             text,
             watchedCardIds,
+            showClosed,
         })
         return groupMyCards(rows, group)
-    }, [joined, labels, users, mode, userId, text, group, watchedCardIds])
+    }, [joined, labels, users, mode, userId, text, group, watchedCardIds, showClosed])
 
     const openRow = (row: MyCardRow) =>
         router.push(orgHref('cards/[cardId]', { cardId: row.card.key || row.card.id }))
@@ -117,6 +121,7 @@ export default function MyCardsScreen() {
                         </Text>
                         <HelpIcon topic="cards:my-cards" />
                         <View className="flex-1" />
+                        <ClosedToggle isShowing={showClosed} onToggle={toggleShowClosed} />
                         <GroupToggle group={group} onChange={setGroup} />
                     </View>
                     <View className="flex-row flex-wrap items-center gap-2">
@@ -210,6 +215,23 @@ function GroupToggle({
     )
 }
 
+function ClosedToggle({ isShowing, onToggle }: { isShowing: boolean; onToggle: () => void }) {
+    return (
+        <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected: isShowing }}
+            accessibilityLabel={isShowing ? 'Hide closed cards' : 'Show closed cards'}
+            testID="cards-my-cards-closed"
+            onPress={onToggle}
+            className="px-2 py-1 rounded-md hover:bg-foreground/10"
+        >
+            <Text className="text-[12px] font-medium text-muted">
+                {isShowing ? 'Hide closed' : 'Show closed'}
+            </Text>
+        </Pressable>
+    )
+}
+
 function Groups({
     groups,
     mode,
@@ -249,6 +271,7 @@ function Groups({
                 <CardRow
                     card={item.card}
                     listName={item.list.name}
+                    listCategory={item.list.category}
                     board={item.board}
                     variant="stacked"
                     onPress={() => onOpen(item)}

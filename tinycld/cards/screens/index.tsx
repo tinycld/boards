@@ -12,9 +12,11 @@ import { NoBoards } from '../components/EmptyBoard'
 import { NewBoardDialog } from '../components/NewBoardDialog'
 import { ProjectWash } from '../components/ProjectWash'
 import { BoardTable } from '../components/table/BoardTable'
+import { BoardTimeline } from '../components/timeline/BoardTimeline'
 import { useActiveBoard } from '../hooks/useActiveBoard'
 import { usePeekUrl } from '../hooks/usePeekUrl'
-import { selectViewMode, useCardsUIStore } from '../stores/cards-ui-store'
+import { selectViewMode, useCardsUIStore, type ViewMode } from '../stores/cards-ui-store'
+import type { BoardProject } from '../types'
 
 export default function CardsIndex() {
     const { project, isArchived, cardCount, isLoading, hasProjects } = useActiveBoard()
@@ -58,15 +60,23 @@ export default function CardsIndex() {
                 <ProjectWash color={project.color} bleedRight={insets.right} />
                 <BoardHeader project={project} cardCount={cardCount} isArchived={isArchived} />
                 <ArchivedBoardBanner project={project} isVisible={isArchived} />
-                {viewMode === 'list' ? (
-                    <BoardTable project={project} />
-                ) : (
-                    <BoardCanvas project={project} />
-                )}
+                <BoardView project={project} viewMode={viewMode} />
                 <CardPeek project={project} />
                 <ArchivedCardsPanel project={project} />
                 <NewBoardDialog />
             </View>
         </BoardPresenceProvider>
     )
+}
+
+/** The one branch on the view mode. The public board stays a canvas — see public-screens. */
+function BoardView({ project, viewMode }: { project: BoardProject; viewMode: ViewMode }) {
+    switch (viewMode) {
+        case 'list':
+            return <BoardTable project={project} />
+        case 'timeline':
+            return <BoardTimeline project={project} />
+        case 'board':
+            return <BoardCanvas project={project} />
+    }
 }

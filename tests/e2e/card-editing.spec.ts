@@ -159,6 +159,41 @@ test.describe('Cards — editing a card', () => {
         ).toBeVisible()
     })
 
+    test('sets a start date and a due time, and the face reads both', async ({ page }) => {
+        await boardWithOpenCard(page, 'start-time')
+
+        await peek(page).getByRole('button', { name: 'Set start date' }).click()
+        await page.getByRole('button', { name: 'Today', exact: true }).click()
+        const today = formatDue(daysFromToday(0))
+        await expect(
+            peek(page).getByRole('button', { name: `Start ${today}. Change start date` })
+        ).toBeVisible()
+
+        // A due date typed with a time: the chip and the face carry it, and
+        // the face joins the two dates into one line.
+        await peek(page).getByRole('button', { name: 'Set due date' }).click()
+        await page.getByRole('button', { name: 'Next week', exact: true }).click()
+        const nextWeek = formatDue(daysFromToday(7))
+        await peek(page)
+            .getByRole('button', { name: new RegExp(`^Due ${nextWeek}`) })
+            .click()
+        await page.getByTestId('cards-due-time').fill('14:30')
+        await page.keyboard.press('Enter')
+        await expect(
+            peek(page).getByRole('button', { name: new RegExp(`^Due ${nextWeek}, 2:30 PM`) })
+        ).toBeVisible()
+        await expect(boardCard(page, CARD_TITLE)).toContainText(`${today} → ${nextWeek}, 2:30 PM`)
+
+        // Clear time keeps the day.
+        await peek(page)
+            .getByRole('button', { name: new RegExp(`^Due ${nextWeek}, 2:30 PM`) })
+            .click()
+        await page.getByRole('button', { name: 'Clear time', exact: true }).click()
+        await expect(
+            peek(page).getByRole('button', { name: `Due ${nextWeek}. Change due date` })
+        ).toBeVisible()
+    })
+
     test('shows an overdue due date as overdue', async ({ page }) => {
         await boardWithOpenCard(page, 'due-overdue')
 

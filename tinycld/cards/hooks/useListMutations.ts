@@ -1,6 +1,7 @@
 import { mutation, useMutation } from '@tinycld/core/lib/mutations'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { newRecordId } from 'pbtsdb/core'
+import type { ListCategory } from '../lib/list-category'
 
 export interface CreateListInput {
     name: string
@@ -11,9 +12,9 @@ export interface CreateListInput {
 /**
  * Add a column to a board.
  *
- * `is_done` is false: the done column is a property of a board's workflow, not
- * of a newly added column, and a board created through useCreateProject already
- * has one. It is toggled from the column menu afterwards.
+ * The category is `todo`: which column means finished is a property of a
+ * board's workflow, not of a newly added column, and a board created through
+ * useCreateProject already has one. It is set from the column menu afterwards.
  */
 export function useCreateList(projectId: string) {
     const [listsCollection] = useStore('cards_lists')
@@ -28,7 +29,7 @@ export function useCreateList(projectId: string) {
                 project: projectId,
                 name: input.name,
                 position: input.position,
-                is_done: false,
+                category: 'todo',
             })
 
             return listId
@@ -39,12 +40,12 @@ export function useCreateList(projectId: string) {
 export interface UpdateListInput {
     listId: string
     name?: string
-    isDone?: boolean
+    category?: ListCategory
     position?: string
 }
 
 /**
- * Rename a column, mark it as the done column, or move it.
+ * Rename a column, set its status, or move it.
  *
  * All three are one update because they are one row, and a rename that arrives
  * as a separate write from a reorder would render the column in its old place
@@ -58,7 +59,7 @@ export function useUpdateList() {
         mutationFn: mutation(function* (input: UpdateListInput) {
             yield listsCollection.update(input.listId, draft => {
                 if (input.name !== undefined) draft.name = input.name
-                if (input.isDone !== undefined) draft.is_done = input.isDone
+                if (input.category !== undefined) draft.category = input.category
                 if (input.position !== undefined) draft.position = input.position
             })
         }),

@@ -9,28 +9,44 @@ import (
 )
 
 // registerAutomation installs cards' automation surface: the owner resolver
-// shared by all four card triggers, the card-completed trigger filter, and the
-// native action handlers with the relation authorizers the engine requires
-// before it will run them. Called from registerShared before hooks load.
+// shared by every cards trigger, the trigger filters that split one record
+// event into its named cases, and the native action handlers with the
+// relation authorizers the engine requires before it will run them. Called
+// from registerShared before hooks load.
 func registerAutomation() {
-	// One resolver, five triggers: every card event belongs to the same
-	// people — the members of the card's board.
+	// One resolver, every trigger: a card event — and a reaction on one of
+	// its comments — belongs to the same people, the members of the card's
+	// board. cardOwnerResolver reads `project`, which every row here carries.
 	for _, ref := range []string{
 		"cards:card-created",
 		"cards:card-moved",
 		"cards:card-completed",
+		"cards:card-canceled",
 		"cards:card-assigned",
 		"cards:card-priority-changed",
+		"cards:card-estimate-changed",
+		"cards:card-rescheduled",
+		"cards:card-archived",
+		"cards:card-parented",
+		"cards:comment-reacted",
 	} {
 		automation.RegisterOwnerResolver(ref, cardOwnerResolver)
 	}
 
 	automation.RegisterTriggerFilter("cards:card-completed", cardMovedToDoneList)
+	automation.RegisterTriggerFilter("cards:card-canceled", cardMovedToCanceledList)
+	// `archived` flips both ways; only the archive is the event. A restore is
+	// visible in history and to watchers, but "a card is archived" firing on
+	// a restore would be the wrong surprise.
+	automation.RegisterTriggerFilter("cards:card-archived", cardIsArchived)
 
 	// move-card declares a relation param, and the engine refuses to run an
 	// action whose relation param has no registered authorizer — without this
 	// the action is greyed out in the catalog and fails at execution.
 	automation.RegisterRelationAuthorizer("cards:move-card", "list", moveDestinationAuthorizer)
+	// set-parent is a record-op like move-card — a single-valued relation, so
+	// `set` is the right verb — and needs an authorizer for the same reason.
+	automation.RegisterRelationAuthorizer("cards:set-parent", "parent", parentAuthorizer)
 
 	automation.RegisterAction("cards:add-assignee", addAssignee)
 	automation.RegisterRelationAuthorizer("cards:add-assignee", "user", assigneeAuthorizer)
@@ -231,6 +247,41 @@ func moveDestinationAuthorizer(app core.App, req automation.ActionRequest, destI
 	return checkBoardWrite(app, req.OwnerID, projectID)
 }
 
+// parentAuthorizer answers the which-record question for cards:set-parent's
+// `parent` param. moveDestinationAuthorizer's shape, reading cards_cards
+// instead of cards_lists, and for the same two reasons — visibility is not
+// writability, and any card the owner can see would otherwise do.
+//
+// The third check has no analogue there and is the one this feature turns on:
+// the parent must not itself be a sub-task. The engine saves as a superuser
+// and so bypasses the rules AND the OnRecordUpdate guard's siblings, which
+// makes this the only place a rule-driven set-parent can be stopped from
+// building a three-level tree. (checkParent still runs — it is bound on the
+// model hook, not the request hook — but refusing here names the rule and the
+// param in the error the user reads.)
+//
+// Fails closed on anything unresolvable.
+func parentAuthorizer(app core.App, req automation.ActionRequest, parentID string) error {
+	if req.Record == nil {
+		return fmt.Errorf("cards:set-parent: no trigger card to re-parent")
+	}
+	if parentID == req.Record.Id {
+		return fmt.Errorf("a card cannot be its own sub-task")
+	}
+	parent, err := app.FindRecordById("cards_cards", parentID)
+	if err != nil {
+		return fmt.Errorf("parent card %s: %w", parentID, err)
+	}
+	projectID := req.Record.GetString("project")
+	if projectID == "" || parent.GetString("project") != projectID {
+		return fmt.Errorf("parent card %s is on a different board than the card", parentID)
+	}
+	if parent.GetString("parent") != "" {
+		return fmt.Errorf("parent card %s is itself a sub-task", parentID)
+	}
+	return checkBoardWrite(app, req.OwnerID, projectID)
+}
+
 // checkBoardWrite reports whether a user may write this board's cards. The
 // roles mirror cards_cards' own updateRule (`viaWriter`, 1980000000) and
 // lib/permissions.ts: owner and editor write; commentor and viewer do not.
@@ -298,30 +349,68 @@ func cardOwnerResolver(app core.App, record *core.Record) []string {
 	return owners
 }
 
+// listCategory reads a list's status category. ” — a row written before the
+// column existed, or by a client that omitted it — reads as `todo`, exactly
+// as lib/list-category.ts normalizes it, so the two sides never disagree
+// about what an unmarked list is.
+func listCategory(list *core.Record) string {
+	if category := list.GetString("category"); category != "" {
+		return category
+	}
+	return "todo"
+}
+
+// cardListCategory resolves the category of the list a card sits in.
+//
+// Fails closed (ok = false) on a nil record, a blank list, or a list that
+// cannot be loaded: an unknown destination is neither done nor canceled, and
+// firing "card completed" on a card that merely moved is the worse error.
+func cardListCategory(app core.App, record *core.Record) (category string, ok bool) {
+	if record == nil {
+		return "", false
+	}
+	listID := record.GetString("list")
+	if listID == "" {
+		return "", false
+	}
+	list, err := app.FindRecordById("cards_lists", listID)
+	if err != nil {
+		return "", false
+	}
+	return listCategory(list), true
+}
+
 // cardMovedToDoneList is the TriggerFilter for "cards:card-completed".
 //
 // card-completed and card-moved fire on the same event — a change to the
-// card's `list`. What separates them is the DESTINATION list's is_done flag,
+// card's `list`. What separates them is the DESTINATION list's category,
 // which lives on cards_lists rather than on the card, so a rule condition
 // cannot express it: conditions see only the trigger collection's own
-// columns. Hence a filter.
-//
-// Fails closed on an unresolvable list: an unknown destination is not a
-// completion, and firing "card completed" on a card that merely moved is the
-// worse error.
+// columns. Hence a filter. Only `done` counts: a canceled list is closed, but
+// it is not a completion — that is cardMovedToCanceledList's event.
 func cardMovedToDoneList(app core.App, record *core.Record) bool {
-	if record == nil {
-		return false
-	}
+	category, ok := cardListCategory(app, record)
+	return ok && category == "done"
+}
 
-	listID := record.GetString("list")
-	if listID == "" {
-		return false
-	}
+// cardMovedToCanceledList is the TriggerFilter for "cards:card-canceled".
+func cardMovedToCanceledList(app core.App, record *core.Record) bool {
+	category, ok := cardListCategory(app, record)
+	return ok && category == "canceled"
+}
 
-	list, err := app.FindRecordById("cards_lists", listID)
-	if err != nil {
-		return false
-	}
-	return list.GetBool("is_done")
+// cardIsArchived is the TriggerFilter for "cards:card-archived": the watched
+// column flipped, and it flipped TO archived. The auto-archive sweep's saves
+// pass through here at depth 0 like any other, which is intended — a rule
+// that says "when a card is archived, tell the team" should hear about the
+// sweep's archives too.
+func cardIsArchived(_ core.App, record *core.Record) bool {
+	return record != nil && record.GetBool("archived")
+}
+
+// cardInClosedList: the card's work has stopped, one way or the other. What
+// the due-date reminders and the auto-archive sweep ask.
+func cardInClosedList(app core.App, record *core.Record) bool {
+	category, ok := cardListCategory(app, record)
+	return ok && (category == "done" || category == "canceled")
 }

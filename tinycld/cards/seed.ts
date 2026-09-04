@@ -1,6 +1,9 @@
+import { toDateString } from '@tinycld/core/lib/dates'
 import type PocketBase from 'pocketbase'
+import type { ListCategory } from './lib/list-category'
 import type { CardPriority } from './lib/priority'
 import { initialRanks } from './lib/rank'
+import type { ReactionEmoji } from './lib/reactions'
 
 function log(...args: unknown[]) {
     process.stdout.write(`[seed:cards] ${args.join(' ')}\n`)
@@ -15,13 +18,22 @@ interface SeedContext {
     companion?: { id: string; email: string; name: string }
 }
 
-// Day-granular due dates as offsets from local midnight today (calendar's
-// convention). Data rows store these as THUNKS so the module-level tables can
-// be consts while the dates still resolve at run time, not import time.
+// Day-granular dates as offsets from today, written as the bare local day
+// the picker writes (a `toISOString()` of local midnight reads back as the
+// previous day east of UTC). Data rows store these as THUNKS so the
+// module-level tables can be consts while the dates still resolve at run
+// time, not import time.
 function dueAt(dayOffset: number) {
     const d = new Date()
-    d.setHours(0, 0, 0, 0)
     d.setDate(d.getDate() + dayOffset)
+    return toDateString(d)
+}
+
+/** A timed deadline: the instant at `hours` local on the offset day. */
+function dueAtTime(dayOffset: number, hours: number) {
+    const d = new Date()
+    d.setDate(d.getDate() + dayOffset)
+    d.setHours(hours, 0, 0, 0)
     return d.toISOString()
 }
 
@@ -42,12 +54,17 @@ interface CommentSeed {
      */
     editedBody?: string
     replies?: { author: Who; body: string }[]
+    /** Who reacted with what; two people on one emoji is what makes a count. */
+    reactions?: { by: Who; emoji: ReactionEmoji }[]
 }
 
 interface CardSeed {
     title: string
     description?: string
     due?: () => string
+    /** When set, `due` is an instant (dueAtTime) rather than a day. */
+    dueHasTime?: boolean
+    start?: () => string
     /** Label NAMES, resolved against the board's own labels. */
     labels?: string[]
     assignees?: Who[]
@@ -58,13 +75,35 @@ interface CardSeed {
      */
     reporter?: Who
     priority?: CardPriority
+    /** Points. Left unset on most cards so the demo shows both states. */
+    estimate?: number
+    /**
+     * The TITLE of the card this one is a sub-task of, resolved after every
+     * card exists.
+     *
+     * By title rather than id because the seed is declarative and ids are not
+     * known until insert; by a second pass because a parent may be seeded into
+     * a later list than its child. Must name a card on the SAME board — the
+     * rule refuses anything else.
+     */
+    parentTitle?: string
+    /**
+     * Links to other cards, BY TITLE, resolved after every card exists — the
+     * same second-pass reason parentTitle needs one.
+     *
+     * Titles are matched within this board only. A cross-board link is
+     * perfectly legal (see pb-migrations/1980000016) but seeding one would
+     * need a board-qualified reference, and the demo reads better with the
+     * dependency visible on one screen.
+     */
+    links?: { type: 'blocks' | 'related' | 'duplicates'; to: string }[]
     checklist?: { title: string; done?: boolean }[]
     comments?: CommentSeed[]
 }
 
 interface ListSeed {
     name: string
-    isDone?: boolean
+    category?: ListCategory
     cards: CardSeed[]
 }
 
@@ -80,6 +119,8 @@ interface BoardSeed {
     slug: string
     color: string
     owner: Who
+    /** Days a finished card sits before the server archives it; 0 (the default) never does. */
+    autoArchiveDays?: number
     /**
      * Roles for the non-owner members, cycled in order. On a 'me'-owned board
      * every teammate gets a row (a populated ShareDialog roster); on a
@@ -100,6 +141,9 @@ const BOARDS: BoardSeed[] = [
         slug: 'PL',
         color: '#4A86E8',
         owner: 'me',
+        // Demonstrates the sweep without ever firing on fresh demo data: the
+        // seeded Done cards entered their list today.
+        autoArchiveDays: 30,
         memberRoles: ['editor', 'commentor', 'viewer'],
         labels: [
             { name: 'Bug', color: '#B00020' },
@@ -110,6 +154,7 @@ const BOARDS: BoardSeed[] = [
         lists: [
             {
                 name: 'Backlog',
+                category: 'backlog',
                 cards: [
                     {
                         title: 'Dark-mode audit of the marketing site',
@@ -118,6 +163,7 @@ const BOARDS: BoardSeed[] = [
                     {
                         title: 'Export boards to CSV',
                         priority: 'low',
+                        estimate: 3,
                         labels: ['Feature'],
                     },
                     {
@@ -158,7 +204,10 @@ const BOARDS: BoardSeed[] = [
                 cards: [
                     {
                         title: 'Draft the launch announcement',
+                        links: [{ type: 'blocks', to: 'Press kit landing page' }],
                         priority: 'medium',
+                        estimate: 5,
+                        start: () => dueAt(-2),
                         due: () => dueAt(3),
                         labels: ['Feature'],
                         assignees: ['me'],
@@ -170,8 +219,15 @@ const BOARDS: BoardSeed[] = [
                     },
                     {
                         title: 'Fix duplicate label colors in picker',
+                        // A dependency the board can show off: the announcement
+                        // cannot go out until the press kit is up. Reads
+                        // "Blocks" on one card and "Blocked by" on the other
+                        // from the SAME row.
+                        links: [{ type: 'related', to: 'Press kit landing page' }],
                         priority: 'high',
-                        due: () => dueAt(1),
+                        estimate: 2,
+                        due: () => dueAtTime(1, 14),
+                        dueHasTime: true,
                         labels: ['Bug'],
                         // A bug someone else hit and filed: the reporter is who
                         // to ask about it, and it differs from created_by on
@@ -187,11 +243,33 @@ const BOARDS: BoardSeed[] = [
                             { title: 'Keyboard shortcuts tour' },
                         ],
                     },
+                    // Sub-tasks of the announcement above. Seeded as ordinary
+                    // cards — which is what they are — spread across lists so a
+                    // reset shows the rollup counting a DONE one (the list's
+                    // category is what "done" means) rather than a flat 0/3.
+                    {
+                        title: 'Write the headline and subhead',
+                        parentTitle: 'Draft the launch announcement',
+                        estimate: 1,
+                        assignees: ['me'],
+                    },
+                    {
+                        title: 'Get legal sign-off on the claims',
+                        parentTitle: 'Draft the launch announcement',
+                        priority: 'high',
+                        assignees: ['teammate'],
+                    },
                 ],
             },
             {
                 name: 'Doing',
+                category: 'in_progress',
                 cards: [
+                    {
+                        title: 'Pick the hero screenshot',
+                        parentTitle: 'Draft the launch announcement',
+                        labels: ['Design'],
+                    },
                     {
                         title: 'Press kit landing page',
                         description: [
@@ -222,6 +300,7 @@ const BOARDS: BoardSeed[] = [
                     {
                         title: 'Payment provider webhook retries',
                         priority: 'urgent',
+                        estimate: 8,
                         due: () => dueAt(-2),
                         labels: ['Bug', 'Urgent'],
                         assignees: ['teammate'],
@@ -231,7 +310,7 @@ const BOARDS: BoardSeed[] = [
             },
             {
                 name: 'Done',
-                isDone: true,
+                category: 'done',
                 cards: [
                     { title: 'Rename workspace settings tabs' },
                     {
@@ -241,6 +320,11 @@ const BOARDS: BoardSeed[] = [
                                 author: 'me',
                                 body: 'Landed — moves are a single-line update now.',
                                 editedBody: 'Landed — moves are a single-row update now.',
+                                reactions: [
+                                    { by: 'teammate', emoji: '🎉' },
+                                    { by: 'me', emoji: '🎉' },
+                                    { by: 'teammate', emoji: '🚀' },
+                                ],
                             },
                         ],
                     },
@@ -259,13 +343,13 @@ const BOARDS: BoardSeed[] = [
             {
                 name: 'To do',
                 cards: [
-                    { title: 'Fix the gate latch', due: () => dueAt(7) },
+                    { title: 'Fix the gate latch', start: () => dueAt(2), due: () => dueAt(7) },
                     { title: 'Plant fall garlic', due: () => dueAt(14) },
                 ],
             },
             {
                 name: 'Done',
-                isDone: true,
+                category: 'done',
                 cards: [{ title: 'Clean the gutters' }],
             },
         ],
@@ -347,6 +431,7 @@ async function seedBoard(
         visibility: 'private',
         created_by: ownerId,
         archived: false,
+        auto_archive_days: board.autoArchiveDays ?? 0,
     })
 
     // Owner row first, mirroring useCreateProject's yield order. The superuser
@@ -383,12 +468,15 @@ async function seedBoard(
     }
 
     const listRanks = initialRanks(board.lists.length)
+    // Card ids by title, for the sub-task pass below.
+    const cardIdsByTitle: Record<string, string> = {}
+
     for (const [listIndex, list] of board.lists.entries()) {
         const listRecord = await pb.collection('cards_lists').create({
             project: project.id,
             name: list.name,
             position: listRanks[listIndex] ?? '',
-            is_done: list.isDone ?? false,
+            category: list.category ?? 'todo',
         })
 
         const cardRanks = initialRanks(list.cards.length)
@@ -403,6 +491,8 @@ async function seedBoard(
                 title: card.title,
                 description: card.description ?? '',
                 due: card.due ? card.due() : '',
+                due_has_time: card.dueHasTime ?? false,
+                start: card.start ? card.start() : '',
                 assignees: [...new Set((card.assignees ?? []).map(who))],
                 labels: (card.labels ?? [])
                     .map(name => labelIds[name])
@@ -410,6 +500,7 @@ async function seedBoard(
                 created_by: ownerId,
                 reporter: card.reporter ? who(card.reporter) : ownerId,
                 priority: card.priority ?? 'none',
+                estimate: card.estimate ?? 0,
                 archived: false,
             })
 
@@ -426,29 +517,53 @@ async function seedBoard(
                 }
             }
 
-            for (const comment of card.comments ?? []) {
-                const top = await pb.collection('cards_comments').create({
-                    card: cardRecord.id,
-                    project: project.id,
-                    author: who(comment.author),
-                    body: comment.body,
-                    parent: '',
+            await seedComments(pb, project.id, cardRecord.id, card.comments ?? [], who)
+            cardIdsByTitle[card.title] = cardRecord.id
+        }
+    }
+
+    await seedSubtasks(pb, board, cardIdsByTitle)
+    await seedLinks(pb, board, cardIdsByTitle)
+}
+
+/** Link the seeded cards to each other. A second pass, like seedSubtasks. */
+async function seedLinks(pb: PocketBase, board: BoardSeed, cardIdsByTitle: Record<string, string>) {
+    for (const list of board.lists) {
+        for (const card of list.cards) {
+            const sourceId = cardIdsByTitle[card.title]
+            if (!sourceId) continue
+            for (const link of card.links ?? []) {
+                const targetId = cardIdsByTitle[link.to]
+                if (!targetId) continue
+                await pb.collection('cards_card_links').create({
+                    source: sourceId,
+                    target: targetId,
+                    type: link.type,
                 })
-                if (comment.editedBody) {
-                    await pb.collection('cards_comments').update(top.id, {
-                        body: comment.editedBody,
-                    })
-                }
-                for (const reply of comment.replies ?? []) {
-                    await pb.collection('cards_comments').create({
-                        card: cardRecord.id,
-                        project: project.id,
-                        author: who(reply.author),
-                        body: reply.body,
-                        parent: top.id,
-                    })
-                }
             }
+        }
+    }
+}
+
+/**
+ * Link the seeded sub-tasks to their parents.
+ *
+ * A second pass, not an inline write: a parent may be seeded into a later list
+ * than its child, so no single ordering of the card loop would have both ids in
+ * hand. Titles are the seed's stable handle — ids do not exist until insert.
+ */
+async function seedSubtasks(
+    pb: PocketBase,
+    board: BoardSeed,
+    cardIdsByTitle: Record<string, string>
+) {
+    for (const list of board.lists) {
+        for (const card of list.cards) {
+            if (!card.parentTitle) continue
+            const cardId = cardIdsByTitle[card.title]
+            const parentId = cardIdsByTitle[card.parentTitle]
+            if (!cardId || !parentId) continue
+            await pb.collection('cards_cards').update(cardId, { parent: parentId })
         }
     }
 }
@@ -476,4 +591,44 @@ export default async function seed(pb: PocketBase, { user, companion }: SeedCont
         await seedBoard(pb, board, user.id, teammates)
     }
     log(`Created ${boards.length} boards`)
+}
+
+/** One card's comment threads: each top-level comment, its edit, its reactions, its replies. */
+async function seedComments(
+    pb: PocketBase,
+    projectId: string,
+    cardId: string,
+    comments: CommentSeed[],
+    who: (w: Who) => string
+) {
+    for (const comment of comments) {
+        const top = await pb.collection('cards_comments').create({
+            card: cardId,
+            project: projectId,
+            author: who(comment.author),
+            body: comment.body,
+            parent: '',
+        })
+        if (comment.editedBody) {
+            await pb.collection('cards_comments').update(top.id, { body: comment.editedBody })
+        }
+        for (const reaction of comment.reactions ?? []) {
+            await pb.collection('cards_comment_reactions').create({
+                project: projectId,
+                card: cardId,
+                comment: top.id,
+                user: who(reaction.by),
+                emoji: reaction.emoji,
+            })
+        }
+        for (const reply of comment.replies ?? []) {
+            await pb.collection('cards_comments').create({
+                card: cardId,
+                project: projectId,
+                author: who(reply.author),
+                body: reply.body,
+                parent: top.id,
+            })
+        }
+    }
 }

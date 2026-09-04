@@ -1,11 +1,15 @@
 import { LabelBadge } from '@tinycld/core/components/LabelBadge'
 import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
-import { CalendarDays, Clock } from 'lucide-react-native'
+import { CalendarDays, Clock, Gauge } from 'lucide-react-native'
 import { Pressable, Text, View } from 'react-native'
 import { dueStateFor, formatDueDate } from '../../lib/due-state'
+import { formatSchedule } from '../../lib/due-time'
+import { formatEstimate } from '../../lib/estimate'
+import type { ListCategory } from '../../lib/list-category'
 import { priorityLabel } from '../../lib/priority'
 import type { BoardCardView, BoardMember } from '../../types'
+import { CategoryGlyph } from '../CategoryGlyph'
 import { PriorityGlyph } from '../PriorityGlyph'
 
 export interface CardRowBoard {
@@ -17,6 +21,7 @@ export interface CardRowBoard {
 interface CardRowProps {
     card: BoardCardView
     listName: string
+    listCategory: ListCategory
     /** Present on the cross-board list; the board's own table omits it. */
     board?: CardRowBoard
     /** `table` lays cells out under DataTableHeader; `stacked` is the phone row. */
@@ -32,8 +37,10 @@ export const TABLE_COLUMNS = {
     list: 1.2,
     assignees: 96,
     labels: 1.6,
-    due: 104,
+    start: 96,
+    due: 120,
     priority: 96,
+    estimate: 80,
 } as const
 
 /**
@@ -45,6 +52,7 @@ export const TABLE_COLUMNS = {
 export function CardRow({
     card,
     listName,
+    listCategory,
     board,
     variant,
     isFocused = false,
@@ -72,8 +80,10 @@ export function CardRow({
                 </View>
                 <View className="flex-row flex-wrap items-center gap-x-2 gap-y-1">
                     <BoardTile board={board} />
+                    <CategoryGlyph category={listCategory} size={11} />
                     <Meta text={[card.key, listName].filter(Boolean).join(' · ')} />
-                    <DueCell due={card.due} />
+                    <DueCell start={card.start} due={card.due} dueHasTime={card.dueHasTime} />
+                    <EstimateCell estimate={card.estimate} />
                     <Labels card={card} />
                 </View>
             </Pressable>
@@ -103,8 +113,12 @@ export function CardRow({
                     {card.title}
                 </Text>
             </View>
-            <View style={{ flex: TABLE_COLUMNS.list }} className="pr-2">
-                <Text className="text-[12.5px] text-muted" numberOfLines={1}>
+            <View
+                style={{ flex: TABLE_COLUMNS.list }}
+                className="flex-row items-center gap-1.5 pr-2"
+            >
+                <CategoryGlyph category={listCategory} size={11} />
+                <Text className="flex-1 text-[12.5px] text-muted" numberOfLines={1}>
                     {listName}
                 </Text>
             </View>
@@ -114,8 +128,11 @@ export function CardRow({
             <View style={{ flex: TABLE_COLUMNS.labels }} className="pr-2">
                 <Labels card={card} />
             </View>
+            <View style={{ width: TABLE_COLUMNS.start }}>
+                <StartCell start={card.start} />
+            </View>
             <View style={{ width: TABLE_COLUMNS.due }}>
-                <DueCell due={card.due} />
+                <DueCell due={card.due} dueHasTime={card.dueHasTime} />
             </View>
             <View
                 style={{ width: TABLE_COLUMNS.priority }}
@@ -125,6 +142,9 @@ export function CardRow({
                 {card.priority !== 'none' ? (
                     <Text className="text-[12.5px] text-muted">{priorityLabel(card.priority)}</Text>
                 ) : null}
+            </View>
+            <View style={{ width: TABLE_COLUMNS.estimate }}>
+                <EstimateCell estimate={card.estimate} />
             </View>
         </Pressable>
     )
@@ -199,12 +219,40 @@ function Labels({ card }: { card: BoardCardView }) {
     )
 }
 
-function DueCell({ due }: { due?: Date }) {
+function EstimateCell({ estimate }: { estimate?: number }) {
+    const mutedColor = useThemeColor('muted')
+    if (estimate === undefined) return null
+    return (
+        <View className="flex-row items-center gap-1">
+            <Gauge size={11} color={mutedColor} strokeWidth={2.2} />
+            <Text className="text-[12px] font-medium text-muted">{formatEstimate(estimate)}</Text>
+        </View>
+    )
+}
+
+function StartCell({ start }: { start?: Date }) {
+    const mutedColor = useThemeColor('muted')
+    if (!start) return null
+    return (
+        <View className="flex-row items-center gap-1">
+            <CalendarDays size={11} color={mutedColor} strokeWidth={2.2} />
+            <Text className="text-[12px] font-medium" style={{ color: mutedColor }}>
+                {formatDueDate(start)}
+            </Text>
+        </View>
+    )
+}
+
+/**
+ * The due date, coloured by state. The stacked row passes `start` too, so a
+ * phone reads "Sep 3 → Sep 10" in one cell; the table has a Start column.
+ */
+function DueCell({ start, due, dueHasTime }: { start?: Date; due?: Date; dueHasTime: boolean }) {
     const warningColor = useThemeColor('warning')
     const dangerColor = useThemeColor('danger')
     const mutedColor = useThemeColor('muted')
-    if (!due) return null
-    const state = dueStateFor(due)
+    if (!due && !start) return null
+    const state = due ? dueStateFor(due, undefined, dueHasTime) : 'upcoming'
     const isOverdue = state === 'overdue'
     const Icon = isOverdue ? Clock : CalendarDays
     const color = isOverdue ? dangerColor : state === 'soon' ? warningColor : mutedColor
@@ -212,7 +260,7 @@ function DueCell({ due }: { due?: Date }) {
         <View className="flex-row items-center gap-1">
             <Icon size={11} color={color} strokeWidth={2.2} />
             <Text className="text-[12px] font-medium" style={{ color }}>
-                {formatDueDate(due)}
+                {formatSchedule(start, due, dueHasTime)}
             </Text>
         </View>
     )
