@@ -157,6 +157,58 @@ const automation = {
             ],
         },
         {
+            // Time-based, without a schedule. The due-notice sweep
+            // (server/due_notices.go) already stamps a card when it crosses a
+            // deadline boundary and saves it, and that save runs the ordinary
+            // after-update hook — so watching the stamp turns the existing
+            // ticker into a trigger with no scheduling machinery of its own.
+            //
+            // Deliberately NOT core:schedule, which is synthetic and fires
+            // with no record: owners resolve through the card's board, and
+            // every cards authorizer refuses a record-less request. A record
+            // trigger also keeps conditions, which synthetic triggers cannot
+            // have — "overdue AND priority is urgent" is most of the value.
+            //
+            // "Once per deadline" is inherited rather than reimplemented: the
+            // stamp is a column, so it survives a restart, and rescheduling a
+            // card clears it so the next deadline notifies again.
+            id: 'card-overdue',
+            label: 'A card becomes overdue',
+            collection: 'cards_cards',
+            on: 'update',
+            watch: ['overdue_notified_at'],
+            fields: [
+                'title',
+                'due',
+                'start',
+                'priority',
+                'estimate',
+                { key: 'list', label: 'List' },
+                { key: 'project', label: 'Board' },
+                { key: 'assignees', label: 'Assignees' },
+            ],
+        },
+        {
+            // card-overdue's sibling on the other boundary. Gated in Go to a
+            // stamp that was just SET: rescheduling a card clears both stamps,
+            // and a cleared stamp is the opposite of the event.
+            id: 'card-due-soon',
+            label: 'A card is due soon',
+            collection: 'cards_cards',
+            on: 'update',
+            watch: ['due_soon_notified_at'],
+            fields: [
+                'title',
+                'due',
+                'start',
+                'priority',
+                'estimate',
+                { key: 'list', label: 'List' },
+                { key: 'project', label: 'Board' },
+                { key: 'assignees', label: 'Assignees' },
+            ],
+        },
+        {
             // `archived` flips both ways; gated in Go to the archive only, so
             // a restore never reads as "archived". Fires for the auto-archive
             // sweep's archives as well as a person's.

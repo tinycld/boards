@@ -26,6 +26,8 @@ func registerAutomation() {
 		"cards:card-priority-changed",
 		"cards:card-estimate-changed",
 		"cards:card-rescheduled",
+		"cards:card-overdue",
+		"cards:card-due-soon",
 		"cards:card-archived",
 		"cards:card-parented",
 		"cards:comment-reacted",
@@ -39,6 +41,11 @@ func registerAutomation() {
 	// visible in history and to watchers, but "a card is archived" firing on
 	// a restore would be the wrong surprise.
 	automation.RegisterTriggerFilter("cards:card-archived", cardIsArchived)
+	// Both deadline triggers watch a stamp column, which moves in BOTH
+	// directions: the sweep sets it, and rescheduling a card clears it
+	// (registerDueNotices). Only the set is the event.
+	automation.RegisterTriggerFilter("cards:card-overdue", cardBecameOverdue)
+	automation.RegisterTriggerFilter("cards:card-due-soon", cardBecameDueSoon)
 
 	// move-card declares a relation param, and the engine refuses to run an
 	// action whose relation param has no registered authorizer — without this
@@ -406,6 +413,50 @@ func cardMovedToCanceledList(app core.App, record *core.Record) bool {
 // sweep's archives too.
 func cardIsArchived(_ core.App, record *core.Record) bool {
 	return record != nil && record.GetBool("archived")
+}
+
+// stampJustSet reports that a notice stamp went from empty to set on this
+// save — the sweep marking a card, rather than registerDueNotices clearing the
+// stamps because someone moved the deadline.
+//
+// The watch list alone cannot express this. `watch` fires on any change to the
+// column, and a reschedule CLEARS both stamps, so without this gate moving a
+// due date would fire "card overdue" — precisely backwards.
+//
+// Fails closed on a nil record: an unreadable save is not evidence a deadline
+// passed, and a false "overdue" is the worse error.
+func stampJustSet(record *core.Record, field string) bool {
+	if record == nil {
+		return false
+	}
+	if record.GetDateTime(field).IsZero() {
+		return false
+	}
+	return record.Original().GetDateTime(field).IsZero()
+}
+
+// cardBecameOverdue is the TriggerFilter for "cards:card-overdue".
+//
+// The closed-list re-check is not redundant with the sweep's own: a rule fires
+// off whatever save reaches the hook, and a card can be moved to a done list in
+// the same window. Finished work is not late, whichever way it finished — the
+// invariant cardInClosedList exists to state.
+func cardBecameOverdue(app core.App, record *core.Record) bool {
+	return stampJustSet(record, "overdue_notified_at") && !cardInClosedList(app, record)
+}
+
+// cardBecameDueSoon is the TriggerFilter for "cards:card-due-soon".
+//
+// The sweep stamps due_soon_notified_at even when it sends no "soon" notice —
+// a card first seen already overdue gets the overdue notice only, and the soon
+// stamp is written to suppress stale news. Reading the stamp alone would fire
+// "due soon" on a card that is in fact late, so this asserts the card is not
+// yet overdue as well.
+func cardBecameDueSoon(app core.App, record *core.Record) bool {
+	if !stampJustSet(record, "due_soon_notified_at") || cardInClosedList(app, record) {
+		return false
+	}
+	return record.GetDateTime("overdue_notified_at").IsZero()
 }
 
 // cardInClosedList: the card's work has stopped, one way or the other. What
