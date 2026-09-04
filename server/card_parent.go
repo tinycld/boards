@@ -176,26 +176,22 @@ func recountParent(app core.App, parentID string) {
 		return
 	}
 
-	// A TARGETED UPDATE of the two rollup columns, NOT app.Save(parent), and
-	// this is a correctness fix rather than an optimization.
+	// app.Save, NOT a raw DB().Update of just these two columns.
 	//
-	// Save writes every column of the in-memory record. This hook fires on the
-	// same cards_cards row that recountCard (counters.go) is also loading,
-	// mutating and saving — a duplicate inserts a card and then its checklist
-	// items, so the two interleave. Saving a whole record here republishes
-	// THIS handler's snapshot of columns it does not own, so a checklist count
-	// computed a moment ago gets rolled back to what it was when this record
-	// was fetched. That is exactly the "0/1 instead of 0/2" a duplicated card
-	// showed in CI, and card_parent_test.go's ChecklistCountSurvives pins it.
+	// A targeted UPDATE was tried and reverted, and the reason is worth
+	// keeping: writing through the DB layer bypasses PocketBase's realtime
+	// broadcast, so the row changes on disk and NO client is told. The board
+	// face then shows a stale rollup — or, for a card whose first sub-task was
+	// just filed, no pill at all — until something else happens to resave the
+	// card. Every Go test still passed, because they read the database
+	// directly; only a browser could see it, and e2e did.
 	//
-	// Writing only the two columns this hook owns makes the collision
-	// impossible rather than unlikely: whatever else is racing, it is not
-	// touching these, and they are not touching it.
-	if _, err := app.DB().Update(
-		"cards_cards",
-		dbx.Params{"subtask_total": total, "subtask_done": done},
-		dbx.HashExp{"id": parentID},
-	).Execute(); err != nil {
+	// The counters in counters.go save whole records for the same reason, and
+	// they are the precedent this follows.
+	parent.Set("subtask_total", total)
+	parent.Set("subtask_done", done)
+
+	if err := app.Save(parent); err != nil {
 		app.Logger().Warn("cards: subtask counter save failed", "card", parentID, "error", err)
 	}
 }
