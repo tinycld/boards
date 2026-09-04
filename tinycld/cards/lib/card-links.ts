@@ -134,10 +134,15 @@ export function orientLinks(
  * computed per end.
  */
 export function groupLinks(links: CardLinkView[]): { label: string; links: CardLinkView[] }[] {
-    const order = LINK_TYPES.flatMap(type => [
-        LINK_LABELS[type].fromSource,
-        LINK_LABELS[type].fromTarget,
-    ])
+    // DEDUPED, and that is not defensive tidiness — it is required. The
+    // symmetric types read the same from both ends ("Related to" either way),
+    // so the flatMap below yields that label TWICE, and without the Set every
+    // related link renders in two identical groups.
+    const order = [
+        ...new Set(
+            LINK_TYPES.flatMap(type => [LINK_LABELS[type].fromSource, LINK_LABELS[type].fromTarget])
+        ),
+    ]
     const byLabel = new Map<string, CardLinkView[]>()
     for (const link of links) {
         const bucket = byLabel.get(link.label)

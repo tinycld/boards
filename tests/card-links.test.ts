@@ -150,3 +150,36 @@ describe('canLinkTo', () => {
         expect(canLinkTo(card('c3', { parent: 'c9' }), card('c1'))).toBe(true)
     })
 })
+
+describe('groupLinks with symmetric types', () => {
+    // The regression: `related` reads the same from both ends, so the label
+    // order array contained "Related to" twice and every related link rendered
+    // in two identical groups. E2E caught it as a strict-mode violation —
+    // two rows where the card has one link.
+    it('emits one group per label, not one per end', () => {
+        const links = orientLinks([row('l1', 'c1', 'c2', 'related')], 'c1', store(card('c2')), true)
+        const groups = groupLinks(links)
+        expect(groups).toHaveLength(1)
+        expect(groups[0]?.label).toBe('Related to')
+        expect(groups[0]?.links).toHaveLength(1)
+    })
+
+    it('reads the same from the target end, still once', () => {
+        const links = orientLinks([row('l1', 'c1', 'c2', 'related')], 'c2', store(card('c1')), true)
+        const groups = groupLinks(links)
+        expect(groups).toHaveLength(1)
+        expect(groups[0]?.label).toBe('Related to')
+        expect(groups[0]?.links).toHaveLength(1)
+    })
+
+    // `duplicates` is directional, so its two ends stay separate groups.
+    it('keeps the two ends of a directional type apart', () => {
+        const links = orientLinks(
+            [row('l1', 'c1', 'c2', 'duplicates'), row('l2', 'c3', 'c1', 'duplicates')],
+            'c1',
+            store(card('c2'), card('c3')),
+            true
+        )
+        expect(groupLinks(links).map(g => g.label)).toEqual(['Duplicates', 'Duplicated by'])
+    })
+})
