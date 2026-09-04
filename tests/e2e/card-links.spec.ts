@@ -40,7 +40,12 @@ async function addLink(page: Page, fromTitle: string, typeLabel: string, toTitle
     await peek(page).getByTestId('cards-link-add').click()
     await page.getByRole('menuitem', { name: typeLabel, exact: true }).click()
     await peek(page).getByTestId('cards-link-candidate').filter({ hasText: toTitle }).click()
-    await expect(peek(page).getByTestId('cards-link-row')).toBeVisible()
+    // Scoped to the row this call just filed. An unscoped locator matches every
+    // link on the card, so it goes ambiguous the moment a test files a second
+    // one — which is a strict-mode failure, not a flake.
+    await expect(
+        peek(page).getByTestId('cards-link-row').filter({ hasText: toTitle })
+    ).toBeVisible()
 }
 
 test.beforeEach(async ({ page }) => {
@@ -57,13 +62,17 @@ test('a link reads from both ends', async ({ page }) => {
 
     await addLink(page, BLOCKER, 'Blocks', BLOCKED)
     await expect(peek(page).getByText('Blocks', { exact: true })).toBeVisible()
-    await expect(peek(page).getByTestId('cards-link-row')).toContainText(BLOCKED)
+    await expect(
+        peek(page).getByTestId('cards-link-row').filter({ hasText: BLOCKED })
+    ).toBeVisible()
     await closeCardPeek(page)
 
     // The far end of the SAME row, with the inverted label.
     await openCard(page, BLOCKED)
     await expect(peek(page).getByText('Blocked by', { exact: true })).toBeVisible()
-    await expect(peek(page).getByTestId('cards-link-row')).toContainText(BLOCKER)
+    await expect(
+        peek(page).getByTestId('cards-link-row').filter({ hasText: BLOCKER })
+    ).toBeVisible()
 })
 
 test('a link opens the card it points at', async ({ page }) => {
@@ -73,8 +82,11 @@ test('a link opens the card it points at', async ({ page }) => {
     await addLink(page, BLOCKER, 'Blocks', BLOCKED)
 
     await peek(page).getByTestId('cards-link-row').getByText(BLOCKED).click()
-    // The peek swaps to the far card rather than opening a second panel.
-    await expect(peek(page).getByTestId('cards-card-title')).toHaveText(BLOCKED)
+    // The peek swaps to the far card rather than opening a second panel. Read
+    // the TITLE inside the peek, not `cards-card-title` — that id belongs to
+    // the board face behind the panel, where both cards also render.
+    await expect(peek(page).getByText(BLOCKED, { exact: true })).toBeVisible()
+    await expect(peek(page).getByText('Blocked by', { exact: true })).toBeVisible()
 })
 
 test('a link can be removed', async ({ page }) => {
@@ -83,13 +95,17 @@ test('a link can be removed', async ({ page }) => {
     await addCard(page, 0, BLOCKED)
     await addLink(page, BLOCKER, 'Blocks', BLOCKED)
 
-    await peek(page).getByTestId('cards-link-remove').click()
-    await expect(peek(page).getByTestId('cards-link-row')).toHaveCount(0)
+    await peek(page).getByTestId('cards-link-remove').first().click()
+    await expect(peek(page).getByTestId('cards-link-row').filter({ hasText: BLOCKED })).toHaveCount(
+        0
+    )
 
     // And it is gone from the other end too, because it was one row.
     await closeCardPeek(page)
     await openCard(page, BLOCKED)
-    await expect(peek(page).getByTestId('cards-link-row')).toHaveCount(0)
+    await expect(peek(page).getByTestId('cards-link-row').filter({ hasText: BLOCKER })).toHaveCount(
+        0
+    )
 })
 
 // The symmetric types read the same from either end, which is why
