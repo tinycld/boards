@@ -23,8 +23,9 @@ interface EpicPickerProps {
  * sits, and re-picking the same value must not silently move it.
  *
  * No "Manage epics…" item, and the asymmetry with LabelPicker is deliberate:
- * labels are created from the card that needs them, while an epic is a plan
- * that is set up from the sidebar before cards are filed into it.
+ * a label is created from the card that needs it, while an epic is a plan set
+ * up for the BOARD before cards are filed into it — so it is managed from the
+ * board menu (BoardMenu → "Epics…"), beside the board's other settings.
  */
 export function EpicPicker({ epics, selectedId, onSelect, children }: EpicPickerProps) {
     const offered = epics.filter(epic => !epic.archived || epic.id === selectedId)
