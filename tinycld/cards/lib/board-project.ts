@@ -6,12 +6,14 @@
 
 import type {
     BoardCardView,
+    BoardEpic,
     BoardLabel,
     BoardListRank,
     BoardListView,
     BoardMember,
     BoardProject,
     CardsCards,
+    CardsEpics,
     CardsLabels,
     CardsLists,
     CardsProjects,
@@ -62,6 +64,18 @@ export function toBoardLabel(label: CardsLabels): BoardLabel {
     return { id: label.id, name: label.name, color: label.color }
 }
 
+export function toBoardEpic(epic: CardsEpics): BoardEpic {
+    return {
+        id: epic.id,
+        title: epic.title,
+        color: epic.color,
+        position: epic.position,
+        archived: epic.archived,
+        pointsTotal: epic.points_total,
+        pointsDone: epic.points_done,
+    }
+}
+
 /**
  * Resolve one card, looking its relations up by id.
  *
@@ -86,7 +100,13 @@ export function toBoardCard(
      * card is top level, and when its parent has been deleted (the relation
      * does not cascade, so a dangling id is an ordinary state).
      */
-    parentKey = ''
+    parentKey = '',
+    /**
+     * The board's epics by id. Resolved here rather than expanded for the
+     * reason labels are: cards_epics syncs eagerly, so an expand would ship a
+     * duplicate copy of the row with every card.
+     */
+    epicsById: Map<string, BoardEpic> = new Map()
 ): BoardCardView {
     return {
         id: card.id,
@@ -131,6 +151,9 @@ export function toBoardCard(
         parentKey,
         subtaskTotal: card.subtask_total,
         subtaskDone: card.subtask_done,
+        // A dangling id reads as unfiled — the epic was deleted, which orphans
+        // rather than cascades, exactly as a deleted parent does.
+        epic: epicsById.get(card.epic) ?? null,
     }
 }
 
@@ -197,6 +220,12 @@ export interface BuildBoardInput {
     lists: CardsLists[]
     cards: CardsCards[]
     labels: CardsLabels[]
+    /**
+     * Optional because a board legitimately has none, and because every
+     * caller predating epics builds a board without them — `toBoardCard`'s
+     * epicsById defaults the same way.
+     */
+    epics?: CardsEpics[]
     /** Project roster, for the header avatar stack. */
     members: UserLike[]
     /**
@@ -222,10 +251,11 @@ export function buildBoardProject(
     input: BuildBoardInput,
     previous?: BoardProject | null
 ): BoardProject | null {
-    const { project, lists, cards, labels, members, users, view } = input
+    const { project, lists, cards, labels, epics = [], members, users, view } = input
     if (!project) return null
 
     const labelsById = new Map(labels.map(l => [l.id, toBoardLabel(l)]))
+    const epicsById = new Map(epics.map(e => [e.id, toBoardEpic(e)]))
     const usersById = new Map(users.map(u => [u.id, toBoardMember(u)]))
     // Resolved once here so a card can carry its list's status without a
     // lookup at every filter. A card whose list has not synced yet reads as
@@ -264,7 +294,8 @@ export function buildBoardProject(
             usersById,
             project.slug,
             categoryByList.get(card.list) ?? 'todo',
-            (card.parent && keyByCardId.get(card.parent)) || ''
+            (card.parent && keyByCardId.get(card.parent)) || '',
+            epicsById
         )
         if (view && !cardMatchesFilter(cardView, view.filter, view)) continue
         const bucket = cardsByList.get(card.list)
@@ -297,6 +328,12 @@ export function buildBoardProject(
         // Sorted by name so the label picker has a stable order that does not
         // depend on insertion sequence.
         labels: [...labelsById.values()].sort((a, b) => a.name.localeCompare(b.name)),
+        // Rank order, not alphabetical: epics are a hand-ordered plan in the
+        // sidebar, the way lists are — unlike labels, which have no order of
+        // their own and so sort by name.
+        epics: [...epicsById.values()].sort(
+            (a, b) => a.position.localeCompare(b.position) || a.id.localeCompare(b.id)
+        ),
         lists: sortedLists.map(list => ({
             id: list.id,
             name: list.name,
@@ -336,6 +373,29 @@ function sameLabel(a: BoardLabel, b: BoardLabel): boolean {
     return a.id === b.id && a.name === b.name && a.color === b.color
 }
 
+// The two POINT fields are compared as well as the identity ones: the rollup
+// is server-maintained and moves without anything else on the epic changing,
+// so omitting them would reuse the previous node and freeze an epic's progress
+// on screen — the failure sameCard's reporter line documents.
+function sameEpic(a: BoardEpic, b: BoardEpic): boolean {
+    return (
+        a.id === b.id &&
+        a.title === b.title &&
+        a.color === b.color &&
+        a.position === b.position &&
+        a.archived === b.archived &&
+        a.pointsTotal === b.pointsTotal &&
+        a.pointsDone === b.pointsDone
+    )
+}
+
+// A card's epic is a resolved row, so renaming an epic must re-render every
+// card filed under it — null on both sides counts as equal.
+function sameOptionalEpic(a: BoardEpic | null, b: BoardEpic | null): boolean {
+    if (a === null || b === null) return a === b
+    return sameEpic(a, b)
+}
+
 function sameCard(a: BoardCardView, b: BoardCardView): boolean {
     return (
         a.id === b.id &&
@@ -368,7 +428,8 @@ function sameCard(a: BoardCardView, b: BoardCardView): boolean {
         // this line the node compares equal, gets reused from the previous
         // tree, and the new reporter never renders — the failure the key
         // comparison above documents, in its quietest form.
-        sameOptionalMember(a.reporter, b.reporter)
+        sameOptionalMember(a.reporter, b.reporter) &&
+        sameOptionalEpic(a.epic, b.epic)
     )
 }
 
@@ -436,6 +497,7 @@ function shareTree(previous: BoardProject, fresh: BoardProject): BoardProject {
     const sharedLists = allShared(lists, previous.lists) ? previous.lists : lists
 
     const labels = shareById(previous.labels, fresh.labels, sameLabel)
+    const epics = shareById(previous.epics, fresh.epics, sameEpic)
     const members = shareById(previous.members, fresh.members, sameMember)
     const listOrder = sameElements(previous.listOrder, fresh.listOrder, sameRank)
         ? previous.listOrder
@@ -445,6 +507,7 @@ function shareTree(previous: BoardProject, fresh: BoardProject): BoardProject {
     if (
         sharedLists === previous.lists &&
         labels === previous.labels &&
+        epics === previous.epics &&
         members === previous.members &&
         listOrder === previous.listOrder &&
         unplacedCards === previous.unplacedCards &&
@@ -459,5 +522,5 @@ function shareTree(previous: BoardProject, fresh: BoardProject): BoardProject {
     ) {
         return previous
     }
-    return { ...fresh, lists: sharedLists, labels, members, listOrder, unplacedCards }
+    return { ...fresh, lists: sharedLists, labels, epics, members, listOrder, unplacedCards }
 }

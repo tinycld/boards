@@ -142,6 +142,7 @@ export function useBoardContent(projectId: string, view?: BoardViewOptions) {
         listsCollection,
         cardsCollection,
         labelsCollection,
+        epicsCollection,
         usersCollection,
     ] = useStore(
         'cards_projects',
@@ -149,6 +150,7 @@ export function useBoardContent(projectId: string, view?: BoardViewOptions) {
         'cards_lists',
         'cards_cards',
         'cards_labels',
+        'cards_epics',
         'users'
     )
 
@@ -194,6 +196,16 @@ export function useBoardContent(projectId: string, view?: BoardViewOptions) {
                 .where(({ label }) => eq(label.project, projectId))
         },
         [projectId, labelsCollection]
+    )
+
+    const { data: epicRows } = useBoardLiveQuery(
+        query => {
+            if (!projectId) return null
+            return query
+                .from({ epic: epicsCollection })
+                .where(({ epic }) => eq(epic.project, projectId))
+        },
+        [projectId, epicsCollection]
     )
 
     // The roster, joined to users for names. cards_project_members does expand
@@ -246,13 +258,14 @@ export function useBoardContent(projectId: string, view?: BoardViewOptions) {
                     lists: listRows ?? [],
                     cards: cardRows ?? [],
                     labels: labelRows ?? [],
+                    epics: epicRows ?? [],
                     members: (memberRows ?? []).map(r => r.user),
                     users: userRows ?? [],
                     view,
                 },
                 previousProjectRef.current
             ),
-        [projectRows, listRows, cardRows, labelRows, memberRows, userRows, view]
+        [projectRows, listRows, cardRows, labelRows, epicRows, memberRows, userRows, view]
     )
     previousProjectRef.current = project
 

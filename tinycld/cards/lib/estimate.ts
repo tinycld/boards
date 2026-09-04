@@ -27,10 +27,30 @@ export function formatEstimate(points: number): string {
     return points === 1 ? '1 pt' : `${points} pts`
 }
 
-/** The rollup a column header shows: the total of the cards it lists. */
+/**
+ * The rollup a column header and an epic show: the points of the cards listed,
+ * counting an UNESTIMATED card as 1.
+ *
+ * The floor is what makes one number correct on both kinds of board. Summing
+ * raw estimates reads "0 pts" on the many boards that never estimate — the
+ * ones the `unestimated` facet exists to acknowledge — while counting cards
+ * throws away the sizing an estimating board did. Treating an unsized card as
+ * the smallest unit of work says something true on either.
+ *
+ * The server applies the same floor in SQL (server/epic_rollup.go's
+ * MAX(estimate, 1)), and the agreement is the point: a column header and an
+ * epic that disagreed about one set of cards would be the kind of bug nobody
+ * files and everybody distrusts.
+ *
+ * This CHANGED the shipped column total — an all-unestimated column read
+ * "0 pts" before and reads its card count now — taken deliberately, because a
+ * column holding eight cards is not worth zero. The `estimated`/`unestimated`
+ * FILTER is untouched: "did someone size this card" is still a real question,
+ * and a different one from "what is it worth".
+ */
 export function sumEstimates(cards: Pick<BoardCardView, 'estimate'>[]): number {
     let total = 0
-    for (const card of cards) total += card.estimate ?? 0
+    for (const card of cards) total += Math.max(card.estimate ?? 0, 1)
     return total
 }
 

@@ -40,6 +40,7 @@ import type {
     CardsChecklistItems,
     CardsCommentReactions,
     CardsComments,
+    CardsEpics,
     CardsLabels,
     CardsLists,
     CardsProjectMembers,
@@ -59,6 +60,7 @@ export type {
     CardsChecklistItems,
     CardsCommentReactions,
     CardsComments,
+    CardsEpics,
     CardsLabels,
     CardsLists,
     CardsProjectMembers,
@@ -273,6 +275,38 @@ export interface BoardCardView {
      */
     subtaskTotal: number
     subtaskDone: number
+    /**
+     * The epic this card is filed under, or null when it is unfiled.
+     *
+     * A resolved row rather than an id, the way `labels` is: the face renders
+     * the epic's title and color, and cards_epics syncs eagerly precisely so
+     * that lookup needs no per-card fetch. Always an epic on the SAME board —
+     * pinned by the rule in 1980000017 — so a resolver never looks outside the
+     * loaded set, and a dangling id (the epic was deleted; the relation does
+     * not cascade) reads as unfiled, exactly as a missing parent does.
+     */
+    epic: BoardEpic | null
+}
+
+/**
+ * An epic as the board renders it — the grouping row from cards_epics.
+ *
+ * `pointsTotal` / `pointsDone` are maintained by server/epic_rollup.go and
+ * count POINTS, with an unestimated card worth 1 (lib/estimate.ts's
+ * sumEstimates applies the same floor, so a column header and an epic never
+ * disagree about the same cards). Denormalized rather than counted from the
+ * loaded cards because an epic renders where the board's card set is not
+ * loaded, and because a filtered board must not make an epic's progress move.
+ */
+export interface BoardEpic {
+    id: string
+    title: string
+    color: string
+    /** Fractional rank — see lib/rank.ts. Sort by `position, id`. */
+    position: string
+    archived: boolean
+    pointsTotal: number
+    pointsDone: number
 }
 
 export interface BoardListView {
@@ -327,6 +361,13 @@ export interface BoardProject {
      * which is a superset of any one card's `labels`.
      */
     labels: BoardLabel[]
+    /**
+     * Every epic on this board — what the card epic picker offers, and what
+     * the sidebar lists. A superset of any one card's `epic`, and includes
+     * archived epics: the picker hides them, but a card already filed under
+     * one must still resolve its title.
+     */
+    epics: BoardEpic[]
     /**
      * Cards whose `list` names a row this client hasn't synced yet. Lists and
      * cards arrive on independent live queries, so a card can legitimately land

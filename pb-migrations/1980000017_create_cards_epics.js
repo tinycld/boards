@@ -124,6 +124,23 @@ migrate(
                     required: false,
                     min: 0,
                 },
+                // Both, unlike cards_card_links' create-only stamp: an epic is
+                // renamed, recolored and reordered over its life, and the
+                // rollup rewrites it besides.
+                {
+                    id: 'cards_epics_created',
+                    name: 'created',
+                    type: 'autodate',
+                    onCreate: true,
+                    onUpdate: false,
+                },
+                {
+                    id: 'cards_epics_updated',
+                    name: 'updated',
+                    type: 'autodate',
+                    onCreate: true,
+                    onUpdate: true,
+                },
             ],
             indexes: [
                 'CREATE INDEX `idx_cards_epics_project` ON `cards_epics` (`project`)',

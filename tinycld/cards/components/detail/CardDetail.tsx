@@ -10,7 +10,13 @@ import { useCommentMutations } from '../../hooks/useCommentMutations'
 import { useCommentReactions } from '../../hooks/useCommentReactions'
 import { useProjectRole } from '../../hooks/useProjectRole'
 import { type DescriptionMode, descriptionMode } from '../../lib/description-mode'
-import type { BoardAttachment, BoardCardView, BoardLabel, BoardMember } from '../../types'
+import type {
+    BoardAttachment,
+    BoardCardView,
+    BoardEpic,
+    BoardLabel,
+    BoardMember,
+} from '../../types'
 import { useBoardPresenceContext } from '../BoardPresenceProvider'
 import { LabelManagerDialog } from '../LabelManagerDialog'
 import { CommentComposer } from './CommentComposer'
@@ -55,6 +61,7 @@ interface CardDetailProps {
     projectId: string
     /** The board's labels and roster — what the pickers offer. */
     projectLabels: BoardLabel[]
+    projectEpics: BoardEpic[]
     projectMembers: BoardMember[]
     /** The board's lists, so history can name where a card moved. */
     projectLists: { id: string; name: string }[]
@@ -91,6 +98,7 @@ export function CardDetail({
     variant,
     projectId,
     projectLabels,
+    projectEpics,
     projectMembers,
     projectLists,
     projectCards,
@@ -114,8 +122,9 @@ export function CardDetail({
             labels: projectLabels,
             members: projectMembers,
             cards: projectCards,
+            epics: projectEpics,
         }),
-        [projectLists, projectLabels, projectMembers, projectCards]
+        [projectLists, projectLabels, projectMembers, projectCards, projectEpics]
     )
     // Resolved here for the same reason — both containers share the gates.
     const { canEdit, canComment, isOwner } = useProjectRole(projectId)

@@ -29,9 +29,23 @@ describe('formatEstimate', () => {
 })
 
 describe('sumEstimates', () => {
-    it('adds the estimated cards and ignores the rest', () => {
-        expect(sumEstimates([{ estimate: 3 }, { estimate: undefined }, { estimate: 5 }])).toBe(8)
+    it('adds the estimates, counting an unestimated card as one point', () => {
+        expect(sumEstimates([{ estimate: 3 }, { estimate: undefined }, { estimate: 5 }])).toBe(9)
         expect(sumEstimates([])).toBe(0)
+    })
+
+    // The floor is what makes the number meaningful on a board that never
+    // estimates — where summing raw estimates would read 0 for real work.
+    // Mirrored by MAX(estimate, 1) in server/epic_rollup.go, so a column
+    // header and an epic never disagree about the same cards.
+    it('reads as a card count when nothing is estimated', () => {
+        expect(
+            sumEstimates([
+                { estimate: undefined },
+                { estimate: undefined },
+                { estimate: undefined },
+            ])
+        ).toBe(3)
     })
 })
 

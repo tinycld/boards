@@ -129,6 +129,9 @@ export function useCreateCard(projectId: string) {
                 attachment_count: 0,
                 subtask_total: 0,
                 subtask_done: 0,
+                // A new card is unfiled; an epic is chosen from the detail row
+                // afterwards, the way a parent is.
+                epic: '',
             })
 
             return cardId
@@ -191,6 +194,9 @@ export function useDuplicateCard(projectId: string) {
                 attachment_count: 0,
                 subtask_total: 0,
                 subtask_done: 0,
+                // A copy stays in the same plan — the epic is on the same
+                // board, so the id carries over as-is.
+                epic: card.epic?.id ?? '',
             })
 
             const items = itemsCollection.toArray
