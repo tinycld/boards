@@ -98,6 +98,9 @@ A sub-task's face shows **↳** and its parent's key, so you can tell at a glanc
 which cards on the board are part of something larger. Click the row in the
 parent's Sub-tasks section to open one.
 
+For a larger piece of work spanning many separate cards rather than one card's
+own pieces, use an [epic](help://cards:epics) instead.
+
 **Sub-tasks or a checklist?** A checklist item is a line of text that lives on
 one card — right for "don't forget these five steps". A sub-task is a card, so
 choose one when the piece needs its own owner, its own due date, or a
