@@ -30,6 +30,8 @@ func newCardCmd(c *client.Client) *cobra.Command {
 		newCardRemoveCmd(c),
 		newCardLinkCmd(c),
 		newCardUnlinkCmd(c),
+		newCommentReactCmd(c),
+		newCommentUnreactCmd(c),
 	)
 	return card
 }
@@ -67,6 +69,10 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			reactions, err := cardReactions(ctx, c, cd.ID)
+			if err != nil {
+				return err
+			}
 
 			ids := append([]string{}, cd.Assignees...)
 			if reporterID := cd.reporterID(); reporterID != "" {
@@ -101,7 +107,9 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 				Checklist []checklistItem `json:"checklist"`
 				Comments  []comment       `json:"comments"`
 				Links     []linkRow       `json:"links"`
-			}{card: cd, Checklist: items, Comments: comments, Links: linkRows}
+				Reactions []reaction      `json:"reactions"`
+			}{card: cd, Checklist: items, Comments: comments, Links: linkRows,
+				Reactions: reactions}
 
 			if o.Format == output.JSON {
 				return o.Write(cmd.OutOrStdout(), nil, nil, detail)
@@ -203,7 +211,11 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 				if u, ok := users[cm.Author]; ok {
 					author = u.displayName()
 				}
-				rows = append(rows, []string{"comment", author + ": " + firstLine(cm.Body)})
+				body := author + ": " + firstLine(cm.Body)
+				if summary := reactionSummary(reactions, cm.ID); summary != "" {
+					body += "  " + summary
+				}
+				rows = append(rows, []string{"comment", body})
 			}
 			rows = append(rows, linkTableRows(linkRows)...)
 			return o.Write(cmd.OutOrStdout(), []string{"FIELD", "VALUE"}, rows, detail)

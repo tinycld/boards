@@ -1670,3 +1670,139 @@ func TestCardUnlinkSaysSoWhenThereIsNoLink(t *testing.T) {
 		t.Error("unlinking two unlinked cards must be an error, not a silent no-op")
 	}
 }
+
+// ── Comment reactions ───────────────────────────────────────────────────────
+
+func TestCommentReactFilesTheRow(t *testing.T) {
+	f := board(t)
+	f.comments["cmt1"] = &comment{ID: "cmt1", Card: "crdCopy", Author: "user1", Body: "Looks good"}
+	_, c := f.serve()
+
+	if _, _, err := runCmd(t, c, "boards", "card", "react", "cmt1", "thumbs_up"); err != nil {
+		t.Fatal(err)
+	}
+	if f.lastReactionCreate == nil {
+		t.Fatal("no reaction was created")
+	}
+	// The row denormalizes card and project so the open card reads its
+	// reactions in ONE query — both are derived from the comment, and getting
+	// either wrong makes the reaction invisible to the app.
+	for field, want := range map[string]string{
+		"comment": "cmt1",
+		"card":    "crdCopy",
+		"project": "prjA",
+		"user":    "user1",
+		"emoji":   "👍",
+	} {
+		if got := str(f.lastReactionCreate[field]); got != want {
+			t.Errorf("reaction %s = %q, want %q", field, got, want)
+		}
+	}
+}
+
+// A terminal is exactly where pasting an emoji is awkward, so the ASCII name
+// is the primary spelling — but someone copying from the app will paste the
+// emoji, and refusing that would be gratuitous.
+func TestCommentReactAcceptsTheEmojiItself(t *testing.T) {
+	f := board(t)
+	f.comments["cmt1"] = &comment{ID: "cmt1", Card: "crdCopy", Author: "user1", Body: "Looks good"}
+	_, c := f.serve()
+
+	if _, _, err := runCmd(t, c, "boards", "card", "react", "cmt1", "🎉"); err != nil {
+		t.Fatal(err)
+	}
+	if got := str(f.lastReactionCreate["emoji"]); got != "🎉" {
+		t.Errorf("emoji = %q, want 🎉", got)
+	}
+}
+
+// The palette is closed and short, so an unknown value shows the whole set
+// rather than only refusing.
+func TestCommentReactRejectsAnEmojiOutsideThePalette(t *testing.T) {
+	f := board(t)
+	f.comments["cmt1"] = &comment{ID: "cmt1", Card: "crdCopy", Author: "user1", Body: "Looks good"}
+	_, c := f.serve()
+
+	_, _, err := runCmd(t, c, "boards", "card", "react", "cmt1", "🦆")
+	if err == nil {
+		t.Fatal("an emoji outside the palette must be refused")
+	}
+	if !strings.Contains(err.Error(), "thumbs_up") {
+		t.Errorf("the refusal should list the palette, got: %v", err)
+	}
+}
+
+func TestCommentUnreactRemovesOnlyYourOwn(t *testing.T) {
+	f := board(t)
+	f.comments["cmt1"] = &comment{ID: "cmt1", Card: "crdCopy", Author: "user1", Body: "Looks good"}
+	f.reactions["rxn1"] = &reaction{
+		ID: "rxn1", Project: "prjA", Card: "crdCopy", Comment: "cmt1",
+		User: "user1", Emoji: "👍",
+	}
+	// Someone else's row, same comment and same emoji. The rules would refuse
+	// it anyway; the command must not even ask.
+	f.reactions["rxn2"] = &reaction{
+		ID: "rxn2", Project: "prjA", Card: "crdCopy", Comment: "cmt1",
+		User: "user2", Emoji: "👍",
+	}
+	_, c := f.serve()
+
+	if _, _, err := runCmd(t, c, "boards", "card", "unreact", "cmt1", "thumbs_up"); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.deletedReactions) != 1 || f.deletedReactions[0] != "rxn1" {
+		t.Errorf("deleted %v, want only your own row [rxn1]", f.deletedReactions)
+	}
+}
+
+// "You have not reacted that way" is the truthful answer; asking for the row
+// by id and being refused would report a permission error instead.
+func TestCommentUnreactSaysSoWhenYouHaveNotReacted(t *testing.T) {
+	f := board(t)
+	f.comments["cmt1"] = &comment{ID: "cmt1", Card: "crdCopy", Author: "user1", Body: "Looks good"}
+	_, c := f.serve()
+
+	_, _, err := runCmd(t, c, "boards", "card", "unreact", "cmt1", "rocket")
+	if err == nil {
+		t.Fatal("unreacting what you never reacted to must be an error")
+	}
+	if !strings.Contains(err.Error(), "not reacted") {
+		t.Errorf("want a 'not reacted' message, got: %v", err)
+	}
+}
+
+// `card view` shows the counts under each comment, which is where the app
+// shows them too.
+func TestCardViewShowsReactionCounts(t *testing.T) {
+	f := board(t)
+	f.comments["cmt1"] = &comment{ID: "cmt1", Card: "crdCopy", Author: "user1", Body: "Looks good"}
+	f.reactions["rxn1"] = &reaction{ID: "rxn1", Card: "crdCopy", Comment: "cmt1", User: "user1", Emoji: "👍"}
+	f.reactions["rxn2"] = &reaction{ID: "rxn2", Card: "crdCopy", Comment: "cmt1", User: "user2", Emoji: "👍"}
+	f.reactions["rxn3"] = &reaction{ID: "rxn3", Card: "crdCopy", Comment: "cmt1", User: "user1", Emoji: "🎉"}
+	_, c := f.serve()
+
+	out, _, err := runCmd(t, c, "boards", "card", "view", "crdCopy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "👍 2") || !strings.Contains(out, "🎉 1") {
+		t.Errorf("card view should count reactions per emoji:\n%s", out)
+	}
+}
+
+// Palette order, not arrival order, so the same set always reads the same way.
+func TestReactionSummaryUsesPaletteOrder(t *testing.T) {
+	rows := []reaction{
+		{Comment: "cmt1", Emoji: "🚀"},
+		{Comment: "cmt1", Emoji: "👍"},
+		{Comment: "cmt1", Emoji: "❤️"},
+		// A different comment's row must not leak into this one's summary.
+		{Comment: "cmt2", Emoji: "🎉"},
+	}
+	if got, want := reactionSummary(rows, "cmt1"), "👍 1  ❤️ 1  🚀 1"; got != want {
+		t.Errorf("reactionSummary = %q, want %q", got, want)
+	}
+	if got := reactionSummary(rows, "cmt3"); got != "" {
+		t.Errorf("a comment with no reactions should yield \"\", got %q", got)
+	}
+}

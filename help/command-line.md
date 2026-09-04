@@ -44,6 +44,21 @@ tinycld boards card view OTTER-12     # one card, in full
 include them. `card view` shows the description, checklist and comments that
 the board view leaves out.
 
+## Reacting to comments
+
+```
+tinycld boards card react <comment-id> thumbs_up    # or the emoji itself
+tinycld boards card unreact <comment-id> thumbs_up
+```
+
+The six reactions are `thumbs_up`, `heart`, `laugh`, `party`, `eyes` and
+`rocket`. You can paste the emoji instead if you have it to hand; the name is
+easier to type in a terminal.
+
+Comment ids come from `card view --json`. `card view` shows the counts under
+each comment. `unreact` removes only your own reaction — no one can take back
+anyone else's.
+
 ## Linking cards
 
 ```
@@ -158,6 +173,21 @@ and its parent always live on the same board: `--family move` brings the
 sub-tasks along, `--family unlink` leaves them behind as top-level cards. The
 command refuses rather than guessing, and says what it did. A card that is
 itself a sub-task always stops being one when it moves.
+
+## Reacting to comments
+
+```
+tinycld boards card react <comment-id> thumbs_up    # or the emoji itself
+tinycld boards card unreact <comment-id> thumbs_up
+```
+
+The six reactions are `thumbs_up`, `heart`, `laugh`, `party`, `eyes` and
+`rocket`. You can paste the emoji instead if you have it to hand; the name is
+easier to type in a terminal.
+
+Comment ids come from `card view --json`. `card view` shows the counts under
+each comment. `unreact` removes only your own reaction — no one can take back
+anyone else's.
 
 ## Linking cards
 

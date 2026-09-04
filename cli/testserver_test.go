@@ -41,24 +41,27 @@ type fakeCards struct {
 	comments  map[string]*comment
 	users     map[string]*user
 	links     map[string]*cardLink
+	reactions map[string]*reaction
 
 	seq int
 
 	// Recorded writes, so a test can assert what was SENT rather than only
 	// what came back — a fake that echoes its input proves nothing about the
 	// body the command built.
-	lastCardPatch    map[string]any
-	lastCardCreate   map[string]any
-	lastListPatch    map[string]any
-	lastProjectPatch map[string]any
-	lastMoveBody     map[string]any
-	createdChecklist []map[string]any
-	lastLinkCreate   map[string]any
-	deletedLinks     []string
-	deletedCards     []string
-	deletedLists     []string
-	deletedProjects  []string
-	patchCount       int
+	lastCardPatch      map[string]any
+	lastCardCreate     map[string]any
+	lastListPatch      map[string]any
+	lastProjectPatch   map[string]any
+	lastMoveBody       map[string]any
+	createdChecklist   []map[string]any
+	lastLinkCreate     map[string]any
+	deletedLinks       []string
+	lastReactionCreate map[string]any
+	deletedReactions   []string
+	deletedCards       []string
+	deletedLists       []string
+	deletedProjects    []string
+	patchCount         int
 
 	// cardListCount counts LIST reads of boards_cards, so a test can prove the
 	// board view stays one request rather than one per column.
@@ -82,6 +85,7 @@ func newFakeCards(t *testing.T) *fakeCards {
 		comments:  map[string]*comment{},
 		users:     map[string]*user{},
 		links:     map[string]*cardLink{},
+		reactions: map[string]*reaction{},
 	}
 }
 
@@ -124,6 +128,13 @@ var (
 	reIDList            = regexp.MustCompile(`^id = "((?:[^"\\]|\\.)*)"( \|\| id = "(?:(?:[^"\\]|\\.)*)")*$`)
 	// `card view` reads every link with this card at EITHER end.
 	reLinkEitherEnd = regexp.MustCompile(`^source = "((?:[^"\\]|\\.)*)" \|\| target = "((?:[^"\\]|\\.)*)"$`)
+	// `card view` reads every reaction on the card at once — the row carries
+	// `card` precisely so one query serves the whole thread.
+	reReactionByCard = regexp.MustCompile(`^card = "((?:[^"\\]|\\.)*)"$`)
+	// `card unreact` looks up the caller's own row for one emoji.
+	reReactionOwn = regexp.MustCompile(
+		`^comment = "((?:[^"\\]|\\.)*)" && user = "((?:[^"\\]|\\.)*)" && ` +
+			`emoji = "((?:[^"\\]|\\.)*)"$`)
 	// `card unlink` reads both orientations of one pair.
 	reLinkBetween = regexp.MustCompile(
 		`^\(source = "((?:[^"\\]|\\.)*)" && target = "((?:[^"\\]|\\.)*)"\) \|\| ` +
@@ -488,6 +499,16 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		sortByRank(out, func(i checklistItem) (string, string) { return i.Position, i.ID })
 		listResponse(w, out)
 	})
+	// `card react` resolves the comment by id, to derive the card and project
+	// the reaction row denormalizes.
+	mux.HandleFunc("GET /api/collections/boards_comments/records/{id}", func(w http.ResponseWriter, r *http.Request) {
+		cm, ok := f.comments[r.PathValue("id")]
+		if !ok {
+			notFound(w)
+			return
+		}
+		json.NewEncoder(w).Encode(cm)
+	})
 	mux.HandleFunc("GET /api/collections/boards_comments/records", func(w http.ResponseWriter, r *http.Request) {
 		m := reCardEq.FindStringSubmatch(r.URL.Query().Get("filter"))
 		if m == nil {
@@ -551,6 +572,66 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		}
 		delete(f.links, id)
 		f.deletedLinks = append(f.deletedLinks, id)
+		w.WriteHeader(http.StatusNoContent)
+	})
+	// boards_comment_reactions — GET for `card view` and `card unreact`,
+	// POST for `card react`, DELETE for the removal `unreact` performs.
+	mux.HandleFunc("GET /api/collections/boards_comment_reactions/records", func(w http.ResponseWriter, r *http.Request) {
+		filter := r.URL.Query().Get("filter")
+		var out []reaction
+		if m := reReactionOwn.FindStringSubmatch(filter); m != nil {
+			commentID, userID, emoji := unquote(m[1]), unquote(m[2]), unquote(m[3])
+			for _, rx := range f.reactions {
+				if rx.Comment == commentID && rx.User == userID && rx.Emoji == emoji {
+					out = append(out, *rx)
+				}
+			}
+		} else if m := reReactionByCard.FindStringSubmatch(filter); m != nil {
+			cardID := unquote(m[1])
+			for _, rx := range f.reactions {
+				if rx.Card == cardID {
+					out = append(out, *rx)
+				}
+			}
+		} else {
+			f.t.Errorf("unsupported reactions filter: %q", filter)
+			listResponse(w, []reaction{})
+			return
+		}
+		sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+		listResponse(w, out)
+	})
+	mux.HandleFunc("POST /api/collections/boards_comment_reactions/records", func(w http.ResponseWriter, r *http.Request) {
+		body := decodeBody(r)
+		f.lastReactionCreate = body
+		rx := &reaction{
+			ID:      f.nextID("rxn"),
+			Project: str(body["project"]),
+			Card:    str(body["card"]),
+			Comment: str(body["comment"]),
+			User:    str(body["user"]),
+			Emoji:   str(body["emoji"]),
+		}
+		// The unique index is (comment, user, emoji); the fake enforces it so a
+		// double-react is refused here the way the server would refuse it.
+		for _, existing := range f.reactions {
+			if existing.Comment == rx.Comment && existing.User == rx.User &&
+				existing.Emoji == rx.Emoji {
+				http.Error(w, "duplicate reaction", http.StatusBadRequest)
+				return
+			}
+		}
+		f.reactions[rx.ID] = rx
+		json.NewEncoder(w).Encode(rx)
+	})
+	mux.HandleFunc("DELETE /api/collections/boards_comment_reactions/records/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		if _, ok := f.reactions[id]; !ok {
+			notFound(w)
+			return
+		}
+		delete(f.reactions, id)
+		f.deletedReactions = append(f.deletedReactions, id)
 		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("GET /api/collections/boards_labels/records", func(w http.ResponseWriter, r *http.Request) {

@@ -58,7 +58,10 @@ Open: 14, 16–21 and Tier 3.
    own, members and live share links read. A reaction bar under each comment
    sits outside the inline-edit swap; the author gets a `boards_reaction`
    notification (own mute switch); the `comment-reacted` trigger fires for
-   rules. Deferred: CLI reaction commands (need the core scope map widened).
+   rules. CLI commands landed once the core scope map granted
+   `boards_comment_reactions`: `card react` / `card unreact` over the six-emoji
+   palette (by ASCII name or the emoji itself), with per-comment counts in
+   `card view`.
 10. **Start date, due time, timeline view** — landed as `boards_cards.start`
     (a day) and a `due_has_time` flag that lets `due` carry an instant; day
     values keep the calendar-day semantics everywhere, timed ones are
@@ -208,8 +211,6 @@ Open: 14, 16–21 and Tier 3.
 - Editing an existing comment to add a mention does not notify.
 - No responsive pass: fixed `COLUMN_WIDTH` / `PEEK_WIDTH`. The list and
   timeline views read `useBreakpoint`; the canvas and peek do not.
-- Reactions have no CLI commands; the core CLI scope map would need to grant
-  `boards_comment_reactions` first.
 - Rules cannot run at an exact time of day: the deadline triggers and
   `set-due-date` both work in whole days, because core carries no user time
   zone for the server to resolve an hour against.
