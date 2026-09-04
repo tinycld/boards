@@ -109,6 +109,10 @@ func registerShared(app *pocketbase.PocketBase) {
 	// delta, never fail the write — but it recounts the card's PARENT rather
 	// than the card written, and a re-parent recounts two. See card_parent.go.
 	registerCardParentRollup(app)
+	// The epic rollup is the same shape one collection over — it recounts the
+	// card's EPIC, and a re-file recounts two — but it sums POINTS rather than
+	// counting rows, with an unestimated card worth 1. See epic_rollup.go.
+	registerEpicRollup(app)
 	// Unrelated to the counters above despite the adjacency, and the opposite
 	// of them in every invariant: this one is a monotonic sequence, it runs
 	// before the row lands, and it FAILS the write when it cannot allocate.

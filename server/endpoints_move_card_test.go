@@ -397,3 +397,168 @@ func TestMoveCard_CarriesCommentReactions(t *testing.T) {
 		},
 	}.run(t, env.cardsEnv)
 }
+
+// --- the epic, when a card carries one across boards ---
+
+// moveEpicBody is moveBody plus the epic answer the endpoint demands of a card
+// that is filed under one.
+func moveEpicBody(env *moveEnv, epic string) string {
+	return `{"project_id":"` + env.target.Id + `","list_id":"` + env.targetList.Id +
+		`","position":"a0","epic":"` + epic + `"}`
+}
+
+// seedEpic files the moved card under a fresh epic on the SOURCE board.
+func seedEpic(t *testing.T, env *moveEnv, title string) *core.Record {
+	t.Helper()
+	epic := cardsEpic(t, env.app, env.project, title, "a0")
+	env.card.Set("epic", epic.Id)
+	if err := env.app.Save(env.card); err != nil {
+		t.Fatalf("seed epic: %v", err)
+	}
+	return epic
+}
+
+// The endpoint REFUSES rather than guessing, exactly as it does for a family:
+// either the card drops out of a plan or the target board gains an epic, and
+// neither is visible from the move dialog.
+func TestMoveCard_EpicAnswerIsRequired(t *testing.T) {
+	env := setupMoveEnv(t)
+	seedEpic(t, env, "Authentication")
+
+	req{
+		method: http.MethodPost,
+		url:    "/api/cards/cards/" + env.card.Id + "/move",
+		token:  env.editorToken,
+		body:   moveBody(env),
+		want:   http.StatusBadRequest,
+		before: mountCardRoutes,
+		after: func(t testing.TB, app *tests.TestApp) {
+			moved, err := app.FindRecordById("cards_cards", env.card.Id)
+			if err != nil {
+				t.Fatalf("reload card: %v", err)
+			}
+			if moved.GetString("project") != env.project.Id {
+				t.Fatal("the card moved despite the refusal")
+			}
+		},
+	}.run(t, env.cardsEnv)
+}
+
+// A card with no epic needs no answer — the question never arises.
+func TestMoveCard_NoEpicNeedsNoAnswer(t *testing.T) {
+	env := setupMoveEnv(t)
+
+	req{
+		method:  http.MethodPost,
+		url:     "/api/cards/cards/" + env.card.Id + "/move",
+		token:   env.editorToken,
+		body:    moveBody(env),
+		want:    http.StatusOK,
+		content: []string{`"cleared_epic":false`},
+		before:  mountCardRoutes,
+	}.run(t, env.cardsEnv)
+}
+
+// Unlink leaves the card unfiled on the target. The epic on the SOURCE board is
+// untouched — other cards may still be filed under it.
+func TestMoveCard_EpicUnlinkLeavesTheCardUnfiled(t *testing.T) {
+	env := setupMoveEnv(t)
+	epic := seedEpic(t, env, "Authentication")
+
+	req{
+		method:  http.MethodPost,
+		url:     "/api/cards/cards/" + env.card.Id + "/move",
+		token:   env.editorToken,
+		body:    moveEpicBody(env, "unlink"),
+		want:    http.StatusOK,
+		content: []string{`"cleared_epic":true`},
+		before:  mountCardRoutes,
+		after: func(t testing.TB, app *tests.TestApp) {
+			moved, err := app.FindRecordById("cards_cards", env.card.Id)
+			if err != nil {
+				t.Fatalf("reload card: %v", err)
+			}
+			if got := moved.GetString("epic"); got != "" {
+				t.Fatalf("card epic = %q, want empty", got)
+			}
+			if _, err := app.FindRecordById("cards_epics", epic.Id); err != nil {
+				t.Fatal("the source board's epic must survive an unlink")
+			}
+		},
+	}.run(t, env.cardsEnv)
+}
+
+// Move with NO counterpart on the target creates one. The divergence from
+// remapLabels: a label with no match is dropped, but silently unfiling a card
+// is what the "move" answer exists to avoid.
+func TestMoveCard_EpicMoveCreatesItOnTheTarget(t *testing.T) {
+	env := setupMoveEnv(t)
+	seedEpic(t, env, "Authentication")
+
+	req{
+		method:  http.MethodPost,
+		url:     "/api/cards/cards/" + env.card.Id + "/move",
+		token:   env.editorToken,
+		body:    moveEpicBody(env, "move"),
+		want:    http.StatusOK,
+		content: []string{`"created_epic":true`},
+		before:  mountCardRoutes,
+		after: func(t testing.TB, app *tests.TestApp) {
+			moved, err := app.FindRecordById("cards_cards", env.card.Id)
+			if err != nil {
+				t.Fatalf("reload card: %v", err)
+			}
+			filed := moved.GetString("epic")
+			if filed == "" {
+				t.Fatal("the card must be filed under an epic on the target")
+			}
+			made, err := app.FindRecordById("cards_epics", filed)
+			if err != nil {
+				t.Fatalf("load the created epic: %v", err)
+			}
+			if made.GetString("project") != env.target.Id {
+				t.Fatal("the created epic must belong to the TARGET board")
+			}
+			if made.GetString("title") != "Authentication" {
+				t.Fatalf("created epic title = %q, want the source's", made.GetString("title"))
+			}
+		},
+	}.run(t, env.cardsEnv)
+}
+
+// Move WITH a counterpart reuses it rather than making a duplicate — matched by
+// name, case- and space-insensitively, as remapLabels matches labels.
+func TestMoveCard_EpicMoveReusesAMatchingEpic(t *testing.T) {
+	env := setupMoveEnv(t)
+	seedEpic(t, env, "Authentication")
+	existing := cardsEpic(t, env.app, env.target, "  authentication  ", "a0")
+
+	req{
+		method:  http.MethodPost,
+		url:     "/api/cards/cards/" + env.card.Id + "/move",
+		token:   env.editorToken,
+		body:    moveEpicBody(env, "move"),
+		want:    http.StatusOK,
+		content: []string{`"created_epic":false`},
+		before:  mountCardRoutes,
+		after: func(t testing.TB, app *tests.TestApp) {
+			moved, err := app.FindRecordById("cards_cards", env.card.Id)
+			if err != nil {
+				t.Fatalf("reload card: %v", err)
+			}
+			if got := moved.GetString("epic"); got != existing.Id {
+				t.Fatalf("card epic = %q, want the existing target epic %q", got, existing.Id)
+			}
+			rows, err := app.FindRecordsByFilter(
+				"cards_epics", "project = {:p}", "", 0, 0,
+				map[string]any{"p": env.target.Id},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(rows) != 1 {
+				t.Fatalf("target board has %d epics, want 1 — a duplicate was created", len(rows))
+			}
+		},
+	}.run(t, env.cardsEnv)
+}
