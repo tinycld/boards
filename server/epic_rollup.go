@@ -15,8 +15,9 @@ import (
 // throw away the sizing a board already did; summing raw estimates would read
 // "0 pts" on the many boards that never estimate. The 1-point floor makes one
 // number correct on both, so there is no display branch and no preference to
-// set. lib/estimate.ts applies the same floor, so a column header and an epic
-// never disagree about the same cards — see 1980000017 for the full argument.
+// set. The COLUMN HEADER deliberately does NOT floor: it is an opt-in badge
+// that hides when its total is zero, while this is a ratio that must mean
+// something on every board — see lib/estimate.ts and 1980000017.
 //
 // A PER-EPIC LOCK, from the first commit. The recount is a read-modify-write
 // (find, sum, save) exactly as counters.go's is, and counters.go shipped

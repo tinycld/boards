@@ -28,29 +28,29 @@ export function formatEstimate(points: number): string {
 }
 
 /**
- * The rollup a column header and an epic show: the points of the cards listed,
- * counting an UNESTIMATED card as 1.
+ * The rollup a COLUMN HEADER shows: the total of the estimates on the cards it
+ * lists, ignoring the unestimated ones.
  *
- * The floor is what makes one number correct on both kinds of board. Summing
- * raw estimates reads "0 pts" on the many boards that never estimate — the
- * ones the `unestimated` facet exists to acknowledge — while counting cards
- * throws away the sizing an estimating board did. Treating an unsized card as
- * the smallest unit of work says something true on either.
+ * NO 1-point floor here, and the contrast with an epic's rollup
+ * (server/epic_rollup.go's MAX(estimate, 1)) is deliberate rather than an
+ * inconsistency. The two answer different questions:
  *
- * The server applies the same floor in SQL (server/epic_rollup.go's
- * MAX(estimate, 1)), and the agreement is the point: a column header and an
- * epic that disagreed about one set of cards would be the kind of bug nobody
- * files and everybody distrusts.
+ *   - A column header is an OPT-IN badge. It renders only when the total is
+ *     non-zero, so a board that never estimates shows nothing at all
+ *     (EstimateTotal in BoardColumn.tsx). Flooring would make the total always
+ *     non-zero and put a points badge on every board that has none today.
+ *   - An epic's progress is a RATIO that must mean something on every board.
+ *     "0 / 0 pts" would be useless on an unestimated board, so its floor lets
+ *     the ratio read as a card count instead.
  *
- * This CHANGED the shipped column total — an all-unestimated column read
- * "0 pts" before and reads its card count now — taken deliberately, because a
- * column holding eight cards is not worth zero. The `estimated`/`unestimated`
- * FILTER is untouched: "did someone size this card" is still a real question,
- * and a different one from "what is it worth".
+ * A floor was briefly applied here so the two surfaces would agree about the
+ * same cards. They do not need to: one is a sum a user opted into, the other a
+ * denominator that has to exist. e2e (card-estimate.spec.ts) pins the header's
+ * behaviour, including that an all-unestimated column shows no badge.
  */
 export function sumEstimates(cards: Pick<BoardCardView, 'estimate'>[]): number {
     let total = 0
-    for (const card of cards) total += Math.max(card.estimate ?? 0, 1)
+    for (const card of cards) total += card.estimate ?? 0
     return total
 }
 

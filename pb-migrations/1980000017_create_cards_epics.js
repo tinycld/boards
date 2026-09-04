@@ -32,14 +32,13 @@
 // card to 1 point makes one number correct on both kinds of board, so there
 // is no display branch and no user preference to set.
 //
-// The floor is applied in lib/estimate.ts's sumEstimates as well, so the
-// column header and the epic agree about the same cards. That is a CHANGE to
-// the shipped column total (an unestimated column read "0 pts" before this
-// and reads its card count now), taken deliberately: a column holding eight
-// unestimated cards is not worth zero, and two surfaces disagreeing about one
-// set of cards is the worse outcome. The `estimated` / `unestimated` FILTER is
-// untouched — "did someone size this card" is still a real question, and it
-// is a different question from "what is it worth".
+// The COLUMN HEADER does not apply this floor, and the difference is
+// deliberate rather than an oversight. A header is an opt-in badge that renders
+// only when its total is non-zero, so a board that never estimates shows
+// nothing; flooring there would put a points badge on every board that has none
+// today (pinned by tests/e2e/card-estimate.spec.ts). An epic's progress is a
+// RATIO that has to mean something on every board, which is what the floor
+// buys. Both were briefly floored so they would agree; they do not need to.
 //
 // `points_done` counts cards whose LIST is done or canceled, reusing the
 // closed-status vocabulary from 1980000011 exactly as `subtask_done` does, so

@@ -292,9 +292,9 @@ export interface BoardCardView {
  * An epic as the board renders it — the grouping row from cards_epics.
  *
  * `pointsTotal` / `pointsDone` are maintained by server/epic_rollup.go and
- * count POINTS, with an unestimated card worth 1 (lib/estimate.ts's
- * sumEstimates applies the same floor, so a column header and an epic never
- * disagree about the same cards). Denormalized rather than counted from the
+ * count POINTS, with an unestimated card worth 1 so the ratio means something
+ * on a board that never estimates. A column header sums the SAME cards without
+ * that floor, deliberately — see lib/estimate.ts. Denormalized rather than counted from the
  * loaded cards because an epic renders where the board's card set is not
  * loaded, and because a filtered board must not make an epic's progress move.
  */
