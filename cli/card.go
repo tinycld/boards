@@ -196,6 +196,16 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 					fmt.Sprintf("%d/%d done", cd.SubtaskDone, cd.SubtaskTotal),
 				})
 			}
+			// The sprint's label, as the face shows it; the raw id if the
+			// sprint has gone (deleting one unfiles its cards, but a read can
+			// race the cascade).
+			if cd.Sprint != "" {
+				sprintCell := cd.Sprint
+				if s, sprintErr := client.GetRecord[sprint](ctx, c, sprintsCollection, cd.Sprint); sprintErr == nil {
+					sprintCell = s.label()
+				}
+				rows = append(rows, []string{"Sprint", sprintCell})
+			}
 			if cd.Description != "" {
 				rows = append(rows, []string{"Description", firstLine(cd.Description)})
 			}
@@ -225,7 +235,7 @@ func newCardViewCmd(c *client.Client) *cobra.Command {
 }
 
 func newCardAddCmd(c *client.Client) *cobra.Command {
-	var boardRef, listRef, description, due, start, reporter, priority, parent string
+	var boardRef, listRef, description, due, start, reporter, priority, parent, sprintRef string
 	var index, estimate int
 	cmd := &cobra.Command{
 		Use:   "add <title>",
@@ -298,6 +308,16 @@ func newCardAddCmd(c *client.Client) *cobra.Command {
 				}
 				parentID = pd.ID
 			}
+			// A sprint is per board, so it resolves within the one the card
+			// is filed on; a completed one is refused by the server.
+			sprintID := ""
+			if sprintRef != "" {
+				s, err := resolveSprint(ctx, c, p.ID, sprintRef)
+				if err != nil {
+					return err
+				}
+				sprintID = s.ID
+			}
 			body := map[string]any{
 				"project":      p.ID,
 				"list":         l.ID,
@@ -312,6 +332,7 @@ func newCardAddCmd(c *client.Client) *cobra.Command {
 				"priority":     priority,
 				"estimate":     estimate,
 				"parent":       parentID,
+				"sprint":       sprintID,
 				"archived":     false,
 			}
 			created, err := client.CreateRecord[card](ctx, c, cardsCollection, body)
@@ -336,13 +357,14 @@ func newCardAddCmd(c *client.Client) *cobra.Command {
 	cmd.Flags().StringVar(&priority, "priority", "none", "one of "+strings.Join(priorities, ", "))
 	cmd.Flags().IntVar(&estimate, "estimate", 0, "points (0 = no estimate)")
 	cmd.Flags().StringVar(&parent, "parent", "", "make this a sub-task of a card on the same board (id or key)")
+	cmd.Flags().StringVar(&sprintRef, "sprint", "", "file it in a sprint: a number, active, next, or id")
 	return cmd
 }
 
 func newCardEditCmd(c *client.Client) *cobra.Command {
-	var title, description, due, start, reporter, priority, parent string
+	var title, description, due, start, reporter, priority, parent, sprintRef string
 	var estimate int
-	var clearDue, clearStart, clearReporter, clearParent bool
+	var clearDue, clearStart, clearReporter, clearParent, clearSprint bool
 	cmd := &cobra.Command{
 		Use:   "edit <id>",
 		Short: "Change a card's title, description, dates, reporter, priority, estimate, or parent",
@@ -444,14 +466,29 @@ func newCardEditCmd(c *client.Client) *cobra.Command {
 				}
 				body["parent"] = pd.ID
 			}
-			if len(body) == 0 {
-				return fmt.Errorf("nothing to change — pass --title, --description, --due, --clear-due, --start, --clear-start, --reporter, --clear-reporter, --priority, --estimate, --parent, or --clear-parent")
+			if clearSprint && cmd.Flags().Changed("sprint") {
+				return fmt.Errorf("--sprint and --clear-sprint contradict each other")
+			}
+			if len(body) == 0 && !clearSprint && !cmd.Flags().Changed("sprint") {
+				return fmt.Errorf("nothing to change — pass --title, --description, --due, --clear-due, --start, --clear-start, --reporter, --clear-reporter, --priority, --estimate, --parent, --clear-parent, --sprint, or --clear-sprint")
 			}
 			// Through getCard so a card key (OTTER-12) works here exactly as it
 			// does in `card view`/`card move` — the id is what the API needs.
 			cd, err := getCard(ctx, c, args[0])
 			if err != nil {
 				return err
+			}
+			// The --parent shape: a relation clears by its own flag. Resolved
+			// after the card because a sprint is named within ITS board.
+			switch {
+			case clearSprint:
+				body["sprint"] = ""
+			case cmd.Flags().Changed("sprint"):
+				s, err := resolveSprint(ctx, c, cd.Project, sprintRef)
+				if err != nil {
+					return err
+				}
+				body["sprint"] = s.ID
 			}
 			updated, err := client.UpdateRecord[card](ctx, c, cardsCollection, cd.ID, body)
 			if err != nil {
@@ -473,6 +510,8 @@ func newCardEditCmd(c *client.Client) *cobra.Command {
 	cmd.Flags().IntVar(&estimate, "estimate", 0, "points (0 clears it)")
 	cmd.Flags().StringVar(&parent, "parent", "", "make this a sub-task of a card on the same board (id or key)")
 	cmd.Flags().BoolVar(&clearParent, "clear-parent", false, "stop being a sub-task")
+	cmd.Flags().StringVar(&sprintRef, "sprint", "", "file it in a sprint: a number, active, next, or id")
+	cmd.Flags().BoolVar(&clearSprint, "clear-sprint", false, "send it back to the backlog")
 	return cmd
 }
 

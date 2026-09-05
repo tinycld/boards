@@ -12,7 +12,8 @@ work is done without hunting for its cards across the board.
 An epic groups by **what** the work is. That is different from a list, which
 says what stage a card is at, and from a sub-task, which is one card belonging
 to another. A card can sit in any list, have its own sub-tasks, and still belong
-to an epic.
+to an epic — and be planned into a [sprint](help://boards:sprints), which says
+**when** the work happens rather than what it is part of.
 
 ## Creating an epic
 

@@ -355,15 +355,13 @@ face; create a board from a template, assert lists and cards carry over.
 
 ## Deferred, with reasons
 
-**14 — Cycles / sprints.** The only open item needing a real new collection plus
-a backlog view and rollover semantics. `TODO.md` calls it "large; only for
-software-team personas", and with the parity target that is right: it is Jira
-and Linear, not Trello. It also gates half of 21.
+**14 — Sprints.** ✅ Shipped — see `TODO.md`'s Tier 2 shipped list. The
+per-board opt-in keeps it out of Trello-style boards' way.
 
-**21 — Reports.** Velocity needs 14. Burndown and cumulative flow could read
-`boards_activity` today (and the auto-archive sweep's rows correctly count as
-system moves), but shipping reports without velocity is a partial feature that
-invites the comparison it loses.
+**21 — Reports.** Velocity's data now exists (14 stamps commitment and outcome
+per sprint) and burndown has `boards_sprint_snapshots`; the charts are the last
+phase of the sprints work. Cumulative flow could read `boards_activity` today
+(and the auto-archive sweep's rows correctly count as system moves).
 
 **20 — WIP limits and card aging.** Genuinely cheap — `wip_limit` on lists with
 a warning header, aging as a face tint from `updated`. Kanban-purist polish that

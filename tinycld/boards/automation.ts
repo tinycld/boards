@@ -11,9 +11,10 @@ import type { BoardsSchema } from './types'
 // This declaration is the DECLARATIVE half of the cards catalog. The actions
 // that need Go — create-card (must resolve project from the list and let
 // allocateNumber run), add-assignee / add-label (multi-relation `set`
-// REPLACES, so append needs a handler), and set-due-date (date math) — are
-// deliberately absent. add-assignee and add-label additionally want a
-// relation param, which the catalog cannot express for a native action.
+// REPLACES, so append needs a handler), set-due-date (date math) and
+// add-to-active-sprint (a run-time lookup) — are declared native here and
+// implemented in server/automation.go; a native action's relation param is
+// expressed with `relationTarget`.
 //
 // A reaction is a row on boards_comment_reactions rather than a change to a
 // card, so `comment-reacted` is declared against that collection; it carries
@@ -244,6 +245,52 @@ const automation = {
             ],
         },
         {
+            // Fires in both directions, as card-parented does: joining a
+            // sprint, leaving one, and a rollover (which is both). A condition
+            // on `sprint` being empty separates them in the builder. With
+            // move-card this is Linear's "pull a card into To do when it joins
+            // a sprint", as a rule rather than a built-in.
+            id: 'card-sprint-changed',
+            label: "A card's sprint changes",
+            collection: 'boards_cards',
+            on: 'update',
+            watch: ['sprint'],
+            fields: [
+                'title',
+                { key: 'sprint', label: 'Sprint' },
+                { key: 'list', label: 'List' },
+                { key: 'project', label: 'Board' },
+                { key: 'assignees', label: 'Assignees' },
+                'priority',
+                'estimate',
+            ],
+        },
+        {
+            // The sprint row's own transition, gated in Go to the change INTO
+            // active (sprint_guard.go makes `state` forward-only, but a filter
+            // still reads Original() so a re-save cannot fire it). Fires for
+            // the sweep's automatic starts as well as a person's — the
+            // deadline triggers' trick, with no scheduling of its own.
+            //
+            // The fields are the SPRINT's columns: this trigger's record is a
+            // boards_sprints row, so a card action attached to it has no card
+            // to act on and is hidden by the builder.
+            id: 'sprint-started',
+            label: 'A sprint starts',
+            collection: 'boards_sprints',
+            on: 'update',
+            watch: ['state'],
+            fields: ['name', 'goal', 'start', 'end', { key: 'project', label: 'Board' }],
+        },
+        {
+            id: 'sprint-completed',
+            label: 'A sprint completes',
+            collection: 'boards_sprints',
+            on: 'update',
+            watch: ['state'],
+            fields: ['name', 'goal', 'start', 'end', { key: 'project', label: 'Board' }],
+        },
+        {
             id: 'comment-reacted',
             label: 'Someone reacts to a comment',
             collection: 'boards_comment_reactions',
@@ -325,6 +372,44 @@ const automation = {
                 set: { parent: { param: 'parent' } },
             },
             params: [{ key: 'parent', field: 'parent', label: 'Parent card' }],
+        },
+        {
+            // A record-op like set-parent: `sprint` is a single relation, so
+            // `set` is the right verb, and naming the column gives the builder
+            // a sprint picker. sprintAuthorizer in server/automation.go is what
+            // refuses a sprint on another board or one already completed —
+            // the engine saves as a superuser, past the pin and the guard.
+            id: 'set-sprint',
+            label: 'Move the card to a sprint',
+            kind: 'record-op',
+            collection: 'boards_cards',
+            op: {
+                type: 'update',
+                target: 'trigger-record',
+                set: { sprint: { param: 'sprint' } },
+            },
+            params: [{ key: 'sprint', field: 'sprint', label: 'Sprint' }],
+        },
+        {
+            // The same op with a literal: '' is the backlog.
+            id: 'remove-from-sprint',
+            label: 'Move the card to the backlog',
+            kind: 'record-op',
+            collection: 'boards_cards',
+            op: {
+                type: 'update',
+                target: 'trigger-record',
+                set: { sprint: '' },
+            },
+        },
+        {
+            // Native: WHICH sprint is active is looked up when the rule runs,
+            // so there is no param a record-op could set from. No active
+            // sprint is a no-op, not a failure — "when a card is marked
+            // urgent, pull it into the sprint" must not error between sprints.
+            id: 'add-to-active-sprint',
+            label: 'Move the card into the active sprint',
+            kind: 'native',
         },
         {
             // Native, not a record-op: `assignees` is a multi-value relation

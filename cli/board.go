@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -151,10 +153,13 @@ func newBoardListCmd(c *client.Client) *cobra.Command {
 // the rows without disturbing that within-column order.
 func newBoardViewCmd(c *client.Client) *cobra.Command {
 	var all bool
+	var sprintRef string
 	cmd := &cobra.Command{
-		Use:     "view <board>",
-		Short:   "Show a board's columns and cards",
-		Long:    "Show a board's columns and cards.\n\n<board> is a board id or name.",
+		Use:   "view <board>",
+		Short: "Show a board's columns and cards",
+		Long: "Show a board's columns and cards.\n\n<board> is a board id or name.\n\n" +
+			"--sprint narrows the cards to one sprint (a number, active, next, or id)\n" +
+			"or to the backlog — what the app's scope pill does.",
 		Args:    cobra.ExactArgs(1),
 		Aliases: []string{"show"},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -179,6 +184,12 @@ func newBoardViewCmd(c *client.Client) *cobra.Command {
 			byList, err := cardsByList(ctx, c, p.ID, all)
 			if err != nil {
 				return err
+			}
+			if sprintRef != "" {
+				byList, err = scopeToSprint(ctx, c, p.ID, sprintRef, byList)
+				if err != nil {
+					return err
+				}
 			}
 			var (
 				view    []columnView
@@ -215,7 +226,31 @@ func newBoardViewCmd(c *client.Client) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVarP(&all, "all", "a", false, "include archived cards")
+	cmd.Flags().StringVar(&sprintRef, "sprint", "", "only one sprint's cards (a number, active, next, id) or backlog")
 	return cmd
+}
+
+// scopeToSprint keeps the cards in one sprint, or with none for `backlog`.
+// Filtered client-side: the board is already loaded in one request, and a
+// second filtered query would cost more than it saves.
+func scopeToSprint(ctx context.Context, c *client.Client, projectID, ref string, byList map[string][]card) (map[string][]card, error) {
+	sprintID := ""
+	if !strings.EqualFold(ref, "backlog") {
+		s, err := resolveSprint(ctx, c, projectID, ref)
+		if err != nil {
+			return nil, err
+		}
+		sprintID = s.ID
+	}
+	out := map[string][]card{}
+	for listID, cards := range byList {
+		for _, cd := range cards {
+			if cd.Sprint == sprintID {
+				out[listID] = append(out[listID], cd)
+			}
+		}
+	}
+	return out, nil
 }
 
 // dueCell renders a card's due date. A day-only deadline shows the date half

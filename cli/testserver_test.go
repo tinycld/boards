@@ -42,6 +42,7 @@ type fakeCards struct {
 	users     map[string]*user
 	links     map[string]*cardLink
 	reactions map[string]*reaction
+	sprints   map[string]*sprint
 
 	seq int
 
@@ -53,6 +54,13 @@ type fakeCards struct {
 	lastListPatch      map[string]any
 	lastProjectPatch   map[string]any
 	lastMoveBody       map[string]any
+	lastSprintCreate   map[string]any
+	lastSprintPatch    map[string]any
+	lastSprintStart    map[string]any
+	lastSprintComplete map[string]any
+	startedSprint      string
+	completedSprint    string
+	deletedSprints     []string
 	createdChecklist   []map[string]any
 	lastLinkCreate     map[string]any
 	deletedLinks       []string
@@ -86,6 +94,7 @@ func newFakeCards(t *testing.T) *fakeCards {
 		users:     map[string]*user{},
 		links:     map[string]*cardLink{},
 		reactions: map[string]*reaction{},
+		sprints:   map[string]*sprint{},
 	}
 }
 
@@ -104,6 +113,12 @@ func (f *fakeCards) addList(id, projectID, name, position string) *list {
 	l := &list{ID: id, Project: projectID, Name: name, Position: position}
 	f.lists[id] = l
 	return l
+}
+
+func (f *fakeCards) addSprint(id, projectID string, number int, name, state, position string) *sprint {
+	s := &sprint{ID: id, Project: projectID, Number: number, Name: name, State: state, Position: position}
+	f.sprints[id] = s
+	return s
 }
 
 func (f *fakeCards) addCard(id, projectID, listID, title, position string) *card {
@@ -399,6 +414,7 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 			CreatedBy:   str(body["created_by"]),
 			Reporter:    str(body["reporter"]),
 			Estimate:    num(body["estimate"]),
+			Sprint:      str(body["sprint"]),
 		}
 		f.cards[created.ID] = created
 		json.NewEncoder(w).Encode(created)
@@ -442,7 +458,144 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		if v, ok := body["archived"].(bool); ok {
 			c.Archived = v
 		}
+		if v, ok := body["sprint"].(string); ok {
+			c.Sprint = v
+		}
 		json.NewEncoder(w).Encode(c)
+	})
+
+	// --- sprints ------------------------------------------------------------
+	// Read by project (numbered order) and by id; the two transitions are the
+	// endpoints of server/endpoints_sprints.go, which the fake echoes the way
+	// the server does: the start stamps the commitment, the completion reports
+	// its counts and where the unfinished cards went.
+	mux.HandleFunc("GET /api/collections/boards_sprints/records", func(w http.ResponseWriter, r *http.Request) {
+		m := reProjectEq.FindStringSubmatch(r.URL.Query().Get("filter"))
+		if m == nil {
+			f.t.Errorf("unsupported boards_sprints filter: %q", r.URL.Query().Get("filter"))
+			listResponse(w, []sprint{})
+			return
+		}
+		var out []sprint
+		for _, s := range f.sprints {
+			if s.Project == unquote(m[1]) {
+				out = append(out, *s)
+			}
+		}
+		sort.Slice(out, func(i, j int) bool { return out[i].Number < out[j].Number })
+		listResponse(w, out)
+	})
+	mux.HandleFunc("GET /api/collections/boards_sprints/records/{id}", func(w http.ResponseWriter, r *http.Request) {
+		s, ok := f.sprints[r.PathValue("id")]
+		if !ok {
+			notFound(w)
+			return
+		}
+		json.NewEncoder(w).Encode(s)
+	})
+	mux.HandleFunc("POST /api/collections/boards_sprints/records", func(w http.ResponseWriter, r *http.Request) {
+		body := decodeBody(r)
+		f.lastSprintCreate = body
+		created := &sprint{
+			ID:       f.nextID("spr"),
+			Project:  str(body["project"]),
+			Number:   len(f.sprints) + 1,
+			Name:     str(body["name"]),
+			Goal:     str(body["goal"]),
+			Start:    str(body["start"]),
+			End:      str(body["end"]),
+			State:    str(body["state"]),
+			Position: str(body["position"]),
+		}
+		f.sprints[created.ID] = created
+		json.NewEncoder(w).Encode(created)
+	})
+	mux.HandleFunc("PATCH /api/collections/boards_sprints/records/{id}", func(w http.ResponseWriter, r *http.Request) {
+		s, ok := f.sprints[r.PathValue("id")]
+		if !ok {
+			notFound(w)
+			return
+		}
+		body := decodeBody(r)
+		f.lastSprintPatch = body
+		if v, ok := body["name"].(string); ok {
+			s.Name = v
+		}
+		if v, ok := body["goal"].(string); ok {
+			s.Goal = v
+		}
+		if v, ok := body["start"].(string); ok {
+			s.Start = v
+		}
+		if v, ok := body["end"].(string); ok {
+			s.End = v
+		}
+		json.NewEncoder(w).Encode(s)
+	})
+	mux.HandleFunc("DELETE /api/collections/boards_sprints/records/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		if _, ok := f.sprints[id]; !ok {
+			notFound(w)
+			return
+		}
+		f.deletedSprints = append(f.deletedSprints, id)
+		delete(f.sprints, id)
+		// boards_cards.sprint does not cascade: the cards return to the backlog.
+		for _, c := range f.cards {
+			if c.Sprint == id {
+				c.Sprint = ""
+			}
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /api/boards/sprints/{id}/start", func(w http.ResponseWriter, r *http.Request) {
+		s, ok := f.sprints[r.PathValue("id")]
+		if !ok {
+			notFound(w)
+			return
+		}
+		f.lastSprintStart = decodeBody(r)
+		f.startedSprint = s.ID
+		s.State = "active"
+		if v := str(f.lastSprintStart["start"]); v != "" {
+			s.Start = v
+		}
+		if v := str(f.lastSprintStart["end"]); v != "" {
+			s.End = v
+		}
+		if v := str(f.lastSprintStart["name"]); v != "" {
+			s.Name = v
+		}
+		for _, c := range f.cards {
+			if c.Sprint == s.ID {
+				s.CommittedCount++
+				s.CommittedPoints += c.Estimate
+			}
+		}
+		json.NewEncoder(w).Encode(s)
+	})
+	mux.HandleFunc("POST /api/boards/sprints/{id}/complete", func(w http.ResponseWriter, r *http.Request) {
+		s, ok := f.sprints[r.PathValue("id")]
+		if !ok {
+			notFound(w)
+			return
+		}
+		body := decodeBody(r)
+		f.lastSprintComplete = body
+		f.completedSprint = s.ID
+		s.State = "completed"
+		target := str(body["next_sprint"])
+		rolled := 0
+		for _, c := range f.cards {
+			if c.Sprint == s.ID {
+				c.Sprint = target
+				rolled++
+			}
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"sprint": s, "completed_count": 0, "completed_points": 0,
+			"rolled_count": rolled, "target_sprint": target, "created_sprint": false,
+		})
 	})
 	mux.HandleFunc("DELETE /api/collections/boards_cards/records/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")

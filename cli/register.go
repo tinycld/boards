@@ -21,6 +21,7 @@ func Register(root *cobra.Command, c *client.Client) {
 		newBoardRemoveCmd(c),
 		newColumnCmd(c),
 		newCardCmd(c),
+		newSprintCmd(c),
 	)
 	root.AddCommand(boards)
 }

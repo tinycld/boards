@@ -34,9 +34,20 @@ func registerAutomation() {
 		"boards:card-archived",
 		"boards:card-parented",
 		"boards:comment-reacted",
+		// The sprint triggers: a card's sprint changing, and the sprint row's
+		// own transitions. boards_sprints carries `project`, so the same
+		// resolver serves it.
+		"boards:card-sprint-changed",
+		"boards:sprint-started",
+		"boards:sprint-completed",
 	} {
 		automation.RegisterOwnerResolver(ref, cardOwnerResolver)
 	}
+	// `state` moves forward only (sprint_guard.go), so each transition is
+	// "the column changed and now reads X"; the filter still checks
+	// Original() so a same-state re-save cannot fire either.
+	automation.RegisterTriggerFilter("boards:sprint-started", sprintBecameActive)
+	automation.RegisterTriggerFilter("boards:sprint-completed", sprintBecameCompleted)
 
 	automation.RegisterTriggerFilter("boards:card-completed", cardMovedToDoneList)
 	automation.RegisterTriggerFilter("boards:card-canceled", cardMovedToCanceledList)
@@ -57,6 +68,14 @@ func registerAutomation() {
 	// set-parent is a record-op like move-card — a single-valued relation, so
 	// `set` is the right verb — and needs an authorizer for the same reason.
 	automation.RegisterRelationAuthorizer("boards:set-parent", "parent", parentAuthorizer)
+	// set-sprint is a record-op like set-parent, with an authorizer for the
+	// same reason: the engine saves as a superuser, so the same-board pin
+	// and the completed-sprint guard on the request path do not run.
+	automation.RegisterRelationAuthorizer("boards:set-sprint", "sprint", sprintAuthorizer)
+
+	// add-to-active-sprint must be native: which sprint is active is looked
+	// up at run time, so there is no param for a record-op to set from.
+	automation.RegisterAction("boards:add-to-active-sprint", addToActiveSprint)
 
 	automation.RegisterAction("boards:add-assignee", addAssignee)
 	automation.RegisterRelationAuthorizer("boards:add-assignee", "user", assigneeAuthorizer)
@@ -462,6 +481,77 @@ func parentAuthorizer(app core.App, req automation.ActionRequest, parentID strin
 		return fmt.Errorf("parent card %s is itself a sub-task", parentID)
 	}
 	return checkBoardWrite(app, req.OwnerID, projectID)
+}
+
+// sprintAuthorizer answers the which-record question for boards:set-sprint's
+// `sprint` param: on the card's own board, not completed, and the rule owner
+// writes the board. parentAuthorizer's shape.
+func sprintAuthorizer(app core.App, req automation.ActionRequest, sprintID string) error {
+	if req.Record == nil {
+		return fmt.Errorf("boards:set-sprint: no trigger card to file")
+	}
+	sprint, err := app.FindRecordById("boards_sprints", sprintID)
+	if err != nil {
+		return fmt.Errorf("sprint %s: %w", sprintID, err)
+	}
+	projectID := req.Record.GetString("project")
+	if projectID == "" || sprint.GetString("project") != projectID {
+		return fmt.Errorf("sprint %s is on a different board than the card", sprintID)
+	}
+	if sprint.GetString("state") == sprintCompleted {
+		return fmt.Errorf("sprint %s is completed and takes no new cards", sprintID)
+	}
+	return checkBoardWrite(app, req.OwnerID, projectID)
+}
+
+// addToActiveSprint files the trigger card into its board's active sprint.
+// No active sprint is a no-op rather than an error: "when a card is marked
+// urgent, pull it into the sprint" should not fail between sprints.
+func addToActiveSprint(app core.App, req automation.ActionRequest) error {
+	if req.Record == nil {
+		return fmt.Errorf("boards:add-to-active-sprint needs a card — attach it to a card trigger, not a schedule")
+	}
+	card, err := app.FindRecordById("boards_cards", req.Record.Id)
+	if err != nil {
+		return fmt.Errorf("load card %s: %w", req.Record.Id, err)
+	}
+	projectID := card.GetString("project")
+	if err := checkBoardWrite(app, req.OwnerID, projectID); err != nil {
+		return err
+	}
+	active, err := activeSprintOnBoard(app, projectID)
+	if err != nil {
+		return fmt.Errorf("active sprint on board %s: %w", projectID, err)
+	}
+	if active == nil || card.GetString("sprint") == active.Id {
+		return nil
+	}
+	card.Set("sprint", active.Id)
+	// `sprint` is watched by boards:card-sprint-changed, so this write
+	// re-enters the engine — stamp it or a file-on-file rule never terminates.
+	return automation.MarkEngineWrite(req, card.Id, func() error {
+		return app.Save(card)
+	})
+}
+
+// sprintBecameActive is the TriggerFilter for "boards:sprint-started".
+func sprintBecameActive(_ core.App, record *core.Record) bool {
+	return sprintEntered(record, sprintActive)
+}
+
+// sprintBecameCompleted is the TriggerFilter for "boards:sprint-completed".
+func sprintBecameCompleted(_ core.App, record *core.Record) bool {
+	return sprintEntered(record, sprintCompleted)
+}
+
+// sprintEntered: the row now reads `state` and did not before this save.
+// Fails closed on a nil record or a blank Original().
+func sprintEntered(record *core.Record, state string) bool {
+	if record == nil || record.GetString("state") != state {
+		return false
+	}
+	original := record.Original()
+	return original.GetString("project") != "" && original.GetString("state") != state
 }
 
 // checkBoardWrite reports whether a user may write this board's cards. The

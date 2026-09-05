@@ -107,6 +107,22 @@ interface ListSeed {
     cards: CardSeed[]
 }
 
+/**
+ * A sprint and the TITLES of the cards filed in it, resolved after every
+ * card exists (the parentTitle reason). `state` is reached by driving the
+ * lifecycle endpoints, never by writing the column: the stamps a start and
+ * a completion write are server-owned (server/sprint_owned_columns.go), and
+ * a forged `completed` would have no commitment to report.
+ */
+interface SprintSeed {
+    name?: string
+    goal?: string
+    start: () => string
+    end: () => string
+    state: 'planned' | 'active' | 'completed'
+    cards: string[]
+}
+
 interface BoardSeed {
     name: string
     /**
@@ -131,6 +147,12 @@ interface BoardSeed {
     memberRoles: Role[]
     labels: { name: string; color: string }[]
     lists: ListSeed[]
+    /**
+     * Declared in order: the completed sprints first, then the active one,
+     * then the planned. A completed sprint's unfinished cards roll into the
+     * sprint declared after it, which is what the demo's history shows.
+     */
+    sprints?: SprintSeed[]
 }
 
 // Colors come from core's ColorPickerGrid palette — the same hexes the board
@@ -145,6 +167,40 @@ const BOARDS: BoardSeed[] = [
         // seeded Done cards entered their list today.
         autoArchiveDays: 30,
         memberRoles: ['editor', 'commentor', 'viewer'],
+        sprints: [
+            {
+                goal: 'Settle the shape of boards before the announcement',
+                start: () => dueAt(-28),
+                end: () => dueAt(-15),
+                state: 'completed',
+                // The onboarding checklist is still open, so completing this
+                // sprint rolls it into the next one — the demo's rollover.
+                cards: [
+                    'Rename workspace settings tabs',
+                    'Ship fractional ranking for card moves',
+                    'Onboarding checklist for new members',
+                ],
+            },
+            {
+                name: 'Announcement',
+                goal: 'Everything the launch post needs, ready to publish',
+                start: () => dueAt(-7),
+                end: () => dueAt(6),
+                state: 'active',
+                cards: [
+                    'Draft the launch announcement',
+                    'Pick the hero screenshot',
+                    'Press kit landing page',
+                    'Write the headline and subhead',
+                ],
+            },
+            {
+                start: () => dueAt(7),
+                end: () => dueAt(20),
+                state: 'planned',
+                cards: ['Get legal sign-off on the claims', 'Payment provider webhook retries'],
+            },
+        ],
         labels: [
             { name: 'Bug', color: '#B00020' },
             { name: 'Feature', color: '#2E7D32' },
@@ -432,7 +488,7 @@ async function seedBoard(
         created_by: ownerId,
         archived: false,
         auto_archive_days: board.autoArchiveDays ?? 0,
-        sprints_enabled: false,
+        sprints_enabled: (board.sprints?.length ?? 0) > 0,
         sprint_length_days: 0,
         sprint_auto_start: false,
         sprint_auto_complete: false,
@@ -529,6 +585,61 @@ async function seedBoard(
 
     await seedSubtasks(pb, board, cardIdsByTitle)
     await seedLinks(pb, board, cardIdsByTitle)
+    await seedSprints(pb, project.id, ownerId, board.sprints ?? [], cardIdsByTitle)
+}
+
+/**
+ * Plan the sprints, file their cards, then drive each declared state
+ * through the lifecycle endpoints (server/endpoints_sprints.go) in order,
+ * so a completed sprint's unfinished cards roll into the one after it and
+ * the history on those cards reads as it would after a real completion.
+ *
+ * Every sprint is created planned: `state` is forward-only and a client
+ * create must start there (server/sprint_guard.go). The superuser client
+ * is admitted to the endpoints and acts as nobody, the sweep's own shape.
+ */
+async function seedSprints(
+    pb: PocketBase,
+    projectId: string,
+    ownerId: string,
+    sprints: SprintSeed[],
+    cardIdsByTitle: Record<string, string>
+) {
+    if (sprints.length === 0) return
+    const ranks = initialRanks(sprints.length)
+    const ids: string[] = []
+    for (const [index, sprint] of sprints.entries()) {
+        const record = await pb.collection('boards_sprints').create({
+            project: projectId,
+            name: sprint.name ?? '',
+            goal: sprint.goal ?? '',
+            start: sprint.start(),
+            end: sprint.end(),
+            state: 'planned',
+            position: ranks[index] ?? '',
+            created_by: ownerId,
+        })
+        ids.push(record.id)
+        for (const title of sprint.cards) {
+            const cardId = cardIdsByTitle[title]
+            if (!cardId) continue
+            await pb.collection('boards_cards').update(cardId, { sprint: record.id })
+        }
+    }
+    for (const [index, sprint] of sprints.entries()) {
+        const id = ids[index]
+        if (!id || sprint.state === 'planned') continue
+        await pb.send(`/api/boards/sprints/${id}/start`, {
+            method: 'POST',
+            body: { start: sprint.start(), end: sprint.end(), name: '', goal: '' },
+        })
+        if (sprint.state !== 'completed') continue
+        const next = ids[index + 1]
+        await pb.send(`/api/boards/sprints/${id}/complete`, {
+            method: 'POST',
+            body: next ? { unfinished: 'next', next_sprint: next } : { unfinished: 'backlog' },
+        })
+    }
 }
 
 /** Link the seeded cards to each other. A second pass, like seedSubtasks. */

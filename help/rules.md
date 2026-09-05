@@ -111,6 +111,15 @@ date by `7` so it comes back next week instead of sitting there late.
 **Open the follow-up automatically.** When a card is completed, create a card
 titled `QA: {{title}}` in your QA list.
 
+## Sprints
+
+On a board that plans in [sprints](help://boards:sprints), three more triggers
+and three more actions appear: **A card's sprint changes**, **A sprint
+starts** and **A sprint completes**; **Move the card to a sprint**, **Move the
+card to the backlog** and **Move the card into the active sprint**. The two
+sprint triggers act on the sprint itself, so card actions are not offered
+under them.
+
 ## What rules can't do yet
 
 - **An exact time of day.** Due dates a rule sets are whole days, and the two

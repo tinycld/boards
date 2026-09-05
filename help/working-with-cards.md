@@ -474,6 +474,11 @@ Boards, lists and cards are all reachable from the `tinycld` command line, which
 is the quicker path for bulk edits and for scripting a board from another tool —
 see [Boards from the command line](help://boards:command-line).
 
+## Planning in sprints
+
+A board can plan its work in timeboxed sprints, with a backlog view for
+ranking and filing cards — see [Sprints](help://boards:sprints).
+
 ## Missing a button?
 
 What you can do on a board depends on your role there. If you can't add or

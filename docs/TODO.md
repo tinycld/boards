@@ -242,10 +242,29 @@ plain re-run.
     wrongly hidden legitimate targets.
     Deferred: link-aware board filtering; a blocked glyph on the card face.
 
+14. **Sprints with a backlog** — landed as `boards_sprints` (numbered per
+    board like cards, forward-only `planned → active → completed`, one active
+    per board) and `boards_cards.sprint`, pinned to the card's board; per-board
+    opt-in under Board settings, default off, so a Trello-style board never
+    sees sprint chrome. The backlog is a fourth view mode: sections per sprint
+    over ONE shared rank (`position` is a single key space, so a drop in the
+    backlog writes `position` + `sprint`, never `list`, and the canvas agrees).
+    With sprints on, the canvas scopes to the active sprint behind a header
+    pill (active / all / backlog / a planned sprint). Start and Complete are
+    endpoints, not record writes: the stamps they write (commitment at start,
+    outcome and rolled count at completion, plus a daily
+    `boards_sprint_snapshots` row) are server-owned, and completion follows
+    the move endpoint's ask-don't-pick contract for unfinished cards (next /
+    new / backlog). Optional auto-start and auto-complete run from a
+    15-minute sweep. `boards_sprint` notification with its mute switch; three
+    triggers and three actions for rules; `s` and `g p`; `sprint` CLI group
+    with `card --sprint` and `board view --sprint`. Three epics gaps were
+    fixed alongside: `boards_epics` was missing from core's OAuth scope map,
+    an ordinary re-file wrote no `epic` history row, and neither the move
+    dialog nor the CLI sent `epic` to the move endpoint.
+
 ### Open
 
-14. **Cycles / sprints with a backlog.** `boards_cycles`, `boards_cards.cycle`,
-    a backlog view, rollover. Large; only for software-team personas.
 16. **Import and export.** CSV export (also filed in the appendix's M7
     follow-ups) and a Trello JSON importer first. Prior art: `contacts/server/vcard_endpoints.go`,
     `calendar/server/ics_endpoints.go`, the `google-takeout-import` package.
@@ -255,9 +274,12 @@ plain re-run.
     path, and a template picker in the New board dialog.
 20. **WIP limits and card aging.** `wip_limit` on lists with a warning header;
     aging as a face tint from `updated`.
-21. **Reports.** Burndown, velocity, cumulative flow. 12 and 13 are in;
-    velocity still needs 14. Cumulative flow reads the activity table, and
-    the auto-archive sweep's rows count as system moves.
+21. **Reports.** Burndown, velocity, cumulative flow. 12, 13 and 14 are in;
+    velocity's data exists (each sprint stamps its commitment at start and
+    its outcome at completion) and `boards_sprint_snapshots` holds a daily
+    scope/done point per active sprint for burndown — the charts that read
+    them are the sprints work's last phase. Cumulative flow reads the
+    activity table, and the auto-archive sweep's rows count as system moves.
 
 ## Tier 3 — single-product differentiators
 
