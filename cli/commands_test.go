@@ -4,6 +4,8 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -1824,5 +1826,76 @@ func TestReactionSummaryUsesPaletteOrder(t *testing.T) {
 	}
 	if got := reactionSummary(rows, "cmt3"); got != "" {
 		t.Errorf("a comment with no reactions should yield \"\", got %q", got)
+	}
+}
+
+// `boards export` moves bytes: the projection is the server's, tested in
+// server/endpoints_export_test.go against the real collections. What these
+// cover is the half the CLI owns — resolving the board, asking for the right
+// format, and writing the document out untouched.
+
+func TestBoardExportWritesCSVToStdout(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+	out, _, err := runCmd(t, c, "boards", "export", "Product launch")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != "key,title\nPL-1,Write copy\n" {
+		t.Errorf("the document did not reach stdout intact:\n%q", out)
+	}
+	// The board argument is a name here, so this also pins that the command
+	// resolved it to an id before asking.
+	if !strings.Contains(f.lastExportQuery, "project=prjA") {
+		t.Errorf("export asked for %q, want the resolved board id", f.lastExportQuery)
+	}
+	if !strings.Contains(f.lastExportQuery, "format=csv") {
+		t.Errorf("export asked for %q, want the default csv format", f.lastExportQuery)
+	}
+}
+
+func TestBoardExportHonoursTheFormatFlag(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+	out, _, err := runCmd(t, c, "boards", "export", "Product launch", "--format", "json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `"name":"Product launch"`) {
+		t.Errorf("json export did not reach stdout:\n%s", out)
+	}
+}
+
+// Refused in the command rather than by the server: a typo'd format should
+// cost one round trip of nothing, and the error should name what is accepted.
+func TestBoardExportRejectsAnUnknownFormat(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+	_, _, err := runCmd(t, c, "boards", "export", "Product launch", "--format", "xlsx")
+	if err == nil {
+		t.Fatal("an unknown format was accepted")
+	}
+	if !strings.Contains(err.Error(), "csv and json") {
+		t.Errorf("the error does not say what is accepted: %v", err)
+	}
+}
+
+func TestBoardExportWritesToAFile(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+	dest := filepath.Join(t.TempDir(), "board.csv")
+	_, stderr, err := runCmd(t, c, "boards", "export", "Product launch", "--out", dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(saved) != "key,title\nPL-1,Write copy\n" {
+		t.Errorf("the saved file does not match what the server sent:\n%q", saved)
+	}
+	if !strings.Contains(stderr, dest) {
+		t.Errorf("the command did not say where it saved:\n%s", stderr)
 	}
 }

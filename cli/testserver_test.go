@@ -58,6 +58,7 @@ type fakeCards struct {
 	lastSprintPatch    map[string]any
 	lastSprintStart    map[string]any
 	lastSprintComplete map[string]any
+	lastExportQuery    string
 	startedSprint      string
 	completedSprint    string
 	deletedSprints     []string
@@ -547,6 +548,25 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 			}
 		}
 		w.WriteHeader(http.StatusNoContent)
+	})
+	// The export endpoint hands back a finished document, so the fake returns a
+	// canned one — the projection itself is the server's, and is tested in
+	// server/endpoints_export_test.go against the real collections. What this
+	// stub proves is the half the CLI owns: that it resolved the board, asked
+	// for the right format, and moved the bytes without touching them.
+	mux.HandleFunc("GET /api/boards/export", func(w http.ResponseWriter, r *http.Request) {
+		f.lastExportQuery = r.URL.RawQuery
+		if _, ok := f.projects[r.URL.Query().Get("project")]; !ok {
+			notFound(w)
+			return
+		}
+		if r.URL.Query().Get("format") == "json" {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.Write([]byte(`{"name":"Product launch","cards":[]}`))
+			return
+		}
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Write([]byte("key,title\nPL-1,Write copy\n"))
 	})
 	mux.HandleFunc("POST /api/boards/sprints/{id}/start", func(w http.ResponseWriter, r *http.Request) {
 		s, ok := f.sprints[r.PathValue("id")]
