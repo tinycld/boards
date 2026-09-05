@@ -21,9 +21,10 @@ import { formatSchedule } from '../lib/due-time'
 import { formatEstimate } from '../lib/estimate'
 import { isClosedCategory, type ListCategory } from '../lib/list-category'
 import type { CardPriority } from '../lib/priority'
+import { sprintLabel } from '../lib/sprint'
 import { subtasksComplete } from '../lib/subtasks'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
-import type { BoardCardView, BoardEpic, BoardLabel, BoardMember } from '../types'
+import type { BoardCardView, BoardEpic, BoardLabel, BoardMember, BoardSprint } from '../types'
 import { useCardPresence } from './BoardPresenceProvider'
 import { PriorityGlyph } from './PriorityGlyph'
 
@@ -184,6 +185,7 @@ function CardFace({ card, isCompact }: { card: BoardCardView; isCompact: boolean
                 priority={card.priority}
                 parentKey={card.parentKey}
                 epic={card.epic}
+                sprint={card.sprint}
             />
             <Text
                 testID="boards-card-title"
@@ -220,19 +222,24 @@ function CardTopRow({
     priority,
     parentKey,
     epic,
+    sprint,
 }: {
     labels: BoardLabel[]
     cardKey: string
     priority: CardPriority
     parentKey: string
     epic: BoardEpic | null
+    sprint: BoardSprint | null
 }) {
-    if (labels.length === 0 && !cardKey && !parentKey && !epic && priority === 'none') return null
+    if (labels.length === 0 && !cardKey && !parentKey && !epic && !sprint && priority === 'none') {
+        return null
+    }
     return (
         <View className="flex-row items-center gap-1">
             <PriorityGlyph priority={priority} />
             <ParentChip parentKey={parentKey} />
             <EpicChip epic={epic} />
+            <SprintChip sprint={sprint} />
             <CardLabels labels={labels} />
             <View className="flex-1" />
             <CardKey cardKey={cardKey} />
@@ -285,6 +292,25 @@ function EpicChip({ epic }: { epic: BoardEpic | null }) {
                 {epic.title}
             </Text>
         </View>
+    )
+}
+
+/**
+ * The sprint this card is in, as its label — "Sprint 4". On the top row
+ * beside the epic chip: both say what plan the card belongs to. Nothing for
+ * a card in the backlog, or one whose sprint was deleted (null, as a deleted
+ * epic is).
+ */
+function SprintChip({ sprint }: { sprint: BoardSprint | null }) {
+    if (!sprint) return null
+    return (
+        <Text
+            testID="boards-sprint-chip"
+            className="text-[10.5px] font-medium text-muted"
+            numberOfLines={1}
+        >
+            {sprintLabel(sprint)}
+        </Text>
     )
 }
 

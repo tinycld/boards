@@ -1,7 +1,7 @@
 import { MenuActionItem } from '@tinycld/core/components/DropdownMenu'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { Menu } from '@tinycld/core/ui/menu'
-import { Archive, Gauge, ListFilter, Tag, Users, X } from 'lucide-react-native'
+import { Archive, Gauge, ListFilter, Tag, Timer, Users, X } from 'lucide-react-native'
 import { useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useCardBulkActions } from '../hooks/useCardBulkActions'
@@ -12,6 +12,7 @@ import { AssigneePicker } from './detail/AssigneePicker'
 import { EstimatePicker } from './detail/EstimatePicker'
 import { LabelPicker } from './detail/LabelPicker'
 import { PriorityPicker } from './detail/PriorityPicker'
+import { SprintPicker } from './detail/SprintPicker'
 import { LabelManagerDialog } from './LabelManagerDialog'
 
 /**
@@ -148,6 +149,13 @@ function Bar({ project, cards, clearSelection }: BarProps) {
                         <BarButton icon={Gauge} label="Points" testID="boards-bulk-estimate" />
                     </EstimatePicker>
 
+                    <SprintBarPicker
+                        isVisible={project.sprintsEnabled}
+                        project={project}
+                        cards={cards}
+                        actions={actions}
+                    />
+
                     <BarButton
                         icon={Archive}
                         label="Archive"
@@ -159,6 +167,30 @@ function Bar({ project, cards, clearSelection }: BarProps) {
                 </View>
             </View>
         </>
+    )
+}
+
+/** Move the selection into a sprint, on a board that has them. */
+function SprintBarPicker({
+    isVisible,
+    project,
+    cards,
+    actions,
+}: {
+    isVisible: boolean
+    project: BoardProject
+    cards: ReturnType<typeof resolveSelection>
+    actions: ReturnType<typeof useCardBulkActions>
+}) {
+    if (!isVisible) return null
+    return (
+        <SprintPicker
+            sprints={project.sprints}
+            selectedId={sharedValue(cards, card => card.sprint?.id ?? '')}
+            onSelect={sprintId => actions.setSprint.mutate(sprintId)}
+        >
+            <BarButton icon={Timer} label="Sprint" testID="boards-bulk-sprint" />
+        </SprintPicker>
     )
 }
 

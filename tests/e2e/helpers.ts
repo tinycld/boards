@@ -490,3 +490,49 @@ export async function cardsInColumn(page: Page, name: string): Promise<string[]>
             })
     }, name)
 }
+
+/**
+ * Drag a backlog row onto a sprint section, releasing only after that
+ * section reports receiving (`boards-section-receiving` mounts while a
+ * foreign row hovers it) — dragCardToColumn turned on its side.
+ *
+ * The target is the lower part of the section's CONTAINER, not its title:
+ * the rows sit under a header bar, and a point just below the title lands in
+ * that bar rather than on the drop body. drax hit-tests the hovering row's
+ * centre, which for a row grabbed at its centre is the pointer itself.
+ */
+export async function dragCardToSection(page: Page, row: Locator, sectionTitle: string) {
+    const receiving = page.getByTestId('boards-section-receiving')
+    const section = page
+        .getByTestId(/^boards-section-(?!title-|receiving)/)
+        .filter({
+            has: page.getByTestId(/^boards-section-title-/).filter({ hasText: sectionTitle }),
+        })
+        .first()
+    let lastError: unknown = new Error('dragCardToSection: no attempt ran')
+    for (let attempt = 0; attempt < 3; attempt++) {
+        const sectionBox = await stableBoxOf(section)
+        const rowBox = await stableBoxOf(row)
+        const start = { x: rowBox.x + rowBox.width / 2, y: rowBox.y + rowBox.height / 2 }
+        const end = {
+            x: sectionBox.x + sectionBox.width / 2,
+            y: sectionBox.y + sectionBox.height - 16,
+        }
+        await activateDrag(page, start)
+        await travelTo(page, start, end)
+        try {
+            await expect(async () => {
+                await page.mouse.move(end.x, end.y - 4)
+                await page.mouse.move(end.x, end.y)
+                await expect(receiving).toHaveCount(1)
+            }).toPass({ timeout: 4_000 })
+            await page.mouse.up()
+            await expect(page.getByTestId('boards-drag-active')).toHaveCount(0)
+            return
+        } catch (error) {
+            lastError = error
+            await cancelDrag(page, end, start)
+        }
+    }
+    throw lastError
+}

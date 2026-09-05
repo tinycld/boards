@@ -33,6 +33,12 @@ export interface BoardShortcutOptions {
      * `project.lists`, which both views share.
      */
     visibleOrder?: string[]
+    /**
+     * The view renders rows a picker can anchor to (`boards-row-<id>`), so
+     * the property shortcuts stay on even though `visibleOrder` is set. The
+     * backlog passes this; the table does not, and gets no pickers.
+     */
+    rowPickers?: boolean
 }
 
 export function useBoardShortcuts(
@@ -40,7 +46,7 @@ export function useBoardShortcuts(
     canEdit: boolean,
     options: BoardShortcutOptions = {}
 ) {
-    const { visibleOrder } = options
+    const { visibleOrder, rowPickers = false } = options
     const router = useRouter()
     const orgHref = useOrgHref()
     // The id is passed to the register call rather than left to the stack: a
@@ -58,6 +64,7 @@ export function useBoardShortcuts(
     const selectMany = useBoardsUIStore(s => s.selectMany)
     const clearSelection = useBoardsUIStore(s => s.clearSelection)
     const setFilterPanelOpen = useBoardsUIStore(s => s.setFilterPanelOpen)
+    const setViewMode = useBoardsUIStore(s => s.setViewMode)
     const toggleColumnCollapsed = useBoardsUIStore(s => s.toggleColumnCollapsed)
     const moveCard = useMoveCard()
     const archiveCard = useArchiveCard()
@@ -304,6 +311,15 @@ export function useBoardShortcuts(
             // own FilterButton is the mounted trigger, so this needs no anchor.
             nav('boards.board.filter', 'f', 'Filter cards', () => setFilterPanelOpen(true)),
         ]
+        // The backlog view, on a board that has one. `g b` is My cards'
+        // board jump, so the plan view takes `g p`.
+        if (project.sprintsEnabled) {
+            list.push(
+                nav('boards.board.backlog', 'g p', 'Go to the backlog', () =>
+                    setViewMode(project.id, 'backlog')
+                )
+            )
+        }
 
         if (!canEdit) return list
 
@@ -321,7 +337,21 @@ export function useBoardShortcuts(
             nav('boards.board.selectUp', 'Shift+K', 'Extend selection up', () => stepSelecting(-1)),
             nav('boards.board.selectAll', '$mod+a', 'Select all cards', selectAll),
         ]
-        if (visibleOrder) return [...list, ...editing]
+        // The five property pickers. On the canvas they anchor to the card
+        // face; in the backlog to the row (lib/card-rect.ts tries both). The
+        // table renders rows too but passes no `rowPickers`, because its
+        // properties are one click away in the peek.
+        const pickers: Shortcut[] = [
+            nav('boards.board.due', 'd', 'Set due date', openPicker('due')),
+            nav('boards.board.labels', 'l', 'Edit labels', openPicker('labels')),
+            nav('boards.board.assignees', 'a', 'Assign card', openPicker('assignees')),
+            nav('boards.board.priority', 'p', 'Set priority', openPicker('priority')),
+        ]
+        if (project.sprintsEnabled) {
+            pickers.push(nav('boards.board.sprint', 's', 'Move to a sprint', openPicker('sprint')))
+        }
+        if (visibleOrder)
+            return rowPickers ? [...list, ...editing, ...pickers] : [...list, ...editing]
 
         // Board-view only, all of them. The table view renders no card faces
         // to measure, so the four pickers have nothing to anchor to — and its
@@ -332,10 +362,7 @@ export function useBoardShortcuts(
             ...editing,
             nav('boards.board.moveUp', 'Shift+ArrowUp', 'Move card up', () => moveWithin(-1)),
             nav('boards.board.moveDown', 'Shift+ArrowDown', 'Move card down', () => moveWithin(1)),
-            nav('boards.board.due', 'd', 'Set due date', openPicker('due')),
-            nav('boards.board.labels', 'l', 'Edit labels', openPicker('labels')),
-            nav('boards.board.assignees', 'a', 'Assign card', openPicker('assignees')),
-            nav('boards.board.priority', 'p', 'Set priority', openPicker('priority')),
+            ...pickers,
             nav('boards.board.addCard', 'n', 'Add card to this column', addCard),
             // Shift+N is a no-op on an empty board, where BoardCanvas renders
             // EmptyBoard and mounts no AddListColumn to open.
@@ -347,6 +374,7 @@ export function useBoardShortcuts(
         project,
         canEdit,
         visibleOrder,
+        rowPickers,
         router,
         orgHref,
         openCard,
@@ -359,6 +387,7 @@ export function useBoardShortcuts(
         toggleColumnCollapsed,
         openCanvasPicker,
         setFilterPanelOpen,
+        setViewMode,
         selectMany,
         clearSelection,
     ])

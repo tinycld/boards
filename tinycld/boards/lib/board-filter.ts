@@ -23,12 +23,18 @@ export const ME = 'me'
 export const UNASSIGNED = 'unassigned'
 /** Filed under no epic. Only meaningful in `epicIds` — the UNASSIGNED shape. */
 export const NO_EPIC = 'none'
+/** In the backlog — no sprint. Only meaningful in `sprintIds`. */
+export const NO_SPRINT = 'none'
+/** Whichever sprint is active, resolved at match time — the ME shape. */
+export const ACTIVE_SPRINT = 'active'
 
 export interface BoardFilter {
     /** OR within the facet: a card with ANY of these labels passes. */
     labelIds: string[]
     /** Epic ids, or `NO_EPIC` for unfiled cards. OR within the facet. */
     epicIds: string[]
+    /** Sprint ids, `ACTIVE_SPRINT`, or `NO_SPRINT` for the backlog. OR within the facet. */
+    sprintIds: string[]
     /** User ids, `ME`, or `UNASSIGNED`. OR within the facet. */
     assigneeIds: string[]
     /** User ids or `ME`. OR within the facet. */
@@ -50,6 +56,7 @@ export interface BoardFilter {
 export const EMPTY_FILTER: BoardFilter = Object.freeze({
     labelIds: [],
     epicIds: [],
+    sprintIds: [],
     assigneeIds: [],
     reporterIds: [],
     due: null,
@@ -68,6 +75,7 @@ export function activeFacetCount(filter: BoardFilter): number {
     let count = 0
     if (filter.labelIds.length > 0) count += 1
     if (filter.epicIds.length > 0) count += 1
+    if (filter.sprintIds.length > 0) count += 1
     if (filter.assigneeIds.length > 0) count += 1
     if (filter.reporterIds.length > 0) count += 1
     if (filter.due !== null) count += 1
@@ -82,6 +90,8 @@ export interface FilterContext {
     /** Who `ME` resolves to. '' for a visitor, whom `ME` then never matches. */
     userId: string
     now?: Date
+    /** What `ACTIVE_SPRINT` resolves to; '' when no sprint is active, which it then never matches. */
+    activeSprintId?: string
 }
 
 /** AND across facets, OR within each. An empty facet constrains nothing. */
@@ -93,6 +103,19 @@ export interface FilterContext {
 function matchesEpic(card: BoardCardView, epicIds: string[]): boolean {
     if (!card.epic) return epicIds.includes(NO_EPIC)
     return epicIds.includes(card.epic.id)
+}
+
+/**
+ * The epic shape: a card passes when its sprint is chosen, when ACTIVE_SPRINT
+ * is chosen and it is in the active one, or when NO_SPRINT is chosen and it
+ * is in the backlog. A deleted sprint resolves to null and reads as backlog.
+ */
+function matchesSprint(card: BoardCardView, sprintIds: string[], activeSprintId: string): boolean {
+    if (!card.sprint) return sprintIds.includes(NO_SPRINT)
+    const id = card.sprint.id
+    return sprintIds.some(wanted =>
+        wanted === ACTIVE_SPRINT ? activeSprintId !== '' && id === activeSprintId : wanted === id
+    )
 }
 
 export function cardMatchesFilter(
@@ -107,6 +130,12 @@ export function cardMatchesFilter(
         return false
     }
     if (filter.epicIds.length > 0 && !matchesEpic(card, filter.epicIds)) {
+        return false
+    }
+    if (
+        filter.sprintIds.length > 0 &&
+        !matchesSprint(card, filter.sprintIds, ctx.activeSprintId ?? '')
+    ) {
         return false
     }
     if (filter.assigneeIds.length > 0 && !matchesAssignees(card, filter.assigneeIds, ctx.userId)) {

@@ -3,9 +3,17 @@ import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { X } from 'lucide-react-native'
 import type { ReactNode } from 'react'
 import { Pressable, Text, View } from 'react-native'
-import { isFilterActive, ME, NO_EPIC, UNASSIGNED } from '../../lib/board-filter'
+import {
+    ACTIVE_SPRINT,
+    isFilterActive,
+    ME,
+    NO_EPIC,
+    NO_SPRINT,
+    UNASSIGNED,
+} from '../../lib/board-filter'
 import { categoryLabel } from '../../lib/list-category'
 import { priorityLabel } from '../../lib/priority'
+import { sprintLabel } from '../../lib/sprint'
 import { selectBoardFilter, useBoardsUIStore } from '../../stores/boards-ui-store'
 import type { BoardMember, BoardProject } from '../../types'
 import { CategoryGlyph } from '../CategoryGlyph'
@@ -38,8 +46,11 @@ export function FilterBar({ project }: { project: BoardProject }) {
     const membersById = new Map(project.members.map(member => [member.id, member]))
     const labelsById = new Map(project.labels.map(label => [label.id, label]))
     const epicsById = new Map(project.epics.map(epic => [epic.id, epic]))
-    const remove = (key: 'labelIds' | 'epicIds' | 'assigneeIds' | 'reporterIds', id: string) =>
-        setBoardFilter(project.id, { [key]: filter[key].filter(x => x !== id) })
+    const sprintsById = new Map(project.sprints.map(sprint => [sprint.id, sprint]))
+    const remove = (
+        key: 'labelIds' | 'epicIds' | 'sprintIds' | 'assigneeIds' | 'reporterIds',
+        id: string
+    ) => setBoardFilter(project.id, { [key]: filter[key].filter(x => x !== id) })
 
     return (
         <View
@@ -102,6 +113,18 @@ export function FilterBar({ project }: { project: BoardProject }) {
                         onDismiss={() => remove('epicIds', id)}
                     />
                 )
+            })}
+            {filter.sprintIds.map(id => {
+                const sprint = sprintsById.get(id)
+                const label =
+                    id === ACTIVE_SPRINT
+                        ? 'Active sprint'
+                        : id === NO_SPRINT
+                          ? 'Backlog'
+                          : sprint
+                            ? sprintLabel(sprint)
+                            : 'Sprint'
+                return <Chip key={id} label={label} onDismiss={() => remove('sprintIds', id)} />
             })}
             {filter.assigneeIds.map(id => (
                 <Chip

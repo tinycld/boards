@@ -15,6 +15,7 @@ import { useBoardPresenceContext } from './BoardPresenceProvider'
 import { FilterBar } from './filter/FilterBar'
 import { FilterPopover } from './filter/FilterPopover'
 import { SortMenu } from './filter/SortMenu'
+import { SprintScopePill } from './SprintScopePill'
 import { roleLabel } from './sharing/roles'
 import { ShareDialog } from './sharing/ShareDialog'
 import { ViewToggle } from './table/ViewToggle'
@@ -75,7 +76,8 @@ export function BoardHeader({ project, cardCount, isArchived }: BoardHeaderProps
                     project={project}
                     onPress={isGuest ? undefined : () => setIsSharing(true)}
                 />
-                <ViewToggle projectId={project.id} />
+                <ViewToggle projectId={project.id} isSprintsEnabled={project.sprintsEnabled} />
+                <SprintScopePill project={project} isVisible={project.sprintsEnabled} />
                 <FilterPopover project={project} />
                 <SortMenu projectId={project.id} />
                 <SelectModeToggle isVisible={canEdit} />

@@ -7,6 +7,7 @@ import { SORT_FIELD_LABELS, type SortField } from '../../lib/board-sort'
 import { selectBoardSort, useBoardsUIStore } from '../../stores/boards-ui-store'
 
 const FIELDS: SortField[] = [
+    'sprint',
     'manual',
     'priority',
     'due',

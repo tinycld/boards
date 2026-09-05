@@ -30,6 +30,8 @@ export interface CardDragPayload {
     kind: 'boards-card'
     cardId: string
     listId: string
+    /** The backlog section the drag started in — what tells a section a row is foreign. */
+    sectionKey?: string
 }
 
 export function isCardDragPayload(payload: unknown): payload is CardDragPayload {
@@ -115,11 +117,11 @@ const EDGE_ZONE_MIN_PT = 48
 /** The monitor-event fields the edge computation reads — structurally a subset
  *  of DraxMonitorEventData, so tests can build one without the full event. */
 export interface EdgeScrollSample {
-    dragAbsolutePosition: { x: number }
-    monitorOffset: { x: number }
+    dragAbsolutePosition: { x: number; y?: number }
+    monitorOffset: { x: number; y?: number }
     dragged: {
-        grabOffset: { x: number }
-        hoverPosition: { x: number }
+        grabOffset: { x: number; y?: number }
+        hoverPosition: { x: number; y?: number }
     }
 }
 
@@ -139,13 +141,26 @@ export interface EdgeScrollSample {
  *   root- and monitor-relatively, so their difference is the monitor origin.
  */
 export function edgeScrollDirection(event: EdgeScrollSample, viewportWidth: number): EdgeDirection {
-    if (viewportWidth <= 0) return 0
-    const fingerRootX = event.dragged.hoverPosition.x + event.dragged.grabOffset.x
-    const monitorOriginX = event.dragAbsolutePosition.x - event.monitorOffset.x
-    const fingerX = fingerRootX - monitorOriginX
-    const zone = Math.max(EDGE_ZONE_MIN_PT, viewportWidth * EDGE_ZONE_RATIO)
-    if (fingerX <= zone) return -1
-    if (fingerX >= viewportWidth - zone) return 1
+    return edgeScrollDirectionAlong(event, viewportWidth, 'x')
+}
+
+/**
+ * The same computation along either axis. The canvas scrolls horizontally
+ * and reads x; the backlog scrolls its page vertically and reads y.
+ */
+export function edgeScrollDirectionAlong(
+    event: EdgeScrollSample,
+    viewportLength: number,
+    axis: 'x' | 'y'
+): EdgeDirection {
+    if (viewportLength <= 0) return 0
+    const read = (point: { x: number; y?: number }) => (axis === 'x' ? point.x : (point.y ?? 0))
+    const fingerRoot = read(event.dragged.hoverPosition) + read(event.dragged.grabOffset)
+    const monitorOrigin = read(event.dragAbsolutePosition) - read(event.monitorOffset)
+    const finger = fingerRoot - monitorOrigin
+    const zone = Math.max(EDGE_ZONE_MIN_PT, viewportLength * EDGE_ZONE_RATIO)
+    if (finger <= zone) return -1
+    if (finger >= viewportLength - zone) return 1
     return 0
 }
 

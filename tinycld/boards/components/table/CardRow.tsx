@@ -8,6 +8,7 @@ import { formatSchedule } from '../../lib/due-time'
 import { formatEstimate } from '../../lib/estimate'
 import type { ListCategory } from '../../lib/list-category'
 import { priorityLabel } from '../../lib/priority'
+import { sprintLabel } from '../../lib/sprint'
 import type { BoardCardView, BoardMember } from '../../types'
 import { CategoryGlyph } from '../CategoryGlyph'
 import { PriorityGlyph } from '../PriorityGlyph'
@@ -29,6 +30,8 @@ interface CardRowProps {
     isFocused?: boolean
     /** Omitted on the cross-board list, which has no bulk actions. */
     isSelected?: boolean
+    /** The board plans in sprints, so the table has a Sprint column to fill. */
+    showSprint?: boolean
     onPress: (event: GestureResponderEvent) => void
 }
 
@@ -43,6 +46,7 @@ export const TABLE_COLUMNS = {
     due: 120,
     priority: 96,
     estimate: 80,
+    sprint: 100,
 } as const
 
 /**
@@ -59,6 +63,7 @@ export function CardRow({
     variant,
     isFocused = false,
     isSelected = false,
+    showSprint = false,
     onPress,
 }: CardRowProps) {
     // Selection outranks focus, and tints more strongly — the same ladder the
@@ -92,6 +97,7 @@ export function CardRow({
                     <Meta text={[card.key, listName].filter(Boolean).join(' · ')} />
                     <DueCell start={card.start} due={card.due} dueHasTime={card.dueHasTime} />
                     <EstimateCell estimate={card.estimate} />
+                    <SprintMeta sprint={card.sprint} />
                     <Labels card={card} />
                 </View>
             </Pressable>
@@ -154,6 +160,7 @@ export function CardRow({
             <View style={{ width: TABLE_COLUMNS.estimate }}>
                 <EstimateCell estimate={card.estimate} />
             </View>
+            <SprintCell isVisible={showSprint} sprint={card.sprint} />
         </Pressable>
     )
 }
@@ -230,6 +237,28 @@ function Labels({ card }: { card: BoardCardView }) {
             ) : null}
         </View>
     )
+}
+
+/** The table's Sprint column, mounted only when the board plans in sprints. */
+function SprintCell({
+    isVisible,
+    sprint,
+}: {
+    isVisible: boolean
+    sprint: BoardCardView['sprint']
+}) {
+    if (!isVisible) return null
+    return (
+        <View style={{ width: TABLE_COLUMNS.sprint }}>
+            <Meta text={sprint ? sprintLabel(sprint) : ''} />
+        </View>
+    )
+}
+
+/** The stacked row's sprint, as one more piece of meta. */
+function SprintMeta({ sprint }: { sprint: BoardCardView['sprint'] }) {
+    if (!sprint) return null
+    return <Meta text={sprintLabel(sprint)} />
 }
 
 function EstimateCell({ estimate }: { estimate?: number }) {

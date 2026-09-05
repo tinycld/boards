@@ -46,9 +46,15 @@ export function BoardTable({ project }: { project: BoardProject }) {
     // between two rows that are in different lists.
     useSelectionOrder(project, visibleOrder)
 
+    const columns = project.sprintsEnabled
+        ? [
+              ...COLUMNS,
+              { label: 'Sprint', width: TABLE_COLUMNS.sprint, sortField: 'sprint' as const },
+          ]
+        : COLUMNS
     const header = isMobile ? null : (
         <DataTableHeader
-            columns={COLUMNS}
+            columns={columns}
             sortField={sort.field === 'manual' ? undefined : sort.field}
             sortDirection={sort.direction}
             onSort={field => setBoardSort(project.id, toggleSort(sort, field))}
@@ -74,14 +80,24 @@ export function BoardTable({ project }: { project: BoardProject }) {
                 key={`${sort.field}:${sort.direction}`}
                 data={rows}
                 keyExtractor={row => row.card.id}
-                renderItem={({ item }) => <TableRow row={item} isMobile={isMobile} />}
+                renderItem={({ item }) => (
+                    <TableRow row={item} isMobile={isMobile} showSprint={project.sprintsEnabled} />
+                )}
             />
             <BulkActionBar project={project} canEdit={canEdit} />
         </>
     )
 }
 
-function TableRow({ row, isMobile }: { row: BoardRow; isMobile: boolean }) {
+function TableRow({
+    row,
+    isMobile,
+    showSprint,
+}: {
+    row: BoardRow
+    isMobile: boolean
+    showSprint: boolean
+}) {
     // Per-row selector, as BoardCard does: only the row whose ring flipped
     // re-renders on an arrow press.
     const isFocused = useBoardsUIStore(s => s.focusedCardId === row.card.id)
@@ -97,6 +113,7 @@ function TableRow({ row, isMobile }: { row: BoardRow; isMobile: boolean }) {
             variant={isMobile ? 'stacked' : 'table'}
             isFocused={isFocused}
             isSelected={isSelected}
+            showSprint={showSprint}
             onPress={event => select(row.card.id, event)}
         />
     )

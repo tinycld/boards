@@ -4,6 +4,7 @@
 // so every "PocketBase says '' where the UI wants undefined" conversion lives
 // in one place instead of being repeated per component.
 
+import type { SprintScope } from '../stores/boards-ui-store'
 import type {
     BoardCardView,
     BoardEpic,
@@ -28,7 +29,7 @@ import { parseDayValue, parseDueValue } from './due-time'
 import { normalizeEstimate } from './estimate'
 import { type ListCategory, normalizeListCategory } from './list-category'
 import { normalizePriority } from './priority'
-import { normalizeSprintRollover, sprintLengthDays } from './sprint'
+import { activeSprint, normalizeSprintRollover, sprintLengthDays } from './sprint'
 
 /** The subset of a user row the board actually renders. */
 type UserLike = Pick<Users, 'id' | 'name' | 'email'>
@@ -82,7 +83,10 @@ export function toBoardEpic(epic: BoardsEpics): BoardEpic {
 export function toBoardSprint(sprint: BoardsSprints): BoardSprint {
     return {
         id: sprint.id,
-        number: sprint.number,
+        // 0 for the optimistic beat before the allocator answers — the insert
+        // omits `number`, so the local row has none until the server's copy
+        // lands (sprintLabel reads 0 as "New sprint").
+        number: sprint.number ?? 0,
         name: sprint.name,
         goal: sprint.goal,
         start: parseDayValue(sprint.start),
@@ -253,6 +257,31 @@ export interface BoardViewOptions {
     sort: BoardSort
     userId: string
     now?: Date
+    /** The sprint scope; ignored on a board whose sprints are off. */
+    sprintScope?: SprintScope
+}
+
+/**
+ * The sprint id a scope resolves to, or null for every card.
+ *
+ * `active` with no active sprint resolves to EVERY card rather than none: a
+ * team that has just turned sprints on must not watch its board empty out,
+ * and the pill reads "No active sprint" so the state is explained. A scope
+ * naming a sprint that no longer exists resolves the same way.
+ */
+export function resolveSprintScope(
+    scope: SprintScope | undefined,
+    sprints: Pick<BoardSprint, 'id' | 'state'>[]
+): { sprintId: string } | null {
+    if (!scope || scope === 'all') return null
+    if (scope === 'backlog') return { sprintId: '' }
+    if (scope === 'active') {
+        const active = sprints.find(sprint => sprint.state === 'active')
+        return active ? { sprintId: active.id } : null
+    }
+    return sprints.some(sprint => sprint.id === scope.sprintId)
+        ? { sprintId: scope.sprintId }
+        : null
 }
 
 export interface BuildBoardInput {
@@ -300,6 +329,11 @@ export function buildBoardProject(
     const labelsById = new Map(labels.map(l => [l.id, toBoardLabel(l)]))
     const epicsById = new Map(epics.map(e => [e.id, toBoardEpic(e)]))
     const sprintsById = new Map(sprints.map(s => [s.id, toBoardSprint(s)]))
+    // The filter's ACTIVE_SPRINT resolves here, where the sprints are known;
+    // the view options are built before any board data is.
+    const filterContext = view
+        ? { ...view, activeSprintId: activeSprint([...sprintsById.values()])?.id ?? '' }
+        : undefined
     const usersById = new Map(users.map(u => [u.id, toBoardMember(u)]))
     // Resolved once here so a card can carry its list's status without a
     // lookup at every filter. A card whose list has not synced yet reads as
@@ -325,11 +359,21 @@ export function buildBoardProject(
         cards.map(card => [card.id, formatCardKey(project.slug, card.number)])
     )
 
+    // The scope is applied BEFORE the totals, unlike the filter below: a
+    // scoped board is a different SET, so "12 cards in 3 lists" and the
+    // column counts describe the sprint, and the filter's "3 of 12" reads
+    // within it. It keeps `list.cards` the rendered index space for the
+    // same reason the filter does.
+    const scope = project.sprints_enabled
+        ? resolveSprintScope(view?.sprintScope, [...sprintsById.values()])
+        : null
+
     const cardsByList = new Map<string, BoardCardView[]>()
     const totals = new Map<string, number>()
     let cardTotal = 0
     for (const card of [...cards].sort(byRank)) {
         if (card.archived) continue
+        if (scope && (card.sprint ?? '') !== scope.sprintId) continue
         cardTotal += 1
         totals.set(card.list, (totals.get(card.list) ?? 0) + 1)
         const cardView = toBoardCard(
@@ -342,7 +386,9 @@ export function buildBoardProject(
             epicsById,
             sprintsById
         )
-        if (view && !cardMatchesFilter(cardView, view.filter, view)) continue
+        if (view && filterContext && !cardMatchesFilter(cardView, view.filter, filterContext)) {
+            continue
+        }
         const bucket = cardsByList.get(card.list)
         if (bucket) bucket.push(cardView)
         else cardsByList.set(card.list, [cardView])

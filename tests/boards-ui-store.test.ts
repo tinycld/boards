@@ -1,7 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { EMPTY_FILTER } from '../tinycld/boards/lib/board-filter'
-import { useBoardsUIStore } from '../tinycld/boards/stores/boards-ui-store'
+import {
+    persistedSprintScopes,
+    selectSprintScope,
+    selectViewMode,
+    useBoardsUIStore,
+} from '../tinycld/boards/stores/boards-ui-store'
 
 /**
  * The view preferences (collapsed columns, card density) and what persists.
@@ -294,16 +299,20 @@ describe('boards-ui-store view preferences', () => {
             useBoardsUIStore.setState({
                 activeProjectId: 'proj_1',
                 collapsedColumnIds: { list_a: true },
+                collapsedSprintIds: { sprint_a: true },
                 isCompactCards: true,
                 viewModeByProject: { proj_1: 'list' },
+                sprintScopeByProject: { proj_1: 'all' },
                 isMyCardsShowingClosed: true,
             })
 
             expect(await persisted()).toEqual({
                 activeProjectId: 'proj_1',
                 collapsedColumnIds: { list_a: true },
+                collapsedSprintIds: { sprint_a: true },
                 isCompactCards: true,
                 viewModeByProject: { proj_1: 'list' },
+                sprintScopeByProject: { proj_1: 'all' },
                 isMyCardsShowingClosed: true,
             })
         })
@@ -334,10 +343,71 @@ describe('boards-ui-store view preferences', () => {
             expect(Object.keys(await persisted()).sort()).toEqual([
                 'activeProjectId',
                 'collapsedColumnIds',
+                'collapsedSprintIds',
                 'isCompactCards',
                 'isMyCardsShowingClosed',
+                'sprintScopeByProject',
                 'viewModeByProject',
             ])
         })
+    })
+})
+
+describe('the backlog view mode', () => {
+    beforeEach(() => {
+        useBoardsUIStore.setState({ viewModeByProject: {}, collapsedSprintIds: {} })
+    })
+
+    // A stored `backlog` must stay inert once the board's sprints are turned
+    // off: the persisted value is not rewritten, it just reads as the board.
+    it('reads a stored backlog as the board once sprints are off', () => {
+        useBoardsUIStore.getState().setViewMode('proj_1', 'backlog')
+        const state = useBoardsUIStore.getState()
+        expect(selectViewMode(state, 'proj_1', true)).toBe('backlog')
+        expect(selectViewMode(state, 'proj_1', false)).toBe('board')
+        expect(selectViewMode(state, 'proj_1')).toBe('backlog')
+    })
+
+    it('folds and unfolds a sprint section, keeping only folded keys', () => {
+        const { toggleSprintCollapsed } = useBoardsUIStore.getState()
+        toggleSprintCollapsed('sprint_a')
+        toggleSprintCollapsed('completed')
+        expect(useBoardsUIStore.getState().collapsedSprintIds).toEqual({
+            sprint_a: true,
+            completed: true,
+        })
+        toggleSprintCollapsed('sprint_a')
+        expect(useBoardsUIStore.getState().collapsedSprintIds).toEqual({ completed: true })
+    })
+})
+
+describe('the sprint scope', () => {
+    beforeEach(() => {
+        useBoardsUIStore.setState({
+            sprintScopeByProject: {},
+            selectedCardIds: new Set(['c1']),
+            lastSelectedId: 'c1',
+        })
+    })
+
+    it('defaults to the active sprint and drops the selection when it changes', () => {
+        expect(selectSprintScope(useBoardsUIStore.getState(), 'proj_1')).toBe('active')
+        useBoardsUIStore.getState().setSprintScope('proj_1', { sprintId: 's1' })
+        const state = useBoardsUIStore.getState()
+        expect(selectSprintScope(state, 'proj_1')).toEqual({ sprintId: 's1' })
+        expect(state.selectedCardIds.size).toBe(0)
+    })
+
+    // A persisted sprint id would reopen next month scoped to a sprint that
+    // has since completed; only the two self-naming values are kept.
+    it('persists only the inert scopes', () => {
+        expect(
+            persistedSprintScopes({
+                a: 'active',
+                b: 'all',
+                c: 'backlog',
+                d: { sprintId: 's1' },
+            })
+        ).toEqual({ a: 'active', b: 'all' })
     })
 })

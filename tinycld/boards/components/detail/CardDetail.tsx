@@ -64,6 +64,7 @@ interface CardDetailProps {
     projectLabels: BoardLabel[]
     projectEpics: BoardEpic[]
     projectSprints: BoardSprint[]
+    sprintsEnabled: boolean
     projectMembers: BoardMember[]
     /** The board's lists, so history can name where a card moved. */
     projectLists: { id: string; name: string }[]
@@ -102,6 +103,7 @@ export function CardDetail({
     projectLabels,
     projectEpics,
     projectSprints,
+    sprintsEnabled,
     projectMembers,
     projectLists,
     projectCards,
@@ -238,6 +240,8 @@ export function CardDetail({
                             card={card}
                             projectLabels={projectLabels}
                             projectEpics={projectEpics}
+                            projectSprints={projectSprints}
+                            sprintsEnabled={sprintsEnabled}
                             projectMembers={projectMembers}
                             onManageLabels={() => setIsManagingLabels(true)}
                             canEdit={canEdit}

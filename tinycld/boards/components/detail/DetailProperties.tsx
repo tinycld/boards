@@ -1,15 +1,16 @@
 import { LabelBadge } from '@tinycld/core/components/LabelBadge'
 import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
-import { CalendarDays, Clock, Gauge, Layers } from 'lucide-react-native'
-import { forwardRef, type ReactNode } from 'react'
+import { CalendarDays, Clock, Gauge, Layers, Timer } from 'lucide-react-native'
+import { forwardRef, type ReactElement, type ReactNode } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useToggleCardRelation, useUpdateCard } from '../../hooks/useCardMutations'
 import { dueStateFor, formatDueDate } from '../../lib/due-state'
 import { formatSchedule } from '../../lib/due-time'
 import { formatEstimate } from '../../lib/estimate'
 import { type CardPriority, priorityLabel } from '../../lib/priority'
-import type { BoardCardView, BoardEpic, BoardLabel, BoardMember } from '../../types'
+import { sprintLabel } from '../../lib/sprint'
+import type { BoardCardView, BoardEpic, BoardLabel, BoardMember, BoardSprint } from '../../types'
 import { PriorityGlyph } from '../PriorityGlyph'
 import { AssigneePicker } from './AssigneePicker'
 import { DuePicker } from './DuePicker'
@@ -18,6 +19,7 @@ import { EstimatePicker } from './EstimatePicker'
 import { LabelPicker } from './LabelPicker'
 import { PriorityPicker } from './PriorityPicker'
 import { ReporterPicker } from './ReporterPicker'
+import { SprintPicker } from './SprintPicker'
 
 interface DetailPropertiesProps {
     card: BoardCardView
@@ -25,6 +27,9 @@ interface DetailPropertiesProps {
     projectLabels: BoardLabel[]
     /** The board's epics — the picker offers these, not the card's own. */
     projectEpics: BoardEpic[]
+    /** The board's sprints, and whether the board plans in them at all. */
+    projectSprints: BoardSprint[]
+    sprintsEnabled: boolean
     /** The board's roster, so a card is only assignable to someone who can open it. */
     projectMembers: BoardMember[]
     onManageLabels: () => void
@@ -36,6 +41,8 @@ export function DetailProperties({
     card,
     projectLabels,
     projectEpics,
+    projectSprints,
+    sprintsEnabled,
     projectMembers,
     onManageLabels,
     canEdit,
@@ -65,6 +72,9 @@ export function DetailProperties({
                 <PropertyRow name="Epic">
                     <EpicValue epic={card.epic} />
                 </PropertyRow>
+                <SprintPropertyRow isVisible={sprintsEnabled}>
+                    <SprintValue sprint={card.sprint} />
+                </SprintPropertyRow>
                 <PropertyRow name="Start">
                     <StartValue start={card.start} />
                 </PropertyRow>
@@ -120,6 +130,15 @@ export function DetailProperties({
                     <EpicValue epic={card.epic} />
                 </EpicPicker>
             </PropertyRow>
+            <SprintPropertyRow isVisible={sprintsEnabled}>
+                <SprintPicker
+                    sprints={projectSprints}
+                    selectedId={card.sprint?.id ?? ''}
+                    onSelect={sprint => updateCard.mutate({ cardId: card.id, sprint })}
+                >
+                    <SprintValue sprint={card.sprint} />
+                </SprintPicker>
+            </SprintPropertyRow>
             <PropertyRow name="Start">
                 <DuePicker
                     value={card.start}
@@ -163,6 +182,59 @@ export function DetailProperties({
         </View>
     )
 }
+
+/** The Sprint row, only on a board that plans in sprints. */
+function SprintPropertyRow({
+    isVisible,
+    children,
+}: {
+    isVisible: boolean
+    children: ReactElement
+}) {
+    if (!isVisible) return null
+    return <PropertyRow name="Sprint">{children}</PropertyRow>
+}
+
+/** The sprint chip, and the SprintPicker's trigger — the EpicValue shape. */
+const SprintValue = forwardRef<View, { sprint: BoardSprint | null; onPress?: () => void }>(
+    function SprintValue({ sprint, onPress }, ref) {
+        const mutedColor = useThemeColor('muted')
+        if (!sprint) {
+            if (!onPress) return <EmptyValue />
+            return <GhostChip ref={ref} label="Add to sprint" onPress={onPress} />
+        }
+
+        const chipContent = (
+            <>
+                <Timer size={12} color={mutedColor} strokeWidth={2.2} />
+                <Text className="text-[12.5px] font-medium text-foreground">
+                    {sprintLabel(sprint)}
+                </Text>
+            </>
+        )
+
+        if (!onPress) {
+            return (
+                <View className="flex-row items-center gap-[5px] rounded-md px-2 py-[3px] bg-foreground/[0.06]">
+                    {chipContent}
+                </View>
+            )
+        }
+
+        return (
+            <Pressable
+                ref={ref}
+                accessibilityRole="button"
+                accessibilityLabel={`Sprint ${sprintLabel(sprint)}. Change sprint`}
+                testID="boards-detail-sprint"
+                onPress={onPress}
+                className="flex-row items-center gap-[5px] rounded-md px-2 py-[3px] bg-foreground/[0.06] web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+            >
+                {chipContent}
+            </Pressable>
+        )
+    }
+)
 
 /** The estimate chip, and the EstimatePicker's trigger — the PriorityValue shape. */
 const EpicValue = forwardRef<View, { epic: BoardEpic | null; onPress?: () => void }>(

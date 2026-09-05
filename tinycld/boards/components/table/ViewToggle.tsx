@@ -1,14 +1,21 @@
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
-import { ChartGantt, Columns3, List } from 'lucide-react-native'
+import { ChartGantt, Columns3, List, ListTree } from 'lucide-react-native'
 import { Pressable, View } from 'react-native'
 import { selectViewMode, useBoardsUIStore, type ViewMode } from '../../stores/boards-ui-store'
 
 /**
- * Board, list or timeline, drive's ViewToggle shape. A per-board preference that
- * persists (a stale board id is inert), unlike the filter beside it.
+ * Board, list, timeline — and the backlog, on a board with sprints — drive's
+ * ViewToggle shape. A per-board preference that persists (a stale board id is
+ * inert), unlike the filter beside it.
  */
-export function ViewToggle({ projectId }: { projectId: string }) {
-    const viewMode = useBoardsUIStore(s => selectViewMode(s, projectId))
+export function ViewToggle({
+    projectId,
+    isSprintsEnabled,
+}: {
+    projectId: string
+    isSprintsEnabled: boolean
+}) {
+    const viewMode = useBoardsUIStore(s => selectViewMode(s, projectId, isSprintsEnabled))
     const setViewMode = useBoardsUIStore(s => s.setViewMode)
     const mutedColor = useThemeColor('muted')
     const activeColor = useThemeColor('foreground')
@@ -43,7 +50,38 @@ export function ViewToggle({ projectId }: { projectId: string }) {
                 onPress={() => setViewMode(projectId, 'timeline')}
                 colors={{ muted: mutedColor, active: activeColor }}
             />
+            <BacklogSegment
+                isVisible={isSprintsEnabled}
+                isActive={viewMode === 'backlog'}
+                onPress={() => setViewMode(projectId, 'backlog')}
+                colors={{ muted: mutedColor, active: activeColor }}
+            />
         </View>
+    )
+}
+
+/** The fourth segment, only on a board whose sprints are on. */
+function BacklogSegment({
+    isVisible,
+    isActive,
+    onPress,
+    colors,
+}: {
+    isVisible: boolean
+    isActive: boolean
+    onPress: () => void
+    colors: { muted: string; active: string }
+}) {
+    if (!isVisible) return null
+    return (
+        <Segment
+            mode="backlog"
+            label="Backlog"
+            icon={ListTree}
+            isActive={isActive}
+            onPress={onPress}
+            colors={colors}
+        />
     )
 }
 

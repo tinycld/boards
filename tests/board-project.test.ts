@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { type BoardFilter, EMPTY_FILTER } from '../tinycld/boards/lib/board-filter'
-import { buildBoardProject, toBoardCard, toBoardMember } from '../tinycld/boards/lib/board-project'
+import {
+    buildBoardProject,
+    resolveSprintScope,
+    toBoardCard,
+    toBoardMember,
+} from '../tinycld/boards/lib/board-project'
 import { type BoardSort, MANUAL_SORT } from '../tinycld/boards/lib/board-sort'
 import type {
     BoardLabel,
@@ -1034,5 +1039,59 @@ describe('sprints', () => {
         )
         expect(toggled).not.toBe(first)
         expect(toggled?.sprintsEnabled).toBe(false)
+    })
+})
+
+describe('the sprint scope', () => {
+    const active = sprint('s-active', { number: 1, state: 'active' })
+    const planned = sprint('s-planned', { number: 2, state: 'planned', position: 'a1' })
+    const input = {
+        project: project({ sprints_enabled: true }),
+        lists: [list('l1', 'a0')],
+        labels: [],
+        members: [],
+        users: [],
+        sprints: [active, planned],
+        cards: [
+            card('now', 'l1', 'a0', { sprint: 's-active' }),
+            card('next', 'l1', 'a1', { sprint: 's-planned' }),
+            card('later', 'l1', 'a2'),
+        ],
+    }
+    const view = { filter: EMPTY_FILTER, sort: MANUAL_SORT, userId: 'u1' }
+    const shown = (sprintScope: Parameters<typeof resolveSprintScope>[0]) =>
+        buildBoardProject({ ...input, view: { ...view, sprintScope } })?.lists[0]?.cards.map(
+            c => c.id
+        )
+
+    it('defaults to the active sprint, and counts only its cards', () => {
+        const built = buildBoardProject({ ...input, view: { ...view, sprintScope: 'active' } })
+        expect(built?.lists[0]?.cards.map(c => c.id)).toEqual(['now'])
+        // The scope is a different SET: the totals describe the sprint.
+        expect(built?.cardTotal).toBe(1)
+        expect(built?.lists[0]?.totalCount).toBe(1)
+    })
+
+    it('shows the backlog, a named sprint, or everything', () => {
+        expect(shown('backlog')).toEqual(['later'])
+        expect(shown({ sprintId: 's-planned' })).toEqual(['next'])
+        expect(shown('all')).toEqual(['now', 'next', 'later'])
+        expect(shown(undefined)).toEqual(['now', 'next', 'later'])
+    })
+
+    it('falls back to every card when there is no active sprint or the named one is gone', () => {
+        const noActive = { ...input, sprints: [planned] }
+        expect(
+            buildBoardProject({ ...noActive, view: { ...view, sprintScope: 'active' } })?.cardTotal
+        ).toBe(3)
+        expect(resolveSprintScope({ sprintId: 'gone' }, [planned])).toBeNull()
+        expect(resolveSprintScope('active', [])).toBeNull()
+    })
+
+    it('is ignored on a board whose sprints are off', () => {
+        const off = { ...input, project: project({ sprints_enabled: false }) }
+        expect(
+            buildBoardProject({ ...off, view: { ...view, sprintScope: 'backlog' } })?.cardTotal
+        ).toBe(3)
     })
 })

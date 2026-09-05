@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { compareCards, MANUAL_SORT, toggleSort } from '../tinycld/boards/lib/board-sort'
-import type { BoardCardView } from '../tinycld/boards/types'
+import type { BoardCardView, BoardSprint } from '../tinycld/boards/types'
 
 function card(id: string, overrides: Partial<BoardCardView> = {}): BoardCardView {
     return {
@@ -145,5 +145,48 @@ describe('toggleSort', () => {
             direction: 'desc',
         })
         expect(toggleSort({ field: 'due', direction: 'desc' }, 'manual')).toBe(MANUAL_SORT)
+    })
+})
+
+describe('sort by sprint', () => {
+    const sprint = (id: string, state: BoardSprint['state'], position: string): BoardSprint => ({
+        id,
+        number: 1,
+        name: '',
+        goal: '',
+        state,
+        position,
+        startedAt: '',
+        completedAt: '',
+        cardTotal: 0,
+        cardDone: 0,
+        pointsTotal: 0,
+        pointsDone: 0,
+        committedCount: 0,
+        committedPoints: 0,
+        completedCount: 0,
+        completedPoints: 0,
+        rolledCount: 0,
+    })
+
+    it('reads active, then planned by rank, with the backlog last either way', () => {
+        const cards = [
+            card('backlog', { sprint: null }),
+            card('later', { sprint: sprint('s3', 'planned', 'a2') }),
+            card('now', { sprint: sprint('s1', 'active', 'a9') }),
+            card('next', { sprint: sprint('s2', 'planned', 'a1') }),
+        ]
+        expect(ids([...cards].sort(compareCards({ field: 'sprint', direction: 'asc' })))).toEqual([
+            'now',
+            'next',
+            'later',
+            'backlog',
+        ])
+        expect(ids([...cards].sort(compareCards({ field: 'sprint', direction: 'desc' })))).toEqual([
+            'later',
+            'next',
+            'now',
+            'backlog',
+        ])
     })
 })

@@ -20,7 +20,8 @@
         "./stores/*": "./tinycld/boards/stores/*.ts",
         "./components/*": "./tinycld/boards/components/*.tsx",
         "./search-adapter": "./tinycld/boards/search-adapter.ts",
-        "./calendar-source": "./tinycld/boards/calendar-source.ts"
+        "./calendar-source": "./tinycld/boards/calendar-source.ts",
+        "./calendar-sprint-source": "./tinycld/boards/calendar-sprint-source.ts"
     },
     "scripts": {
         "typecheck": "tinycld-pkg typecheck",

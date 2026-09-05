@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import { MANUAL_SORT } from '../tinycld/boards/lib/board-sort'
-import { buildTimeline, dayColumns, dayIndex, timelineRange } from '../tinycld/boards/lib/timeline'
-import type { BoardCardView, BoardListView, BoardProject } from '../tinycld/boards/types'
+import {
+    buildTimeline,
+    dayColumns,
+    dayIndex,
+    sprintSpans,
+    timelineRange,
+} from '../tinycld/boards/lib/timeline'
+import type {
+    BoardCardView,
+    BoardListView,
+    BoardProject,
+    BoardSprint,
+} from '../tinycld/boards/types'
 
 const TODAY = new Date(2026, 8, 4, 12)
 const day = (offset: number) => new Date(2026, 8, 4 + offset)
@@ -145,5 +156,56 @@ describe('dayColumns', () => {
         // US DST ends 2026-11-01: that day is 25 hours long.
         const start = new Date(2026, 9, 30)
         expect(dayIndex(start, new Date(2026, 10, 3))).toBe(4)
+    })
+})
+
+describe('sprintSpans', () => {
+    const sprint = (id: string, number: number, start?: Date, end?: Date): BoardSprint => ({
+        id,
+        number,
+        name: '',
+        goal: '',
+        state: 'planned',
+        position: 'a0',
+        start,
+        end,
+        startedAt: '',
+        completedAt: '',
+        cardTotal: 0,
+        cardDone: 0,
+        pointsTotal: 0,
+        pointsDone: 0,
+        committedCount: 0,
+        committedPoints: 0,
+        completedCount: 0,
+        completedPoints: 0,
+        rolledCount: 0,
+    })
+    const withSprints = (sprints: BoardSprint[], sprintsEnabled = true): BoardProject => ({
+        ...project([list('l1', [card('a', { due: day(0) })])]),
+        sprintsEnabled,
+        sprints,
+    })
+
+    it('clips dated sprints to the range and skips undated ones', () => {
+        const range = timelineRange(withSprints([]), TODAY)
+        const spans = sprintSpans(
+            withSprints([
+                sprint('in', 1, day(-2), day(5)),
+                sprint('undated', 2),
+                sprint('early', 3, day(-100), day(-60)),
+                sprint('overlaps', 4, day(-100), day(1)),
+            ]),
+            range
+        )
+        expect(spans.map(s => s.sprint.id)).toEqual(['in', 'overlaps'])
+        const overlaps = spans[1]
+        expect(overlaps?.startCol).toBe(0)
+        expect(overlaps?.endCol).toBe(dayIndex(range.start, day(1)))
+    })
+
+    it('draws nothing on a board whose sprints are off', () => {
+        const board = withSprints([sprint('in', 1, day(0), day(3))], false)
+        expect(sprintSpans(board, timelineRange(board, TODAY))).toEqual([])
     })
 })

@@ -33,6 +33,15 @@ describe('boards manifest', () => {
                 module: 'calendar-source',
                 color: 'graphite',
             },
+            // Sprint dates ride as a second source with its own toggle, and
+            // its module must likewise stay in step with the exports map.
+            {
+                target: 'calendar',
+                id: 'boards-sprints',
+                label: 'Sprint dates',
+                module: 'calendar-sprint-source',
+                color: 'graphite',
+            },
         ])
     })
 
