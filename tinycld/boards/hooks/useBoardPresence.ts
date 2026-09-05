@@ -2,7 +2,8 @@ import { useAuth } from '@tinycld/core/lib/auth'
 import { useRealtimeRoom } from '@tinycld/core/lib/realtime/use-realtime-room'
 import { useRemoteAwareness } from '@tinycld/core/lib/realtime/use-remote-awareness'
 import { colorForUser } from '@tinycld/core/lib/util/color'
-import { useEffect, useMemo } from 'react'
+import { useFocusEffect } from 'expo-router'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { Awareness } from 'y-protocols/awareness'
 
 /** Must match `roomKindBoards` in boards/server/realtime.go. */
@@ -106,10 +107,28 @@ export function useBoardPresence(projectId: string, openCardId: string | null) {
     // same slot. A wholesale setLocalState would erase the caret on every
     // reconnect and on every card change, so remote collaborators' cursors
     // would blink out with no obvious cause.
+    // Whether the owning route is focused. useRealtimeRoom clears the slot on
+    // blur (its useLeaveOnBlur), and nothing below may put it back while the
+    // screen is frozen: a peer arriving fires `added`, and a reconnect flips
+    // `isConnected`, and either used to republish the slot of someone who had
+    // left — the board showed them again the moment anyone else opened it.
+    // A ref, not state: the publish reads it inside an awareness listener, and
+    // a re-render on focus would only re-subscribe for nothing.
+    const isFocused = useRef(true)
+    useFocusEffect(
+        useCallback(() => {
+            isFocused.current = true
+            return () => {
+                isFocused.current = false
+            }
+        }, [])
+    )
+
     useEffect(() => {
         if (!awareness || !isConnected || !identity) return
 
         const publish = () => {
+            if (!isFocused.current) return
             awareness.setLocalState({
                 ...(awareness.getLocalState() ?? {}),
                 user: identity,
