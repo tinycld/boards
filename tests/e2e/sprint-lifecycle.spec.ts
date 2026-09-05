@@ -1,7 +1,14 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard, dragCardToColumn, dragCardToSection } from './helpers'
+import {
+    addCard,
+    boardCard,
+    closeCardPeek,
+    createBoard,
+    dragCardToSection,
+    openCard,
+} from './helpers'
 
 // A sprint's life: planned, started, completed with the unfinished work
 // rolled into a new sprint. Drives the UI only — the transitions go through
@@ -61,17 +68,19 @@ test.describe('Boards — sprint lifecycle', () => {
         await expect(page.getByTestId('boards-start-sprint-dialog')).toHaveCount(0)
         await expect(page.getByTestId('boards-sprint-complete-1')).toBeVisible()
 
-        // Once active it is what the canvas scopes to; finish one card there.
+        // Once active it is what the canvas scopes to; finish one card there
+        // through the peek's list stepper. A button, not a drag: the drag
+        // path has its own specs, and this one is about the lifecycle.
         await page.getByTestId('boards-view-board').click()
         await expect(page.getByTestId('boards-sprint-scope')).toContainText('Sprint 1')
-        await dragCardToColumn(page, boardCard(page, 'finished work'), 'Done')
-        // Drax places the card in Done visually before the transfer commits a
-        // frame later; the closed face renders from the card's DATA, so its
-        // appearance is the move having been written. Leaving the canvas
-        // earlier unmounts the container mid-commit.
+        await openCard(page, 'finished work')
+        await peek(page).getByRole('button', { name: 'Move to Done' }).click()
+        // The closed face renders from the card's data, so its appearance is
+        // the move having been written before the view changes underneath it.
         await expect(
             boardCard(page, 'finished work').getByTestId(/^boards-card-closed-/)
         ).toBeVisible()
+        await closeCardPeek(page)
         await page.getByTestId('boards-view-backlog').click()
 
         // Complete: one done, one unfinished; the unfinished card rolls into
