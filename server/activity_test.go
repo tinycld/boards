@@ -85,6 +85,25 @@ func requireKinds(t *testing.T, rows []*core.Record, want ...string) {
 	}
 }
 
+// rowOfKindTo picks the row of `kind` whose `to` is the given value — the way
+// to name one of SEVERAL rows of the same kind.
+//
+// Position cannot do that job here, for the reason requireKinds is a multiset
+// comparison: rows landing in the same millisecond share `created`, so the
+// "created,id" sort falls back to the random id and their relative order is a
+// coin flip. Selecting a row by what it SAYS is stable; selecting it by where
+// it sits is not.
+func rowOfKindTo(t *testing.T, rows []*core.Record, kind, to string) *core.Record {
+	t.Helper()
+	for _, r := range rows {
+		if r.GetString("kind") == kind && r.GetString("to") == to {
+			return r
+		}
+	}
+	t.Fatalf("no %q row with to=%q among %v", kind, to, kinds(rows))
+	return nil
+}
+
 func rowOfKind(t *testing.T, rows []*core.Record, kind string) *core.Record {
 	t.Helper()
 	for _, r := range rows {
@@ -314,7 +333,7 @@ func TestActivity_ParentChangesAreRecorded(t *testing.T) {
 	// one this test is about.
 	rows := activityRows(t, env.app, child.Id)
 	requireKinds(t, rows, "created", "parent")
-	set := rowOfKind(t, rows, "parent")
+	set := rowOfKindTo(t, rows, "parent", env.card.Id)
 	if got := set.GetString("to"); got != env.card.Id {
 		t.Fatalf("parent row `to` = %q, want the parent %q", got, env.card.Id)
 	}
@@ -327,7 +346,10 @@ func TestActivity_ParentChangesAreRecorded(t *testing.T) {
 	})
 	rows = activityRows(t, env.app, child.Id)
 	requireKinds(t, rows, "created", "parent", "parent")
-	cleared := rows[len(rows)-1]
+	// Selected by CONTENT, not position: both parent rows can land in the same
+	// millisecond, and the "created,id" sort then breaks the tie on a random
+	// id — so `rows[len(rows)-1]` returned the SET row about half the time.
+	cleared := rowOfKindTo(t, rows, "parent", "")
 	if cleared.GetString("from") != env.card.Id || cleared.GetString("to") != "" {
 		t.Fatalf("clear row carries %q → %q, want %q → \"\"",
 			cleared.GetString("from"), cleared.GetString("to"), env.card.Id)
