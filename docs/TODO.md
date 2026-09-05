@@ -271,7 +271,7 @@ plain re-run.
 17. **Card covers.** First image attachment as the cover, via core's
     thumbnail pipeline.  Requires improving file handling so files can be sorted
 18. **Card and board templates.** An `is_template` flag using the duplicate
-    path, and a template picker in the New board dialog.
+    path, and a template picker in the New board dialog. UPDATE: this is out of scope
 20. **WIP limits and card aging.** `wip_limit` on lists with a warning header;
     aging as a face tint from `updated`.
 21. **Reports.** Burndown and velocity shipped with 14: a sprint's report
