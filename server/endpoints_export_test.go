@@ -296,6 +296,42 @@ func TestExportIsStableAcrossRuns(t *testing.T) {
 	}
 }
 
+// Cards come out grouped by their column, in column order, and ranked within
+// it. `position` only orders cards INSIDE one list, so a global rank sort
+// interleaves the columns — an order no reader would recognise, and one that a
+// re-import (which groups by list again) does not reproduce.
+func TestExportOrdersCardsByListThenRank(t *testing.T) {
+	env := setupCardsEnv(t)
+	seedExportBoard(t, env)
+
+	// A second card in the FIRST column, ranked after the seeded one but with a
+	// rank that sorts after the second column's card too — so a global sort
+	// would put it last rather than beside its neighbour.
+	late := cardsCard(t, env.app, env.project, env.list, "Also to do", "a9", env.owner)
+	late.Set("number", 3)
+	if err := env.app.Save(late); err != nil {
+		t.Fatal(err)
+	}
+
+	board, err := collectBoard(env.app, env.project)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Every card of the first list must appear before any card of the second.
+	firstList := board.Lists[0].ID
+	seenOther := false
+	for _, c := range board.Cards {
+		if c.List != firstList {
+			seenOther = true
+			continue
+		}
+		if seenOther {
+			t.Fatalf("card %q of the first column appears after another column's", c.Title)
+		}
+	}
+}
+
 func TestExportFilename(t *testing.T) {
 	env := setupCardsEnv(t)
 	col, err := env.app.FindCollectionByNameOrId("boards_projects")
