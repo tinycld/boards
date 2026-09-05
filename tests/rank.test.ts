@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FIRST_RANK, initialRanks, rankBetween } from '../tinycld/boards/lib/rank'
+import { FIRST_RANK, initialRanks, rankBetween, ranksAfter } from '../tinycld/boards/lib/rank'
 
 // A rank is opaque: any ASCII-ordered key of unbounded-but-short length. These
 // tests assert the ORDERING CONTRACT the board depends on, never the shape of
@@ -112,5 +112,36 @@ describe('initialRanks', () => {
     it('rejects a negative or fractional count', () => {
         expect(() => initialRanks(-1)).toThrow(/non-negative integer/)
         expect(() => initialRanks(1.5)).toThrow(/non-negative integer/)
+    })
+})
+
+describe('ranksAfter', () => {
+    // The bug this exists to prevent: a bulk move computing one rank per card
+    // with rankForAppend against unchanged state gets the SAME rank N times,
+    // and the selection's order is lost to the id tiebreaker.
+    it('returns distinct ascending ranks', () => {
+        const ranks = ranksAfter('a0', 5)
+        expect(ranks).toHaveLength(5)
+        expect(new Set(ranks).size).toBe(5)
+        expect([...ranks].sort()).toEqual(ranks)
+        expect(ranks.every(fitsColumn)).toBe(true)
+    })
+
+    it('places every rank after the highest existing one', () => {
+        const ranks = ranksAfter('a5', 3)
+        expect(ranks.every(rank => rank > 'a5')).toBe(true)
+    })
+
+    it('seeds an empty column from null', () => {
+        expect(ranksAfter(null, 3)).toEqual(initialRanks(3))
+    })
+
+    it('returns nothing for a count of zero', () => {
+        expect(ranksAfter('a0', 0)).toEqual([])
+    })
+
+    it('refuses a negative or fractional count', () => {
+        expect(() => ranksAfter('a0', -1)).toThrow()
+        expect(() => ranksAfter('a0', 1.5)).toThrow()
     })
 })

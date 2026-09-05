@@ -134,6 +134,149 @@ describe('boards-ui-store view preferences', () => {
         })
     })
 
+    describe('selection', () => {
+        beforeEach(() => {
+            useBoardsUIStore.setState({
+                selectedCardIds: new Set<string>(),
+                lastSelectedId: null,
+                isSelectMode: false,
+            })
+        })
+
+        const ORDER = ['a', 'b', 'c', 'd', 'e']
+        const selected = () => [...useBoardsUIStore.getState().selectedCardIds].sort()
+
+        it('replaces the selection and re-anchors on a single select', () => {
+            const { selectSingle, selectToggle } = useBoardsUIStore.getState()
+            selectToggle('a')
+            selectSingle('c')
+
+            expect(selected()).toEqual(['c'])
+            expect(useBoardsUIStore.getState().lastSelectedId).toBe('c')
+        })
+
+        it('adds and removes on toggle', () => {
+            const { selectToggle } = useBoardsUIStore.getState()
+            selectToggle('a')
+            selectToggle('b')
+            expect(selected()).toEqual(['a', 'b'])
+
+            selectToggle('a')
+            expect(selected()).toEqual(['b'])
+        })
+
+        it('extends a range from the anchor, in either direction', () => {
+            const { selectSingle, selectRange } = useBoardsUIStore.getState()
+            selectSingle('d')
+            selectRange('b', ORDER)
+
+            // Anchored at d, reaching back to b — the range is inclusive of
+            // both ends regardless of which came first.
+            expect(selected()).toEqual(['b', 'c', 'd'])
+        })
+
+        it('unions a range with what is already selected', () => {
+            const { selectToggle, selectRange } = useBoardsUIStore.getState()
+            selectToggle('a')
+            selectToggle('c')
+            selectRange('e', ORDER)
+
+            expect(selected()).toEqual(['a', 'c', 'd', 'e'])
+        })
+
+        // A filter can hide the anchor. Extending from a card the user cannot
+        // see would select a run they never chose, so the range collapses to
+        // the card they actually clicked.
+        it('collapses to one card when the anchor is not in the order', () => {
+            const { selectSingle, selectRange } = useBoardsUIStore.getState()
+            selectSingle('hidden')
+            selectRange('c', ORDER)
+
+            expect(selected()).toEqual(['c'])
+            expect(useBoardsUIStore.getState().lastSelectedId).toBe('c')
+        })
+
+        it('collapses to one card when there is no anchor at all', () => {
+            useBoardsUIStore.getState().selectRange('c', ORDER)
+            expect(selected()).toEqual(['c'])
+        })
+
+        // "Select all" pressed twice must leave everything selected, not
+        // invert the set — which a toggle-in-a-loop would do.
+        it('selects many idempotently, and re-anchors on the last', () => {
+            const { selectMany } = useBoardsUIStore.getState()
+            selectMany(['a', 'b', 'c'])
+            selectMany(['a', 'b', 'c'])
+
+            expect(selected()).toEqual(['a', 'b', 'c'])
+            expect(useBoardsUIStore.getState().lastSelectedId).toBe('c')
+        })
+
+        it('keeps the anchor when selecting nothing', () => {
+            const { selectSingle, selectMany } = useBoardsUIStore.getState()
+            selectSingle('b')
+            selectMany([])
+
+            expect(useBoardsUIStore.getState().lastSelectedId).toBe('b')
+        })
+
+        it('drops the selection and the anchor together on clear', () => {
+            const { selectToggle, clearSelection } = useBoardsUIStore.getState()
+            selectToggle('a')
+            clearSelection()
+
+            expect(selected()).toEqual([])
+            expect(useBoardsUIStore.getState().lastSelectedId).toBeNull()
+        })
+
+        // The bar is the only thing on screen saying a selection exists, and it
+        // goes with the mode — so a selection kept past it would still be
+        // targeted by x with nothing indicating why.
+        it('drops the selection when leaving select mode', () => {
+            const { setSelectMode, selectToggle } = useBoardsUIStore.getState()
+            setSelectMode(true)
+            selectToggle('a')
+            setSelectMode(false)
+
+            expect(useBoardsUIStore.getState().isSelectMode).toBe(false)
+            expect(selected()).toEqual([])
+        })
+
+        // The three moments that invalidate a selection all clear it at the
+        // point the change happens, rather than in an effect watching for it.
+        it('drops the selection when the view changes', () => {
+            const { selectToggle, setViewMode } = useBoardsUIStore.getState()
+            selectToggle('a')
+            setViewMode('proj_1', 'list')
+
+            expect(selected()).toEqual([])
+        })
+
+        it('drops the selection when the filter changes', () => {
+            const { selectToggle, setBoardFilter, clearBoardFilter } = useBoardsUIStore.getState()
+            selectToggle('a')
+            setBoardFilter('proj_1', { text: 'bug' })
+            // A selected card the new filter hides is invisible but still
+            // targeted by the next bulk action.
+            expect(selected()).toEqual([])
+
+            selectToggle('b')
+            clearBoardFilter('proj_1')
+            expect(selected()).toEqual([])
+        })
+
+        it('drops the selection when the board changes', () => {
+            const { selectToggle, setActiveProject } = useBoardsUIStore.getState()
+            selectToggle('a')
+            setActiveProject('proj_other')
+
+            // The selected cards belong to the board being left; a bulk action
+            // would otherwise aim at cards that are no longer on screen.
+            expect(selected()).toEqual([])
+            expect(useBoardsUIStore.getState().lastSelectedId).toBeNull()
+        })
+    })
+
     describe('persistence', () => {
         /**
          * Reads what the persist middleware ACTUALLY wrote, rather than
@@ -177,12 +320,17 @@ describe('boards-ui-store view preferences', () => {
                 boardFilters: { proj_1: { ...EMPTY_FILTER, text: 'stale' } },
                 boardSorts: { proj_1: { field: 'due', direction: 'asc' } },
                 isFilterPanelOpen: true,
+                selectedCardIds: new Set(['card_3']),
+                lastSelectedId: 'card_3',
+                isSelectMode: true,
             })
 
             // Restoring any of these greets the user with a peek on a possibly
             // deleted card, an unrequested modal, or a ring pointing at a card
             // that has since moved — and a restored filter is worse still: a
             // near-empty board with no explanation of where the cards went.
+            // Worst of all is a restored SELECTION, which would silently arm a
+            // bulk archive against rows the user cannot see.
             expect(Object.keys(await persisted()).sort()).toEqual([
                 'activeProjectId',
                 'collapsedColumnIds',

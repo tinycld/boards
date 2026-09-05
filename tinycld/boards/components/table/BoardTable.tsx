@@ -4,11 +4,14 @@ import { useBreakpoint } from '@tinycld/core/components/workspace/useBreakpoint'
 import { useMemo } from 'react'
 import { FlatList } from 'react-native'
 import { useBoardShortcuts } from '../../hooks/useBoardShortcuts'
+import { useCardSelection } from '../../hooks/useCardSelection'
 import { useProjectRole } from '../../hooks/useProjectRole'
+import { useSelectionOrder } from '../../hooks/useSelectionOrder'
 import { type BoardRow, flattenBoardRows } from '../../lib/board-rows'
 import { type SortField, toggleSort } from '../../lib/board-sort'
 import { selectBoardSort, useBoardsUIStore } from '../../stores/boards-ui-store'
 import type { BoardProject } from '../../types'
+import { BulkActionBar } from '../BulkActionBar'
 import { CardRow, TABLE_COLUMNS } from './CardRow'
 
 const COLUMNS: { label: string; flex?: number; width?: number; sortField?: SortField }[] = [
@@ -33,12 +36,15 @@ export function BoardTable({ project }: { project: BoardProject }) {
     const { canEdit } = useProjectRole(project.id)
     const sort = useBoardsUIStore(s => selectBoardSort(s, project.id))
     const setBoardSort = useBoardsUIStore(s => s.setBoardSort)
-    const openCard = useBoardsUIStore(s => s.openCard)
     const isMobile = useBreakpoint() === 'mobile'
 
     const rows = useMemo(() => flattenBoardRows(project, sort), [project, sort])
     const visibleOrder = useMemo(() => rows.map(row => row.card.id), [rows])
     useBoardShortcuts(project, canEdit, { visibleOrder })
+    // The table's own row order, so a shift-range here follows what is on
+    // screen rather than board order — a table sorted by due date puts cards
+    // between two rows that are in different lists.
+    useSelectionOrder(project, visibleOrder)
 
     const header = isMobile ? null : (
         <DataTableHeader
@@ -68,30 +74,21 @@ export function BoardTable({ project }: { project: BoardProject }) {
                 key={`${sort.field}:${sort.direction}`}
                 data={rows}
                 keyExtractor={row => row.card.id}
-                renderItem={({ item }) => (
-                    <TableRow
-                        row={item}
-                        isMobile={isMobile}
-                        onPress={() => openCard(item.card.id)}
-                    />
-                )}
+                renderItem={({ item }) => <TableRow row={item} isMobile={isMobile} />}
             />
+            <BulkActionBar project={project} canEdit={canEdit} />
         </>
     )
 }
 
-function TableRow({
-    row,
-    isMobile,
-    onPress,
-}: {
-    row: BoardRow
-    isMobile: boolean
-    onPress: () => void
-}) {
+function TableRow({ row, isMobile }: { row: BoardRow; isMobile: boolean }) {
     // Per-row selector, as BoardCard does: only the row whose ring flipped
     // re-renders on an arrow press.
     const isFocused = useBoardsUIStore(s => s.focusedCardId === row.card.id)
+    const isSelected = useBoardsUIStore(s => s.selectedCardIds.has(row.card.id))
+    // The same handler the card face uses, so ⌘/⇧-click behaves identically in
+    // both views and a range resolves against whichever order is published.
+    const select = useCardSelection()
     return (
         <CardRow
             card={row.card}
@@ -99,7 +96,8 @@ function TableRow({
             listCategory={row.list.category}
             variant={isMobile ? 'stacked' : 'table'}
             isFocused={isFocused}
-            onPress={onPress}
+            isSelected={isSelected}
+            onPress={event => select(row.card.id, event)}
         />
     )
 }

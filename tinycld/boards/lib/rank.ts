@@ -65,3 +65,24 @@ export function initialRanks(count: number): string[] {
     }
     return generateNKeysBetween(null, null, count)
 }
+
+/**
+ * `count` ascending ranks that all sort AFTER `highest`.
+ *
+ * A bulk move drops N cards into one column at once, and {@link rankBetween}
+ * (or lib/move.ts's `rankForAppend`) called N times against unchanged state
+ * returns the SAME string every time — every card would land on one rank and
+ * their order would be decided by the `id` tiebreaker rather than by the order
+ * the user selected them in.
+ *
+ * `highest` is the greatest rank already in the target column, or null for an
+ * empty one. It is the greatest rather than the last element because under a
+ * non-manual sort the caller's column is not in rank order — the same reason
+ * `rankForAppend` scans for a maximum instead of reading `cards.at(-1)`.
+ */
+export function ranksAfter(highest: string | null, count: number): string[] {
+    if (!Number.isInteger(count) || count < 0) {
+        throw new Error(`rank: count must be a non-negative integer (got ${count})`)
+    }
+    return generateNKeysBetween(highest, null, count)
+}

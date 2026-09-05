@@ -51,11 +51,22 @@ function widenBefore(cards: Ranked[], index: number, after: string | null): stri
  * one that has to be order-independent.
  */
 export function rankForAppend(cards: Ranked[]): string {
+    return rankBetween(highestRank(cards), null)
+}
+
+/**
+ * The greatest rank in `cards`, or null when there are none.
+ *
+ * Exported because a bulk move needs the same value to seed `ranksAfter` — and
+ * for the same reason `rankForAppend` scans instead of reading the last
+ * element: under a non-manual sort the caller's column is not in rank order.
+ */
+export function highestRank(cards: Ranked[]): string | null {
     let highest: string | null = null
     for (const card of cards) {
         if (highest === null || card.position > highest) highest = card.position
     }
-    return rankBetween(highest, null)
+    return highest
 }
 
 /** The rank for a card placed at the start of `cards`. */
