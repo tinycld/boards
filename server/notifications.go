@@ -1,6 +1,8 @@
 package boards
 
 import (
+	"fmt"
+
 	"github.com/pocketbase/pocketbase/core"
 
 	"tinycld.org/core/notify"
@@ -18,6 +20,9 @@ import (
 //	boards_watched   a card you watch changed — Meta.event says how:
 //	                comment | moved | completed | canceled | archived
 //	boards_due       a card you watch or own is due soon / overdue (due_notices.go)
+//	boards_sprint    a sprint on your board started or completed — Meta.event
+//	                says which; sent to every member (a sprint is board news,
+//	                not card news, so watchers are not the audience)
 //
 // PRECEDENCE, per event: one notification per person. A reply's author is
 // told it is a reply, not that a watched card gained a comment; someone
@@ -35,6 +40,7 @@ const (
 	notifyTypeReply    = "boards_reply"
 	notifyTypeReaction = "boards_reaction"
 	notifyTypeWatched  = "boards_watched"
+	notifyTypeSprint   = "boards_sprint"
 )
 
 func registerCardNotifications(app core.App) {
@@ -150,6 +156,98 @@ func notifyNewComment(app core.App, comment *core.Record) {
 		told[userID] = true
 		deliver(app, userID, notifyTypeWatched, who+" commented on a card you watch", title, card, "comment")
 	}
+}
+
+// registerSprintNotifications tells a board's members when a sprint starts
+// or completes. Bound on the after-update hook: the transition is a state
+// change on the sprint row, whoever made it — a person through the endpoint
+// or the sweep on the sprint's dates.
+func registerSprintNotifications(app core.App) {
+	app.OnRecordAfterUpdateSuccess("boards_sprints").BindFunc(func(e *core.RecordEvent) error {
+		actor := actorOf(e.Record)
+		go notifySprintTransition(app, e.Record, actor)
+		return e.Next()
+	})
+}
+
+// notifySprintTransition fans out one sprint's start or completion. The actor
+// is never told about their own action; the sweep has no actor and tells
+// everyone.
+func notifySprintTransition(app core.App, sprint *core.Record, actor string) {
+	original := sprint.Original()
+	if original.GetString("project") == "" {
+		return
+	}
+	from, to := original.GetString("state"), sprint.GetString("state")
+	if from == to {
+		return
+	}
+	var event, headline string
+	switch {
+	case from == sprintPlanned && to == sprintActive:
+		event, headline = "started", sprintLabelOf(sprint)+" started"
+	case from == sprintActive && to == sprintCompleted:
+		event, headline = "completed", sprintLabelOf(sprint)+" completed"
+	default:
+		return
+	}
+	if actor != "" {
+		headline = actorName(app, actor) + " " + lowerFirst(headline)
+	}
+	body := truncateRunes(sprint.GetString("goal"), 200)
+	if body == "" {
+		body = fmt.Sprintf("%d cards", sprint.GetInt("card_total"))
+	}
+	for _, userID := range cardOwnerResolver(app, sprint) {
+		if userID == actor {
+			continue
+		}
+		notify.NotifyUser(app, notify.NotifyParams{
+			UserID:  userID,
+			Type:    notifyTypeSprint,
+			Package: "boards",
+			Title:   headline,
+			Body:    body,
+			URL:     boardURL(app),
+			Meta: map[string]any{
+				"targetCollection": "boards_sprints",
+				"targetRecord":     sprint.Id,
+				"project":          sprint.GetString("project"),
+				"event":            event,
+			},
+		})
+	}
+}
+
+// sprintLabelOf mirrors lib/sprint.ts's sprintLabel.
+func sprintLabelOf(sprint *core.Record) string {
+	if name := sprint.GetString("name"); name != "" {
+		return name
+	}
+	return fmt.Sprintf("Sprint %d", sprint.GetInt("number"))
+}
+
+func lowerFirst(s string) string {
+	runes := []rune(s)
+	if len(runes) == 0 {
+		return s
+	}
+	// Only a generic "Sprint N …" headline lowercases; a named sprint keeps
+	// its name's own casing.
+	if runes[0] == 'S' && len(runes) > 6 && string(runes[:7]) == "Sprint " {
+		runes[0] = 's'
+	}
+	return string(runes)
+}
+
+// boardURL links a sprint notice to the boards package; there is no
+// per-sprint route to deep-link to.
+func boardURL(app core.App) string {
+	appURL := app.Settings().Meta.AppURL
+	for len(appURL) > 0 && appURL[len(appURL)-1] == '/' {
+		appURL = appURL[:len(appURL)-1]
+	}
+	return appURL + "/boards"
 }
 
 func deliver(app core.App, userID, kind, headline, body string, card *core.Record, event string) {

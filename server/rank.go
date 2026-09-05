@@ -41,6 +41,12 @@ import (
 //
 // An empty list (no rows, or a NULL max) yields the first rank, exactly as
 // rankForAppend's empty-slice case does.
+// rankAfter is the rank placing a row after `last` (the first rank when
+// `last` is empty) — what a new sprint takes to land after the planned ones.
+func rankAfter(last string) (string, error) {
+	return fracdex.KeyBetween(last, "")
+}
+
 func rankAppendToList(app core.App, listID string) (string, error) {
 	var last string
 	err := app.DB().

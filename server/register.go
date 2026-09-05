@@ -151,6 +151,7 @@ func registerShared(app *pocketbase.PocketBase) {
 	registerCardLinkActivity(app)
 	registerAutoWatch(app)
 	registerCardNotifications(app)
+	registerSprintNotifications(app)
 	registerDueNotices(app)
 	registerMemberLastOwnerGuard(app)
 	rt := registerRealtime(app)
@@ -184,12 +185,16 @@ func registerShareLinkEndpoints(app *pocketbase.PocketBase, rt *boardRealtime) {
 	app.OnServe().BindFunc(func(e *core.ServeEvent) error {
 		bindShareLinkRoutes(e)
 		bindCardRoutes(e, rt)
+		bindSprintRoutes(e)
 		// A minute ticker for due-date notices; bails out on its own once
 		// the app is torn down (cardsAppIsLive).
 		go startDueNoticeScheduler(app)
 		// A quarter-hour ticker archiving cards that have sat finished for
 		// longer than their board allows. See auto_archive.go.
 		go startAutoArchiveScheduler(app)
+		// A quarter-hour ticker for the sprint snapshots and the optional
+		// auto-start / auto-complete. See sprint_scheduler.go.
+		go startSprintScheduler(app)
 		return e.Next()
 	})
 }

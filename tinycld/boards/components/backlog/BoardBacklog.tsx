@@ -1,6 +1,6 @@
 import { useBreakpoint } from '@tinycld/core/components/workspace/useBreakpoint'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
-import { ChevronDown, ChevronRight, Pencil, Plus } from 'lucide-react-native'
+import { ChevronDown, ChevronRight, CircleCheck, Pencil, Play, Plus } from 'lucide-react-native'
 import { memo, type ReactNode, useMemo, useState } from 'react'
 import { Platform, Pressable, ScrollView, Text, View } from 'react-native'
 import { SortableBoardContainer } from 'react-native-drax'
@@ -24,6 +24,7 @@ import { SprintDialog } from './SprintDialog'
 import { SprintMenu } from './SprintMenu'
 import { SprintSection } from './SprintSection'
 import { SprintSectionHeader } from './SprintSectionHeader'
+import { type SprintTransition, SprintTransitionDialogs } from './SprintTransitionDialogs'
 
 /**
  * The backlog view — Jira's backlog: the active sprint, the planned sprints,
@@ -53,6 +54,7 @@ export function BoardBacklog({ project }: { project: BoardProject }) {
     useBoardShortcuts(project, canEdit, { visibleOrder, rowPickers: true })
     useSelectionOrder(project, visibleOrder)
     const [planning, setPlanning] = useState<{ sprint?: BoardSprint } | null>(null)
+    const [transition, setTransition] = useState<SprintTransition | null>(null)
 
     return (
         <SortableBoardContainer
@@ -78,6 +80,8 @@ export function BoardBacklog({ project }: { project: BoardProject }) {
                                 canEdit={canEdit}
                                 onPlan={() => setPlanning({})}
                                 onEdit={sprint => setPlanning({ sprint })}
+                                onStart={sprint => setTransition({ kind: 'start', sprint })}
+                                onComplete={sprint => setTransition({ kind: 'complete', sprint })}
                             />
                         }
                     />
@@ -97,6 +101,11 @@ export function BoardBacklog({ project }: { project: BoardProject }) {
                 sprint={planning?.sprint}
                 isOpen={planning !== null}
                 onClose={() => setPlanning(null)}
+            />
+            <SprintTransitionDialogs
+                project={project}
+                transition={transition}
+                onClose={() => setTransition(null)}
             />
         </SortableBoardContainer>
     )
@@ -138,22 +147,33 @@ function BacklogScroll({
     )
 }
 
-/** The header's buttons: plan a sprint on the backlog, edit a planned one. */
+/**
+ * The header's buttons: plan a sprint on the backlog; start, complete or
+ * edit a sprint. Start is offered on a planned sprint only while none is
+ * active — the server refuses a second active sprint, and a button that
+ * 400s is worse than one that is absent.
+ */
 function SectionActions({
     section,
     project,
     canEdit,
     onPlan,
     onEdit,
+    onStart,
+    onComplete,
 }: {
     section: BacklogSection
     project: BoardProject
     canEdit: boolean
     onPlan: () => void
     onEdit: (sprint: BoardSprint) => void
+    onStart: (sprint: BoardSprint) => void
+    onComplete: (sprint: BoardSprint) => void
 }) {
+    const hasActive = project.sprints.some(sprint => sprint.state === 'active')
+    const sprint = section.sprint
     if (!canEdit) return null
-    if (!section.sprint) {
+    if (!sprint) {
         return (
             <HeaderButton
                 icon={Plus}
@@ -165,32 +185,44 @@ function SectionActions({
     }
     return (
         <View className="flex-row items-center gap-1">
+            <TransitionButton
+                isVisible={sprint.state === 'planned' && !hasActive}
+                icon={Play}
+                label="Start sprint"
+                testID={`boards-sprint-start-${sprint.number}`}
+                onPress={() => onStart(sprint)}
+            />
+            <TransitionButton
+                isVisible={sprint.state === 'active'}
+                icon={CircleCheck}
+                label="Complete sprint"
+                testID={`boards-sprint-complete-${sprint.number}`}
+                onPress={() => onComplete(sprint)}
+            />
             <HeaderButton
                 icon={Pencil}
                 label="Edit"
-                testID={`boards-sprint-edit-${section.sprint.number}`}
-                onPress={() => onEdit(section.sprint as BoardSprint)}
+                testID={`boards-sprint-edit-${sprint.number}`}
+                onPress={() => onEdit(sprint)}
             />
-            <SprintMenu
-                sprint={section.sprint}
-                project={project}
-                cardCount={section.totals.count}
-            />
+            <SprintMenu sprint={sprint} project={project} cardCount={section.totals.count} />
         </View>
     )
 }
 
-function HeaderButton({
-    icon: Icon,
-    label,
-    testID,
-    onPress,
-}: {
+function TransitionButton({ isVisible, ...button }: { isVisible: boolean } & HeaderButtonProps) {
+    if (!isVisible) return null
+    return <HeaderButton {...button} />
+}
+
+interface HeaderButtonProps {
     icon: typeof Plus
     label: string
     testID: string
     onPress: () => void
-}) {
+}
+
+function HeaderButton({ icon: Icon, label, testID, onPress }: HeaderButtonProps) {
     const mutedColor = useThemeColor('muted')
     return (
         <Pressable
