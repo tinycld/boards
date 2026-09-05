@@ -8,6 +8,7 @@ import {
     Archive,
     ArchiveRestore,
     Layers,
+    ListTree,
     MoreHorizontal,
     Palette,
     Pencil,
@@ -21,6 +22,7 @@ import {
     useRestoreProject,
     useUpdateProject,
 } from '../hooks/useProjectMutations'
+import { useBoardsUIStore } from '../stores/boards-ui-store'
 import type { BoardProject } from '../types'
 import { BoardSettingsDialog } from './BoardSettingsDialog'
 import { DeleteBoardDialog } from './DeleteBoardDialog'
@@ -41,6 +43,19 @@ interface BoardMenuProps {
  * last and demands the board's name typed back — see useDeleteProject for
  * what the cascade takes with it.
  */
+/** The way to the backlog view from the menu, on a board that plans in sprints. */
+function BacklogItem({ isVisible, onPress }: { isVisible: boolean; onPress: () => void }) {
+    if (!isVisible) return null
+    return (
+        <MenuActionItem
+            label="Backlog & sprints"
+            icon={ListTree}
+            testID="boards-menu-backlog"
+            onPress={onPress}
+        />
+    )
+}
+
 export function BoardMenu({ project, cardCount, isArchived, onRename }: BoardMenuProps) {
     const [isPickingColor, setIsPickingColor] = useState(false)
     const [isEditingSettings, setIsEditingSettings] = useState(false)
@@ -51,6 +66,7 @@ export function BoardMenu({ project, cardCount, isArchived, onRename }: BoardMen
     const updateProject = useUpdateProject()
     const archiveProject = useArchiveProject()
     const restoreProject = useRestoreProject()
+    const setViewMode = useBoardsUIStore(s => s.setViewMode)
 
     return (
         <>
@@ -79,6 +95,10 @@ export function BoardMenu({ project, cardCount, isArchived, onRename }: BoardMen
                             icon={Layers}
                             testID="boards-manage-epics"
                             onPress={() => setIsManagingEpics(true)}
+                        />
+                        <BacklogItem
+                            isVisible={project.sprintsEnabled}
+                            onPress={() => setViewMode(project.id, 'backlog')}
                         />
                         <MenuActionItem
                             label="Board settings…"

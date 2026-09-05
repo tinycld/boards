@@ -10,6 +10,7 @@ import { parseCardKey } from './card-key'
 import { byCreatedThenId } from './created-order'
 import { compareEstimate } from './estimate'
 import { comparePriority } from './priority'
+import { compareSprints } from './sprint'
 
 export type SortField =
     | 'manual'
@@ -20,6 +21,7 @@ export type SortField =
     | 'key'
     | 'priority'
     | 'estimate'
+    | 'sprint'
 export type SortDirection = 'asc' | 'desc'
 
 export interface BoardSort {
@@ -39,6 +41,7 @@ export const SORT_FIELD_LABELS: Record<SortField, string> = {
     key: 'Key',
     priority: 'Priority',
     estimate: 'Estimate',
+    sprint: 'Sprint',
 }
 
 type Comparator = (a: BoardCardView, b: BoardCardView) => number
@@ -86,6 +89,8 @@ function isMissing(field: Exclude<SortField, 'manual'>, card: BoardCardView): bo
             return card.created === ''
         case 'estimate':
             return card.estimate === undefined
+        case 'sprint':
+            return card.sprint === null
         default:
             return false
     }
@@ -131,6 +136,8 @@ const PRIMARY: Record<Exclude<SortField, 'manual'>, Comparator> = {
     key: byKey,
     priority: (a, b) => comparePriority(a.priority, b.priority),
     estimate: (a, b) => compareEstimate(a.estimate, b.estimate),
+    // Both in a sprint — the backlog's order: active, then planned by rank.
+    sprint: (a, b) => (a.sprint && b.sprint ? compareSprints(a.sprint, b.sprint) : 0),
 }
 
 /**

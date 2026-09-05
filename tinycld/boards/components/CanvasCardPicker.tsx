@@ -7,6 +7,7 @@ import { AssigneePicker } from './detail/AssigneePicker'
 import { DuePicker } from './detail/DuePicker'
 import { LabelPicker } from './detail/LabelPicker'
 import { PriorityPicker } from './detail/PriorityPicker'
+import { SprintPicker } from './detail/SprintPicker'
 import { LabelManagerDialog } from './LabelManagerDialog'
 
 /**
@@ -92,6 +93,18 @@ function OpenPicker({ project, card, picker, onClose, onManageLabels }: OpenPick
                             dueHasTime: pick.hasTime,
                         })
                     }
+                />
+            )
+        case 'sprint':
+            return (
+                <SprintPicker
+                    {...shared}
+                    sprints={project.sprints}
+                    selectedId={card.sprint?.id ?? ''}
+                    onSelect={sprint => {
+                        updateCard.mutate({ cardId: card.id, sprint })
+                        onClose()
+                    }}
                 />
             )
         case 'priority':

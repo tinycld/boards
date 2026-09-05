@@ -171,6 +171,22 @@ export function useCardBulkActions(cards: CardEntry[], clearSelection: () => voi
         onError: bulkActionFailed('estimate'),
     })
 
+    /** '' sends the selection back to the backlog. */
+    const setSprint = useMutation<void, Error, string>({
+        mutationKey: ['boards', 'bulk', 'sprint'],
+        mutationFn: async (sprintId: string) => {
+            await settleAll(
+                cards.map(entry =>
+                    cardsCollection.update(entry.card.id, draft => {
+                        draft.sprint = sprintId
+                    })
+                )
+            )
+        },
+        onSuccess: clearSelection,
+        onError: bulkActionFailed('sprint'),
+    })
+
     const archive = useMutation<void, Error, void>({
         mutationKey: ['boards', 'bulk', 'archive'],
         mutationFn: async () => {
@@ -186,5 +202,5 @@ export function useCardBulkActions(cards: CardEntry[], clearSelection: () => voi
         onError: bulkActionFailed('archive'),
     })
 
-    return { moveToList, setRelation, setPriority, setEstimate, archive }
+    return { moveToList, setRelation, setPriority, setEstimate, setSprint, archive }
 }

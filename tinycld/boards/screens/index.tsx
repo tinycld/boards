@@ -7,6 +7,7 @@ import { ArchivedCardsPanel } from '../components/ArchivedCardsPanel'
 import { BoardCanvas } from '../components/BoardCanvas'
 import { BoardHeader } from '../components/BoardHeader'
 import { BoardPresenceProvider } from '../components/BoardPresenceProvider'
+import { BoardBacklog } from '../components/backlog/BoardBacklog'
 import { CardPeek } from '../components/CardPeek'
 import { NoBoards } from '../components/EmptyBoard'
 import { NewBoardDialog } from '../components/NewBoardDialog'
@@ -25,7 +26,9 @@ export default function BoardsIndex() {
     // open. Read here rather than inside the provider so the provider stays a
     // plain wrapper over the hook.
     const openCardId = useBoardsUIStore(s => s.openCardId)
-    const viewMode = useBoardsUIStore(s => selectViewMode(s, project?.id ?? ''))
+    const viewMode = useBoardsUIStore(s =>
+        selectViewMode(s, project?.id ?? '', project?.sprintsEnabled ?? false)
+    )
     // Mirrors the open peek into `?focused=` and back. Called before the early
     // returns below because hooks cannot be conditional; it no-ops until there
     // is a board.
@@ -76,6 +79,8 @@ function BoardView({ project, viewMode }: { project: BoardProject; viewMode: Vie
             return <BoardTable project={project} />
         case 'timeline':
             return <BoardTimeline project={project} />
+        case 'backlog':
+            return <BoardBacklog project={project} />
         case 'board':
             return <BoardCanvas project={project} />
     }

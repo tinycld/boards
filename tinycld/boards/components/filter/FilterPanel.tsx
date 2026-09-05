@@ -5,16 +5,19 @@ import { Check } from 'lucide-react-native'
 import type { ReactNode } from 'react'
 import { Pressable, ScrollView, Text, View } from 'react-native'
 import {
+    ACTIVE_SPRINT,
     type BoardFilter,
     type DueFilter,
     type EstimateFilter,
     isFilterActive,
     ME,
     NO_EPIC,
+    NO_SPRINT,
     UNASSIGNED,
 } from '../../lib/board-filter'
 import { categoryLabel, LIST_CATEGORIES, type ListCategory } from '../../lib/list-category'
 import { type CardPriority, PRIORITIES, priorityLabel } from '../../lib/priority'
+import { sprintLabel } from '../../lib/sprint'
 import type { BoardProject } from '../../types'
 import { CategoryGlyph } from '../CategoryGlyph'
 import { PriorityGlyph } from '../PriorityGlyph'
@@ -46,7 +49,10 @@ const DUE_OPTIONS: { value: DueFilter; label: string }[] = [
  * need reopening for every label. The host decides what wraps this.
  */
 export function FilterPanel({ project, filter, onChange, onClear }: FilterPanelProps) {
-    const toggleIn = (key: 'labelIds' | 'epicIds' | 'assigneeIds' | 'reporterIds', id: string) => {
+    const toggleIn = (
+        key: 'labelIds' | 'epicIds' | 'sprintIds' | 'assigneeIds' | 'reporterIds',
+        id: string
+    ) => {
         const current = filter[key]
         onChange({
             [key]: current.includes(id) ? current.filter(x => x !== id) : [...current, id],
@@ -138,6 +144,29 @@ export function FilterPanel({ project, filter, onChange, onClear }: FilterPanelP
                         label="No epic"
                         isSelected={filter.epicIds.includes(NO_EPIC)}
                         onPress={() => toggleIn('epicIds', NO_EPIC)}
+                    />
+                </Section>
+                {/* Completed sprints are offered too, as archived epics are:
+                    a filter is for FINDING work, and "what did Sprint 3 ship"
+                    is a question about a closed sprint. */}
+                <Section title="Sprints" isVisible={project.sprintsEnabled}>
+                    <OptionRow
+                        label="Active sprint"
+                        isSelected={filter.sprintIds.includes(ACTIVE_SPRINT)}
+                        onPress={() => toggleIn('sprintIds', ACTIVE_SPRINT)}
+                    />
+                    {project.sprints.map(sprint => (
+                        <OptionRow
+                            key={sprint.id}
+                            label={sprintLabel(sprint)}
+                            isSelected={filter.sprintIds.includes(sprint.id)}
+                            onPress={() => toggleIn('sprintIds', sprint.id)}
+                        />
+                    ))}
+                    <OptionRow
+                        label="Backlog (no sprint)"
+                        isSelected={filter.sprintIds.includes(NO_SPRINT)}
+                        onPress={() => toggleIn('sprintIds', NO_SPRINT)}
                     />
                 </Section>
                 <Section title="Assignees">

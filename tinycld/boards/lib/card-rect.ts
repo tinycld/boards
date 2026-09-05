@@ -27,7 +27,11 @@ export interface CardRect {
 export function focusedCardRect(cardId: string): CardRect | null {
     if (Platform.OS !== 'web') return null
     if (typeof document === 'undefined') return null
-    const node = document.querySelector(`[data-testid="board-card-${cardId}"]`)
+    // The card face on the canvas, or the row in the backlog — whichever is
+    // on screen for this card.
+    const node =
+        document.querySelector(`[data-testid="board-card-${cardId}"]`) ??
+        document.querySelector(`[data-testid="boards-row-${cardId}"]`)
     if (!node) return null
     const rect = (node as HTMLElement).getBoundingClientRect()
     return { x: rect.left, y: rect.top, width: rect.width, height: rect.height }

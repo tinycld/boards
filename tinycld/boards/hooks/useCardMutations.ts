@@ -353,6 +353,36 @@ export function useToggleCardRelation() {
  * to its caller, so without a handler somewhere a rejected move would roll the
  * optimistic update back silently.
  */
+export interface SetCardSprintInput {
+    cardId: string
+    /** The sprint, or '' for the backlog. */
+    sprintId: string
+    /** A new rank among the destination's rows; omitted when only the sprint changes. */
+    position?: string
+}
+
+/**
+ * File a card into a sprint — and, from the backlog view, rank it there.
+ *
+ * ONE ROW, ONE UPDATE, the useMoveCard rule: a drop in the backlog writes
+ * `sprint` and `position` together, never `list` (lib/backlog.ts explains
+ * the shared rank). The server refuses a completed sprint and the rule pins
+ * the same board.
+ */
+export function useSetCardSprint() {
+    const [cardsCollection] = useStore('boards_cards')
+
+    return useMutation<void, Error, SetCardSprintInput>({
+        mutationKey: ['boards', 'card', 'sprint'],
+        mutationFn: mutation(function* (input: SetCardSprintInput) {
+            yield cardsCollection.update(input.cardId, draft => {
+                draft.sprint = input.sprintId
+                if (input.position !== undefined) draft.position = input.position
+            })
+        }),
+    })
+}
+
 export function useMoveCard() {
     const [cardsCollection] = useStore('boards_cards')
 

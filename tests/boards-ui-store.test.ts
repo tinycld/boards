@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { EMPTY_FILTER } from '../tinycld/boards/lib/board-filter'
-import { useBoardsUIStore } from '../tinycld/boards/stores/boards-ui-store'
+import { selectViewMode, useBoardsUIStore } from '../tinycld/boards/stores/boards-ui-store'
 
 /**
  * The view preferences (collapsed columns, card density) and what persists.
@@ -294,6 +294,7 @@ describe('boards-ui-store view preferences', () => {
             useBoardsUIStore.setState({
                 activeProjectId: 'proj_1',
                 collapsedColumnIds: { list_a: true },
+                collapsedSprintIds: { sprint_a: true },
                 isCompactCards: true,
                 viewModeByProject: { proj_1: 'list' },
                 isMyCardsShowingClosed: true,
@@ -302,6 +303,7 @@ describe('boards-ui-store view preferences', () => {
             expect(await persisted()).toEqual({
                 activeProjectId: 'proj_1',
                 collapsedColumnIds: { list_a: true },
+                collapsedSprintIds: { sprint_a: true },
                 isCompactCards: true,
                 viewModeByProject: { proj_1: 'list' },
                 isMyCardsShowingClosed: true,
@@ -334,10 +336,39 @@ describe('boards-ui-store view preferences', () => {
             expect(Object.keys(await persisted()).sort()).toEqual([
                 'activeProjectId',
                 'collapsedColumnIds',
+                'collapsedSprintIds',
                 'isCompactCards',
                 'isMyCardsShowingClosed',
                 'viewModeByProject',
             ])
         })
+    })
+})
+
+describe('the backlog view mode', () => {
+    beforeEach(() => {
+        useBoardsUIStore.setState({ viewModeByProject: {}, collapsedSprintIds: {} })
+    })
+
+    // A stored `backlog` must stay inert once the board's sprints are turned
+    // off: the persisted value is not rewritten, it just reads as the board.
+    it('reads a stored backlog as the board once sprints are off', () => {
+        useBoardsUIStore.getState().setViewMode('proj_1', 'backlog')
+        const state = useBoardsUIStore.getState()
+        expect(selectViewMode(state, 'proj_1', true)).toBe('backlog')
+        expect(selectViewMode(state, 'proj_1', false)).toBe('board')
+        expect(selectViewMode(state, 'proj_1')).toBe('backlog')
+    })
+
+    it('folds and unfolds a sprint section, keeping only folded keys', () => {
+        const { toggleSprintCollapsed } = useBoardsUIStore.getState()
+        toggleSprintCollapsed('sprint_a')
+        toggleSprintCollapsed('completed')
+        expect(useBoardsUIStore.getState().collapsedSprintIds).toEqual({
+            sprint_a: true,
+            completed: true,
+        })
+        toggleSprintCollapsed('sprint_a')
+        expect(useBoardsUIStore.getState().collapsedSprintIds).toEqual({ completed: true })
     })
 })

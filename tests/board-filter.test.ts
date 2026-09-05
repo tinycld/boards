@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+    ACTIVE_SPRINT,
     activeFacetCount,
     type BoardFilter,
     cardMatchesFilter,
@@ -8,9 +9,10 @@ import {
     ME,
     matchesKeyword,
     NO_EPIC,
+    NO_SPRINT,
     UNASSIGNED,
 } from '../tinycld/boards/lib/board-filter'
-import type { BoardCardView, BoardMember } from '../tinycld/boards/types'
+import type { BoardCardView, BoardMember, BoardSprint } from '../tinycld/boards/types'
 
 const maya: BoardMember = { id: 'u1', firstName: 'Maya', lastName: 'Kim' }
 const sam: BoardMember = { id: 'u2', firstName: 'Sam', lastName: 'Doe' }
@@ -257,5 +259,57 @@ describe('composition', () => {
                 filter({ labelIds: ['l1', 'l2'], due: 'soon', text: 'x', priorities: ['high'] })
             )
         ).toBe(4)
+    })
+})
+
+describe('sprints', () => {
+    const sprint = (id: string, state: BoardSprint['state']): BoardSprint => ({
+        id,
+        number: 1,
+        name: '',
+        goal: '',
+        state,
+        position: 'a0',
+        startedAt: '',
+        completedAt: '',
+        cardTotal: 0,
+        cardDone: 0,
+        pointsTotal: 0,
+        pointsDone: 0,
+        committedCount: 0,
+        committedPoints: 0,
+        completedCount: 0,
+        completedPoints: 0,
+        rolledCount: 0,
+    })
+    const now = sprint('s-now', 'active')
+    const later = sprint('s-later', 'planned')
+    const withActive = { ...ctx, activeSprintId: 's-now' }
+
+    it('matches a named sprint, and NO_SPRINT for the backlog', () => {
+        const f = filter({ sprintIds: ['s-later'] })
+        expect(cardMatchesFilter(card({ sprint: later }), f, ctx)).toBe(true)
+        expect(cardMatchesFilter(card({ sprint: now }), f, ctx)).toBe(false)
+        expect(cardMatchesFilter(card({ sprint: null }), f, ctx)).toBe(false)
+        const backlog = filter({ sprintIds: [NO_SPRINT] })
+        expect(cardMatchesFilter(card({ sprint: null }), backlog, ctx)).toBe(true)
+        expect(cardMatchesFilter(card({ sprint: later }), backlog, ctx)).toBe(false)
+    })
+
+    // ACTIVE_SPRINT resolves through the context, the ME shape; with no active
+    // sprint it matches nothing rather than everything.
+    it('resolves ACTIVE_SPRINT through the context', () => {
+        const f = filter({ sprintIds: [ACTIVE_SPRINT] })
+        expect(cardMatchesFilter(card({ sprint: now }), f, withActive)).toBe(true)
+        expect(cardMatchesFilter(card({ sprint: later }), f, withActive)).toBe(false)
+        expect(cardMatchesFilter(card({ sprint: now }), f, ctx)).toBe(false)
+    })
+
+    it('ORs within the facet and counts it once', () => {
+        const f = filter({ sprintIds: [ACTIVE_SPRINT, NO_SPRINT] })
+        expect(cardMatchesFilter(card({ sprint: null }), f, withActive)).toBe(true)
+        expect(cardMatchesFilter(card({ sprint: now }), f, withActive)).toBe(true)
+        expect(cardMatchesFilter(card({ sprint: later }), f, withActive)).toBe(false)
+        expect(activeFacetCount(f)).toBe(1)
     })
 })

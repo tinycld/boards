@@ -75,7 +75,7 @@ export function BoardHeader({ project, cardCount, isArchived }: BoardHeaderProps
                     project={project}
                     onPress={isGuest ? undefined : () => setIsSharing(true)}
                 />
-                <ViewToggle projectId={project.id} />
+                <ViewToggle projectId={project.id} isSprintsEnabled={project.sprintsEnabled} />
                 <FilterPopover project={project} />
                 <SortMenu projectId={project.id} />
                 <SelectModeToggle isVisible={canEdit} />

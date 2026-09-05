@@ -105,6 +105,13 @@ interface BoardsUIState {
     collapsedColumnIds: Record<string, true>
     toggleColumnCollapsed: (listId: string) => void
     /**
+     * The backlog view's folded sections, keyed by sprint id (or 'backlog' /
+     * 'completed'). The collapsedColumnIds shape and doctrine: persisted,
+     * because a stale id is inert.
+     */
+    collapsedSprintIds: Record<string, true>
+    toggleSprintCollapsed: (key: string) => void
+    /**
      * Card density, board-wide. Off = the full face; on = one line plus
      * assignees and due state.
      */
@@ -189,10 +196,10 @@ interface BoardsUIState {
     toggleMyCardsShowClosed: () => void
 }
 
-export type ViewMode = 'board' | 'list' | 'timeline'
+export type ViewMode = 'board' | 'list' | 'timeline' | 'backlog'
 
-/** Which of the four card properties a canvas shortcut opens a picker for. */
-export type CanvasPickerKind = 'due' | 'labels' | 'assignees' | 'priority'
+/** Which card property a canvas (or backlog row) shortcut opens a picker for. */
+export type CanvasPickerKind = 'due' | 'labels' | 'assignees' | 'priority' | 'sprint'
 
 export interface CanvasPicker {
     cardId: string
@@ -201,8 +208,18 @@ export interface CanvasPicker {
     anchor: { x: number; y: number; width: number; height: number }
 }
 
-export function selectViewMode(state: BoardsUIState, projectId: string): ViewMode {
-    return state.viewModeByProject[projectId] ?? 'board'
+/**
+ * The stored view, or the board. A stored `backlog` on a board whose sprints
+ * have since been turned off reads as the board too — the stored value stays
+ * inert rather than rendering a view the board no longer offers.
+ */
+export function selectViewMode(
+    state: BoardsUIState,
+    projectId: string,
+    isSprintsEnabled = true
+): ViewMode {
+    const mode = state.viewModeByProject[projectId] ?? 'board'
+    return mode === 'backlog' && !isSprintsEnabled ? 'board' : mode
 }
 
 /**
@@ -326,6 +343,14 @@ export const useBoardsUIStore = create<BoardsUIState>()(
                     else next[listId] = true
                     return { collapsedColumnIds: next }
                 }),
+            collapsedSprintIds: {},
+            toggleSprintCollapsed: key =>
+                set(s => {
+                    const next = { ...s.collapsedSprintIds }
+                    if (next[key]) delete next[key]
+                    else next[key] = true
+                    return { collapsedSprintIds: next }
+                }),
             isCompactCards: false,
             toggleCompactCards: () => set(s => ({ isCompactCards: !s.isCompactCards })),
             composerOpenListId: null,
@@ -417,6 +442,7 @@ export const useBoardsUIStore = create<BoardsUIState>()(
             partialize: s => ({
                 activeProjectId: s.activeProjectId,
                 collapsedColumnIds: s.collapsedColumnIds,
+                collapsedSprintIds: s.collapsedSprintIds,
                 isCompactCards: s.isCompactCards,
                 viewModeByProject: s.viewModeByProject,
                 isMyCardsShowingClosed: s.isMyCardsShowingClosed,

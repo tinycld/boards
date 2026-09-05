@@ -28,7 +28,7 @@ import { parseDayValue, parseDueValue } from './due-time'
 import { normalizeEstimate } from './estimate'
 import { type ListCategory, normalizeListCategory } from './list-category'
 import { normalizePriority } from './priority'
-import { normalizeSprintRollover, sprintLengthDays } from './sprint'
+import { activeSprint, normalizeSprintRollover, sprintLengthDays } from './sprint'
 
 /** The subset of a user row the board actually renders. */
 type UserLike = Pick<Users, 'id' | 'name' | 'email'>
@@ -82,7 +82,10 @@ export function toBoardEpic(epic: BoardsEpics): BoardEpic {
 export function toBoardSprint(sprint: BoardsSprints): BoardSprint {
     return {
         id: sprint.id,
-        number: sprint.number,
+        // 0 for the optimistic beat before the allocator answers — the insert
+        // omits `number`, so the local row has none until the server's copy
+        // lands (sprintLabel reads 0 as "New sprint").
+        number: sprint.number ?? 0,
         name: sprint.name,
         goal: sprint.goal,
         start: parseDayValue(sprint.start),
@@ -300,6 +303,11 @@ export function buildBoardProject(
     const labelsById = new Map(labels.map(l => [l.id, toBoardLabel(l)]))
     const epicsById = new Map(epics.map(e => [e.id, toBoardEpic(e)]))
     const sprintsById = new Map(sprints.map(s => [s.id, toBoardSprint(s)]))
+    // The filter's ACTIVE_SPRINT resolves here, where the sprints are known;
+    // the view options are built before any board data is.
+    const filterContext = view
+        ? { ...view, activeSprintId: activeSprint([...sprintsById.values()])?.id ?? '' }
+        : undefined
     const usersById = new Map(users.map(u => [u.id, toBoardMember(u)]))
     // Resolved once here so a card can carry its list's status without a
     // lookup at every filter. A card whose list has not synced yet reads as
@@ -342,7 +350,9 @@ export function buildBoardProject(
             epicsById,
             sprintsById
         )
-        if (view && !cardMatchesFilter(cardView, view.filter, view)) continue
+        if (view && filterContext && !cardMatchesFilter(cardView, view.filter, filterContext)) {
+            continue
+        }
         const bucket = cardsByList.get(card.list)
         if (bucket) bucket.push(cardView)
         else cardsByList.set(card.list, [cardView])
