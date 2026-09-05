@@ -271,15 +271,16 @@ plain re-run.
 17. **Card covers.** First image attachment as the cover, via core's
     thumbnail pipeline.  Requires improving file handling so files can be sorted
 18. **Card and board templates.** An `is_template` flag using the duplicate
-    path, and a template picker in the New board dialog.
+    path, and a template picker in the New board dialog. UPDATE: this is out of scope
 20. **WIP limits and card aging.** `wip_limit` on lists with a warning header;
     aging as a face tint from `updated`.
-21. **Reports.** Burndown, velocity, cumulative flow. 12, 13 and 14 are in;
-    velocity's data exists (each sprint stamps its commitment at start and
-    its outcome at completion) and `boards_sprint_snapshots` holds a daily
-    scope/done point per active sprint for burndown — the charts that read
-    them are the sprints work's last phase. Cumulative flow reads the
-    activity table, and the auto-archive sweep's rows count as system moves.
+21. **Reports.** Burndown and velocity shipped with 14: a sprint's report
+    (burndown against the ideal line, or scope-vs-done) draws from the daily
+    `boards_sprint_snapshots` rows, and the backlog's Completed block opens
+    with velocity over the last six completed sprints (committed vs
+    completed stamps, never the live rollup). Still open: **cumulative
+    flow**, which reads the activity table (the auto-archive sweep's rows
+    count as system moves).
 
 ## Tier 3 — single-product differentiators
 

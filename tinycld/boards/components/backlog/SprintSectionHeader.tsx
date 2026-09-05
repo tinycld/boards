@@ -1,10 +1,11 @@
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
-import { ChevronDown, ChevronRight, CircleDot } from 'lucide-react-native'
-import type { ReactNode } from 'react'
+import { ChartLine, ChevronDown, ChevronRight, CircleDot } from 'lucide-react-native'
+import { type ReactNode, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import type { BacklogSection } from '../../lib/backlog'
 import { daysRemaining, formatSprintDates, sprintLabel, sprintProgress } from '../../lib/sprint'
 import type { BoardSprint } from '../../types'
+import { SprintChart } from './SprintChart'
 
 interface SprintSectionHeaderProps {
     section: BacklogSection
@@ -29,6 +30,10 @@ export function SprintSectionHeader({
     const mutedColor = useThemeColor('muted')
     const Chevron = isCollapsed ? ChevronRight : ChevronDown
     const title = section.sprint ? sprintLabel(section.sprint) : 'Backlog'
+    // The report folds under the header; a planned sprint has nothing to
+    // report yet, so it is offered only once the sprint has started.
+    const [isChartOpen, setIsChartOpen] = useState(false)
+    const hasChart = section.sprint !== null && section.sprint.state !== 'planned'
 
     return (
         <View className="px-3 py-2 border-b border-border bg-foreground/[0.02]">
@@ -54,10 +59,56 @@ export function SprintSectionHeader({
                 <Text className="text-[12px] text-muted">{countLabel(section)}</Text>
                 <View className="flex-1" />
                 {actions}
+                <ChartToggle
+                    isVisible={hasChart}
+                    isOpen={isChartOpen}
+                    sprint={section.sprint}
+                    onPress={() => setIsChartOpen(open => !open)}
+                />
             </View>
             <SprintSubtitle sprint={section.sprint} />
+            <SprintChartPanel sprint={section.sprint} isVisible={hasChart && isChartOpen} />
         </View>
     )
+}
+
+function ChartToggle({
+    isVisible,
+    isOpen,
+    sprint,
+    onPress,
+}: {
+    isVisible: boolean
+    isOpen: boolean
+    sprint: BoardSprint | null
+    onPress: () => void
+}) {
+    const mutedColor = useThemeColor('muted')
+    const primaryColor = useThemeColor('primary')
+    if (!isVisible || !sprint) return null
+    return (
+        <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${isOpen ? 'Hide' : 'Show'} the report for ${sprintLabel(sprint)}`}
+            accessibilityState={{ expanded: isOpen }}
+            testID={`boards-sprint-chart-toggle-${sprint.number}`}
+            onPress={onPress}
+            className="rounded-md p-1 hover:bg-foreground/[0.06]"
+        >
+            <ChartLine size={14} color={isOpen ? primaryColor : mutedColor} strokeWidth={2.2} />
+        </Pressable>
+    )
+}
+
+function SprintChartPanel({
+    sprint,
+    isVisible,
+}: {
+    sprint: BoardSprint | null
+    isVisible: boolean
+}) {
+    if (!isVisible || !sprint) return null
+    return <SprintChart sprint={sprint} />
 }
 
 function countLabel(section: BacklogSection): string {

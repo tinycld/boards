@@ -99,6 +99,12 @@ test.describe('Boards — sprint lifecycle', () => {
         await expect(section(page, 'Sprint 1').getByText('finished work')).toBeVisible()
         await expect(section(page, 'Sprint 1').getByText('open work')).toHaveCount(0)
 
+        // The reports: velocity over the completed sprint, and the completed
+        // sprint's own burndown from the snapshots its start and end wrote.
+        await expect(page.getByTestId('boards-velocity-chart')).toContainText('Velocity')
+        await page.getByTestId('boards-sprint-chart-toggle-1').click()
+        await expect(page.getByTestId(/^boards-sprint-report-/).locator('svg')).toBeVisible()
+
         // The rollover is one attributed history row, not two.
         await page.getByTestId('boards-view-board').click()
         await page.getByTestId('boards-sprint-scope').click()
