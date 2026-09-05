@@ -32,10 +32,13 @@ which have since landed) and are merged:
 | #63 | `feat/tier2-cross-board-picker` | Debt 3: the cross-board link picker |
 
 Bulk operations (19) followed on `feat/tier2-bulk-ops` (PR #64) — no migration
-and no server work, exactly as the ranking predicted.
-Open: 14, 16–18, 20, 21 and Tier 3. Next up is 16 (import/export) per
-`docs/PLAN-tier2-open.md`'s phase order, with 20 (WIP limits and aging) as the
-cheap filler if a phase finishes early.
+and no server work, exactly as the ranking predicted. Sprints (14) shipped as a
+six-branch stack, and item 16's EXPORT half on `feat/boards-export`, stacked on
+it, with its core scope entries on `tinycld`'s `feat/boards-export-scopes` (the
+cross-repo step `PLAN-tier2-open.md` said would not be needed — see item 16).
+Open: 16's import half, 17, 18, 20, 21 and Tier 3. Next up is the Trello
+importer, with 20 (WIP limits and aging) as the cheap filler if a phase
+finishes early.
 
 **Carried debt — none left.** `docs/PLAN-debts.md`'s Debts 1 (core `Menu`
 overlay + measurement) and 2 (the CLI scope map) shipped in core; Debt 3 (the
@@ -265,8 +268,26 @@ plain re-run.
 
 ### Open
 
-16. **Import and export.** CSV export (also filed in the appendix's M7
-    follow-ups) and a Trello JSON importer first. Prior art: `contacts/server/vcard_endpoints.go`,
+16. **Import and export.** Export has SHIPPED; the Trello importer is the open
+    half. `GET /api/boards/export?project=<id>&format=csv|json` — CSV is the
+    flat one-row-per-card projection for a spreadsheet, JSON is the whole board
+    including the checklists, comments and links a CSV row cannot hold. Both
+    carry archived cards, flagged, because an export doubles as a backup.
+    Reached from the board menu (Export…) and `boards export` on the CLI.
+    Three things worth carrying into the importer. The endpoint is a RAW route,
+    so it restates the rules by hand — membership, and the suspension clause
+    that `requireAuth` does not check (a raw route runs no rule engine, and a
+    token minted before an account was disabled keeps working); any member may
+    export and a non-member gets 404, never 403. Ordering is `position, id`
+    everywhere, so two exports of an unchanged board are byte-identical — which
+    is what will let the round-trip test assert equality. And the export is
+    deliberately UNFILTERED: `BoardFilter` has no wire format, so honouring it
+    would mean a second `cardMatchesFilter` in Go.
+    A `tinycld` commit was needed too, contrary to `PLAN-tier2-open.md`'s
+    "every phase is in `boards` alone" — a bespoke endpoint absent from core's
+    `endpointScopes` is default-denied for OAuth tokens while working for a
+    session. Prior art for the importer: `contacts/server/vcard_endpoints.go`
+    (its `readImportBody` handles multipart and raw alike),
     `calendar/server/ics_endpoints.go`, the `google-takeout-import` package.
 17. **Card covers.** First image attachment as the cover, via core's
     thumbnail pipeline.  Requires improving file handling so files can be sorted

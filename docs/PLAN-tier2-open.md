@@ -278,15 +278,31 @@ scope-gated GET export and POST import pair — and both are already registered 
 core's route map (`middleware.go:201-204`), which is the pattern the new routes
 follow.
 
-### 2a. CSV export (the cheap half)
+### 2a. CSV export (the cheap half) — ✅ shipped
 
-`GET /api/boards/export?project=<id>` returning the board's cards: key, title,
-list, status category, assignees, labels, priority, estimate, start, due, epic,
-parent. Add to `endpointScopes` as `{ScopeBoardsRead}`.
+`GET /api/boards/export?project=<id>&format=csv|json`, `{ScopeBoardsRead}`.
+CSV carries key, title, description, list, status, priority, estimate, labels,
+assignees, reporter, epic, parent, start, due and **archived** — the last
+because an export doubles as a backup, and one that quietly dropped the archive
+would misrepresent the board.
 
-The export should honour the **active filter** if one is passed — exporting a
-filtered board is the common case, and the filter already serialises for the
-chip bar (`lib/board-filter.ts`).
+Three corrections to this section as it was written:
+
+- **A JSON format shipped beside the CSV.** This section asked for a CSV export
+  and a Trello-JSON import, and then asked (below) for a ROUND-TRIP test. Those
+  are incompatible — a CSV cannot be re-imported by a Trello importer, and it
+  cannot carry checklists, comments or links at all. So `format=json` emits the
+  whole board and is what round-trips. The split mirrors the CLI's own, at
+  `cli/card.go`'s `writeCardResult`.
+- **The filter is NOT honoured, and it does not serialise.** The claim that "the
+  filter already serialises for the chip bar" is wrong: `BoardFilter` is a plain
+  object with no `toQuery`/`fromQuery`, kept session-only in Zustand and
+  deliberately excluded from `partialize`. Honouring it server-side would mean a
+  second implementation of `cardMatchesFilter` in Go, sentinels and closed-list
+  rule included — the drift risk the three rank implementations are documented
+  to guard against. Export the whole board and filter in the spreadsheet.
+- **This phase was NOT boards-only.** See the correction to the suggested-order
+  table at the end of this document.
 
 ### 2b. Trello JSON importer (the half that decides evaluations)
 
@@ -309,8 +325,13 @@ Three things that need decisions rather than transcription:
   it — a wrong guess is one menu click, an unguessed board is N.
 
 **Tests.** A Go golden-file test per direction (`testdata/`, following
-`cli/testdata`'s precedent), plus a round-trip: export a seeded board, re-import
-it into a fresh one, assert equality on the exported projection.
+`cli/testdata`'s precedent), plus a round-trip: export a seeded board as JSON,
+re-import it into a fresh one, assert equality on the exported projection. The
+round trip is JSON→JSON; the CSV is a one-way projection and has no importer.
+
+The export half's suite also pins that two exports of an unchanged board are
+byte-identical, which is what makes that equality assertion meaningful — ranks
+are not unique, so the `position, id` tiebreaker is load-bearing here.
 
 ---
 
@@ -383,9 +404,16 @@ why it is listed here rather than dropped.
 | 3 | 17 + 18 | `boards` | Small, shared theme, existing paths |
 
 Phase 0's four items are independent of each other and of Phase 1 — they can go
-in parallel or in any order. **Every phase is in `boards` alone**; nothing here
-needs a `tinycld` change, which is the dividend of the two debts having already
-landed.
+in parallel or in any order.
+
+**Correction: Phase 2 is NOT in `boards` alone.** A bespoke Go endpoint must be
+classified in core's `endpointScopes`
+(`tinycld/core/server/oauth/middleware.go`) or `ScopeForRoute` default-denies
+it — the route then works for a session and 403s for an OAuth token, which is
+the failure the move endpoint shipped with and that the comment beside the
+prefix entries describes. So export/import needs a `tinycld` commit, and it has
+to land FIRST or the CLI is broken on arrival. Phases 0, 1 and 3 remain
+boards-only.
 
 ## Doc maintenance to do alongside
 
