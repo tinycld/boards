@@ -185,6 +185,7 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
                     projectId={project.id}
                     projectLabels={project.labels}
                     projectEpics={project.epics}
+                    projectSprints={project.sprints}
                     projectMembers={project.members}
                     projectLists={project.lists}
                     projectCards={boardCards}

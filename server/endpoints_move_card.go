@@ -81,6 +81,11 @@ type moveCardResponse struct {
 	MovedEpic   string `json:"moved_epic"`
 	ClearedEpic bool   `json:"cleared_epic"`
 	CreatedEpic bool   `json:"created_epic"`
+	// Whether the card left a sprint. Never asked, unlike the epic: a sprint
+	// is a dated slice of ONE board's plan, so there is nothing on the target
+	// to carry it to — the card goes to the target's backlog and the source
+	// sprint's rollup drops it. Reported so the client can say so.
+	ClearedSprint bool `json:"cleared_sprint"`
 }
 
 // boardRealtime is what registerRealtime hands the endpoint: enough to flush
@@ -116,6 +121,10 @@ func moveFamily(
 	cardID string,
 ) error {
 	for _, child := range children {
+		// This function writes the child's relation history itself, with the
+		// actor the request hooks never captured (activity.go).
+		release := ownRelationHistory(child)
+		defer release()
 		if body.Family == familyUnlink {
 			child.Set("parent", "")
 			if err := tx.Save(child); err != nil {
@@ -131,6 +140,11 @@ func moveFamily(
 		}
 		child.Set("project", body.ProjectID)
 		child.Set("list", body.ListID)
+		// The sprint is per board, like the parent: it cannot follow.
+		if sprint := child.GetString("sprint"); sprint != "" {
+			child.Set("sprint", "")
+			writeActivity(tx, child, actorID, "sprint", sprint, "")
+		}
 		child.Set("labels", []string{})
 		child.Set("assignees", membersOnly(tx, body.ProjectID, child.GetStringSlice("assignees")))
 		if reporter := child.GetString("reporter"); reporter != "" &&
@@ -267,6 +281,13 @@ func handleMoveCard(app core.App, rt *boardRealtime, re *core.RequestEvent) erro
 
 	movedEpic, createdEpic := "", false
 	clearedEpic := sourceEpic != "" && body.Epic == epicUnlink
+	sourceSprint := card.GetString("sprint")
+
+	// The parent, epic and sprint rows are written below with the caller's
+	// id; without this mark the after-success diff would write each again,
+	// unattributed (activity.go).
+	release := ownRelationHistory(card)
+	defer release()
 
 	err = app.RunInTransaction(func(tx core.App) error {
 		// Inside the transaction: "move" can CREATE an epic on the target
@@ -299,6 +320,12 @@ func handleMoveCard(app core.App, rt *boardRealtime, re *core.RequestEvent) erro
 			previousParent := card.GetString("parent")
 			card.Set("parent", "")
 			writeActivity(tx, card, re.Auth.Id, "parent", previousParent, "")
+		}
+		// A sprint is one board's dated plan, so it cannot follow the card
+		// under any answer; the card lands in the target's backlog.
+		if sourceSprint != "" {
+			card.Set("sprint", "")
+			writeActivity(tx, card, re.Auth.Id, "sprint", sourceSprint, "")
 		}
 		if err := tx.Save(card); err != nil {
 			return err
@@ -357,6 +384,7 @@ func handleMoveCard(app core.App, rt *boardRealtime, re *core.RequestEvent) erro
 		MovedEpic:        movedEpic,
 		ClearedEpic:      clearedEpic,
 		CreatedEpic:      createdEpic,
+		ClearedSprint:    sourceSprint != "",
 	})
 }
 

@@ -432,6 +432,11 @@ async function seedBoard(
         created_by: ownerId,
         archived: false,
         auto_archive_days: board.autoArchiveDays ?? 0,
+        sprints_enabled: false,
+        sprint_length_days: 0,
+        sprint_auto_start: false,
+        sprint_auto_complete: false,
+        sprint_rollover: 'next',
     })
 
     // Owner row first, mirroring useCreateProject's yield order. The superuser

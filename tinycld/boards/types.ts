@@ -46,6 +46,8 @@ import type {
     BoardsProjectMembers,
     BoardsProjects,
     BoardsShareLinks,
+    BoardsSprintSnapshots,
+    BoardsSprints,
     Users,
 } from '@tinycld/core/types/pbSchema'
 import type { ListCategory } from './lib/list-category'
@@ -66,6 +68,8 @@ export type {
     BoardsProjectMembers,
     BoardsProjects,
     BoardsShareLinks,
+    BoardsSprintSnapshots,
+    BoardsSprints,
 }
 
 /**
@@ -95,6 +99,9 @@ export type BoardsShareLinkRole = BoardsShareLinks['role']
 
 /** `link` means the board is reachable by anyone holding a live share link. */
 export type BoardsProjectVisibility = BoardsProjects['visibility']
+
+/** planned → active → completed, and only ever forward (server/sprint_guard.go). */
+export type BoardSprintState = BoardsSprints['state']
 
 /**
  * The five-step scale, re-exported from lib/priority.ts where its ORDER lives.
@@ -286,6 +293,53 @@ export interface BoardCardView {
      * not cascade) reads as unfiled, exactly as a missing parent does.
      */
     epic: BoardEpic | null
+    /**
+     * The sprint this card is in, or null when it is in the backlog.
+     *
+     * A resolved row, the way `epic` is and for the same reasons: the face
+     * renders the sprint's label, boards_sprints syncs eagerly, the pin in
+     * 1980000018 keeps it on the same board, and a dangling id (the sprint
+     * was deleted; the relation does not cascade) reads as backlog.
+     */
+    sprint: BoardSprint | null
+}
+
+/**
+ * A sprint as the board renders it — the dated iteration row from
+ * boards_sprints.
+ *
+ * Every number here is server-owned. The four rollup fields are live
+ * (server/sprint_rollup.go) and count RAW points — no 1-point floor, unlike
+ * an epic — beside a card count. The committed/completed pairs are stamped by
+ * the start and complete transitions and never move again, because the
+ * rollover empties a completed sprint of its unfinished cards and the live
+ * numbers would then read "all done".
+ */
+export interface BoardSprint {
+    id: string
+    /** The 4 in "Sprint 4"; see lib/sprint.ts's sprintLabel. */
+    number: number
+    /** '' when the team gave none. */
+    name: string
+    goal: string
+    /** Local days, undefined while a planned sprint is undated. */
+    start?: Date
+    end?: Date
+    state: BoardSprintState
+    /** Fractional rank among PLANNED sprints — see lib/rank.ts. Sort by `position, id`. */
+    position: string
+    /** ISO timestamps, '' until the transition happened. */
+    startedAt: string
+    completedAt: string
+    cardTotal: number
+    cardDone: number
+    pointsTotal: number
+    pointsDone: number
+    committedCount: number
+    committedPoints: number
+    completedCount: number
+    completedPoints: number
+    rolledCount: number
 }
 
 /**
@@ -368,6 +422,19 @@ export interface BoardProject {
      * one must still resolve its title.
      */
     epics: BoardEpic[]
+    /**
+     * Every sprint on this board, every state: the backlog view lists them
+     * all, and a card in a completed sprint must still resolve its label.
+     * Ordered active, then planned by rank, then completed.
+     */
+    sprints: BoardSprint[]
+    /** The per-board sprint settings (Board settings…), owner-only by rule. */
+    sprintsEnabled: boolean
+    /** Days, with 0 already read as the default — see lib/sprint.ts. */
+    sprintLengthDays: number
+    sprintAutoStart: boolean
+    sprintAutoComplete: boolean
+    sprintRollover: 'next' | 'backlog'
     /**
      * Cards whose `list` names a row this client hasn't synced yet. Lists and
      * cards arrive on independent live queries, so a card can legitimately land

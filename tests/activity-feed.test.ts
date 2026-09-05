@@ -30,6 +30,11 @@ const ctx = {
         // A board with no slug has no keys, so the title is the fallback.
         { id: 'cd2', key: '', title: 'Untitled epic' },
     ],
+    epics: [{ id: 'e1', title: 'Authentication' }],
+    sprints: [
+        { id: 's1', number: 1, name: '' },
+        { id: 's2', number: 2, name: 'Launch week' },
+    ],
 }
 
 describe('buildActivityFeed', () => {
@@ -183,5 +188,29 @@ describe('describeActivity', () => {
         expect(
             describeActivity(activity('a', 'moved_board', '', { from: 'OTTER-3' }), ctx).text
         ).toBe('moved this here from OTTER-3')
+    })
+})
+
+describe('describeActivity — sprints', () => {
+    it('reads a first filing, a rollover and a return to the backlog', () => {
+        const joined = activity('a1', 'sprint', '2026-01-01 00:00:00.000Z', { to: 's1' })
+        expect(describeActivity(joined, ctx).text).toBe('added this to Sprint 1')
+        const rolled = activity('a2', 'sprint', '2026-01-02 00:00:00.000Z', {
+            from: 's1',
+            to: 's2',
+        })
+        expect(describeActivity(rolled, ctx).text).toBe('moved this from Sprint 1 to Launch week')
+        const left = activity('a3', 'sprint', '2026-01-03 00:00:00.000Z', { from: 's2' })
+        expect(describeActivity(left, ctx).text).toBe('moved this from Launch week to the backlog')
+    })
+
+    it('falls back to a noun for a deleted sprint', () => {
+        const row = activity('a1', 'sprint', '2026-01-01 00:00:00.000Z', { to: 'gone' })
+        expect(describeActivity(row, ctx).text).toBe('added this to a sprint')
+    })
+
+    it('reads an epic filing', () => {
+        const row = activity('a1', 'epic', '2026-01-01 00:00:00.000Z', { to: 'e1' })
+        expect(describeActivity(row, ctx).text).toBe('filed this under Authentication')
     })
 })

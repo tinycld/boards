@@ -236,6 +236,7 @@ export function useBoardContent(projectId: string, view?: BoardViewOptions) {
         cardsCollection,
         labelsCollection,
         epicsCollection,
+        sprintsCollection,
         usersCollection,
     ] = useStore(
         'boards_projects',
@@ -244,6 +245,7 @@ export function useBoardContent(projectId: string, view?: BoardViewOptions) {
         'boards_cards',
         'boards_labels',
         'boards_epics',
+        'boards_sprints',
         'users'
     )
 
@@ -301,6 +303,16 @@ export function useBoardContent(projectId: string, view?: BoardViewOptions) {
         [projectId, epicsCollection]
     )
 
+    const { data: sprintRows } = useBoardLiveQuery(
+        query => {
+            if (!projectId) return null
+            return query
+                .from({ sprint: sprintsCollection })
+                .where(({ sprint }) => eq(sprint.project, projectId))
+        },
+        [projectId, sprintsCollection]
+    )
+
     // The roster, joined to users for names. boards_project_members does expand
     // `user`, but a join reads from the optimistic local store where the expand
     // waits on a realtime round-trip — the same reasoning as the project query.
@@ -352,13 +364,24 @@ export function useBoardContent(projectId: string, view?: BoardViewOptions) {
                     cards: cardRows ?? [],
                     labels: labelRows ?? [],
                     epics: epicRows ?? [],
+                    sprints: sprintRows ?? [],
                     members: (memberRows ?? []).map(r => r.user),
                     users: userRows ?? [],
                     view,
                 },
                 previousProjectRef.current
             ),
-        [projectRows, listRows, cardRows, labelRows, epicRows, memberRows, userRows, view]
+        [
+            projectRows,
+            listRows,
+            cardRows,
+            labelRows,
+            epicRows,
+            sprintRows,
+            memberRows,
+            userRows,
+            view,
+        ]
     )
     previousProjectRef.current = project
 

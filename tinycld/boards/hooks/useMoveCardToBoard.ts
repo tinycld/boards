@@ -15,6 +15,14 @@ export interface MoveCardToBoardInput {
      * move work the user cannot see from the dialog.
      */
     family?: 'move' | 'unlink'
+    /**
+     * What to do with the card's epic, when it has one: "move" recreates the
+     * epic on the target board by name and files the card under it, "unlink"
+     * leaves it unfiled. Required by the server whenever the card is filed,
+     * for the reason `family` is. (The dialog shipped without sending this,
+     * so moving any card in an epic was refused.)
+     */
+    epic?: 'move' | 'unlink'
 }
 
 export interface MoveCardToBoardResult {
@@ -27,6 +35,16 @@ export interface MoveCardToBoardResult {
     orphanedChildren: number
     /** Whether the card stopped being a sub-task — a parent cannot follow it. */
     clearedParent: boolean
+    /** The target board's epic the card landed in, '' when unfiled. */
+    movedEpic: string
+    clearedEpic: boolean
+    /** Whether "move" had to create the epic on the target. */
+    createdEpic: boolean
+    /**
+     * Whether the card left a sprint. Never asked: a sprint is one board's
+     * dated plan, so the card lands in the target's backlog.
+     */
+    clearedSprint: boolean
 }
 
 interface MovePayload {
@@ -36,6 +54,10 @@ interface MovePayload {
     moved_children: number
     orphaned_children: number
     cleared_parent: boolean
+    moved_epic: string
+    cleared_epic: boolean
+    created_epic: boolean
+    cleared_sprint: boolean
 }
 
 /**
@@ -66,6 +88,7 @@ export function useMoveCardToBoard() {
                             list_id: input.listId,
                             position: input.position,
                             family: input.family ?? '',
+                            epic: input.epic ?? '',
                         },
                     }
                 )
@@ -77,6 +100,10 @@ export function useMoveCardToBoard() {
                     movedChildren: payload.moved_children ?? 0,
                     orphanedChildren: payload.orphaned_children ?? 0,
                     clearedParent: payload.cleared_parent ?? false,
+                    movedEpic: payload.moved_epic ?? '',
+                    clearedEpic: payload.cleared_epic ?? false,
+                    createdEpic: payload.created_epic ?? false,
+                    clearedSprint: payload.cleared_sprint ?? false,
                 }
             } catch (err) {
                 captureException('boards.card.moveToBoard', err, { ...input })

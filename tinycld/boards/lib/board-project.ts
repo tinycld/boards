@@ -12,11 +12,13 @@ import type {
     BoardListView,
     BoardMember,
     BoardProject,
+    BoardSprint,
     BoardsCards,
     BoardsEpics,
     BoardsLabels,
     BoardsLists,
     BoardsProjects,
+    BoardsSprints,
     Users,
 } from '../types'
 import { type BoardFilter, cardMatchesFilter } from './board-filter'
@@ -26,6 +28,7 @@ import { parseDayValue, parseDueValue } from './due-time'
 import { normalizeEstimate } from './estimate'
 import { type ListCategory, normalizeListCategory } from './list-category'
 import { normalizePriority } from './priority'
+import { normalizeSprintRollover, sprintLengthDays } from './sprint'
 
 /** The subset of a user row the board actually renders. */
 type UserLike = Pick<Users, 'id' | 'name' | 'email'>
@@ -76,6 +79,39 @@ export function toBoardEpic(epic: BoardsEpics): BoardEpic {
     }
 }
 
+export function toBoardSprint(sprint: BoardsSprints): BoardSprint {
+    return {
+        id: sprint.id,
+        number: sprint.number,
+        name: sprint.name,
+        goal: sprint.goal,
+        start: parseDayValue(sprint.start),
+        end: parseDayValue(sprint.end),
+        state: sprint.state,
+        position: sprint.position,
+        startedAt: sprint.started_at,
+        completedAt: sprint.completed_at,
+        cardTotal: sprint.card_total,
+        cardDone: sprint.card_done,
+        pointsTotal: sprint.points_total,
+        pointsDone: sprint.points_done,
+        committedCount: sprint.committed_count,
+        committedPoints: sprint.committed_points,
+        completedCount: sprint.completed_count,
+        completedPoints: sprint.completed_points,
+        rolledCount: sprint.rolled_count,
+    }
+}
+
+/** active first, then planned, then completed — the backlog's reading order. */
+const SPRINT_STATE_ORDER = { active: 0, planned: 1, completed: 2 } as const
+
+function bySprintOrder(a: BoardSprint, b: BoardSprint): number {
+    const byState = SPRINT_STATE_ORDER[a.state] - SPRINT_STATE_ORDER[b.state]
+    if (byState !== 0) return byState
+    return a.position.localeCompare(b.position) || a.id.localeCompare(b.id)
+}
+
 /**
  * Resolve one card, looking its relations up by id.
  *
@@ -106,7 +142,9 @@ export function toBoardCard(
      * reason labels are: boards_epics syncs eagerly, so an expand would ship a
      * duplicate copy of the row with every card.
      */
-    epicsById: Map<string, BoardEpic> = new Map()
+    epicsById: Map<string, BoardEpic> = new Map(),
+    /** The board's sprints by id, resolved for the reason epics are. */
+    sprintsById: Map<string, BoardSprint> = new Map()
 ): BoardCardView {
     return {
         id: card.id,
@@ -154,6 +192,9 @@ export function toBoardCard(
         // A dangling id reads as unfiled — the epic was deleted, which orphans
         // rather than cascades, exactly as a deleted parent does.
         epic: epicsById.get(card.epic) ?? null,
+        // Likewise: a deleted sprint leaves its id behind, and the card reads
+        // as backlog.
+        sprint: sprintsById.get(card.sprint) ?? null,
     }
 }
 
@@ -226,6 +267,8 @@ export interface BuildBoardInput {
      * epicsById defaults the same way.
      */
     epics?: BoardsEpics[]
+    /** Optional for the reason `epics` is. */
+    sprints?: BoardsSprints[]
     /** Project roster, for the header avatar stack. */
     members: UserLike[]
     /**
@@ -251,11 +294,12 @@ export function buildBoardProject(
     input: BuildBoardInput,
     previous?: BoardProject | null
 ): BoardProject | null {
-    const { project, lists, cards, labels, epics = [], members, users, view } = input
+    const { project, lists, cards, labels, epics = [], sprints = [], members, users, view } = input
     if (!project) return null
 
     const labelsById = new Map(labels.map(l => [l.id, toBoardLabel(l)]))
     const epicsById = new Map(epics.map(e => [e.id, toBoardEpic(e)]))
+    const sprintsById = new Map(sprints.map(s => [s.id, toBoardSprint(s)]))
     const usersById = new Map(users.map(u => [u.id, toBoardMember(u)]))
     // Resolved once here so a card can carry its list's status without a
     // lookup at every filter. A card whose list has not synced yet reads as
@@ -295,7 +339,8 @@ export function buildBoardProject(
             project.slug,
             categoryByList.get(card.list) ?? 'todo',
             (card.parent && keyByCardId.get(card.parent)) || '',
-            epicsById
+            epicsById,
+            sprintsById
         )
         if (view && !cardMatchesFilter(cardView, view.filter, view)) continue
         const bucket = cardsByList.get(card.list)
@@ -324,6 +369,11 @@ export function buildBoardProject(
         slug: project.slug,
         color: project.color,
         autoArchiveDays: project.auto_archive_days,
+        sprintsEnabled: project.sprints_enabled,
+        sprintLengthDays: sprintLengthDays(project),
+        sprintAutoStart: project.sprint_auto_start,
+        sprintAutoComplete: project.sprint_auto_complete,
+        sprintRollover: normalizeSprintRollover(project.sprint_rollover),
         members: members.map(toBoardMember),
         // Sorted by name so the label picker has a stable order that does not
         // depend on insertion sequence.
@@ -334,6 +384,7 @@ export function buildBoardProject(
         epics: [...epicsById.values()].sort(
             (a, b) => a.position.localeCompare(b.position) || a.id.localeCompare(b.id)
         ),
+        sprints: [...sprintsById.values()].sort(bySprintOrder),
         lists: sortedLists.map(list => ({
             id: list.id,
             name: list.name,
@@ -396,6 +447,38 @@ function sameOptionalEpic(a: BoardEpic | null, b: BoardEpic | null): boolean {
     return sameEpic(a, b)
 }
 
+// Every field, the sameEpic discipline: the rollup and the lifecycle stamps
+// are server-written and move with nothing else on the row changing, so any
+// one left out freezes a sprint's progress on screen.
+function sameSprint(a: BoardSprint, b: BoardSprint): boolean {
+    return (
+        a.id === b.id &&
+        a.number === b.number &&
+        a.name === b.name &&
+        a.goal === b.goal &&
+        (a.start?.getTime() ?? null) === (b.start?.getTime() ?? null) &&
+        (a.end?.getTime() ?? null) === (b.end?.getTime() ?? null) &&
+        a.state === b.state &&
+        a.position === b.position &&
+        a.startedAt === b.startedAt &&
+        a.completedAt === b.completedAt &&
+        a.cardTotal === b.cardTotal &&
+        a.cardDone === b.cardDone &&
+        a.pointsTotal === b.pointsTotal &&
+        a.pointsDone === b.pointsDone &&
+        a.committedCount === b.committedCount &&
+        a.committedPoints === b.committedPoints &&
+        a.completedCount === b.completedCount &&
+        a.completedPoints === b.completedPoints &&
+        a.rolledCount === b.rolledCount
+    )
+}
+
+function sameOptionalSprint(a: BoardSprint | null, b: BoardSprint | null): boolean {
+    if (a === null || b === null) return a === b
+    return sameSprint(a, b)
+}
+
 function sameCard(a: BoardCardView, b: BoardCardView): boolean {
     return (
         a.id === b.id &&
@@ -429,7 +512,8 @@ function sameCard(a: BoardCardView, b: BoardCardView): boolean {
         // tree, and the new reporter never renders — the failure the key
         // comparison above documents, in its quietest form.
         sameOptionalMember(a.reporter, b.reporter) &&
-        sameOptionalEpic(a.epic, b.epic)
+        sameOptionalEpic(a.epic, b.epic) &&
+        sameOptionalSprint(a.sprint, b.sprint)
     )
 }
 
@@ -498,6 +582,7 @@ function shareTree(previous: BoardProject, fresh: BoardProject): BoardProject {
 
     const labels = shareById(previous.labels, fresh.labels, sameLabel)
     const epics = shareById(previous.epics, fresh.epics, sameEpic)
+    const sprints = shareById(previous.sprints, fresh.sprints, sameSprint)
     const members = shareById(previous.members, fresh.members, sameMember)
     const listOrder = sameElements(previous.listOrder, fresh.listOrder, sameRank)
         ? previous.listOrder
@@ -508,6 +593,7 @@ function shareTree(previous: BoardProject, fresh: BoardProject): BoardProject {
         sharedLists === previous.lists &&
         labels === previous.labels &&
         epics === previous.epics &&
+        sprints === previous.sprints &&
         members === previous.members &&
         listOrder === previous.listOrder &&
         unplacedCards === previous.unplacedCards &&
@@ -518,9 +604,25 @@ function shareTree(previous: BoardProject, fresh: BoardProject): BoardProject {
         previous.slug === fresh.slug &&
         previous.color === fresh.color &&
         previous.autoArchiveDays === fresh.autoArchiveDays &&
+        // The sprint settings live on the project row too; without these the
+        // header would keep rendering sprint chrome a setting just turned off.
+        previous.sprintsEnabled === fresh.sprintsEnabled &&
+        previous.sprintLengthDays === fresh.sprintLengthDays &&
+        previous.sprintAutoStart === fresh.sprintAutoStart &&
+        previous.sprintAutoComplete === fresh.sprintAutoComplete &&
+        previous.sprintRollover === fresh.sprintRollover &&
         previous.cardTotal === fresh.cardTotal
     ) {
         return previous
     }
-    return { ...fresh, lists: sharedLists, labels, epics, members, listOrder, unplacedCards }
+    return {
+        ...fresh,
+        lists: sharedLists,
+        labels,
+        epics,
+        sprints,
+        members,
+        listOrder,
+        unplacedCards,
+    }
 }

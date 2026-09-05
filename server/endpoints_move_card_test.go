@@ -562,3 +562,83 @@ func TestMoveCard_EpicMoveReusesAMatchingEpic(t *testing.T) {
 		},
 	}.run(t, env.cardsEnv)
 }
+
+// A sprint is one board's dated plan, so it never follows the card — no
+// answer is asked, the card lands in the target's backlog, and the response
+// says so. The history hook is bound here so the assertion proves ONE row,
+// attributed to the caller: the endpoint marks the card as owning its
+// relation history (activity.go), or the after-success diff would write a
+// second, unattributed copy.
+func TestMoveCard_ClearsTheSprint(t *testing.T) {
+	env := setupMoveEnv(t)
+	registerCardActivity(env.app)
+	sprint := cardsSprint(t, env.app, env.project, "Sprint one", "a0")
+	env.card.Set("sprint", sprint.Id)
+	if err := env.app.Save(env.card); err != nil {
+		t.Fatalf("seed sprint: %v", err)
+	}
+
+	req{
+		method:  http.MethodPost,
+		url:     "/api/boards/cards/" + env.card.Id + "/move",
+		token:   env.editorToken,
+		body:    moveBody(env),
+		want:    http.StatusOK,
+		content: []string{`"cleared_sprint":true`},
+		before:  mountCardRoutes,
+		after: func(t testing.TB, app *tests.TestApp) {
+			requireCardSprint(env.card.Id, "")(t, app)
+			rows, err := app.FindRecordsByFilter("boards_activity",
+				"card = {:card} && kind = 'sprint'", "", 0, 0, dbx.Params{"card": env.card.Id})
+			if err != nil {
+				t.Fatalf("read history: %v", err)
+			}
+			if len(rows) != 1 {
+				t.Fatalf("sprint history rows = %d, want exactly 1", len(rows))
+			}
+			if rows[0].GetString("actor") != env.editor.Id || rows[0].GetString("from") != sprint.Id {
+				t.Fatalf("row = actor %q, from %q; want the editor leaving %s",
+					rows[0].GetString("actor"), rows[0].GetString("from"), sprint.Id)
+			}
+			if _, err := app.FindRecordById("boards_sprints", sprint.Id); err != nil {
+				t.Fatal("the source board's sprint must survive the move")
+			}
+		},
+	}.run(t, env.cardsEnv)
+}
+
+func TestMoveCard_NoSprintReportsNothingCleared(t *testing.T) {
+	env := setupMoveEnv(t)
+
+	req{
+		method:  http.MethodPost,
+		url:     "/api/boards/cards/" + env.card.Id + "/move",
+		token:   env.editorToken,
+		body:    moveBody(env),
+		want:    http.StatusOK,
+		content: []string{`"cleared_sprint":false`},
+		before:  mountCardRoutes,
+	}.run(t, env.cardsEnv)
+}
+
+// A moved child leaves its sprint too, for the reason the parent does.
+func TestMoveCard_MovedChildrenLeaveTheSprint(t *testing.T) {
+	env := setupMoveEnv(t)
+	sprint := cardsSprint(t, env.app, env.project, "Sprint one", "a0")
+	child := seedChild(t, env, "child", "a1")
+	child.Set("sprint", sprint.Id)
+	if err := env.app.Save(child); err != nil {
+		t.Fatalf("seed child sprint: %v", err)
+	}
+
+	req{
+		method:  http.MethodPost,
+		url:     "/api/boards/cards/" + env.card.Id + "/move",
+		token:   env.editorToken,
+		body:    moveFamilyBody(env, "move"),
+		want:    http.StatusOK,
+		content: []string{`"moved_children":1`},
+		before:  mountCardRoutes,
+		after:   requireCardSprint(child.Id, ""),
+	}.run(t, env.cardsEnv)
+}

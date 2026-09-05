@@ -95,6 +95,7 @@ func registerShared(app *pocketbase.PocketBase) {
 		{Collection: "boards_cards", Field: "reporter"},
 		{Collection: "boards_comments", Field: "author"},
 		{Collection: "boards_attachments", Field: "uploaded_by"},
+		{Collection: "boards_sprints", Field: "created_by"},
 	} {
 		offboard.RegisterReassignable(ref)
 	}
@@ -113,6 +114,9 @@ func registerShared(app *pocketbase.PocketBase) {
 	// card's EPIC, and a re-file recounts two — but it sums POINTS rather than
 	// counting rows, with an unestimated card worth 1. See epic_rollup.go.
 	registerEpicRollup(app)
+	// The sprint rollup, the epic shape again but with a count beside the
+	// points and no floor. See sprint_rollup.go.
+	registerSprintRollup(app)
 	// Unrelated to the counters above despite the adjacency, and the opposite
 	// of them in every invariant: this one is a monotonic sequence, it runs
 	// before the row lands, and it FAILS the write when it cannot allocate.
@@ -125,6 +129,13 @@ func registerShared(app *pocketbase.PocketBase) {
 	// Self-links and contradictory blocks-both-ways pairs: what the unique
 	// index and the rules cannot say. See card_links.go.
 	registerCardLinkGuard(app)
+	// The sprint invariants — created planned, forward-only, one active per
+	// board, a card joins only an open sprint — then the server-owned
+	// columns and the number. Guard first so a refused row never reaches the
+	// allocator. See sprint_guard.go, sprint_owned_columns.go, sprint_number.go.
+	registerSprintGuard(app)
+	registerSprintOwnedColumns(app)
+	registerSprintNumbers(app)
 	// edited_at on comments is server-owned the same way `number` is: the
 	// hook stamps it when the body actually changes and discards any
 	// client-supplied value when it does not. See comment_edited.go.

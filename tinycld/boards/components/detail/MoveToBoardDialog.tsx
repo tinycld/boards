@@ -39,6 +39,9 @@ function MoveToBoardDialogBody({ card, projectId, onClose, onMoved }: MoveToBoar
     // Unset until chosen, deliberately: the server refuses a family move with
     // no answer rather than picking one, so there is no default to preselect.
     const [family, setFamily] = useState<'move' | 'unlink' | ''>('')
+    // The epic question, asked the same way: the server refuses a filed card
+    // with no answer, so there is nothing to preselect.
+    const [epic, setEpic] = useState<'move' | 'unlink' | ''>('')
     const { project: target } = useBoardContent(targetId)
     const moveCard = useMoveCardToBoard()
 
@@ -46,7 +49,13 @@ function MoveToBoardDialogBody({ card, projectId, onClose, onMoved }: MoveToBoar
     // A card in a family cannot move until the question is answered — the
     // server would refuse it, so the button says so first.
     const hasFamily = card.subtaskTotal > 0 || card.parent !== ''
-    const canMove = !!target && !!list && !moveCard.isPending && (!hasFamily || family !== '')
+    const hasEpic = card.epic !== null
+    const canMove =
+        !!target &&
+        !!list &&
+        !moveCard.isPending &&
+        (!hasFamily || family !== '') &&
+        (!hasEpic || epic !== '')
 
     const confirm = () => {
         if (!target || !list) return
@@ -57,6 +66,7 @@ function MoveToBoardDialogBody({ card, projectId, onClose, onMoved }: MoveToBoar
                 listId: list.id,
                 position: rankForAppend(list.cards),
                 family: family || undefined,
+                epic: epic || undefined,
             },
             {
                 onSuccess: result => {
@@ -90,6 +100,7 @@ function MoveToBoardDialogBody({ card, projectId, onClose, onMoved }: MoveToBoar
                     />
                     <ListChoices target={target} selectedId={list?.id ?? ''} onSelect={setListId} />
                     <FamilyChoices card={card} selected={family} onSelect={setFamily} />
+                    <EpicChoices card={card} target={target} selected={epic} onSelect={setEpic} />
                     <Preview card={card} target={target} />
                 </ScrollView>
                 <View className="flex-row gap-3 justify-end p-3 border-t border-border">
@@ -261,6 +272,51 @@ function FamilyChoices({
     )
 }
 
+/**
+ * What happens to the card's epic — asked, never assumed, for the reason the
+ * family is: either the card drops out of a plan someone was tracking, or the
+ * target board gains an epic nobody there made. "Bring" files the card under
+ * the target's epic of the same name, creating it if there is none.
+ */
+function EpicChoices({
+    card,
+    target,
+    selected,
+    onSelect,
+}: {
+    card: BoardCardView
+    target: BoardProject | null
+    selected: 'move' | 'unlink' | ''
+    onSelect: (choice: 'move' | 'unlink') => void
+}) {
+    if (!card.epic) return null
+    const title = card.epic.title
+    const existsOnTarget = target?.epics.some(
+        epic => epic.title.trim().toLowerCase() === title.trim().toLowerCase()
+    )
+    const bringLabel = existsOnTarget
+        ? `Keep it in “${title}” there`
+        : `Bring “${title}” along (creates the epic there)`
+
+    return (
+        <View>
+            <SectionTitle>Epic</SectionTitle>
+            <ChoiceRow
+                label={bringLabel}
+                isSelected={selected === 'move'}
+                testID="boards-move-epic-move"
+                onPress={() => onSelect('move')}
+            />
+            <ChoiceRow
+                label="Leave it unfiled on arrival"
+                isSelected={selected === 'unlink'}
+                testID="boards-move-epic-unlink"
+                onPress={() => onSelect('unlink')}
+            />
+        </View>
+    )
+}
+
 /** What changes on arrival: dropped labels, assignees who are not members. */
 function Preview({ card, target }: { card: BoardCardView; target: BoardProject | null }) {
     if (!target) return null
@@ -278,6 +334,11 @@ function Preview({ card, target }: { card: BoardCardView; target: BoardProject |
             `Unassigned on arrival (not members there): ${leaving
                 .map(m => `${m.firstName} ${m.lastName}`.trim())
                 .join(', ')}.`
+        )
+    }
+    if (card.sprint) {
+        lines.push(
+            'It leaves its sprint — a sprint belongs to one board — and lands in the backlog.'
         )
     }
     lines.push('The card gets a new key on its new board; the old key stops working.')

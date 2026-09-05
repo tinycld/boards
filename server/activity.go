@@ -2,6 +2,7 @@ package boards
 
 import (
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/pocketbase/dbx"
@@ -32,6 +33,20 @@ var activityLog = logging.ForPackage("boards")
 // descriptionCoalesceWindow is how long a description edit by the same actor
 // keeps folding into the previous row.
 const descriptionCoalesceWindow = 10 * time.Minute
+
+// relationHistoryOwned marks a card save whose caller writes the `parent`,
+// `epic` and `sprint` rows ITSELF — the cross-board move and the sprint
+// lifecycle, which save through a transaction with an actor the request
+// hooks never saw. Without the mark the after-success diff below would write
+// a second, unattributed copy of each of those rows. Keyed by record pointer,
+// the actor.go convention.
+var relationHistoryOwned sync.Map // *core.Record → struct{}
+
+// ownRelationHistory sets the mark for one card and returns its release.
+func ownRelationHistory(card *core.Record) func() {
+	relationHistoryOwned.Store(card, struct{}{})
+	return func() { relationHistoryOwned.Delete(card) }
+}
 
 func registerCardActivity(app core.App) {
 	app.OnRecordAfterCreateSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
@@ -118,8 +133,20 @@ func logCardChanges(app core.App, card *core.Record, actor string) {
 	// estimateText use: a blank `to` is a card that stopped being a sub-task,
 	// a blank `from` one that became one. Raw ids, resolved to card keys at
 	// render like every other relation here.
-	if from, to := original.GetString("parent"), card.GetString("parent"); from != to {
-		writeActivity(app, card, actor, "parent", from, to)
+	if _, owned := relationHistoryOwned.Load(card); !owned {
+		if from, to := original.GetString("parent"), card.GetString("parent"); from != to {
+			writeActivity(app, card, actor, "parent", from, to)
+		}
+		// Both grouping relations, the parent shape: a blank `to` is a card
+		// leaving, a blank `from` one joining. The epic branch was missing
+		// until sprints landed — an ordinary re-file wrote no history, only a
+		// cross-board move did.
+		if from, to := original.GetString("epic"), card.GetString("epic"); from != to {
+			writeActivity(app, card, actor, "epic", from, to)
+		}
+		if from, to := original.GetString("sprint"), card.GetString("sprint"); from != to {
+			writeActivity(app, card, actor, "sprint", from, to)
+		}
 	}
 	if from, to := original.GetInt("estimate"), card.GetInt("estimate"); from != to {
 		writeActivity(app, card, actor, "estimate", estimateText(from), estimateText(to))
