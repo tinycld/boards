@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tests"
 )
@@ -157,4 +158,52 @@ func TestStartSprintEndpoint_StampsSurviveTheOwnedColumnGuard(t *testing.T) {
 		before:  mountSprintRoutes,
 		after:   requireSprintInt(sprint.Id, "committed_points", 8),
 	}.run(t, env.cardsEnv)
+}
+
+// The seed drives the transitions as a superuser, which is no board's
+// member: admitted, and attributed to nobody.
+func TestSprintEndpoints_SuperuserActsAsNobody(t *testing.T) {
+	env := setupLifecycleEnv(t)
+	sprint, _, open1, _ := seedActive(t, env)
+	token := superuserToken(t, env.app)
+
+	req{
+		method:  http.MethodPost,
+		url:     "/api/boards/sprints/" + sprint.Id + "/complete",
+		token:   token,
+		body:    `{"unfinished":"backlog"}`,
+		want:    http.StatusOK,
+		content: []string{`"rolled_count":2`},
+		before:  mountSprintRoutes,
+		after: func(t testing.TB, app *tests.TestApp) {
+			requireCardSprint(open1.Id, "")(t, app)
+			rows, err := app.FindRecordsByFilter("boards_activity",
+				"card = {:card} && kind = 'sprint'", "", 0, 0, dbx.Params{"card": open1.Id})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(rows) != 1 || rows[0].GetString("actor") != "" {
+				t.Fatalf("history = %d rows, actor %q; want one unattributed row", len(rows), rows[0].GetString("actor"))
+			}
+		},
+	}.run(t, env.cardsEnv)
+}
+
+func superuserToken(t *testing.T, app core.App) string {
+	t.Helper()
+	col, err := app.FindCollectionByNameOrId(core.CollectionNameSuperusers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	su := core.NewRecord(col)
+	su.SetEmail("root@example.com")
+	su.SetPassword("password-long-enough")
+	if err := app.Save(su); err != nil {
+		t.Fatal(err)
+	}
+	token, err := su.NewAuthToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return token
 }

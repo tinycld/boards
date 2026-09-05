@@ -68,3 +68,11 @@ move through time; the card names stay pinned at the left.
 Cards with no dates are left out, and the same filter and sort apply as in
 the other views. Click a row to open the card, or walk the rows with `j` and
 `k` and press `Enter`. Dates are changed on the card, not by dragging a bar.
+
+## Sprints
+
+On a board that plans in [sprints](help://boards:sprints), the filter has a
+**Sprints** section (the active sprint, any sprint, or **No sprint**), the
+sort menu has **Sprint**, and a pill in the header scopes every view to the
+running sprint, the backlog, or all cards. The timeline draws each sprint as
+a band over its dates.

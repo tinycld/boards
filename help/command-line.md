@@ -121,6 +121,8 @@ tinycld boards card edit <card> --priority high
 tinycld boards card edit <card> --estimate 5
 tinycld boards card edit <card> --parent OTTER-4
 tinycld boards card edit <card> --clear-parent
+tinycld boards card edit <card> --sprint active
+tinycld boards card edit <card> --clear-sprint
 ```
 
 `edit` only changes what you name. Editing the title leaves the description
@@ -138,6 +140,10 @@ card has no estimate; `--estimate 0` clears one.
 takes a card id or a key, and the parent must be on the **same board**. Since a
 relation has no "empty" value to write, `--clear-parent` is what stops a card
 being a sub-task. A sub-task cannot have sub-tasks of its own.
+
+`--sprint` files the card in one of its board's sprints, on `add` as well as
+`edit`: a sprint number, `active`, `next`, or an id. `--clear-sprint` sends it
+back to the backlog. See [Sprints](help://boards:sprints).
 
 A new card reports to you. Pass `--reporter` on `add` or `edit` to point it at
 someone else — useful when a script or a shared account files cards that a real
@@ -173,6 +179,39 @@ and its parent always live on the same board: `--family move` brings the
 sub-tasks along, `--family unlink` leaves them behind as top-level cards. The
 command refuses rather than guessing, and says what it did. A card that is
 itself a sub-task always stops being one when it moves.
+
+A card in an epic needs `--epic move` or `--epic unlink` in the same way. A
+card in a sprint always leaves it — a sprint belongs to one board — and the
+command says so.
+
+## Sprints
+
+```
+tinycld boards sprint list "Product launch"
+tinycld boards sprint view active --board "Product launch"
+tinycld boards sprint create --board "Product launch" --name "Hardening" \
+    --goal "Close the open bugs" --start 2026-10-01 --end 2026-10-14
+tinycld boards sprint edit 4 --board "Product launch" --goal "Close every open bug"
+tinycld boards sprint start next --board "Product launch"
+tinycld boards sprint start 4 --board "Product launch" --start 2026-10-01 --end 2026-10-14
+tinycld boards sprint complete active --board "Product launch" --unfinished next
+tinycld boards sprint complete active --board "Product launch" --unfinished new
+tinycld boards sprint complete active --board "Product launch" --unfinished backlog
+tinycld boards sprint delete 4 --board "Product launch"
+tinycld boards view "Product launch" --sprint active
+tinycld boards view "Product launch" --sprint backlog
+```
+
+A sprint is named by its **number** within a board (`--board X 4`), by
+`active` or `next`, or by its id — never by its name, which the team can
+change. `create` lets the server number it; `start` with no dates runs from
+today for the board's sprint length.
+
+`complete` needs `--unfinished` whenever the sprint has cards outside a Done or
+Canceled list — `next` moves them to the next planned sprint (`--next 5` picks
+another), `new` plans a following sprint for them, `backlog` unfiles them.
+There is no default: the command refuses rather than guessing where work goes.
+`--sprint` on `view` narrows a board to one sprint, or to the `backlog`.
 
 ## Reacting to comments
 

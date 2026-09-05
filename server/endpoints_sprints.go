@@ -66,6 +66,12 @@ func loadWritableSprint(app core.App, re *core.RequestEvent) (*core.Record, erro
 	if err != nil {
 		return nil, re.NotFoundError("sprint not found", nil)
 	}
+	// A superuser bypasses every collection rule, and the seed drives the
+	// transitions through these routes precisely because the stamps they
+	// write are refused on a plain record write (sprint_owned_columns.go).
+	if re.Auth.IsSuperuser() {
+		return sprint, nil
+	}
 	project := sprint.GetString("project")
 	if !isProjectWriter(app, project, re.Auth.Id) {
 		if member, _ := app.CountRecords("boards_project_members",
@@ -89,7 +95,7 @@ func handleStartSprint(app core.App, re *core.RequestEvent) error {
 	}
 	// The actor, for the history the start itself writes nothing of but
 	// the notification names.
-	pendingActors.Store(sprint, re.Auth.Id)
+	pendingActors.Store(sprint, actorFor(re))
 	defer pendingActors.Delete(sprint)
 	if err := startSprint(app, sprint, time.Now(), sprintStartOptions{
 		Start: body.Start, End: body.End, Name: body.Name, Goal: body.Goal,
@@ -135,9 +141,10 @@ func handleCompleteSprint(app core.App, re *core.RequestEvent) error {
 		}
 	}
 
-	pendingActors.Store(sprint, re.Auth.Id)
+	actor := actorFor(re)
+	pendingActors.Store(sprint, actor)
 	defer pendingActors.Delete(sprint)
-	result, err := completeSprint(app, sprint, time.Now(), re.Auth.Id, sprintRollover{
+	result, err := completeSprint(app, sprint, time.Now(), actor, sprintRollover{
 		Target: body.Unfinished, SprintID: body.NextSprint,
 	})
 	if err != nil {
@@ -158,6 +165,16 @@ func handleCompleteSprint(app core.App, re *core.RequestEvent) error {
 		TargetSprint:    result.TargetSprintID,
 		CreatedSprint:   result.CreatedSprint,
 	})
+}
+
+// actorFor is who a transition is attributed to. A superuser is not a
+// `users` row, and both the history and the notice relate to one, so it acts
+// as nobody — the shape the sweep's own transitions take.
+func actorFor(re *core.RequestEvent) string {
+	if re.Auth == nil || re.Auth.IsSuperuser() {
+		return ""
+	}
+	return re.Auth.Id
 }
 
 func plural(n int, one, many string) string {
