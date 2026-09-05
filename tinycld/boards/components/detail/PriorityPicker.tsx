@@ -1,14 +1,13 @@
 import { MenuActionItem } from '@tinycld/core/components/DropdownMenu'
 import { Menu } from '@tinycld/core/ui/menu'
-import type { ReactElement } from 'react'
 import { type CardPriority, PRIORITIES, priorityLabel } from '../../lib/priority'
 import { PriorityGlyph } from '../PriorityGlyph'
+import { menuPropsFor, type PickerAnchor } from './picker-anchor'
 
-interface PriorityPickerProps {
+type PriorityPickerProps = {
     selected: CardPriority
     onSelect: (priority: CardPriority) => void
-    children: ReactElement
-}
+} & PickerAnchor
 
 /**
  * Single-select over the fixed scale, the ReporterPicker shape.
@@ -18,10 +17,10 @@ interface PriorityPickerProps {
  * reader looking for "make this not urgent any more" finds it where the other
  * four are instead of at the bottom under a different verb.
  */
-export function PriorityPicker({ selected, onSelect, children }: PriorityPickerProps) {
+export function PriorityPicker({ selected, onSelect, ...anchor }: PriorityPickerProps) {
     return (
-        <Menu>
-            <Menu.Trigger>{children}</Menu.Trigger>
+        <Menu {...menuPropsFor(anchor)}>
+            {anchor.children ? <Menu.Trigger>{anchor.children}</Menu.Trigger> : null}
             <Menu.Portal>
                 <Menu.Overlay />
                 <Menu.Content presentation="popover" placement="bottom" align="start">

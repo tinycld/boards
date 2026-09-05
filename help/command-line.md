@@ -44,6 +44,45 @@ tinycld boards card view OTTER-12     # one card, in full
 include them. `card view` shows the description, checklist and comments that
 the board view leaves out.
 
+## Reacting to comments
+
+```
+tinycld boards card react <comment-id> thumbs_up    # or the emoji itself
+tinycld boards card unreact <comment-id> thumbs_up
+```
+
+The six reactions are `thumbs_up`, `heart`, `laugh`, `party`, `eyes` and
+`rocket`. You can paste the emoji instead if you have it to hand; the name is
+easier to type in a terminal.
+
+Comment ids come from `card view --json`. `card view` shows the counts under
+each comment. `unreact` removes only your own reaction — no one can take back
+anyone else's.
+
+## Linking cards
+
+```
+tinycld boards card link OTTER-12 OTTER-40 --blocks       # 12 blocks 40
+tinycld boards card link OTTER-12 HOME-3 --related        # any two cards
+tinycld boards card link OTTER-12 OTTER-40 --duplicates
+tinycld boards card unlink OTTER-12 OTTER-40
+```
+
+A link is stored once and reads from both ends, so the same link shows as
+**Blocks** on one card and **Blocked by** on the other. `--related` and
+`--duplicates` work the same way; only blocking has a direction that matters.
+
+The two cards do not have to be on the same board. Filing a link needs
+permission to edit the first card's board and membership of the second's.
+
+`card view` lists a card's links. If one points at a card on a board you
+cannot open, the link still appears — shown as *(a card on another board)* —
+because a blocked card that looked unblocked would tell you something false
+about whether the work can go ahead.
+
+`unlink` does not care which order you name the two cards, and removes every
+link between them.
+
 ## Archiving and deleting a board
 
 ```
@@ -134,6 +173,45 @@ and its parent always live on the same board: `--family move` brings the
 sub-tasks along, `--family unlink` leaves them behind as top-level cards. The
 command refuses rather than guessing, and says what it did. A card that is
 itself a sub-task always stops being one when it moves.
+
+## Reacting to comments
+
+```
+tinycld boards card react <comment-id> thumbs_up    # or the emoji itself
+tinycld boards card unreact <comment-id> thumbs_up
+```
+
+The six reactions are `thumbs_up`, `heart`, `laugh`, `party`, `eyes` and
+`rocket`. You can paste the emoji instead if you have it to hand; the name is
+easier to type in a terminal.
+
+Comment ids come from `card view --json`. `card view` shows the counts under
+each comment. `unreact` removes only your own reaction — no one can take back
+anyone else's.
+
+## Linking cards
+
+```
+tinycld boards card link OTTER-12 OTTER-40 --blocks       # 12 blocks 40
+tinycld boards card link OTTER-12 HOME-3 --related        # any two cards
+tinycld boards card link OTTER-12 OTTER-40 --duplicates
+tinycld boards card unlink OTTER-12 OTTER-40
+```
+
+A link is stored once and reads from both ends, so the same link shows as
+**Blocks** on one card and **Blocked by** on the other. `--related` and
+`--duplicates` work the same way; only blocking has a direction that matters.
+
+The two cards do not have to be on the same board. Filing a link needs
+permission to edit the first card's board and membership of the second's.
+
+`card view` lists a card's links. If one points at a card on a board you
+cannot open, the link still appears — shown as *(a card on another board)* —
+because a blocked card that looked unblocked would tell you something false
+about whether the work can go ahead.
+
+`unlink` does not care which order you name the two cards, and removes every
+link between them.
 
 ## Archiving and deleting
 

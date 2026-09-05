@@ -9,12 +9,15 @@ import { openHelpPackage } from '@tinycld/core/lib/help/open-help'
 import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { usePathname, useRouter } from 'expo-router'
 import { Archive, HelpCircle, UserCheck } from 'lucide-react-native'
-import { useActiveBoard } from './hooks/useActiveBoard'
+import { useSidebarBoards } from './hooks/useActiveBoard'
 import { useBoardsUIStore } from './stores/boards-ui-store'
 import type { BoardsProjects } from './types'
 
 export default function BoardsSidebar() {
-    const { projects, archivedProjects, project } = useActiveBoard()
+    // NOT useActiveBoard: that also runs useBoardContent — six live queries
+    // over every card, label, epic, member and user of the active board — so
+    // every card edit re-rendered this whole list, and the list is unbounded.
+    const { projects, archivedProjects, activeProjectId: resolvedId } = useSidebarBoards()
     const setActiveProject = useBoardsUIStore(s => s.setActiveProject)
     const openNewBoard = useBoardsUIStore(s => s.openNewBoard)
     const router = useRouter()
@@ -26,7 +29,7 @@ export default function BoardsSidebar() {
     // The resolved id, not the stored one: a persisted id that no longer names
     // a board falls back to the first, and the sidebar must highlight what is
     // actually on screen — and nothing is, while My cards is up.
-    const activeProjectId = isOnMyCards ? null : (project?.id ?? null)
+    const activeProjectId = isOnMyCards ? null : resolvedId
 
     const selectBoard = (projectId: string) => {
         setActiveProject(projectId)

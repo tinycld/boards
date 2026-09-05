@@ -85,6 +85,55 @@ describe('boards-ui-store view preferences', () => {
         })
     })
 
+    describe('openCanvasPicker', () => {
+        const anchor = { x: 10, y: 20, width: 200, height: 60 }
+
+        beforeEach(() => {
+            useBoardsUIStore.setState({ openPickerFor: null, focusedCardId: null })
+        })
+
+        it('holds the card, the kind and the anchor rect', () => {
+            useBoardsUIStore.getState().openCanvasPicker({ cardId: 'card_1', kind: 'due', anchor })
+
+            expect(useBoardsUIStore.getState().openPickerFor).toEqual({
+                cardId: 'card_1',
+                kind: 'due',
+                anchor,
+            })
+        })
+
+        // The anchor is the rect of the card that WAS focused, so a picker left
+        // open across a move would float beside one card while writing to
+        // another. Both focus setters clear it for that reason.
+        it('closes when the focus ring moves to another card', () => {
+            const store = useBoardsUIStore.getState()
+            store.openCanvasPicker({ cardId: 'card_1', kind: 'labels', anchor })
+
+            store.focusCard('card_2')
+
+            expect(useBoardsUIStore.getState().openPickerFor).toBeNull()
+        })
+
+        it('closes when focus moves to a column', () => {
+            const store = useBoardsUIStore.getState()
+            store.openCanvasPicker({ cardId: 'card_1', kind: 'assignees', anchor })
+
+            store.focusColumn('list_1')
+
+            expect(useBoardsUIStore.getState().openPickerFor).toBeNull()
+        })
+
+        // The card and the rect both belong to the board being left.
+        it('closes on a board switch', () => {
+            const store = useBoardsUIStore.getState()
+            store.openCanvasPicker({ cardId: 'card_1', kind: 'priority', anchor })
+
+            store.setActiveProject('proj_2')
+
+            expect(useBoardsUIStore.getState().openPickerFor).toBeNull()
+        })
+    })
+
     describe('persistence', () => {
         /**
          * Reads what the persist middleware ACTUALLY wrote, rather than

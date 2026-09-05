@@ -434,8 +434,24 @@ To add something:
 The composer stays open after you press Enter, so you can type several cards in
 a row without reaching for the mouse.
 
-Moving, archiving and adding need permission to edit the board; if you're a
-viewer or commentor, the navigation keys still work.
+To change a highlighted card without opening it, press one of:
+
+- **D** — set its due date
+- **L** — add or remove labels
+- **A** — assign someone
+- **P** — set its priority
+
+Each opens the same picker the card panel uses, beside the highlighted card, so
+you can label or assign your way down a column without opening anything. Labels
+and assignees let you pick several — press **Esc** when you're done; a due date
+or priority is one choice, so the picker closes itself. These four are for the
+board view; in the list view, open the card to change the same things.
+
+**F** opens the board's filter, and needs no highlighted card.
+
+Moving, archiving, adding and the four card pickers need permission to edit the
+board; if you're a viewer or commentor, the navigation keys and **F** still
+work.
 
 With a card open:
 

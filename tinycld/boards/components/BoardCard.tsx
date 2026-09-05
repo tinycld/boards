@@ -645,8 +645,11 @@ function EstimatePill({ estimate }: { estimate?: number }) {
 function CardAssignees({ assignees }: { assignees: BoardMember[] }) {
     if (assignees.length === 0) return null
 
+    // Named so a test can assert the face shows assignees without matching on
+    // avatar INITIALS, which are one letter and collide with card titles and
+    // keys. The watchers row beside it already carries its own testID.
     return (
-        <View className="flex-row">
+        <View className="flex-row" testID="boards-card-assignees">
             {assignees.map((member, index) => (
                 <View
                     key={member.id}

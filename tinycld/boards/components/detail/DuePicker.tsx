@@ -2,9 +2,10 @@ import { MiniCalendar } from '@tinycld/core/components/MiniCalendar'
 import { addDays, startOfDay } from '@tinycld/core/lib/dates'
 import { Menu } from '@tinycld/core/ui/menu'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
-import { type ReactElement, useState } from 'react'
+import { useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { type DueTime, encodeDue, formatDueTime, parseTimeText, timeOf } from '../../lib/due-time'
+import { menuPropsFor, type PickerAnchor } from './picker-anchor'
 
 /** What a pick writes: a bare day, an instant with the flag, or a clear. */
 export interface DatePick {
@@ -12,7 +13,7 @@ export interface DatePick {
     hasTime: boolean
 }
 
-interface DuePickerProps {
+type DuePickerProps = {
     /** The current value, or undefined when unset. */
     value?: Date
     /** Whether `value` carries a time. Only meaningful with `allowTime`. */
@@ -20,9 +21,7 @@ interface DuePickerProps {
     /** Offer a time row. Off for the start date, which is always a day. */
     allowTime?: boolean
     onChange: (pick: DatePick) => void
-    /** The chip the picker hangs off — rendered as the menu trigger. */
-    children: ReactElement
-}
+} & PickerAnchor
 
 /**
  * The date popover: a row of relative shortcuts over a month grid, and — for
@@ -43,23 +42,28 @@ export function DuePicker({
     hasTime = false,
     allowTime = false,
     onChange,
-    children,
+    ...anchor
 }: DuePickerProps) {
     // Controlled so a choice can dismiss the popover. Picking a date is a
     // single terminal choice, unlike the assignee and label pickers, which
     // stay open BECAUSE they multi-select — leaving this one up meant the chip
     // it had just written was hidden behind the sheet that wrote it, with the
     // grid still inviting a second pick.
+    //
+    // Anchored on the canvas, the same dismissal unmounts the picker outright
+    // (there is no chip to return to), so the terminal pick routes through
+    // `onClose` instead of this flag.
     const [isOpen, setIsOpen] = useState(false)
 
     const choose = (pick: DatePick) => {
         onChange(pick)
-        setIsOpen(false)
+        if (anchor.anchor) anchor.onClose()
+        else setIsOpen(false)
     }
 
     return (
-        <Menu isOpen={isOpen} onOpenChange={setIsOpen}>
-            <Menu.Trigger>{children}</Menu.Trigger>
+        <Menu {...(anchor.anchor ? menuPropsFor(anchor) : { isOpen, onOpenChange: setIsOpen })}>
+            {anchor.children ? <Menu.Trigger>{anchor.children}</Menu.Trigger> : null}
             <Menu.Portal>
                 <Menu.Overlay />
                 <Menu.Content presentation="popover" placement="bottom" align="start">

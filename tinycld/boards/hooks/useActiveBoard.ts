@@ -19,13 +19,22 @@ import { useBoardLiveQuery } from './useBoardLiveQuery'
  * says they must (expanding them would ship a duplicate copy of every label and
  * user with every card).
  */
-export function useActiveBoard() {
+/**
+ * The boards this user belongs to, split live/archived — and NOTHING about
+ * their contents.
+ *
+ * The sidebar needs exactly this and no more, which is the whole reason it is
+ * its own hook. Calling `useActiveBoard` there instead would also run
+ * `useBoardContent` — six queries over every card, label, epic, member and
+ * user of the ACTIVE board — so every card edit re-rendered the sidebar's
+ * whole board list, and the list is unbounded. `useCardRoute` documents the
+ * same rule for the same reason.
+ */
+export function useBoardList() {
     const [projectsCollection, membersCollection] = useStore(
         'boards_projects',
         'boards_project_members'
     )
-
-    const activeProjectId = useBoardsUIStore(s => s.activeProjectId)
 
     // Driven from the MEMBERSHIP side with an innerJoin, following
     // mail's useMailboxes: a board created optimistically renders the instant
@@ -43,15 +52,56 @@ export function useActiveBoard() {
     // Split by `archived` rather than filtered: the sidebar lists both, in
     // separate sections, and an archived board must still be openable so it
     // can be looked at and restored.
-    const { projects, archivedProjects } = useMemo(() => {
+    return useMemo(() => {
         const rows = (projectRows ?? [])
             .map(r => r.project)
             .sort((a, b) => a.name.localeCompare(b.name) || (a.id < b.id ? -1 : 1))
         return {
             projects: rows.filter(p => !p.archived),
             archivedProjects: rows.filter(p => p.archived),
+            projectsLoading,
         }
-    }, [projectRows])
+    }, [projectRows, projectsLoading])
+}
+
+/**
+ * Which board is on screen: the stored id when it still names a board this
+ * user can open, else the first live one.
+ *
+ * Resolved DURING RENDER rather than synced back to the store with an effect.
+ * The persisted id may name a board that was deleted or that this user has
+ * been removed from, and on a cold start there is no id at all; both fall back
+ * to the first LIVE board — an archived one is only ever active by explicit
+ * choice. The store is never corrected — the next explicit setActiveProject
+ * overwrites it.
+ */
+export function resolveActiveProjectId(
+    activeProjectId: string | null,
+    projects: { id: string }[],
+    archivedProjects: { id: string }[]
+): string {
+    if (activeProjectId && projects.some(p => p.id === activeProjectId)) return activeProjectId
+    if (activeProjectId && archivedProjects.some(p => p.id === activeProjectId)) {
+        return activeProjectId
+    }
+    return projects[0]?.id ?? ''
+}
+
+/**
+ * Everything the SIDEBAR renders: the board list, and which one is active.
+ *
+ * Deliberately not `useActiveBoard` — see `useBoardList`.
+ */
+export function useSidebarBoards() {
+    const activeProjectId = useBoardsUIStore(s => s.activeProjectId)
+    const { projects, archivedProjects } = useBoardList()
+    const resolvedId = resolveActiveProjectId(activeProjectId, projects, archivedProjects)
+    return { projects, archivedProjects, activeProjectId: resolvedId }
+}
+
+export function useActiveBoard() {
+    const activeProjectId = useBoardsUIStore(s => s.activeProjectId)
+    const { projects, archivedProjects, projectsLoading } = useBoardList()
 
     // Resolve the active board DURING RENDER rather than syncing it back to the
     // store with an effect. The persisted id may name a board that was deleted
@@ -59,13 +109,7 @@ export function useActiveBoard() {
     // id at all; both fall back to the first LIVE board — an archived one is
     // only ever active by explicit choice. The store is never corrected — the
     // next explicit setActiveProject overwrites it.
-    const projectId = useMemo(() => {
-        if (activeProjectId && projects.some(p => p.id === activeProjectId)) return activeProjectId
-        if (activeProjectId && archivedProjects.some(p => p.id === activeProjectId)) {
-            return activeProjectId
-        }
-        return projects[0]?.id ?? ''
-    }, [activeProjectId, projects, archivedProjects])
+    const projectId = resolveActiveProjectId(activeProjectId, projects, archivedProjects)
 
     const isArchived = archivedProjects.some(p => p.id === projectId)
 

@@ -81,6 +81,25 @@ interface BoardsUIState {
     isAddListOpen: boolean
     setAddListOpen: (isOpen: boolean) => void
     /**
+     * The picker a keyboard shortcut opened on the CANVAS, where the card's
+     * properties are not on screen — `d`/`l`/`a`/`p` open one against the
+     * focused card. The composer arrangement above, with one addition.
+     *
+     * It carries the focused card's RECT, and that is not redundant with the
+     * core Menu's own measurement. Menu re-measures `triggerRef` on every open
+     * so a keyboard-opened menu positions itself — but a canvas picker has no
+     * trigger to measure: nothing on the board is the "due date chip" of a card
+     * that is not open. The rect stands in for the trigger that would have been
+     * there, and Menu prefers a supplied `triggerPosition` over its own layout
+     * precisely so a caller can do this.
+     *
+     * Measured at KEYPRESS time rather than stored per card: it is a viewport
+     * rect, so a scroll or a column collapse invalidates it, and the only
+     * moment it is certainly right is the moment the menu opens.
+     */
+    openPickerFor: CanvasPicker | null
+    openCanvasPicker: (picker: CanvasPicker | null) => void
+    /**
      * The archived-cards panel. In the store because its entry point (the
      * header button) and the panel itself (mounted by the screen, beside the
      * peek) are in different subtrees — the NewBoardDialog arrangement.
@@ -123,6 +142,16 @@ interface BoardsUIState {
 
 export type ViewMode = 'board' | 'list' | 'timeline'
 
+/** Which of the four card properties a canvas shortcut opens a picker for. */
+export type CanvasPickerKind = 'due' | 'labels' | 'assignees' | 'priority'
+
+export interface CanvasPicker {
+    cardId: string
+    kind: CanvasPickerKind
+    /** The focused card's viewport rect — see `openPickerFor`. */
+    anchor: { x: number; y: number; width: number; height: number }
+}
+
 export function selectViewMode(state: BoardsUIState, projectId: string): ViewMode {
     return state.viewModeByProject[projectId] ?? 'board'
 }
@@ -147,7 +176,8 @@ export const useBoardsUIStore = create<BoardsUIState>()(
             // Switching boards closes the peek: the open card belongs to the
             // board being left, so it would resolve to nothing and the peek
             // would silently empty itself.
-            setActiveProject: projectId => set({ activeProjectId: projectId, openCardId: null }),
+            setActiveProject: projectId =>
+                set({ activeProjectId: projectId, openCardId: null, openPickerFor: null }),
             openCardId: null,
             openCard: cardId => set({ openCardId: cardId }),
             closeCard: () => set({ openCardId: null }),
@@ -158,8 +188,14 @@ export const useBoardsUIStore = create<BoardsUIState>()(
             setCardDragging: isDragging => set({ isCardDragging: isDragging }),
             focusedCardId: null,
             focusedColumnId: null,
-            focusCard: cardId => set({ focusedCardId: cardId, focusedColumnId: null }),
-            focusColumn: columnId => set({ focusedCardId: null, focusedColumnId: columnId }),
+            // Moving the ring closes an open canvas picker. Its anchor is the
+            // rect of the card that WAS focused, so leaving it up would float a
+            // menu beside a card the ring has moved off, still writing to the
+            // card it was opened for.
+            focusCard: cardId =>
+                set({ focusedCardId: cardId, focusedColumnId: null, openPickerFor: null }),
+            focusColumn: columnId =>
+                set({ focusedCardId: null, focusedColumnId: columnId, openPickerFor: null }),
             collapsedColumnIds: {},
             // Deletes rather than storing `false`, so the map holds only
             // collapsed ids and never accumulates an entry per list the user
@@ -177,6 +213,8 @@ export const useBoardsUIStore = create<BoardsUIState>()(
             openComposer: listId => set({ composerOpenListId: listId }),
             isAddListOpen: false,
             setAddListOpen: isOpen => set({ isAddListOpen: isOpen }),
+            openPickerFor: null,
+            openCanvasPicker: picker => set({ openPickerFor: picker }),
             isArchivedPanelOpen: false,
             openArchivedPanel: () => set({ isArchivedPanelOpen: true }),
             closeArchivedPanel: () => set({ isArchivedPanelOpen: false }),
