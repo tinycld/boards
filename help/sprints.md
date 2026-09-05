@@ -133,6 +133,24 @@ settings.
   and **Move the card into the active sprint** file cards for you. The last
   does nothing between sprints rather than failing.
 
+## Reports
+
+Press the chart button on a started sprint's header to open its report. It
+draws from a snapshot the server takes every day the sprint runs (and one
+at its start and its completion):
+
+- **Burndown** — what was left each day, against the straight line from the
+  commitment to zero on the last day. A day with no snapshot leaves a gap
+  rather than a guess.
+- **Progress** — the sprint's scope and its finished work over the same
+  days, so scope that grew mid-sprint is visible as the line it moved.
+
+The **Completed** block at the bottom of the backlog opens with a
+**velocity** chart: for each of the last six completed sprints, what it
+committed to beside what it finished, and the average finished as a line —
+the number to plan the next sprint against. Both charts read in points when
+the sprint had estimates and in cards otherwise.
+
 ## Finding sprint work elsewhere
 
 - The board filter has a **Sprints** section: the active sprint, any sprint by

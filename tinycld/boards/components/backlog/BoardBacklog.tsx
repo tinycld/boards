@@ -25,6 +25,7 @@ import { SprintMenu } from './SprintMenu'
 import { SprintSection } from './SprintSection'
 import { SprintSectionHeader } from './SprintSectionHeader'
 import { type SprintTransition, SprintTransitionDialogs } from './SprintTransitionDialogs'
+import { VelocityChart } from './VelocityChart'
 
 /**
  * The backlog view — Jira's backlog: the active sprint, the planned sprints,
@@ -273,6 +274,7 @@ const CompletedSprints = memo(function CompletedSprints({
                     Completed ({sections.length})
                 </Text>
             </Pressable>
+            <CompletedVelocity sections={sections} isVisible={isOpen} />
             {isOpen
                 ? sections.map(section => (
                       <CompletedSection
@@ -287,6 +289,22 @@ const CompletedSprints = memo(function CompletedSprints({
         </View>
     )
 })
+
+/** Velocity over the completed sprints, above their sections. */
+function CompletedVelocity({
+    sections,
+    isVisible,
+}: {
+    sections: BacklogSection[]
+    isVisible: boolean
+}) {
+    const sprints = useMemo(
+        () => sections.flatMap(section => (section.sprint ? [section.sprint] : [])),
+        [sections]
+    )
+    if (!isVisible) return null
+    return <VelocityChart sprints={sprints} />
+}
 
 function CompletedSection({
     section,
