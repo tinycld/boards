@@ -29,14 +29,14 @@ fixes which have since landed):
 | #59 | `feat/tier2-canvas-pickers` | `d`/`l`/`a`/`p`/`f` shortcuts |
 | #60 | `feat/tier2-link-cli` | `card link` / `card unlink` |
 | #61 | `feat/tier2-reaction-cli` | `card react` / `card unreact` |
-| #62 | `feat/tier2-cross-board-picker` | Debt 3: the cross-board link picker |
+| #63 | `feat/tier2-cross-board-picker` | Debt 3: the cross-board link picker |
 
 Open: 14, 16–21 and Tier 3. Next up is 19 (bulk operations) — the
 highest-value open item, and the only one needing no migration or server work.
 
 **Carried debt — none left.** `docs/PLAN-debts.md`'s Debts 1 (core `Menu`
 overlay + measurement) and 2 (the CLI scope map) shipped in core; Debt 3 (the
-cross-board link picker) is PR #62 above. With Phase 0 merged, Tier 2 carries
+cross-board link picker) is PR #63 above. With Phase 0 merged, Tier 2 carries
 no outstanding debt.
 
 **One unreproduced e2e failure**, recorded so it is not rediscovered from

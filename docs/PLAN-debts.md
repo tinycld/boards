@@ -20,7 +20,7 @@ ship alone, and two of the three are in `tinycld`, not `cards`.
 >   `boards_comment_reactions` and `boards_card_watchers` as read+write, and
 >   `boards_activity` read-only with the schema rationale this plan asked for.
 >   The commands it unblocked shipped as PRs #60 and #61.
-> - **Debt 3 (cross-board link picker) — DONE** in PR #62, but the spec below
+> - **Debt 3 (cross-board link picker) — DONE** in PR #63, but the spec below
 >   turned out to be HALF the job, which is worth recording. It frames the debt
 >   as a picker limitation: the schema and rules already allow cross-board
 >   links, only the picker was limited. True — and the picker fix is as
@@ -34,7 +34,7 @@ ship alone, and two of the three are in `tinycld`, not `cards`.
 >   open board's cards only — so a freshly-filed cross-board link rendered as
 >   "a card on another board" to the very person who had just filed it, and
 >   pressing it opened nothing (`CardPeek` resolves ids through
->   `findCardEntry`, which knows one board). Both halves are fixed in #62;
+>   `findCardEntry`, which knows one board). Both halves are fixed in #63;
 >   an e2e caught it, not review.
 >
 > **All three are now closed.** This file is history; nothing here is queued.
