@@ -187,6 +187,7 @@ func registerShareLinkEndpoints(app *pocketbase.PocketBase, rt *boardRealtime) {
 		bindCardRoutes(e, rt)
 		bindSprintRoutes(e)
 		bindExportRoutes(e)
+		bindImportRoutes(e)
 		// A minute ticker for due-date notices; bails out on its own once
 		// the app is torn down (cardsAppIsLive).
 		go startDueNoticeScheduler(app)

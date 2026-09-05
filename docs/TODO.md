@@ -36,9 +36,12 @@ and no server work, exactly as the ranking predicted. Sprints (14) shipped as a
 six-branch stack, and item 16's EXPORT half on `feat/boards-export`, stacked on
 it, with its core scope entries on `tinycld`'s `feat/boards-export-scopes` (the
 cross-repo step `PLAN-tier2-open.md` said would not be needed — see item 16).
-Open: 16's import half, 17, 18, 20, 21 and Tier 3. Next up is the Trello
-importer, with 20 (WIP limits and aging) as the cheap filler if a phase
-finishes early.
+Item 16 shipped in two stacked branches — `feat/boards-export` (PR #71) and
+`feat/boards-import` — with the core scope entries on `tinycld`'s
+`feat/boards-export-scopes` (PR #235).
+Open: 17, 18, 20, 21 and Tier 3. Next up is 17+18 (covers and templates) per
+`docs/PLAN-tier2-open.md`'s Phase 3, with 20 (WIP limits and aging) as the
+cheap filler if a phase finishes early.
 
 **Carried debt — none left.** `docs/PLAN-debts.md`'s Debts 1 (core `Menu`
 overlay + measurement) and 2 (the CLI scope map) shipped in core; Debt 3 (the
@@ -268,8 +271,8 @@ plain re-run.
 
 ### Open
 
-16. **Import and export.** Export has SHIPPED; the Trello importer is the open
-    half. `GET /api/boards/export?project=<id>&format=csv|json` — CSV is the
+16. **Import and export.** ✅ Both halves shipped.
+    `GET /api/boards/export?project=<id>&format=csv|json` — CSV is the
     flat one-row-per-card projection for a spreadsheet, JSON is the whole board
     including the checklists, comments and links a CSV row cannot hold. Both
     carry archived cards, flagged, because an export doubles as a backup.
@@ -286,9 +289,30 @@ plain re-run.
     A `tinycld` commit was needed too, contrary to `PLAN-tier2-open.md`'s
     "every phase is in `boards` alone" — a bespoke endpoint absent from core's
     `endpointScopes` is default-denied for OAuth tokens while working for a
-    session. Prior art for the importer: `contacts/server/vcard_endpoints.go`
-    (its `readImportBody` handles multipart and raw alike),
-    `calendar/server/ics_endpoints.go`, the `google-takeout-import` package.
+    session.
+    The IMPORTER (`POST /api/boards/import`) accepts a Trello export or a board
+    export, sniffed on whether the file's lists carry a `category`, and always
+    creates a NEW board owned by the caller. Its parser is pure and separate
+    from its writer, so the writer never learns what Trello looks like and the
+    golden-file tests need no PocketBase app. Five decisions worth knowing:
+    duplicate label names FOLD (the unique index on (project, name), which
+    Trello does not have); comments are authored by the importer with the
+    original name written into the body (the author column is a relation that
+    must resolve); the board arrives with NO slug (keys are globally unique, so
+    the source's would collide); ranks are regenerated with
+    `fracdex.NKeysBetween` via `ranksAppending`, pinned to npm-captured vectors
+    in `server/testdata/nkeys_vectors.json`; and the write is deliberately NOT
+    one transaction, because the number allocator compare-and-swaps on a row the
+    same connection is writing and the counters recount from goroutines holding
+    a per-card lock — one transaction deadlocks against both.
+    A `hooks` flag (default OFF) suppresses per-card activity rows and
+    notifications; auto-watch stays on, since the importer owns the board.
+    Fixed alongside: the export sorted cards by rank GLOBALLY, but `position`
+    only orders within a list — so the export interleaved columns and a round
+    trip did not return the order it started with. Cards now come out by list,
+    then by rank.
+    Prior art used: `contacts/server/vcard_endpoints.go` (its `readImportBody`
+    handles multipart and raw alike) and `contacts/cli/transfer.go`.
 17. **Card covers.** First image attachment as the cover, via core's
     thumbnail pipeline.  Requires improving file handling so files can be sorted
 18. **Card and board templates.** An `is_template` flag using the duplicate

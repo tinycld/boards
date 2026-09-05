@@ -1,7 +1,7 @@
 ---
-title: Exporting a board
-summary: Save a board as a spreadsheet or a full backup file
-tags: [export, csv, json, backup, spreadsheet, download, reporting]
+title: Importing and exporting boards
+summary: Bring a board in from Trello, or save one out as a spreadsheet or backup
+tags: [export, import, trello, csv, json, backup, spreadsheet, download, migrating]
 order: 32
 ---
 
@@ -39,6 +39,46 @@ People are named rather than numbered, so a column of assignees reads as names
 you recognise. Cards on a board with a key export with theirs — `OTTER-14` —
 and a card whose parent is another card names that parent by its key too.
 
+## Importing a board
+
+To bring a board in, press **+ New board** in the sidebar and switch to the
+**Import** tab. Choose the file and press **Import**. An import always creates a
+**new** board that you own — it never merges into one you already have.
+
+Two kinds of file work:
+
+- **A Trello board export.** In Trello, open the board's menu and choose *Print,
+  export and share* → *Export as JSON*.
+- **A board exported from here** as a full backup (JSON).
+
+### What comes across from Trello
+
+Lists, cards, labels, checklists and comments all come across, along with due
+and start dates, and which cards were archived. Trello lets a card carry several
+checklists where a card here has one, so they are joined together in order.
+
+Three things cannot come across as they were, and the import tells you about
+each one when it finishes:
+
+- **Assignments.** Trello identifies people by ids that mean nothing here, so
+  every card arrives unassigned. The import names everyone who *was* assigned so
+  you can put them back deliberately.
+- **Column statuses.** Trello has no notion of a column being "in progress" or
+  "done", so each column's status is guessed from its name — a column called
+  Done becomes a done column. The import lists every guess it made, and changing
+  one is a single menu click on the column.
+- **Who wrote a comment.** Comments are attributed to you, since the original
+  author has no account here, and the original name is written into the comment
+  itself so nothing is lost.
+
+Card keys are not carried over either: keys are unique across every board, so an
+imported board starts without one. Give it a key from **Board settings** if you
+want `OTTER-14`-style card numbers.
+
+By default an import writes no card history and sends no notifications — a few
+hundred cards arriving at once is not news, and the history would bury the work
+that follows. The `--hooks` flag on the command line turns that off.
+
 ## Exporting from the command line
 
 The `tinycld` command exports the same two formats, which is the way to script a
@@ -49,8 +89,15 @@ tinycld boards export OTTER --out board.csv
 tinycld boards export OTTER --format json --out backup.json
 ```
 
-Leave off `--out` to write to standard output and pipe it somewhere else. See
-[the command line](help://boards:command-line) for setting the tool up.
+Leave off `--out` to write to standard output and pipe it somewhere else.
+
+Importing works the same way:
+
+```
+tinycld boards import trello.json --name "Product launch"
+```
+
+See [the command line](help://boards:command-line) for setting the tool up.
 
 ## What export does not do
 

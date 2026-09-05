@@ -304,7 +304,36 @@ Three corrections to this section as it was written:
 - **This phase was NOT boards-only.** See the correction to the suggested-order
   table at the end of this document.
 
-### 2b. Trello JSON importer (the half that decides evaluations)
+### 2b. Trello JSON importer (the half that decides evaluations) — ✅ shipped
+
+`POST /api/boards/import`, `{ScopeBoardsWrite}`, accepting a Trello export OR a
+board export (sniffed on whether the file's lists carry a `category`). Always
+creates a NEW board owned by the caller; merging into an existing one would have
+to answer questions the format cannot ask.
+
+Five things this section did not anticipate:
+
+- **The parser is pure and separate from the writer.** `import_trello.go` takes
+  bytes and returns the same shape the export emits, so the writer never learns
+  what Trello looks like — and the golden-file tests run with no PocketBase app.
+- **Duplicate label names have to fold.** `boards_labels` is UNIQUE on
+  (project, name) and Trello permits two labels called "bug". They fold, and
+  every card that named either keeps pointing at the survivor.
+- **Comments are attributed to the importer, with the original author in the
+  body.** `boards_comments.author` is a relation that must resolve, and the
+  file's ids name people on another installation.
+- **The board imports without a slug.** Keys are globally unique, so taking the
+  source's would collide with the board it came from.
+- **The write is NOT one transaction.** The number allocator compare-and-swaps
+  on a row the same connection is writing, and the counters recount from
+  goroutines holding a per-card lock; one long transaction deadlocks against
+  both. A partial import is reported honestly and can be deleted.
+
+The `hooks` flag (default off) suppresses per-card activity rows and
+notifications. Auto-watch is deliberately left on — the importer owns the board,
+and watching their own cards is what making them by hand would have given them.
+
+### 2b, as originally written
 
 `POST /api/boards/import`, `{ScopeBoardsWrite}`. Trello's export JSON maps
 cleanly onto the schema: lists → `boards_lists`, cards → `boards_cards`,

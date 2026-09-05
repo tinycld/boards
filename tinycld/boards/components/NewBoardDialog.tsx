@@ -3,11 +3,12 @@ import { Button, ButtonText } from '@tinycld/core/ui/button'
 import { COLOR_PALETTE, ColorPickerGrid } from '@tinycld/core/ui/color-picker'
 import { FormErrorSummary, TextInput, useForm, z, zodResolver } from '@tinycld/core/ui/form'
 import { Modal, ModalBackdrop, ModalContent } from '@tinycld/core/ui/modal'
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useCreateProject } from '../hooks/useProjectMutations'
 import { deriveSlug, MAX_SLUG_LENGTH } from '../lib/card-key'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
+import { ImportBoardForm } from './ImportBoardForm'
 
 const boardSchema = z.object({
     name: z.string().min(1, 'Name is required').max(200, 'Name must be 200 characters or fewer'),
@@ -132,9 +133,45 @@ function NewBoardForm({ onClose }: { onClose: () => void }) {
  * the field state on close without a manual `reset()`, and without drive's
  * remount-key trick.
  */
+/**
+ * The two ways to start a board: describe one, or bring one in.
+ *
+ * A segmented control rather than a second menu entry — importing IS creating a
+ * board, and someone who has just decided to make one is exactly who has a
+ * Trello export to hand.
+ */
+function ModeTabs({ mode, onChange }: { mode: BoardMode; onChange: (mode: BoardMode) => void }) {
+    return (
+        <View className="flex-row gap-1 px-5 pb-3" accessibilityRole="tablist">
+            {(['create', 'import'] as const).map(value => (
+                <Pressable
+                    key={value}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: mode === value }}
+                    testID={`boards-new-board-${value}`}
+                    onPress={() => onChange(value)}
+                    className={`px-2.5 py-1 rounded-md ${mode === value ? 'bg-foreground/10' : ''}`}
+                >
+                    <Text
+                        className={`text-[12px] ${
+                            mode === value ? 'text-foreground font-medium' : 'text-muted'
+                        }`}
+                    >
+                        {value === 'create' ? 'New board' : 'Import'}
+                    </Text>
+                </Pressable>
+            ))}
+        </View>
+    )
+}
+
+type BoardMode = 'create' | 'import'
+
 export function NewBoardDialog() {
     const isOpen = useBoardsUIStore(s => s.isNewBoardOpen)
     const closeNewBoard = useBoardsUIStore(s => s.closeNewBoard)
+    const setActiveProject = useBoardsUIStore(s => s.setActiveProject)
+    const [mode, setMode] = useState<BoardMode>('create')
 
     if (!isOpen) return null
 
@@ -143,9 +180,19 @@ export function NewBoardDialog() {
             <ModalBackdrop />
             <ModalContent className="w-[360px] p-0">
                 <View className="px-5 pt-5 pb-3">
-                    <Text className="text-[15px] font-semibold text-foreground">New board</Text>
+                    <Text className="text-[15px] font-semibold text-foreground">
+                        {mode === 'create' ? 'New board' : 'Import a board'}
+                    </Text>
                 </View>
-                <NewBoardForm onClose={closeNewBoard} />
+                <ModeTabs mode={mode} onChange={setMode} />
+                {mode === 'create' ? (
+                    <NewBoardForm onClose={closeNewBoard} />
+                ) : (
+                    <ImportBoardForm
+                        onClose={closeNewBoard}
+                        onImported={projectId => setActiveProject(projectId)}
+                    />
+                )}
             </ModalContent>
         </Modal>
     )

@@ -50,6 +50,12 @@ func ownRelationHistory(card *core.Record) func() {
 
 func registerCardActivity(app core.App) {
 	app.OnRecordAfterCreateSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
+		// A bulk import writes no per-card history: 500 "created" rows say
+		// nothing one "imported" does not, and they bury the history of the
+		// work that follows. See import_quiet.go.
+		if isQuietImport(e.Record) {
+			return e.Next()
+		}
 		actor := actorOf(e.Record)
 		writeActivity(e.App, e.Record, actor, "created", "", "")
 		return e.Next()

@@ -1,6 +1,8 @@
 package boards
 
 import (
+	"fmt"
+
 	"roci.dev/fracdex"
 
 	"github.com/pocketbase/dbx"
@@ -45,6 +47,27 @@ import (
 // `last` is empty) — what a new sprint takes to land after the planned ones.
 func rankAfter(last string) (string, error) {
 	return fracdex.KeyBetween(last, "")
+}
+
+// ranksAppending returns n ascending ranks that all sort after `last` (or from
+// the start of the key space when it is empty).
+//
+// The Go counterpart of lib/rank.ts's `ranksAfter`, and needed for the same
+// reason the bulk actions needed that one: rankAfter called n times against
+// unchanged state returns the SAME string every time, so an importer laying
+// down a column of cards would put every one of them on one rank and lose the
+// order to the id tiebreaker.
+//
+// fracdex.NKeysBetween is the direct port of the npm package's
+// generateNKeysBetween, which is what makes the two byte-compatible — the
+// property this file's header calls structural. testdata/nkeys_vectors.json
+// holds keys captured FROM the npm package, so a divergence fails here rather
+// than showing up as cards sorting differently in the app than in an import.
+func ranksAppending(last string, n int) ([]string, error) {
+	if n < 0 {
+		return nil, fmt.Errorf("boards: rank count must not be negative (got %d)", n)
+	}
+	return fracdex.NKeysBetween(last, "", uint(n))
 }
 
 func rankAppendToList(app core.App, listID string) (string, error) {
