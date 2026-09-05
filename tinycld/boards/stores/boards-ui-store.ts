@@ -42,6 +42,55 @@ interface BoardsUIState {
     focusCard: (cardId: string | null) => void
     focusColumn: (columnId: string | null) => void
     /**
+     * The cards a bulk action applies to. Kept SEPARATE from the focus ring
+     * above: focus is the keyboard cursor, selection is what an action targets.
+     * Collapsing the two would mean j/k could not walk through a selection
+     * without changing it.
+     *
+     * Read PER CARD (`s => s.selectedCardIds.has(card.id)`) for exactly the
+     * reason the focus ring is — a whole-set read in BoardCard would re-render
+     * every column on every toggle and undo the structural sharing that keeps
+     * drags stable.
+     *
+     * NOT persisted, and cleared on board change: a restored selection would
+     * target cards that may be gone and would silently arm a bulk archive
+     * against rows the user cannot see. Stale ids that survive within a session
+     * (a realtime archive) are dropped at the point of use by
+     * `resolveSelection`, not by an effect pruning the set.
+     */
+    selectedCardIds: Set<string>
+    /** The anchor a shift-click extends from — the last explicitly picked card. */
+    lastSelectedId: string | null
+    /**
+     * Native's selection mode, entered from the header's Select button.
+     *
+     * Native has no modifier keys, and long-press is already the card drag
+     * (CARD_DRAG_ACTIVATION_MS in lib/dnd.ts, deliberately tuned so a quick
+     * swipe reads as a column scroll), so a mode is the only entry that does
+     * not take a gesture away from something. Always false on web, where
+     * ⌘/⇧-click needs no mode.
+     */
+    isSelectMode: boolean
+    /**
+     * The card order a shift-range resolves against, published by whichever
+     * view is on screen (lib/board-selection.ts's `selectionOrder`).
+     *
+     * In the store rather than passed to BoardCard as a prop because
+     * `ColumnCards` is memoized and deliberately state-free — a new prop would
+     * re-render it and destabilise Drax's measurements mid-drag. Nothing
+     * SUBSCRIBES to this: the press handler reads it imperatively at click
+     * time, so writing it costs no render at all.
+     */
+    selectionOrderIds: string[]
+    setSelectionOrder: (ids: string[]) => void
+    selectSingle: (cardId: string) => void
+    selectToggle: (cardId: string) => void
+    selectRange: (cardId: string, orderedIds: string[]) => void
+    /** Select every id outright — NOT a toggle, so it is idempotent. */
+    selectMany: (ids: string[]) => void
+    clearSelection: () => void
+    setSelectMode: (isOn: boolean) => void
+    /**
      * Lists the user has collapsed to a narrow spine. A set rather than a flag
      * on the list: collapse is a per-USER view preference with no row to derive
      * it from, and putting it on BoardListView would mean a new comparison in
@@ -177,7 +226,16 @@ export const useBoardsUIStore = create<BoardsUIState>()(
             // board being left, so it would resolve to nothing and the peek
             // would silently empty itself.
             setActiveProject: projectId =>
-                set({ activeProjectId: projectId, openCardId: null, openPickerFor: null }),
+                set({
+                    activeProjectId: projectId,
+                    openCardId: null,
+                    openPickerFor: null,
+                    // The selection belongs to the board being left; carrying it
+                    // over would aim a bulk action at cards that are no longer
+                    // on screen.
+                    selectedCardIds: new Set<string>(),
+                    lastSelectedId: null,
+                }),
             openCardId: null,
             openCard: cardId => set({ openCardId: cardId }),
             closeCard: () => set({ openCardId: null }),
@@ -196,6 +254,67 @@ export const useBoardsUIStore = create<BoardsUIState>()(
                 set({ focusedCardId: cardId, focusedColumnId: null, openPickerFor: null }),
             focusColumn: columnId =>
                 set({ focusedCardId: null, focusedColumnId: columnId, openPickerFor: null }),
+            selectedCardIds: new Set<string>(),
+            lastSelectedId: null,
+            isSelectMode: false,
+            selectionOrderIds: [],
+            setSelectionOrder: ids => set({ selectionOrderIds: ids }),
+            selectSingle: cardId =>
+                set({ selectedCardIds: new Set([cardId]), lastSelectedId: cardId }),
+            // Re-anchors on every toggle, so a ⌘-click then ⇧-click extends
+            // from the card just picked rather than from an older one.
+            selectToggle: cardId =>
+                set(s => {
+                    const next = new Set(s.selectedCardIds)
+                    if (next.has(cardId)) next.delete(cardId)
+                    else next.add(cardId)
+                    return { selectedCardIds: next, lastSelectedId: cardId }
+                }),
+            // Falls back to a single selection when there is no anchor, or when
+            // either end is missing from `orderedIds` — which is what a filter
+            // hiding the anchor looks like. Extending from a card the user
+            // cannot see would select a run they never chose.
+            selectRange: (cardId, orderedIds) =>
+                set(s => {
+                    const anchor = s.lastSelectedId
+                    if (!anchor)
+                        return { selectedCardIds: new Set([cardId]), lastSelectedId: cardId }
+                    const from = orderedIds.indexOf(anchor)
+                    const to = orderedIds.indexOf(cardId)
+                    if (from === -1 || to === -1) {
+                        return { selectedCardIds: new Set([cardId]), lastSelectedId: cardId }
+                    }
+                    const lo = Math.min(from, to)
+                    const hi = Math.max(from, to)
+                    const range = orderedIds.slice(lo, hi + 1)
+                    return {
+                        selectedCardIds: new Set([...s.selectedCardIds, ...range]),
+                        lastSelectedId: cardId,
+                    }
+                }),
+            // Adds rather than toggling: "select all" pressed twice must leave
+            // everything selected, not invert the set. The anchor moves to the
+            // last id so a following shift-click extends from the end of the
+            // run, which is where the user's attention is.
+            selectMany: ids =>
+                set(s => ({
+                    selectedCardIds: new Set([...s.selectedCardIds, ...ids]),
+                    lastSelectedId: ids.at(-1) ?? s.lastSelectedId,
+                })),
+            clearSelection: () => set({ selectedCardIds: new Set<string>(), lastSelectedId: null }),
+            // Leaving the mode drops the selection: the bar goes with it, so a
+            // kept selection would be targeted by shortcuts with nothing on
+            // screen saying it exists.
+            setSelectMode: isOn =>
+                set(
+                    isOn
+                        ? { isSelectMode: true }
+                        : {
+                              isSelectMode: false,
+                              selectedCardIds: new Set<string>(),
+                              lastSelectedId: null,
+                          }
+                ),
             collapsedColumnIds: {},
             // Deletes rather than storing `false`, so the map holds only
             // collapsed ids and never accumulates an entry per list the user
@@ -223,12 +342,18 @@ export const useBoardsUIStore = create<BoardsUIState>()(
                 set(s => ({ isArchivedBoardsExpanded: !s.isArchivedBoardsExpanded })),
             boardFilters: {},
             boardSorts: {},
+            // A selected card that the new filter hides is invisible but still
+            // targeted — the next bulk action would hit rows the user cannot
+            // see. Clearing here rather than in an effect keeps it at the one
+            // moment the filter actually changes.
             setBoardFilter: (projectId, patch) =>
                 set(s => ({
                     boardFilters: {
                         ...s.boardFilters,
                         [projectId]: { ...selectBoardFilter(s, projectId), ...patch },
                     },
+                    selectedCardIds: new Set<string>(),
+                    lastSelectedId: null,
                 })),
             // Deletes the key rather than storing EMPTY_FILTER, so the selector
             // hands back the shared constant again.
@@ -236,15 +361,27 @@ export const useBoardsUIStore = create<BoardsUIState>()(
                 set(s => {
                     const next = { ...s.boardFilters }
                     delete next[projectId]
-                    return { boardFilters: next }
+                    return {
+                        boardFilters: next,
+                        selectedCardIds: new Set<string>(),
+                        lastSelectedId: null,
+                    }
                 }),
             setBoardSort: (projectId, sort) =>
                 set(s => ({ boardSorts: { ...s.boardSorts, [projectId]: sort } })),
             isFilterPanelOpen: false,
             setFilterPanelOpen: isOpen => set({ isFilterPanelOpen: isOpen }),
             viewModeByProject: {},
+            // Switching view drops the selection, the way switching board
+            // does: a range picked on the canvas means something different in
+            // a table sorted by due date, and cards selected in one view can
+            // be off-screen in the next while still being targeted by `x`.
             setViewMode: (projectId, mode) =>
-                set(s => ({ viewModeByProject: { ...s.viewModeByProject, [projectId]: mode } })),
+                set(s => ({
+                    viewModeByProject: { ...s.viewModeByProject, [projectId]: mode },
+                    selectedCardIds: new Set<string>(),
+                    lastSelectedId: null,
+                })),
             isMyCardsShowingClosed: false,
             toggleMyCardsShowClosed: () =>
                 set(s => ({ isMyCardsShowingClosed: !s.isMyCardsShowingClosed })),
@@ -266,7 +403,10 @@ export const useBoardsUIStore = create<BoardsUIState>()(
             // archived panel and sidebar section likewise: both are things
             // someone opens to look, not settings they expect to keep. The
             // filter and sort are excluded because a stale one is NOT inert —
-            // see the field comment.
+            // see the field comment. The selection and its mode are excluded on
+            // the strongest version of that same ground: a restored selection
+            // is not merely wrong, it silently arms a bulk archive against rows
+            // the user cannot see.
             //
             // The two view preferences persist because a stale value of either
             // is INERT rather than wrong: a collapsed id naming a list that no

@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router'
 import { useMemo } from 'react'
 import { findCardEntry, neighborCardId } from '../lib/board-cards'
 import { columnStep, composerTargetColumnId, targetColumnForMove } from '../lib/board-focus'
+import { resolveSelection } from '../lib/board-selection'
 import { focusedCardRect } from '../lib/card-rect'
 import { rankForAppend, rankForReorder } from '../lib/move'
 import { type CanvasPickerKind, selectBoardSort, useBoardsUIStore } from '../stores/boards-ui-store'
@@ -54,6 +55,8 @@ export function useBoardShortcuts(
     const openComposer = useBoardsUIStore(s => s.openComposer)
     const setAddListOpen = useBoardsUIStore(s => s.setAddListOpen)
     const openCanvasPicker = useBoardsUIStore(s => s.openCanvasPicker)
+    const selectMany = useBoardsUIStore(s => s.selectMany)
+    const clearSelection = useBoardsUIStore(s => s.clearSelection)
     const setFilterPanelOpen = useBoardsUIStore(s => s.setFilterPanelOpen)
     const toggleColumnCollapsed = useBoardsUIStore(s => s.toggleColumnCollapsed)
     const moveCard = useMoveCard()
@@ -62,8 +65,8 @@ export function useBoardShortcuts(
     const shortcuts = useMemo<Shortcut[]>(() => {
         /** Focus state is read imperatively: a subscription here would re-register every shortcut on each move. */
         const focus = () => {
-            const { focusedCardId, focusedColumnId } = useBoardsUIStore.getState()
-            return { focusedCardId, focusedColumnId }
+            const { focusedCardId, focusedColumnId, selectedCardIds } = useBoardsUIStore.getState()
+            return { focusedCardId, focusedColumnId, selectedCardIds }
         }
 
         const firstCardId = () =>
@@ -152,10 +155,81 @@ export function useBoardShortcuts(
             if (focusedCardId && findCardEntry(project, focusedCardId)) openCard(focusedCardId)
         }
 
+        /**
+         * Archive the SELECTION when there is one, else the focused card.
+         *
+         * The selection wins because it is the more explicit statement: a user
+         * who has picked eight cards and presses `x` means those eight, and the
+         * focus ring is very likely resting on one of them anyway.
+         *
+         * Each id is re-derived against the live board by `resolveSelection`,
+         * so a card another client archived in between is skipped rather than
+         * written to — the same rule the single-card path gets from
+         * `findCardEntry`.
+         */
         const archive = () => {
-            const { focusedCardId } = focus()
+            const { selectedCardIds, focusedCardId } = focus()
+            const selected = resolveSelection(project, selectedCardIds)
+            if (selected.length > 0) {
+                for (const entry of selected) {
+                    archiveCard.mutate({ cardId: entry.card.id, archived: true })
+                }
+                clearSelection()
+                focusCard(null)
+                return
+            }
             if (!focusedCardId || !findCardEntry(project, focusedCardId)) return
             archiveCard.mutate({ cardId: focusedCardId, archived: true })
+            focusCard(null)
+        }
+
+        /**
+         * Walk with j/k while extending the selection — the shift-click range in
+         * keyboard form. Selects the card focus LEAVES as well as the one it
+         * lands on, so a run built this way is contiguous: extending from an
+         * unselected card would otherwise leave a hole behind it.
+         *
+         * Adds rather than toggling. A toggle would make the keys direction-
+         * dependent — Shift+J then Shift+K would deselect the card it just
+         * landed on instead of walking back — and shrinking a keyboard range
+         * from the far end is not a gesture anyone reaches for. Escape and
+         * ⌘-click are the ways back.
+         */
+        const stepSelecting = (delta: 1 | -1) => {
+            const { focusedCardId } = focus()
+            if (!focusedCardId) {
+                const first = firstCardId()
+                if (first) {
+                    focusCard(first)
+                    selectMany([first])
+                }
+                return
+            }
+            const next = neighbor(focusedCardId, delta)
+            if (!next) return
+            selectMany([focusedCardId, next])
+            focusCard(next)
+        }
+
+        // Every card the CURRENT VIEW shows, which is what `selectionOrderIds`
+        // holds — a filtered board selects what is on screen, not the rows the
+        // filter is hiding.
+        const selectAll = () => {
+            selectMany(useBoardsUIStore.getState().selectionOrderIds)
+        }
+
+        /**
+         * Escape drops the selection FIRST, and only clears focus once there is
+         * none. Two presses to get back to nothing, but each undoes the more
+         * recent, more visible state — clearing focus while a bulk bar is up
+         * would look like the key did nothing.
+         */
+        const clearSelectionOrFocus = () => {
+            const { selectedCardIds } = useBoardsUIStore.getState()
+            if (selectedCardIds.size > 0) {
+                clearSelection()
+                return
+            }
             focusCard(null)
         }
 
@@ -215,7 +289,12 @@ export function useBoardShortcuts(
             ),
             nav('boards.board.open', 'Enter', 'Open card', open),
             nav('boards.board.openAlt', 'o', 'Open card (alt)', open),
-            nav('boards.board.clearFocus', 'Escape', 'Clear focus', () => focusCard(null)),
+            nav(
+                'boards.board.clearFocus',
+                'Escape',
+                'Clear selection or focus',
+                clearSelectionOrFocus
+            ),
             nav('boards.board.myCards', 'g m', 'Go to My cards', () =>
                 router.push(orgHref('boards/my-cards'))
             ),
@@ -235,7 +314,12 @@ export function useBoardShortcuts(
             nav('boards.board.moveRight', 'Shift+ArrowRight', 'Move card to next column', () =>
                 moveAcross(1)
             ),
-            nav('boards.board.archive', 'x', 'Archive card', archive),
+            nav('boards.board.archive', 'x', 'Archive card or selection', archive),
+            nav('boards.board.selectDown', 'Shift+J', 'Extend selection down', () =>
+                stepSelecting(1)
+            ),
+            nav('boards.board.selectUp', 'Shift+K', 'Extend selection up', () => stepSelecting(-1)),
+            nav('boards.board.selectAll', '$mod+a', 'Select all cards', selectAll),
         ]
         if (visibleOrder) return [...list, ...editing]
 
@@ -275,6 +359,8 @@ export function useBoardShortcuts(
         toggleColumnCollapsed,
         openCanvasPicker,
         setFilterPanelOpen,
+        selectMany,
+        clearSelection,
     ])
 
     useRegisterShortcuts(shortcuts, scopeOwner)

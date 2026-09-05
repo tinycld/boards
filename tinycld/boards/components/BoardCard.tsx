@@ -12,9 +12,10 @@ import {
     Paperclip,
     SquareCheck,
 } from 'lucide-react-native'
-import { Pressable, Text, View } from 'react-native'
+import { type GestureResponderEvent, Pressable, Text, View } from 'react-native'
 import type { RemoteCardsPresence } from '../hooks/useBoardPresence'
 import { useCardFileDrop } from '../hooks/useCardFileDrop'
+import { useCardSelection } from '../hooks/useCardSelection'
 import { dueStateFor } from '../lib/due-state'
 import { formatSchedule } from '../lib/due-time'
 import { formatEstimate } from '../lib/estimate'
@@ -42,21 +43,18 @@ interface BoardCardProps {
 }
 
 function useCardPress(cardId: string) {
-    const openCard = useBoardsUIStore(s => s.openCard)
     const isOpen = useBoardsUIStore(s => s.openCardId === cardId)
     // Per-card boolean, not the whole focus state: only the card whose ring
     // actually flips re-renders, so arrowing across the board never re-renders
     // a column and cannot disturb a live drag.
     const isFocused = useBoardsUIStore(s => s.focusedCardId === cardId)
-    const onPress = () => {
-        // Releasing a web drag can synthesize a trailing click on whatever
-        // sits under the pointer — swallowing it keeps a drop from popping
-        // the peek open. Read imperatively: the flag flips mid-gesture, after
-        // this closure was registered.
-        if (useBoardsUIStore.getState().isCardDragging) return
-        openCard(cardId)
-    }
-    return { isOpen, isFocused, onPress }
+    // Per-card for exactly the same reason — a whole-set read here would
+    // re-render every column on every toggle.
+    const isSelected = useBoardsUIStore(s => s.selectedCardIds.has(cardId))
+    // Owns the drag guard and the open-vs-select decision; see the hook.
+    const select = useCardSelection()
+    const onPress = (event: GestureResponderEvent) => select(cardId, event)
+    return { isOpen, isFocused, isSelected, onPress }
 }
 
 /**
@@ -65,16 +63,34 @@ function useCardPress(cardId: string) {
  * neither reads as meaningful. A hovering OS file drop outranks both: it is
  * the only transient state, and the ring is what tells the user which card
  * will receive the files.
+ *
+ * Selection sits above focus and below open: a selected card is a stronger
+ * statement than the cursor merely resting on one. It is the only rung that
+ * also tints the BACKGROUND (see `cardSelectedClass`) rather than only
+ * recolouring the border — a selection has to stay legible across a run of
+ * cards at a glance, and at most one of them can be the focused one.
  */
-function cardRingClass(isOpen: boolean, isFocused: boolean, idle: string, isDropTarget = false) {
+function cardRingClass(
+    isOpen: boolean,
+    isFocused: boolean,
+    idle: string,
+    isDropTarget = false,
+    isSelected = false
+) {
     if (isDropTarget) return 'border-ring'
     if (isOpen) return 'border-ring'
+    if (isSelected) return 'border-primary'
     if (isFocused) return 'border-muted-foreground'
     return idle
 }
 
+/** The selected card's background tint — see `cardRingClass`. */
+function cardSelectedClass(isSelected: boolean) {
+    return isSelected ? 'bg-primary/10' : 'bg-card'
+}
+
 export function BoardCard({ card, projectId, category, canDrag }: BoardCardProps) {
-    const { isOpen, isFocused, onPress } = useCardPress(card.id)
+    const { isOpen, isFocused, isSelected, onPress } = useCardPress(card.id)
     // canDrag doubles as the edit gate: both come from the same role check.
     const { isDropTarget, dropRef } = useCardFileDrop(card.id, projectId, canDrag)
     // Board-wide, so read here rather than threaded through BoardColumn —
@@ -91,6 +107,7 @@ export function BoardCard({ card, projectId, category, canDrag }: BoardCardProps
                 category={category}
                 isOpen={isOpen}
                 isFocused={isFocused}
+                isSelected={isSelected}
                 onPress={onPress}
                 canDrag={canDrag}
             />
@@ -108,15 +125,17 @@ export function BoardCard({ card, projectId, category, canDrag }: BoardCardProps
             accessibilityRole="button"
             testID={`board-card-${card.id}`}
             onPress={onPress}
-            className={`bg-card border rounded-[10px] shadow-sm ${layout} ${canDrag ? 'web:cursor-grab' : ''} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${cardRingClass(
+            className={`${cardSelectedClass(isSelected)} border rounded-[10px] shadow-sm ${layout} ${canDrag ? 'web:cursor-grab' : ''} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${cardRingClass(
                 isOpen,
                 isFocused,
                 'border-border hover:border-muted/50',
-                isDropTarget
+                isDropTarget,
+                isSelected
             )}`}
         >
             <DropMarker isDropTarget={isDropTarget} cardId={card.id} />
             <FocusMarker isFocused={isFocused} cardId={card.id} />
+            <SelectedMarker isSelected={isSelected} cardId={card.id} />
             <CardFace card={card} isCompact={isCompact} />
         </Pressable>
     )
@@ -315,6 +334,12 @@ function FocusMarker({ isFocused, cardId }: { isFocused: boolean; cardId: string
     return <View testID={`boards-focused-${cardId}`} />
 }
 
+/** The same, for the selection — see FocusMarker for why it is a separate node. */
+function SelectedMarker({ isSelected, cardId }: { isSelected: boolean; cardId: string }) {
+    if (!isSelected) return null
+    return <View testID={`boards-selected-${cardId}`} />
+}
+
 /**
  * Label colours without their names, capped and counted exactly as the full
  * face does — a card must not appear to lose labels when density changes, so
@@ -370,7 +395,8 @@ interface ClosedCardProps {
     category: ListCategory
     isOpen: boolean
     isFocused: boolean
-    onPress: () => void
+    isSelected: boolean
+    onPress: (event: GestureResponderEvent) => void
     canDrag: boolean
 }
 
@@ -385,6 +411,7 @@ function ClosedCard({
     category,
     isOpen,
     isFocused,
+    isSelected,
     onPress,
     canDrag,
 }: ClosedCardProps) {
@@ -399,13 +426,16 @@ function ClosedCard({
             accessibilityRole="button"
             testID={`board-card-${cardId}`}
             onPress={onPress}
-            className={`bg-card border rounded-[10px] px-3 py-2.5 shadow-sm ${canDrag ? 'web:cursor-grab' : ''} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${cardRingClass(
+            className={`${cardSelectedClass(isSelected)} border rounded-[10px] px-3 py-2.5 shadow-sm ${canDrag ? 'web:cursor-grab' : ''} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${cardRingClass(
                 isOpen,
                 isFocused,
-                'border-border'
+                'border-border',
+                false,
+                isSelected
             )}`}
         >
             <FocusMarker isFocused={isFocused} cardId={cardId} />
+            <SelectedMarker isSelected={isSelected} cardId={cardId} />
             <View className="flex-row items-start gap-2">
                 <View className="mt-px" testID={`boards-card-closed-${cardId}`}>
                     <Icon size={14} color={iconColor} strokeWidth={2.4} />

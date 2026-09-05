@@ -5,7 +5,12 @@ import { PriorityGlyph } from '../PriorityGlyph'
 import { menuPropsFor, type PickerAnchor } from './picker-anchor'
 
 type PriorityPickerProps = {
-    selected: CardPriority
+    /**
+     * Undefined marks NO row — which is what a bulk selection whose cards
+     * disagree needs. A card always has a priority, so the card detail always
+     * passes one.
+     */
+    selected?: CardPriority
     onSelect: (priority: CardPriority) => void
 } & PickerAnchor
 

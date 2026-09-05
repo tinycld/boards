@@ -3,9 +3,9 @@ import { PresenceAvatars } from '@tinycld/core/components/PresenceAvatars'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useCurrentRole } from '@tinycld/core/lib/use-current-role'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
-import { Archive, Rows2, Rows3 } from 'lucide-react-native'
+import { Archive, Rows2, Rows3, SquareCheck } from 'lucide-react-native'
 import { useState } from 'react'
-import { Pressable, Text, View } from 'react-native'
+import { Platform, Pressable, Text, View } from 'react-native'
 import { useUpdateProject } from '../hooks/useProjectMutations'
 import { useProjectRole } from '../hooks/useProjectRole'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
@@ -78,6 +78,7 @@ export function BoardHeader({ project, cardCount, isArchived }: BoardHeaderProps
                 <ViewToggle projectId={project.id} />
                 <FilterPopover project={project} />
                 <SortMenu projectId={project.id} />
+                <SelectModeToggle isVisible={canEdit} />
                 <ArchivedCardsButton />
                 <DensityToggle />
                 {/* Rename, recolor and archive are all owner-only by rule; hiding
@@ -158,6 +159,44 @@ function RoleChip({ role, isVisible }: { role: BoardsMemberRole | null; isVisibl
  * Labelled by what it does rather than by the state it names ("Compact"): the
  * label flips with the state, the way ColumnMenu's done-list item does.
  */
+/**
+ * Enters and leaves native's selection mode.
+ *
+ * NATIVE ONLY, and the reason is a gesture collision rather than a preference:
+ * a touch device has no ⌘ or ⇧ to modify a tap with, and the obvious
+ * alternative — a long press — is already the card drag
+ * (CARD_DRAG_ACTIVATION_MS in lib/dnd.ts, deliberately tuned so a quick swipe
+ * over a column reads as a scroll rather than a grab). Taking that gesture for
+ * selection would cost a shipped, device-verified interaction. A mode costs one
+ * press and collides with nothing.
+ *
+ * Web renders nothing: ⌘/⇧-click needs no mode, and a button that puts the
+ * pointer into a state it does not otherwise need would be worse than absent.
+ */
+function SelectModeToggle({ isVisible }: { isVisible: boolean }) {
+    const isSelectMode = useBoardsUIStore(s => s.isSelectMode)
+    const setSelectMode = useBoardsUIStore(s => s.setSelectMode)
+    const mutedColor = useThemeColor('muted')
+    const primaryColor = useThemeColor('primary')
+
+    if (Platform.OS === 'web' || !isVisible) return null
+    return (
+        <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={isSelectMode ? 'Leave selection mode' : 'Select cards'}
+            testID="boards-select-mode"
+            onPress={() => setSelectMode(!isSelectMode)}
+            className="w-7 h-7 items-center justify-center rounded-md hover:bg-foreground/10 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+        >
+            <SquareCheck
+                size={15}
+                color={isSelectMode ? primaryColor : mutedColor}
+                strokeWidth={2}
+            />
+        </Pressable>
+    )
+}
+
 function DensityToggle() {
     const isCompact = useBoardsUIStore(s => s.isCompactCards)
     const toggleCompact = useBoardsUIStore(s => s.toggleCompactCards)

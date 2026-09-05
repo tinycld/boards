@@ -20,19 +20,22 @@ on `feat/tier2-links`, and time-based automation (11) on
 `feat/tier2-automation`. Epics (15) followed on `feat/tier2-epics` (PR #57),
 and the package was renamed cards→boards on `rename-boards` (PR #58).
 
-**In review** — Phase 0 of `docs/PLAN-tier2-open.md`, four stacked branches
-closing out Tier 2's loose ends (the deferrals that were waiting on core
-fixes which have since landed):
+**In review** — the last of Phase 0 of `docs/PLAN-tier2-open.md`. The other
+three closed out Tier 2's loose ends (deferrals that were waiting on core fixes
+which have since landed) and are merged:
 
 | PR | Branch | What |
 |---|---|---|
-| #59 | `feat/tier2-canvas-pickers` | `d`/`l`/`a`/`p`/`f` shortcuts |
-| #60 | `feat/tier2-link-cli` | `card link` / `card unlink` |
-| #61 | `feat/tier2-reaction-cli` | `card react` / `card unreact` |
+| #59 | `feat/tier2-canvas-pickers` | `d`/`l`/`a`/`p`/`f` shortcuts — merged |
+| #60 | `feat/tier2-link-cli` | `card link` / `card unlink` — merged |
+| #61 | `feat/tier2-reaction-cli` | `card react` / `card unreact` — merged |
 | #63 | `feat/tier2-cross-board-picker` | Debt 3: the cross-board link picker |
 
-Open: 14, 16–21 and Tier 3. Next up is 19 (bulk operations) — the
-highest-value open item, and the only one needing no migration or server work.
+Bulk operations (19) followed on `feat/tier2-bulk-ops` (PR #64) — no migration
+and no server work, exactly as the ranking predicted.
+Open: 14, 16–18, 20, 21 and Tier 3. Next up is 16 (import/export) per
+`docs/PLAN-tier2-open.md`'s phase order, with 20 (WIP limits and aging) as the
+cheap filler if a phase finishes early.
 
 **Carried debt — none left.** `docs/PLAN-debts.md`'s Debts 1 (core `Menu`
 overlay + measurement) and 2 (the CLI scope map) shipped in core; Debt 3 (the
@@ -131,6 +134,43 @@ plain re-run.
     archiving them. `card.epic` reads through to the face as a chip. Roadmaps
     still sit on top later.
 
+19. **Bulk operations** — landed as a selection kept BESIDE the focus ring
+    rather than merged into it (focus is the keyboard cursor, selection is what
+    an action targets; collapsing them would stop `j`/`k` walking through a
+    selection). `selectedCardIds` + `lastSelectedId` in the UI store, read PER
+    CARD like the focus ring so a toggle re-renders one face instead of every
+    column. The gesture logic is `lib/selection-gesture.ts`, adapted from
+    drive's, and its one rule is load-bearing: the decision is made on the
+    CLICK, never on press-down, because the modifier flag is not reliably
+    present on `pointerdown` under load — drive hit a CI failure where a
+    ctrl-click read as a plain one and REPLACED the selection.
+    Native cannot use modifiers and could not take long-press either: a 200ms
+    hold IS the card drag (`CARD_DRAG_ACTIVATION_MS`, tuned so a quick swipe
+    reads as a column scroll), so native gets a **Select** button in the header
+    and web gets no mode at all.
+    Ranges resolve against `selectionOrderIds`, published by whichever view is
+    mounted — board order on the canvas, row order in the table — so a range
+    means the same thing in both. It lives in the store rather than as a prop
+    because `ColumnCards` is memoized and state-free, and a new prop would
+    destabilise Drax mid-drag; nothing subscribes to it, the press handler
+    reads it imperatively.
+    Two things the batch writes had to get right. **Ranks**: `rankForAppend`
+    called N times against unchanged state returns the SAME rank, so a bulk
+    move would lose the selection's order to the `id` tiebreaker — `ranksAfter`
+    (lib/rank.ts) generates N distinct keys in one pass. **Partial failure**:
+    core awaits an array yield with `Promise.all`, which rejects on the FIRST
+    rejection and says nothing about the rest — a selection can legitimately
+    contain a card the user may read but not write, so the actions drive the
+    transactions with `allSettled` and report how many of N landed.
+    The selection is dropped at the three moments that invalidate it — board
+    change, view change, filter change — in the STORE ACTIONS themselves rather
+    than an effect, and vanished rows are skipped by `resolveSelection` at the
+    point of use, so nothing chases the six live queries.
+    Deferred: bulk delete, bulk epic (`EpicPicker` has no `PickerAnchor`), bulk
+    cross-board move (`useMoveCardToBoard` is a per-card endpoint, so it is N
+    serial round-trips with its own partial-failure report), and marquee
+    drag-select.
+
 11. **Time-based automation and missing actions** — landed as `card-overdue`
     and `card-due-soon`, RECORD triggers watching the two notice stamps rather
     than anything scheduled. The due-notice sweep already stamped a card on
@@ -213,9 +253,6 @@ plain re-run.
     thumbnail pipeline.  Requires improving file handling so files can be sorted
 18. **Card and board templates.** An `is_template` flag using the duplicate
     path, and a template picker in the New board dialog.
-19. **Bulk operations.** Multi-select then move / label / assign / archive.
-    Needs a multi-select focus model (`board-focus.ts` holds one card) and a
-    batch mutation.
 20. **WIP limits and card aging.** `wip_limit` on lists with a warning header;
     aging as a face tint from `updated`.
 21. **Reports.** Burndown, velocity, cumulative flow. 12 and 13 are in;
