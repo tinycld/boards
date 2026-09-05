@@ -171,7 +171,10 @@ boards, one user, both memberships, no second session.
 
 ---
 
-## Phase 1 — item 19, Bulk operations
+## Phase 1 — item 19, Bulk operations ✅ shipped
+
+Landed on `feat/tier2-bulk-ops`. `TODO.md`'s entry has the design notes; three
+corrections to what this section predicted are recorded at the end.
 
 **The highest-value open item.** All three products treat multi-select as core,
 it is touched constantly in daily use, and it needs **no migration and no server
@@ -232,6 +235,40 @@ silently skip rows that are gone.
 - E2E: selection clears on filter change.
 
 ---
+
+
+### What this section got wrong
+
+Three things, found while building it:
+
+1. **`board-rows.ts` is not the flattener.** The board-order flattening is
+   `flattenCards` in `lib/board-cards.ts`; `board-rows.ts` builds on it and adds
+   the table's sort. `lib/board-selection.ts`'s `selectionOrder` wraps the
+   former, and the table passes its own order through the `visibleOrder`
+   channel `useBoardShortcuts` already had.
+
+2. **An array yield cannot report partial failure.** This section proposed
+   "one `useMutation` per operation, yielding an array of Transactions" and
+   separately asked for partial failure to be reported. Those are incompatible:
+   core awaits an array with `Promise.all`, which rejects on the FIRST rejection
+   and leaves the rest neither awaited nor reported. The actions drive the
+   transactions with `allSettled` instead and raise one toast naming how many of
+   N landed.
+
+3. **Long-press was not available on native.** The plan assumed a gesture could
+   be found for native multi-select. A 200ms hold is already the card drag
+   (`CARD_DRAG_ACTIVATION_MS`, deliberately tuned so a quick swipe over a column
+   reads as a scroll), and taking it would have cost a shipped, device-verified
+   interaction. Native gets a **Select** button in the header instead; web needs
+   no mode at all. Drive has no precedent here — its native path is
+   single-select only.
+
+Also worth recording: the selection model and the batch-mutation shape did not
+need inventing. `drive/tinycld/drive/stores/drive-ui-store.ts` and
+`drive/tinycld/drive/lib/selection-gesture.ts` are the selection precedent (the
+latter carries a CI-hardened rule about `pointerdown` modifiers that was copied
+verbatim), and `mail/tinycld/mail/hooks/useMailBulkActions.ts` is the mutation
+shape, including its "one toast, not N" failure handling.
 
 ## Phase 2 — item 16, Import and export
 
@@ -343,7 +380,7 @@ why it is listed here rather than dropped.
 | 0b | link CLI | `boards` | Unblocked by the scope map |
 | 0c | reaction CLI | `boards` | Same, retires two entries |
 | 0d | Debt 3 | `boards` | The one real carried-over debt |
-| 1 | 19 bulk ops | `boards` | Highest value, no server work |
+| 1 | 19 bulk ops ✅ | `boards` | Highest value, no server work |
 | 2 | 16 import/export | `boards` | Strong prior art; decides evaluations |
 | 3 | 17 + 18 | `boards` | Small, shared theme, existing paths |
 

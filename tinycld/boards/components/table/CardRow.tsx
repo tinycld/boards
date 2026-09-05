@@ -2,7 +2,7 @@ import { LabelBadge } from '@tinycld/core/components/LabelBadge'
 import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { CalendarDays, Clock, Gauge } from 'lucide-react-native'
-import { Pressable, Text, View } from 'react-native'
+import { type GestureResponderEvent, Pressable, Text, View } from 'react-native'
 import { dueStateFor, formatDueDate } from '../../lib/due-state'
 import { formatSchedule } from '../../lib/due-time'
 import { formatEstimate } from '../../lib/estimate'
@@ -27,7 +27,9 @@ interface CardRowProps {
     /** `table` lays cells out under DataTableHeader; `stacked` is the phone row. */
     variant: 'table' | 'stacked'
     isFocused?: boolean
-    onPress: () => void
+    /** Omitted on the cross-board list, which has no bulk actions. */
+    isSelected?: boolean
+    onPress: (event: GestureResponderEvent) => void
 }
 
 /** Column widths, shared with BoardTable's header so the tracks line up. */
@@ -56,9 +58,13 @@ export function CardRow({
     board,
     variant,
     isFocused = false,
+    isSelected = false,
     onPress,
 }: CardRowProps) {
-    const ring = isFocused ? 'bg-foreground/[0.04]' : ''
+    // Selection outranks focus, and tints more strongly — the same ladder the
+    // card face uses, for the same reason: a run of selected rows has to read
+    // at a glance, and at most one of them is the focused one.
+    const ring = isSelected ? 'bg-primary/10' : isFocused ? 'bg-foreground/[0.04]' : ''
     if (variant === 'stacked') {
         return (
             <Pressable
@@ -68,6 +74,8 @@ export function CardRow({
                 className={`px-4 py-2.5 border-b border-border gap-1 ${ring}`}
             >
                 <FocusMarker isFocused={isFocused} cardId={card.id} />
+                <SelectedMarker isSelected={isSelected} cardId={card.id} />
+                <SelectedMarker isSelected={isSelected} cardId={card.id} />
                 <View className="flex-row items-center gap-2">
                     <PriorityGlyph priority={card.priority} size={12} />
                     <Text
@@ -151,6 +159,11 @@ export function CardRow({
 }
 
 /** Zero-size marker the keyboard e2e asserts on — the same one BoardCard mounts. */
+function SelectedMarker({ isSelected, cardId }: { isSelected: boolean; cardId: string }) {
+    if (!isSelected) return null
+    return <View testID={`boards-selected-${cardId}`} />
+}
+
 function FocusMarker({ isFocused, cardId }: { isFocused: boolean; cardId: string }) {
     if (!isFocused) return null
     return <View testID={`boards-focused-${cardId}`} />

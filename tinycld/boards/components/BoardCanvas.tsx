@@ -4,10 +4,12 @@ import { SortableBoardContainer } from 'react-native-drax'
 import { useBoardDnd } from '../hooks/useBoardDnd'
 import { useBoardShortcuts } from '../hooks/useBoardShortcuts'
 import { useProjectRole } from '../hooks/useProjectRole'
+import { useSelectionOrder } from '../hooks/useSelectionOrder'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
 import type { BoardProject } from '../types'
 import { AddListColumn } from './AddListColumn'
 import { BoardColumn } from './BoardColumn'
+import { BulkActionBar } from './BulkActionBar'
 import { CanvasCardPicker } from './CanvasCardPicker'
 import { EmptyBoard } from './EmptyBoard'
 
@@ -15,6 +17,7 @@ export function BoardCanvas({ project }: { project: BoardProject }) {
     const { canEdit } = useProjectRole(project.id)
     const dnd = useBoardDnd(project, canEdit)
     useBoardShortcuts(project, canEdit)
+    useSelectionOrder(project)
     useRemeasureOnCollapse(dnd.measureAllColumns)
 
     if (project.lists.length === 0) {
@@ -59,6 +62,7 @@ export function BoardCanvas({ project }: { project: BoardProject }) {
             </ScrollView>
             <DragActiveMarker />
             <CanvasCardPicker project={project} />
+            <BulkActionBar project={project} canEdit={canEdit} />
         </SortableBoardContainer>
     )
 }
