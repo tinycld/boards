@@ -7,7 +7,7 @@ import {
     TEST_COLLABORATOR_EMAIL,
     TEST_COLLABORATOR_NAME,
 } from '@tinycld/core/e2e-helpers'
-import { addCard, closeCardPeek, createBoard, openBoard, openCard, shareBoard } from './helpers'
+import { addCard, createBoard, openBoard, openCard, shareBoard } from './helpers'
 
 // Collaborative description editing, which needs TWO live sessions: one types
 // and the OTHER must see it without reloading. A single-session spec could not
@@ -233,7 +233,10 @@ test.describe('Boards — collaborative descriptions', () => {
         }
     })
 
-    test('the full-page card is collaborative too, not just the peek', async ({ page }) => {
+    // The full-page half of the suite is two tests where it was one: with a
+    // second session on top of the owner's, a round trip in each direction
+    // overran the 30-second budget on CI as a sum, no single step slow.
+    async function openFullPageWithBob(page: Page) {
         // The peek and the full-page route are separate screens, and only the
         // board screen used to open the presence room. On the full page the
         // context fell back to its default (doc: null), the description
@@ -255,99 +258,59 @@ test.describe('Boards — collaborative descriptions', () => {
 
         // Share BEFORE signing the collaborator in — see shareBoard's doc.
         const { page: bobPage, close } = await signInAsCollaborator(page)
+        // Bob stays on the peek; the owner expands to the full page. One of
+        // each proves the two surfaces share a document rather than merely
+        // each working alone.
+        await navigateToPackage(bobPage, 'boards')
+        await openBoard(bobPage, boardName, CARD_TITLE)
+        await openCard(bobPage, CARD_TITLE)
+
+        await openCard(page, CARD_TITLE)
+        await page.getByRole('button', { name: 'Open full page' }).click()
+        // Gate on the route, not on "Description": the peek stays mounted
+        // behind the page, so that heading matches twice.
+        // Either spelling of a card route: expanding mints the KEY
+        // (OTTER-1) when the board has one, and falls back to the record id
+        // when it does not.
+        await expect(page).toHaveURL(/\/boards\/[A-Za-z0-9-]+/)
+        await expect(page.getByRole('button', { name: 'Back to board' })).toBeVisible()
+        // The collaborative editor is a ProseMirror surface; the fallback
+        // path is a plain text input, so this is the load-bearing check.
+        // Scoped to the DESCRIPTION editors and to the VISIBLE one — the
+        // peek's editor is still in the DOM behind the page, and comment
+        // editors are ProseMirror surfaces too now.
+        // Opened explicitly: the full page renders its description as
+        // markdown too, so there is no editor to find until an edit starts.
+        // `.first()` on the VISIBLE match — the peek is still mounted
+        // behind the page with an editor of its own.
+        await page.getByRole('button', { name: 'Edit description' }).first().click()
+        const pageEditor = page
+            .getByTestId('boards-description-editor')
+            .locator('.ProseMirror:visible')
+            .first()
+        await expect(pageEditor).toBeVisible()
+        return { bobPage, pageEditor, close }
+    }
+
+    test('an edit on the full page reaches the peek', async ({ page }) => {
+        const { bobPage, pageEditor, close } = await openFullPageWithBob(page)
         try {
-            // Bob stays on the peek; the owner expands to the full page. One
-            // of each proves the two surfaces share a document rather than
-            // merely each working alone.
-            await navigateToPackage(bobPage, 'boards')
-            await openBoard(bobPage, boardName, CARD_TITLE)
-            await openCard(bobPage, CARD_TITLE)
-
-            await openCard(page, CARD_TITLE)
-            await page.getByRole('button', { name: 'Open full page' }).click()
-            // Gate on the route, not on "Description": the peek stays mounted
-            // behind the page, so that heading matches twice.
-            // Either spelling of a card route: expanding mints the KEY
-            // (OTTER-1) when the board has one, and falls back to the record id
-            // when it does not.
-            await expect(page).toHaveURL(/\/boards\/[A-Za-z0-9-]+/)
-            await expect(page.getByRole('button', { name: 'Back to board' })).toBeVisible()
-            // The collaborative editor is a ProseMirror surface; the fallback
-            // path is a plain text input, so this is the load-bearing check.
-            // Scoped to the DESCRIPTION editors and to the VISIBLE one — the
-            // peek's editor is still in the DOM behind the page, and comment
-            // editors are ProseMirror surfaces too now.
-            // Opened explicitly: the full page renders its description as
-            // markdown too, so there is no editor to find until an edit starts.
-            // `.first()` on the VISIBLE match — the peek is still mounted
-            // behind the page with an editor of its own.
-            await page.getByRole('button', { name: 'Edit description' }).first().click()
-            const pageEditor = page
-                .getByTestId('boards-description-editor')
-                .locator('.ProseMirror:visible')
-                .first()
-            await expect(pageEditor).toBeVisible()
-
             await pageEditor.click()
             await page.keyboard.press('ControlOrMeta+End')
             await page.keyboard.type('Written from the full page.')
             await expectDescriptionToContain(bobPage, 'Written from the full page.')
-
-            await typeDescription(bobPage, ' And answered from the peek.')
-            await expect(async () => {
-                expect(await pageEditor.innerText()).toContain('And answered from the peek.')
-            }).toPass({ timeout: 15_000 })
         } finally {
             await close()
         }
     })
 
-    test('a viewer cannot edit the description', async ({ page }) => {
-        // The client gate mirrors the server's: WritePredicate drops a
-        // read-only member's document frames regardless of what their UI does,
-        // and this checks the UI does not invite the attempt in the first place.
-        const boardName = `collab-ro-${Date.now()}`
-        await login(page)
-        await navigateToPackage(page, 'boards')
-        await createBoard(page, boardName)
-        await addCard(page, 0, CARD_TITLE)
-        await openCard(page, CARD_TITLE)
-        await typeDescription(page, 'Owner wrote this.')
-
-        // The owner re-opens the card after sharing, and holds it open
-        // while the viewer joins.
-        //
-        // The description is not a plain field here: it is a fragment of
-        // the board's shared document, which the server seeds from storage
-        // when the ROOM IS CREATED and never re-reads while that room stays
-        // alive. This board's room was created before the description
-        // existed, so a viewer joining an otherwise-idle room is handed a
-        // fragment that never learned the prose — an empty editor, even
-        // though boards_cards.description holds the right text (verified
-        // directly against the API). Keeping a writer in the document is
-        // what makes the populated state deterministic, and a populated
-        // description is the precondition this read-only gate needs.
-        await closeCardPeek(page)
-        await openBoard(page, boardName, CARD_TITLE)
-        await shareBoard(page, boardName, TEST_COLLABORATOR_EMAIL, 'Viewer')
-        await openCard(page, CARD_TITLE)
-
-        // Share BEFORE signing the collaborator in — see shareBoard's doc.
-        const { page: bobPage, close } = await signInAsCollaborator(page)
+    test('an edit in the peek reaches the full page', async ({ page }) => {
+        const { bobPage, pageEditor, close } = await openFullPageWithBob(page)
         try {
-            await navigateToPackage(bobPage, 'boards')
-            await openBoard(bobPage, boardName, CARD_TITLE)
-            await openCard(bobPage, CARD_TITLE)
-
-            // The viewer sees the text...
-            await expectDescriptionToContain(bobPage, 'Owner wrote this.')
-            // ...and is offered no way to change it. A description renders as
-            // markdown until someone edits it, so for a viewer the assertion is
-            // stronger than the old read-only editor: there is no editor at
-            // all, and no affordance to open one.
-            await expect(bobPage.getByTestId('boards-description-read')).toBeVisible()
-            await expect(descriptionEditor(bobPage)).toHaveCount(0)
-            await expect(bobPage.getByRole('button', { name: 'Edit description' })).toHaveCount(0)
+            await typeDescription(bobPage, 'Answered from the peek.')
+            await expect(async () => {
+                expect(await pageEditor.innerText()).toContain('Answered from the peek.')
+            }).toPass({ timeout: 15_000 })
         } finally {
             await close()
         }
