@@ -54,6 +54,7 @@ function toFarCardView(row: {
         subtaskTotal: 0,
         subtaskDone: 0,
         epic: null,
+        sprint: null,
     }
 }
 

@@ -6,7 +6,7 @@ import {
     signInAsCollaborator,
     TEST_COLLABORATOR_EMAIL,
 } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, closeCardPeek, createBoard, openBoard } from './helpers'
+import { addCard, boardCard, createBoard, openBoard } from './helpers'
 
 // Reactions end to end: the picker files one, the chip counts it and takes
 // it back, a second commentor's reaction raises the count for both, and a
@@ -99,7 +99,10 @@ test.describe('Boards — comment reactions', () => {
         await expect(thumbsUp(page)).toHaveCount(0)
     })
 
-    test('a second commentor raises the count; a viewer only looks', async ({ page }) => {
+    // Two tests where there was one: each needs its own collaborator session
+    // on top of the owner's, and three sign-ins plus the share dialog in one
+    // 30-second budget overran on CI without any single step being slow.
+    test('a second commentor raises the count', async ({ page }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
         const boardName = `react-two-${Date.now()}`
@@ -130,20 +133,22 @@ test.describe('Boards — comment reactions', () => {
         } finally {
             await close()
         }
+    })
 
-        // Demoted to viewer: the chip is still there to read, the smiley is not.
-        // The peek covers the header's right edge where Share lives.
-        await closeCardPeek(page)
-        await page.getByRole('button', { name: 'Share board' }).click()
-        await expect(page.getByText(`Share “${boardName}”`)).toBeVisible()
-        // The sole owner's own role menu never renders, so the one control
-        // on the roster is the collaborator's.
-        await page.getByRole('button', { name: /^Change role for/ }).click()
-        await page.getByRole('menuitem', { name: 'Viewer' }).click()
-        await page.getByRole('button', { name: 'Done', exact: true }).click()
-        await expect(page.getByRole('button', { name: 'Done', exact: true })).toHaveCount(0)
+    test('a viewer only looks', async ({ page }) => {
+        await login(page)
+        await navigateToPackage(page, 'boards')
+        const boardName = `react-view-${Date.now()}`
+        await createBoard(page, boardName)
+        await addCard(page, 0, CARD_TITLE)
+        await addMemberToBoard(page, boardName, TEST_COLLABORATOR_EMAIL, 'Viewer')
+        await openCard(page, CARD_TITLE)
+        await postComment(page, COMMENT)
+        await react(page, 'thumbs_up')
+        await expect(thumbsUp(page)).toContainText('1')
 
-        const { page: viewerPage, close: closeViewer } = await signInAsCollaborator(page)
+        // The chip is there to read; the smiley to add one is not.
+        const { page: viewerPage, close } = await signInAsCollaborator(page)
         try {
             await navigateToPackage(viewerPage, 'boards')
             await openBoard(viewerPage, boardName, CARD_TITLE)
@@ -151,7 +156,7 @@ test.describe('Boards — comment reactions', () => {
             await expect(thumbsUp(viewerPage)).toContainText('1')
             await expect(viewerPage.getByTestId('boards-reaction-add')).toHaveCount(0)
         } finally {
-            await closeViewer()
+            await close()
         }
     })
 })

@@ -11,6 +11,7 @@ import { formatDueDate } from './due-state'
 import { formatDueTime, parseDayValue } from './due-time'
 import { formatEstimate } from './estimate'
 import { type CardPriority, normalizePriority, priorityLabel } from './priority'
+import { sprintLabel } from './sprint'
 
 export type FeedEntry =
     | { kind: 'thread'; id: string; created: string; thread: CommentThread }
@@ -57,6 +58,8 @@ export interface ActivityContext {
      * Narrowest shape that will do, as `lists` is.
      */
     epics: { id: string; title: string }[]
+    /** The board's sprints, for resolving a `sprint` row's raw id to its label. */
+    sprints: { id: string; number: number; name: string }[]
 }
 
 export interface ActivityDescription {
@@ -95,6 +98,10 @@ export function describeActivity(item: BoardActivity, ctx: ActivityContext): Act
     // that has been deleted leaves its id behind on the history row, which
     // orphaning (rather than cascading) makes an ordinary case.
     const epicName = (id: string) => ctx.epics.find(epic => epic.id === id)?.title ?? 'an epic'
+    const sprintName = (id: string) => {
+        const sprint = ctx.sprints.find(entry => entry.id === id)
+        return sprint ? sprintLabel(sprint) : 'a sprint'
+    }
 
     const memberName = (id: string) => {
         const member = ctx.members.find(m => m.id === id)
@@ -176,6 +183,17 @@ export function describeActivity(item: BoardActivity, ctx: ActivityContext): Act
             text = item.to
                 ? `filed this under ${epicName(item.to)}`
                 : `removed this from ${epicName(item.from)}`
+            break
+        // Same shape. A rollover writes both halves ("moved this from Sprint
+        // 3 to Sprint 4"), a completion to the backlog only `from`.
+        case 'sprint':
+            if (item.to && item.from) {
+                text = `moved this from ${sprintName(item.from)} to ${sprintName(item.to)}`
+            } else if (item.to) {
+                text = `added this to ${sprintName(item.to)}`
+            } else {
+                text = `moved this from ${sprintName(item.from)} to the backlog`
+            }
             break
         // `from` carries the link type and `to` the OTHER card — see
         // server/card_links.go, which writes one row on each end.

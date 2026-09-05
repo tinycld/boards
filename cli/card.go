@@ -482,7 +482,7 @@ func newCardEditCmd(c *client.Client) *cobra.Command {
 // the card momentarily in the target column at its OLD rank, which every other
 // client would render — and if the second call failed, permanently.
 func newCardMoveCmd(c *client.Client) *cobra.Command {
-	var boardRef, listRef, family string
+	var boardRef, listRef, family, epic string
 	var index int
 	cmd := &cobra.Command{
 		Use:   "move <id>",
@@ -513,7 +513,7 @@ func newCardMoveCmd(c *client.Client) *cobra.Command {
 					return err
 				}
 				if p.ID != projectID {
-					return moveCardToBoard(cmd, c, o, cd, p, listRef, hasList, family)
+					return moveCardToBoard(cmd, c, o, cd, p, listRef, hasList, family, epic)
 				}
 			}
 			if !hasList && !hasIndex {
@@ -569,6 +569,11 @@ func newCardMoveCmd(c *client.Client) *cobra.Command {
 	// than guessing, because both answers move work the caller cannot see.
 	cmd.Flags().StringVar(&family, "family", "",
 		"with --board, what to do with sub-tasks: move or unlink")
+	// The same contract for the epic: required when the card is filed under
+	// one, and the server refuses rather than guessing. "move" recreates the
+	// epic on the target by name; "unlink" leaves the card unfiled.
+	cmd.Flags().StringVar(&epic, "epic", "",
+		"with --board, what to do with the card's epic: move or unlink")
 	return cmd
 }
 
@@ -654,7 +659,7 @@ func newCardRemoveCmd(c *client.Client) *cobra.Command {
 // POST /api/boards/cards/{id}/move. The destination list defaults to the
 // target board's first column; the rank appends, as a cross-column move
 // with no --index does.
-func moveCardToBoard(cmd *cobra.Command, c *client.Client, o output.Options, cd card, target project, listRef string, hasList bool, family string) error {
+func moveCardToBoard(cmd *cobra.Command, c *client.Client, o output.Options, cd card, target project, listRef string, hasList bool, family, epic string) error {
 	ctx := cmd.Context()
 	lists, err := projectLists(ctx, c, target.ID)
 	if err != nil {
@@ -685,12 +690,17 @@ func moveCardToBoard(cmd *cobra.Command, c *client.Client, o output.Options, cd 
 		MovedChildren    int      `json:"moved_children"`
 		OrphanedChildren int      `json:"orphaned_children"`
 		ClearedParent    bool     `json:"cleared_parent"`
+		MovedEpic        string   `json:"moved_epic"`
+		ClearedEpic      bool     `json:"cleared_epic"`
+		CreatedEpic      bool     `json:"created_epic"`
+		ClearedSprint    bool     `json:"cleared_sprint"`
 	}
 	err = c.PostJSON(ctx, "/api/boards/cards/"+cd.ID+"/move", map[string]any{
 		"project_id": target.ID,
 		"list_id":    dest.ID,
 		"position":   position,
 		"family":     family,
+		"epic":       epic,
 	}, &result)
 	if err != nil {
 		return err
@@ -713,6 +723,20 @@ func moveCardToBoard(cmd *cobra.Command, c *client.Client, o output.Options, cd 
 	}
 	if result.ClearedParent {
 		o.Info(cmd.ErrOrStderr(), "this card is no longer a sub-task — a parent cannot follow it")
+	}
+	if result.CreatedEpic {
+		o.Info(cmd.ErrOrStderr(), "created the epic on %s and filed the card under it", target.Name)
+	} else if result.MovedEpic != "" {
+		o.Info(cmd.ErrOrStderr(), "filed the card under %s's matching epic", target.Name)
+	}
+	if result.ClearedEpic {
+		o.Info(cmd.ErrOrStderr(), "the card is no longer filed under an epic")
+	}
+	// A sprint belongs to one board, so the card always leaves it; said
+	// because a card arriving with fewer relations than it left is a surprise
+	// unless it is stated.
+	if result.ClearedSprint {
+		o.Info(cmd.ErrOrStderr(), "the card left its sprint and is in %s's backlog", target.Name)
 	}
 	return writeCardResult(cmd, o, result.Card)
 }

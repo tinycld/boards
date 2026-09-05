@@ -53,33 +53,46 @@ var errNoProject = errors.New("cards: card has no project")
 // counter as 1, so a project row written before this column existed — or by a
 // caller that omitted it — starts at 1 rather than 0.
 func allocateNumber(app core.App, projectID string) (int, error) {
+	return allocateCounter(app, projectID, "next_number")
+}
+
+// allocateCounter is the compare-and-swap itself, over one of the project's
+// counter columns: `next_number` for cards, `next_sprint_number` for sprints
+// (sprint_number.go). `column` is a constant chosen by the caller, never
+// input, which is why it is interpolated into the SQL while every value still
+// binds.
+func allocateCounter(app core.App, projectID, column string) (int, error) {
 	if projectID == "" {
 		return 0, errNoProject
 	}
 
+	read := fmt.Sprintf(
+		"SELECT COALESCE(NULLIF(%s, 0), 1) AS n FROM boards_projects WHERE id = {:id}", column)
+	bump := fmt.Sprintf(`UPDATE boards_projects SET %s = {:next}
+			          WHERE id = {:id}
+			            AND COALESCE(NULLIF(%s, 0), 1) = {:current}`, column, column)
+
 	for attempt := 0; attempt < numberAllocRetries; attempt++ {
 		var current int
 		err := app.DB().
-			NewQuery("SELECT COALESCE(NULLIF(next_number, 0), 1) AS n FROM boards_projects WHERE id = {:id}").
+			NewQuery(read).
 			Bind(dbx.Params{"id": projectID}).
 			Row(&current)
 		if err != nil {
-			return 0, fmt.Errorf("cards: read next_number for project %s: %w", projectID, err)
+			return 0, fmt.Errorf("cards: read %s for project %s: %w", column, projectID, err)
 		}
 
 		res, err := app.NonconcurrentDB().
-			NewQuery(`UPDATE boards_projects SET next_number = {:next}
-			          WHERE id = {:id}
-			            AND COALESCE(NULLIF(next_number, 0), 1) = {:current}`).
+			NewQuery(bump).
 			Bind(dbx.Params{"id": projectID, "next": current + 1, "current": current}).
 			Execute()
 		if err != nil {
-			return 0, fmt.Errorf("cards: bump next_number for project %s: %w", projectID, err)
+			return 0, fmt.Errorf("cards: bump %s for project %s: %w", column, projectID, err)
 		}
 
 		affected, err := res.RowsAffected()
 		if err != nil {
-			return 0, fmt.Errorf("cards: bump next_number rows for project %s: %w", projectID, err)
+			return 0, fmt.Errorf("cards: bump %s rows for project %s: %w", column, projectID, err)
 		}
 		if affected == 1 {
 			return current, nil
@@ -89,8 +102,8 @@ func allocateNumber(app core.App, projectID string) (int, error) {
 		// gone, which the next SELECT surfaces as an error out of the loop.
 	}
 
-	return 0, fmt.Errorf("cards: could not allocate a number on project %s after %d attempts",
-		projectID, numberAllocRetries)
+	return 0, fmt.Errorf("cards: could not allocate %s on project %s after %d attempts",
+		column, projectID, numberAllocRetries)
 }
 
 // registerCardNumbers assigns a number to every card, on create and on any

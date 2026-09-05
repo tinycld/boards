@@ -16,6 +16,7 @@ import type {
     BoardEpic,
     BoardLabel,
     BoardMember,
+    BoardSprint,
 } from '../../types'
 import { useBoardPresenceContext } from '../BoardPresenceProvider'
 import { LabelManagerDialog } from '../LabelManagerDialog'
@@ -62,6 +63,7 @@ interface CardDetailProps {
     /** The board's labels and roster — what the pickers offer. */
     projectLabels: BoardLabel[]
     projectEpics: BoardEpic[]
+    projectSprints: BoardSprint[]
     projectMembers: BoardMember[]
     /** The board's lists, so history can name where a card moved. */
     projectLists: { id: string; name: string }[]
@@ -99,6 +101,7 @@ export function CardDetail({
     projectId,
     projectLabels,
     projectEpics,
+    projectSprints,
     projectMembers,
     projectLists,
     projectCards,
@@ -123,8 +126,9 @@ export function CardDetail({
             members: projectMembers,
             cards: projectCards,
             epics: projectEpics,
+            sprints: projectSprints,
         }),
-        [projectLists, projectLabels, projectMembers, projectCards, projectEpics]
+        [projectLists, projectLabels, projectMembers, projectCards, projectEpics, projectSprints]
     )
     // Resolved here for the same reason — both containers share the gates.
     const { canEdit, canComment, isOwner } = useProjectRole(projectId)

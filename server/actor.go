@@ -36,6 +36,7 @@ var actorCapturedCollections = []string{
 	"boards_attachments",
 	"boards_comments",
 	"boards_card_watchers",
+	"boards_sprints",
 	// Creating a link is attributed; REMOVING one is not, because this list
 	// only feeds create/update request hooks and there is no delete capture.
 	// See registerCardLinkActivity.

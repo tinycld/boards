@@ -67,6 +67,11 @@ export interface UpdateCardInput {
      * board — the pin in 1980000017 refuses anything else.
      */
     epic?: string
+    /**
+     * The sprint, or '' for the backlog. Same convention, same-board pin
+     * (1980000018); the server also refuses a completed sprint.
+     */
+    sprint?: string
 }
 
 /**
@@ -137,6 +142,9 @@ export function useCreateCard(projectId: string) {
                 // A new card is unfiled; an epic is chosen from the detail row
                 // afterwards, the way a parent is.
                 epic: '',
+                // And in the backlog: a sprint is chosen from the backlog
+                // view or the detail row.
+                sprint: '',
             })
 
             return cardId
@@ -202,6 +210,9 @@ export function useDuplicateCard(projectId: string) {
                 // A copy stays in the same plan — the epic is on the same
                 // board, so the id carries over as-is.
                 epic: card.epic?.id ?? '',
+                // The copy joins the same sprint — a duplicate is more of the
+                // same planned work, not a fresh idea for the backlog.
+                sprint: card.sprint?.id ?? '',
             })
 
             const items = itemsCollection.toArray
@@ -252,6 +263,7 @@ export function useUpdateCard() {
                 if (input.estimate !== undefined) draft.estimate = input.estimate
                 if (input.parent !== undefined) draft.parent = input.parent
                 if (input.epic !== undefined) draft.epic = input.epic
+                if (input.sprint !== undefined) draft.sprint = input.sprint
             })
         }),
     })

@@ -8,6 +8,7 @@ import type {
     BoardsCards,
     BoardsLists,
     BoardsProjects,
+    BoardsSprints,
 } from '../tinycld/boards/types'
 
 function user(id: string, name: string, email = `${id}@test.local`) {
@@ -25,6 +26,41 @@ function project(overrides: Partial<BoardsProjects> = {}): BoardsProjects {
         created_by: 'u1',
         archived: false,
         auto_archive_days: 0,
+        sprints_enabled: false,
+        sprint_length_days: 0,
+        sprint_auto_start: false,
+        sprint_auto_complete: false,
+        sprint_rollover: 'next',
+        next_sprint_number: 0,
+        created: '',
+        updated: '',
+        ...overrides,
+    }
+}
+
+function sprint(id: string, overrides: Partial<BoardsSprints> = {}): BoardsSprints {
+    return {
+        id,
+        project: 'p1',
+        number: 1,
+        name: '',
+        goal: '',
+        start: '',
+        end: '',
+        state: 'planned',
+        position: 'a0',
+        started_at: '',
+        completed_at: '',
+        card_total: 0,
+        card_done: 0,
+        points_total: 0,
+        points_done: 0,
+        committed_count: 0,
+        committed_points: 0,
+        completed_count: 0,
+        completed_points: 0,
+        rolled_count: 0,
+        created_by: 'u1',
         created: '',
         updated: '',
         ...overrides,
@@ -918,5 +954,85 @@ describe('buildBoardProject structural sharing', () => {
         const result = buildBoardProject(other, previous)
         expect(result).not.toBe(previous)
         expect(result?.id).toBe('p2')
+    })
+})
+
+describe('sprints', () => {
+    const base = {
+        project: project({ sprints_enabled: true, sprint_length_days: 7 }),
+        lists: [list('l1', 'a0')],
+        labels: [],
+        members: [],
+        users: [],
+    }
+
+    it("resolves a card's sprint and reads a dangling id as backlog", () => {
+        const built = buildBoardProject({
+            ...base,
+            sprints: [sprint('s1', { number: 1 })],
+            cards: [
+                card('c1', 'l1', 'a0', { sprint: 's1' }),
+                card('c2', 'l1', 'a1', { sprint: 'gone' }),
+            ],
+        })
+        const cards = built?.lists[0]?.cards ?? []
+        expect(cards[0]?.sprint?.number).toBe(1)
+        expect(cards[1]?.sprint).toBeNull()
+    })
+
+    it('orders sprints active, then planned by rank, then completed', () => {
+        const built = buildBoardProject({
+            ...base,
+            cards: [],
+            sprints: [
+                sprint('done', { number: 1, state: 'completed', position: 'a0' }),
+                sprint('later', { number: 4, state: 'planned', position: 'a2' }),
+                sprint('now', { number: 2, state: 'active', position: 'a0' }),
+                sprint('next', { number: 3, state: 'planned', position: 'a1' }),
+            ],
+        })
+        expect(built?.sprints.map(s => s.id)).toEqual(['now', 'next', 'later', 'done'])
+    })
+
+    it("carries the board's sprint settings, with 0 length read as the default", () => {
+        const built = buildBoardProject({ ...base, cards: [], sprints: [] })
+        expect(built?.sprintsEnabled).toBe(true)
+        expect(built?.sprintLengthDays).toBe(7)
+        const defaulted = buildBoardProject({ ...base, project: project(), cards: [], sprints: [] })
+        expect(defaulted?.sprintLengthDays).toBe(14)
+        expect(defaulted?.sprintRollover).toBe('next')
+    })
+
+    // The structural-sharing lines: a server-written rollup must reach the
+    // screen, and so must a settings change on the project row.
+    it("re-renders a card when its sprint's rollup moves", () => {
+        const input = {
+            ...base,
+            sprints: [sprint('s1', { points_done: 1 })],
+            cards: [card('c1', 'l1', 'a0', { sprint: 's1' })],
+        }
+        const first = buildBoardProject(input)
+        const same = buildBoardProject(input, first)
+        expect(same).toBe(first)
+
+        const moved = buildBoardProject(
+            { ...input, sprints: [sprint('s1', { points_done: 2 })] },
+            first
+        )
+        expect(moved).not.toBe(first)
+        expect(moved?.sprints[0]).not.toBe(first?.sprints[0])
+        expect(moved?.lists[0]?.cards[0]).not.toBe(first?.lists[0]?.cards[0])
+        expect(moved?.lists[0]?.cards[0]?.sprint?.pointsDone).toBe(2)
+    })
+
+    it('re-renders the project when a sprint setting changes', () => {
+        const input = { ...base, cards: [], sprints: [] }
+        const first = buildBoardProject(input)
+        const toggled = buildBoardProject(
+            { ...input, project: project({ sprints_enabled: false }) },
+            first
+        )
+        expect(toggled).not.toBe(first)
+        expect(toggled?.sprintsEnabled).toBe(false)
     })
 })

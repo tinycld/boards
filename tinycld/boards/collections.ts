@@ -25,7 +25,7 @@ export function registerCollections(
     // `slug` is NOT omitted: it is the one half of a card key a person chooses,
     // and the New board dialog sends it.
     const boards_projects = newCollection('boards_projects', {
-        omitOnInsert: ['created', 'updated', 'next_number'] as const,
+        omitOnInsert: ['created', 'updated', 'next_number', 'next_sprint_number'] as const,
         collectionOptions: indexed,
     })
 
@@ -53,6 +53,44 @@ export function registerCollections(
     // resolvable without a per-card fetch. A board holds a handful of epics.
     const boards_epics = newCollection('boards_epics', {
         omitOnInsert: ['created', 'updated'] as const,
+        collectionOptions: indexed,
+    })
+
+    // Eager, for the reason boards_epics is: a sprint chip renders on the card
+    // face and the header scopes the board to the active sprint, so every
+    // sprint on the board must resolve without a per-card fetch. A board holds
+    // a handful of live sprints; completed ones accumulate slowly.
+    //
+    // The omitted columns are all server-owned: `number` is allocated by
+    // server/sprint_number.go, the rollup by sprint_rollup.go, and the
+    // lifecycle stamps by the start/complete transitions. A client insert
+    // never carries any of them (sprint_owned_columns.go would zero them
+    // anyway).
+    const boards_sprints = newCollection('boards_sprints', {
+        omitOnInsert: [
+            'created',
+            'updated',
+            'number',
+            'started_at',
+            'completed_at',
+            'card_total',
+            'card_done',
+            'points_total',
+            'points_done',
+            'committed_count',
+            'committed_points',
+            'completed_count',
+            'completed_points',
+            'rolled_count',
+        ] as const,
+        collectionOptions: indexed,
+    })
+
+    // Server-written, like boards_activity, and read only by the sprint
+    // charts — on demand, for one sprint at a time.
+    const boards_sprint_snapshots = newCollection('boards_sprint_snapshots', {
+        omitOnInsert: ['created'] as const,
+        syncMode: 'on-demand' as const,
         collectionOptions: indexed,
     })
 
@@ -171,6 +209,8 @@ export function registerCollections(
         boards_share_links,
         boards_labels,
         boards_epics,
+        boards_sprints,
+        boards_sprint_snapshots,
         boards_lists,
         boards_cards,
         boards_checklist_items,

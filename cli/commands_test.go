@@ -1384,6 +1384,26 @@ func TestCardMoveToAnotherBoardCallsTheEndpoint(t *testing.T) {
 	}
 }
 
+// The two "ask, don't pick" answers ride in the body verbatim — and so does
+// their absence, since the server is what decides whether an answer was
+// needed. The epic answer was missing from the CLI entirely, so any card
+// filed under an epic was refused by the endpoint.
+func TestCardMoveToAnotherBoardSendsTheFamilyAndEpicAnswers(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+	_, _, err := runCmd(t, c, "boards", "card", "move", "crdCopy", "--board", "Home projects",
+		"--family", "unlink", "--epic", "move")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := str(f.lastMoveBody["family"]); got != "unlink" {
+		t.Fatalf("family = %q, want unlink", got)
+	}
+	if got := str(f.lastMoveBody["epic"]); got != "move" {
+		t.Fatalf("epic = %q, want move", got)
+	}
+}
+
 func TestCardCopyCreatesCardAndChecklist(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()

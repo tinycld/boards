@@ -77,7 +77,12 @@ type card struct {
 	Estimate int `json:"estimate"`
 	// The card this one is a sub-task of, "" when top level. Writable, and
 	// always a card on the SAME board — the server refuses anything else.
-	Parent  string `json:"parent"`
+	Parent string `json:"parent"`
+	// The epic and sprint the card is filed under, "" when none. Both are
+	// same-board relations the server pins; a cross-board move asks about the
+	// epic and clears the sprint.
+	Epic    string `json:"epic"`
+	Sprint  string `json:"sprint"`
 	Created string `json:"created"`
 	Updated string `json:"updated"`
 

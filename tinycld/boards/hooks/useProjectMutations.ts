@@ -49,6 +49,13 @@ export interface UpdateProjectInput {
     slug?: string
     /** Days a card may sit in a done or canceled list before the server archives it; 0 = never. */
     autoArchiveDays?: number
+    /** The sprint settings — Board settings…, owner-only by rule. */
+    sprintsEnabled?: boolean
+    /** 0 means the default length — see lib/sprint.ts. */
+    sprintLengthDays?: number
+    sprintAutoStart?: boolean
+    sprintAutoComplete?: boolean
+    sprintRollover?: 'next' | 'backlog'
 }
 
 /** Rename a board, change its color, or its settings. Owner-only, enforced by the PB rule. */
@@ -65,6 +72,17 @@ export function useUpdateProject() {
                 if (input.autoArchiveDays !== undefined) {
                     draft.auto_archive_days = input.autoArchiveDays
                 }
+                if (input.sprintsEnabled !== undefined) draft.sprints_enabled = input.sprintsEnabled
+                if (input.sprintLengthDays !== undefined) {
+                    draft.sprint_length_days = input.sprintLengthDays
+                }
+                if (input.sprintAutoStart !== undefined) {
+                    draft.sprint_auto_start = input.sprintAutoStart
+                }
+                if (input.sprintAutoComplete !== undefined) {
+                    draft.sprint_auto_complete = input.sprintAutoComplete
+                }
+                if (input.sprintRollover !== undefined) draft.sprint_rollover = input.sprintRollover
             })
         }),
     })
@@ -189,6 +207,13 @@ export function useCreateProject(options: { onError?: (error: unknown) => void }
                 // 0 is "never"; written rather than left to the column default
                 // for the reason every other insert here states its fields.
                 auto_archive_days: 0,
+                // Sprints are opt-in per board (Board settings…); a new board
+                // starts without them and with the default cadence.
+                sprints_enabled: false,
+                sprint_length_days: 0,
+                sprint_auto_start: false,
+                sprint_auto_complete: false,
+                sprint_rollover: 'next',
             })
 
             yield membersCollection.insert({

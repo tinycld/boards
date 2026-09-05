@@ -22,8 +22,14 @@ var allCardsCollections = []string{
 	"boards_projects", "boards_project_members", "boards_share_links",
 	"boards_labels", "boards_lists", "boards_cards",
 	"boards_checklist_items", "boards_comments", "boards_attachments",
-	"boards_card_links", "boards_epics",
+	"boards_card_links", "boards_epics", "boards_sprints",
 }
+
+// The server-written collections: readable by members, no write rule at all.
+// Kept OUT of allCardsCollections, whose sweeps expect a rule per kind —
+// boards_activity, boards_card_watchers and boards_comment_reactions are
+// absent for the same reason.
+var serverWrittenCollections = []string{"boards_activity", "boards_sprint_snapshots"}
 
 var allRuleKinds = []string{"list", "view", "create", "update", "delete"}
 
@@ -71,6 +77,14 @@ func TestCardsShippedRules_CarryTheirGuards(t *testing.T) {
 			"the repoint form of the same hole: PATCH an editable card's parent onto a foreign board"},
 		{"boards_cards", "update", `@request.body.parent = ""`,
 			`the clear branch — without it un-parenting has to satisfy "".project = project and a card is stuck as a sub-task forever`},
+
+		// --- the sprint same-board pin (1980000018), the same three branches ---
+		{"boards_cards", "create", `@request.body.sprint.project = project`,
+			"without it a writer on two boards can file a card into another board's sprint, whose rollup then counts a card nobody there can read"},
+		{"boards_cards", "update", `@request.body.sprint.project = project`,
+			"the repoint form of the same hole"},
+		{"boards_cards", "update", `@request.body.sprint = ""`,
+			`the clear branch — without it a card could never leave a sprint`},
 		{"boards_lists", "create", `project.boards_project_members_via_project.role ?= "editor"`,
 			"a viewer must not add columns"},
 		{"boards_labels", "create", `project.boards_project_members_via_project.role ?= "editor"`,
@@ -117,7 +131,7 @@ func TestCardsShippedRules_EveryUpdateRuleIsPinned(t *testing.T) {
 	for _, collection := range []string{
 		"boards_project_members", "boards_share_links", "boards_labels",
 		"boards_lists", "boards_cards", "boards_checklist_items",
-		"boards_comments", "boards_attachments", "boards_epics",
+		"boards_comments", "boards_attachments", "boards_epics", "boards_sprints",
 	} {
 		t.Run(collection+".update pinProject", func(t *testing.T) {
 			rlstest.RequireRuleContains(t, env.app, collection, "update", pinProject)
@@ -248,6 +262,9 @@ func TestCardsShippedRules_ShareTokenDisjunctIsCorrelated(t *testing.T) {
 		{"boards_checklist_items", `@collection.boards_share_links.project ?= project`},
 		{"boards_comments", `@collection.boards_share_links.project ?= project`},
 		{"boards_attachments", `@collection.boards_share_links.project ?= project`},
+		{"boards_epics", `@collection.boards_share_links.project ?= project`},
+		{"boards_sprints", `@collection.boards_share_links.project ?= project`},
+		{"boards_sprint_snapshots", `@collection.boards_share_links.project ?= project`},
 	} {
 		for _, kind := range []string{"list", "view"} {
 			t.Run(c.collection+"."+kind, func(t *testing.T) {
@@ -349,6 +366,9 @@ func TestCardsShippedRules_ShareTokenIsAbsentEverywhereElse(t *testing.T) {
 		// on the cards it groups. One project, one disjunct, unlike the links
 		// row above.
 		"boards_epics": true,
+		// The same argument for sprints: a public board renders the sprint
+		// chip and scopes its columns to the active sprint.
+		"boards_sprints": true,
 	}
 
 	for _, collection := range allCardsCollections {
@@ -386,6 +406,7 @@ func TestCardsShippedRules_ShareTokenDisjunctIsTopLevel(t *testing.T) {
 	for _, collection := range []string{
 		"boards_projects", "boards_lists", "boards_cards", "boards_labels",
 		"boards_checklist_items", "boards_comments", "boards_attachments",
+		"boards_epics", "boards_sprints", "boards_sprint_snapshots",
 	} {
 		for _, kind := range []string{"list", "view"} {
 			rule, ok := rlstest.Rule(t, env.app, collection, kind)
@@ -402,6 +423,30 @@ func TestCardsShippedRules_ShareTokenDisjunctIsTopLevel(t *testing.T) {
 				t.Errorf(
 					"%s.%sRule has no top-level || between the member and token clauses\n  rule: %s",
 					collection, kind, rule)
+			}
+		}
+	}
+}
+
+// The server-written collections carry NO write rule: nil is superusers-only,
+// which is exactly the shape — the server writes history and snapshots, and no
+// client of any kind may. Asserted positively so a later migration that gave
+// either a create rule fails here rather than quietly opening a client-writable
+// burndown.
+func TestCardsShippedRules_ServerWrittenCollectionsHaveNoWriteRule(t *testing.T) {
+	env := setupCardsEnv(t)
+
+	for _, collection := range serverWrittenCollections {
+		for _, kind := range []string{"list", "view"} {
+			rule, ok := rlstest.Rule(t, env.app, collection, kind)
+			if !ok || strings.TrimSpace(rule) == "" {
+				t.Errorf("%s.%sRule must be a real member read rule", collection, kind)
+			}
+		}
+		for _, kind := range []string{"create", "update", "delete"} {
+			if _, ok := rlstest.Rule(t, env.app, collection, kind); ok {
+				t.Errorf("%s.%sRule is set — this collection is server-written and must stay superusers-only",
+					collection, kind)
 			}
 		}
 	}
