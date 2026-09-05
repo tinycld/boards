@@ -5,6 +5,7 @@ import {
     navigateToPackage,
     signInAsCollaborator,
     TEST_COLLABORATOR_EMAIL,
+    TEST_COLLABORATOR_NAME,
 } from '@tinycld/core/e2e-helpers'
 import { addCard, boardCard, createBoard, openBoard, shareBoard } from './helpers'
 
@@ -87,6 +88,32 @@ test.describe('Boards — real-time presence', () => {
             // reaper instead would be the bug, not the fix.
             await navigateToPackage(bobPage, 'settings')
             await expect(page.getByTestId('boards-live-presence')).toHaveCount(0)
+
+            // --- Someone arrives while Bob is away ---
+            // The room tells a newcomer nothing about who is there, so every
+            // peer republishes its slot when one arrives — and Bob's frozen
+            // screen used to answer too, with the slot it had just left with.
+            // He reappeared the moment anyone else opened the board. A second
+            // tab of the owner's own session is the cheapest newcomer: no
+            // sign-in, and the owner sees it as a peer like any other.
+            const secondTab = await page.context().newPage()
+            try {
+                await login(secondTab)
+                await navigateToPackage(secondTab, 'boards')
+                await openBoard(secondTab, boardName, CARD_TITLE)
+                // The arrival is real once each tab sees the other.
+                await expect(secondTab.getByTestId('boards-live-presence')).toBeVisible()
+                await expect(page.getByTestId('boards-live-presence')).toBeVisible()
+                // A later frame from the newcomer, so Bob's would-be reply to
+                // the arrival has had every chance to land before the check.
+                await boardCard(secondTab, CARD_TITLE).click()
+                await expect(page.getByTestId(`boards-watchers-${bobCardId}`)).toBeVisible()
+                await expect(
+                    page.getByTestId('boards-live-presence').getByLabel(TEST_COLLABORATOR_NAME)
+                ).toHaveCount(0)
+            } finally {
+                await secondTab.close()
+            }
         } finally {
             await close()
         }
