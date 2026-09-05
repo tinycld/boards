@@ -42,6 +42,15 @@ const manifest = {
             module: 'calendar-source',
             color: 'graphite',
         },
+        // Sprint starts and ends, as a source of their own so a planner can
+        // switch deadlines and sprint boundaries independently.
+        {
+            target: 'calendar',
+            id: 'boards-sprints',
+            label: 'Sprint dates',
+            module: 'calendar-sprint-source',
+            color: 'graphite',
+        },
     ],
     migrations: { directory: 'pb-migrations' },
     // Card attachments count against the org's storage ceiling. `size` is

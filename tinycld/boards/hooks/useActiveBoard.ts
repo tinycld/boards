@@ -4,7 +4,12 @@ import { useStore } from '@tinycld/core/lib/pocketbase'
 import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
 import { useMemo, useRef } from 'react'
 import { type BoardViewOptions, buildBoardProject } from '../lib/board-project'
-import { selectBoardFilter, selectBoardSort, useBoardsUIStore } from '../stores/boards-ui-store'
+import {
+    selectBoardFilter,
+    selectBoardSort,
+    selectSprintScope,
+    useBoardsUIStore,
+} from '../stores/boards-ui-store'
 import type { BoardProject } from '../types'
 import { useBoardLiveQuery } from './useBoardLiveQuery'
 
@@ -120,7 +125,11 @@ export function useActiveBoard() {
     const sort = useBoardsUIStore(s => selectBoardSort(s, projectId))
     const { user } = useAuth({ throwIfAnon: false })
     const userId = user?.id ?? ''
-    const view = useMemo<BoardViewOptions>(() => ({ filter, sort, userId }), [filter, sort, userId])
+    const sprintScope = useBoardsUIStore(s => selectSprintScope(s, activeProjectId ?? ''))
+    const view = useMemo<BoardViewOptions>(
+        () => ({ filter, sort, userId, sprintScope }),
+        [filter, sort, userId, sprintScope]
+    )
 
     const { project, cardCount, isLoading: contentLoading } = useBoardContent(projectId, view)
 

@@ -4,6 +4,7 @@
 // so every "PocketBase says '' where the UI wants undefined" conversion lives
 // in one place instead of being repeated per component.
 
+import type { SprintScope } from '../stores/boards-ui-store'
 import type {
     BoardCardView,
     BoardEpic,
@@ -256,6 +257,31 @@ export interface BoardViewOptions {
     sort: BoardSort
     userId: string
     now?: Date
+    /** The sprint scope; ignored on a board whose sprints are off. */
+    sprintScope?: SprintScope
+}
+
+/**
+ * The sprint id a scope resolves to, or null for every card.
+ *
+ * `active` with no active sprint resolves to EVERY card rather than none: a
+ * team that has just turned sprints on must not watch its board empty out,
+ * and the pill reads "No active sprint" so the state is explained. A scope
+ * naming a sprint that no longer exists resolves the same way.
+ */
+export function resolveSprintScope(
+    scope: SprintScope | undefined,
+    sprints: Pick<BoardSprint, 'id' | 'state'>[]
+): { sprintId: string } | null {
+    if (!scope || scope === 'all') return null
+    if (scope === 'backlog') return { sprintId: '' }
+    if (scope === 'active') {
+        const active = sprints.find(sprint => sprint.state === 'active')
+        return active ? { sprintId: active.id } : null
+    }
+    return sprints.some(sprint => sprint.id === scope.sprintId)
+        ? { sprintId: scope.sprintId }
+        : null
 }
 
 export interface BuildBoardInput {
@@ -333,11 +359,21 @@ export function buildBoardProject(
         cards.map(card => [card.id, formatCardKey(project.slug, card.number)])
     )
 
+    // The scope is applied BEFORE the totals, unlike the filter below: a
+    // scoped board is a different SET, so "12 cards in 3 lists" and the
+    // column counts describe the sprint, and the filter's "3 of 12" reads
+    // within it. It keeps `list.cards` the rendered index space for the
+    // same reason the filter does.
+    const scope = project.sprints_enabled
+        ? resolveSprintScope(view?.sprintScope, [...sprintsById.values()])
+        : null
+
     const cardsByList = new Map<string, BoardCardView[]>()
     const totals = new Map<string, number>()
     let cardTotal = 0
     for (const card of [...cards].sort(byRank)) {
         if (card.archived) continue
+        if (scope && (card.sprint ?? '') !== scope.sprintId) continue
         cardTotal += 1
         totals.set(card.list, (totals.get(card.list) ?? 0) + 1)
         const cardView = toBoardCard(

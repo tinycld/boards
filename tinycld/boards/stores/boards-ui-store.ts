@@ -188,6 +188,21 @@ interface BoardsUIState {
     viewModeByProject: Record<string, ViewMode>
     setViewMode: (projectId: string, mode: ViewMode) => void
     /**
+     * What a board with sprints shows on its canvas, table and timeline: the
+     * active sprint (the default — Jira's active-sprint board), everything,
+     * the backlog, or one planned sprint. Per board.
+     *
+     * PERSISTED, but only the two values that are inert when stale: `active`
+     * and `all` name themselves in the header pill and mean the same thing
+     * on any day, while a sprint id or `backlog` describes a moment's
+     * attention — a persisted sprint id would reopen next month scoped to a
+     * sprint that has since completed. Those two reload as `active`. The
+     * filter beside it is not persisted at all, because it hides cards with
+     * nothing on screen explaining why; the pill is that explanation.
+     */
+    sprintScopeByProject: Record<string, SprintScope>
+    setSprintScope: (projectId: string, scope: SprintScope) => void
+    /**
      * Whether My cards lists cards in done or canceled lists. PERSISTED, and
      * off by default: it is a preference with no referent to go stale, and
      * someone who wants to see finished work there wants it every time.
@@ -197,6 +212,23 @@ interface BoardsUIState {
 }
 
 export type ViewMode = 'board' | 'list' | 'timeline' | 'backlog'
+
+export type SprintScope = 'active' | 'all' | 'backlog' | { sprintId: string }
+
+export function selectSprintScope(state: BoardsUIState, projectId: string): SprintScope {
+    return state.sprintScopeByProject[projectId] ?? 'active'
+}
+
+/** The scopes worth keeping across a reload — see `sprintScopeByProject`. */
+export function persistedSprintScopes(
+    scopes: Record<string, SprintScope>
+): Record<string, SprintScope> {
+    const kept: Record<string, SprintScope> = {}
+    for (const [projectId, scope] of Object.entries(scopes)) {
+        if (scope === 'active' || scope === 'all') kept[projectId] = scope
+    }
+    return kept
+}
 
 /** Which card property a canvas (or backlog row) shortcut opens a picker for. */
 export type CanvasPickerKind = 'due' | 'labels' | 'assignees' | 'priority' | 'sprint'
@@ -407,6 +439,15 @@ export const useBoardsUIStore = create<BoardsUIState>()(
                     selectedCardIds: new Set<string>(),
                     lastSelectedId: null,
                 })),
+            sprintScopeByProject: {},
+            // A scope change is the fourth moment a selection goes stale: the
+            // cards it targeted may be off screen in the new scope.
+            setSprintScope: (projectId, scope) =>
+                set(s => ({
+                    sprintScopeByProject: { ...s.sprintScopeByProject, [projectId]: scope },
+                    selectedCardIds: new Set<string>(),
+                    lastSelectedId: null,
+                })),
             isMyCardsShowingClosed: false,
             toggleMyCardsShowClosed: () =>
                 set(s => ({ isMyCardsShowingClosed: !s.isMyCardsShowingClosed })),
@@ -445,6 +486,7 @@ export const useBoardsUIStore = create<BoardsUIState>()(
                 collapsedSprintIds: s.collapsedSprintIds,
                 isCompactCards: s.isCompactCards,
                 viewModeByProject: s.viewModeByProject,
+                sprintScopeByProject: persistedSprintScopes(s.sprintScopeByProject),
                 isMyCardsShowingClosed: s.isMyCardsShowingClosed,
             }),
         }

@@ -4,10 +4,11 @@ import { useCallback, useMemo, useRef } from 'react'
 import { Animated, ScrollView } from 'react-native'
 import { useBoardShortcuts } from '../../hooks/useBoardShortcuts'
 import { useProjectRole } from '../../hooks/useProjectRole'
-import { buildTimeline, dayColumns, type TimelineGroup } from '../../lib/timeline'
+import { buildTimeline, dayColumns, sprintSpans, type TimelineGroup } from '../../lib/timeline'
 import { selectBoardSort, useBoardsUIStore } from '../../stores/boards-ui-store'
 import type { BoardProject } from '../../types'
 import { DESKTOP_METRICS, MOBILE_METRICS } from './metrics'
+import { SprintBands } from './SprintBands'
 import { TimelineAxis } from './TimelineAxis'
 import { type RowChromeProps, TimelineGroupHeader, TimelineRow } from './TimelineRow'
 
@@ -35,6 +36,7 @@ export function BoardTimeline({ project }: { project: BoardProject }) {
 
     const timeline = useMemo(() => buildTimeline(project, sort, new Date()), [project, sort])
     const columns = useMemo(() => dayColumns(timeline.range), [timeline.range])
+    const spans = useMemo(() => sprintSpans(project, timeline.range), [project, timeline.range])
     useBoardShortcuts(project, canEdit, { visibleOrder: timeline.visibleOrder })
 
     // Opens with today a couple of days in from the pinned label column — a
@@ -68,6 +70,7 @@ export function BoardTimeline({ project }: { project: BoardProject }) {
         >
             <ScrollView nestedScrollEnabled stickyHeaderIndices={[0]}>
                 <TimelineAxis columns={columns} metrics={metrics} scrollX={scrollX} />
+                <SprintBands spans={spans} metrics={metrics} scrollX={scrollX} />
                 {timeline.groups.map(group => (
                     <GroupRows
                         key={group.list.id}

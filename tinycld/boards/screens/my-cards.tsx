@@ -57,13 +57,17 @@ export default function MyCardsScreen() {
         labelsCollection,
         usersCollection,
         watchersCollection,
+        epicsCollection,
+        sprintsCollection,
     ] = useStore(
         'boards_cards',
         'boards_projects',
         'boards_lists',
         'boards_labels',
         'users',
-        'boards_card_watchers'
+        'boards_card_watchers',
+        'boards_epics',
+        'boards_sprints'
     )
 
     const { data: joined } = useOrgLiveQuery(query =>
@@ -82,6 +86,16 @@ export default function MyCardsScreen() {
         query => query.from({ user: usersCollection }),
         [usersCollection]
     )
+    // Both eager, both board-scoped by rule: a row resolves its own board's
+    // epic and sprint from these, the same way the board tree does.
+    const { data: epics } = useBoardLiveQuery(
+        query => query.from({ epic: epicsCollection }),
+        [epicsCollection]
+    )
+    const { data: sprints } = useBoardLiveQuery(
+        query => query.from({ sprint: sprintsCollection }),
+        [sprintsCollection]
+    )
     // The caller's own watcher rows — the Watching tab's whole input.
     const { data: watcherRows } = useOrgLiveQuery((query, { userId: me }) =>
         query.from({ watcher: watchersCollection }).where(({ watcher }) => eq(watcher.user, me))
@@ -95,6 +109,8 @@ export default function MyCardsScreen() {
         const rows = buildMyCardRows({
             rows: joined ?? [],
             labels: labels ?? [],
+            epics: epics ?? [],
+            sprints: sprints ?? [],
             users: users ?? [],
             mode,
             userId,
@@ -103,7 +119,19 @@ export default function MyCardsScreen() {
             showClosed,
         })
         return groupMyCards(rows, group)
-    }, [joined, labels, users, mode, userId, text, group, watchedCardIds, showClosed])
+    }, [
+        joined,
+        labels,
+        epics,
+        sprints,
+        users,
+        mode,
+        userId,
+        text,
+        group,
+        watchedCardIds,
+        showClosed,
+    ])
 
     const openRow = (row: MyCardRow) =>
         router.push(orgHref('boards/[cardId]', { cardId: row.card.key || row.card.id }))
@@ -192,6 +220,12 @@ function Segments({
     )
 }
 
+const GROUP_LABELS: Record<MyCardsGroup, string> = {
+    board: 'board',
+    due: 'due date',
+    sprint: 'sprint',
+}
+
 function GroupToggle({
     group,
     onChange,
@@ -199,17 +233,18 @@ function GroupToggle({
     group: MyCardsGroup
     onChange: (group: MyCardsGroup) => void
 }) {
-    const next: MyCardsGroup = group === 'board' ? 'due' : 'board'
+    // A three-way cycle: board → due date → sprint → board.
+    const next: MyCardsGroup = group === 'board' ? 'due' : group === 'due' ? 'sprint' : 'board'
     return (
         <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Group by ${next}`}
+            accessibilityLabel={`Group by ${GROUP_LABELS[next]}`}
             testID="boards-my-boards-group"
             onPress={() => onChange(next)}
             className="px-2 py-1 rounded-md hover:bg-foreground/10"
         >
             <Text className="text-[12px] font-medium text-muted">
-                Grouped by {group === 'board' ? 'board' : 'due date'}
+                Grouped by {GROUP_LABELS[group]}
             </Text>
         </Pressable>
     )

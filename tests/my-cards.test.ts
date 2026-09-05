@@ -6,7 +6,12 @@ import {
     type JoinedRow,
     sortMyCards,
 } from '../tinycld/boards/lib/my-cards'
-import type { BoardsCards, BoardsLists, BoardsProjects } from '../tinycld/boards/types'
+import type {
+    BoardsCards,
+    BoardsLists,
+    BoardsProjects,
+    BoardsSprints,
+} from '../tinycld/boards/types'
 
 const NOW = new Date(2026, 8, 3, 12)
 const day = (n: number) => `2026-09-${String(3 + n).padStart(2, '0')} 00:00:00.000Z`
@@ -257,6 +262,73 @@ describe('groupMyCards', () => {
             ['Next 2 days', ['soon']],
             ['Later', ['later']],
             ['No due date', ['none']],
+        ])
+    })
+})
+
+describe('groupMyCards by sprint', () => {
+    const sprintRow = (id: string, state: BoardsSprints['state']): BoardsSprints => ({
+        id,
+        project: 'p1',
+        number: 1,
+        name: '',
+        goal: '',
+        start: '',
+        end: '',
+        state,
+        position: 'a0',
+        started_at: '',
+        completed_at: '',
+        card_total: 0,
+        card_done: 0,
+        points_total: 0,
+        points_done: 0,
+        committed_count: 0,
+        committed_points: 0,
+        completed_count: 0,
+        completed_points: 0,
+        rolled_count: 0,
+        created_by: 'u1',
+        created: '',
+        updated: '',
+    })
+
+    it("buckets by the sprint's state across boards, backlog last before closed", () => {
+        const p1 = project('p1', 'One')
+        const rows: JoinedRow[] = [
+            {
+                card: card('now', 'p1', { sprint: 's-active' }),
+                project: p1,
+                list: list('p1-l', 'p1'),
+            },
+            {
+                card: card('soon', 'p1', { sprint: 's-planned' }),
+                project: p1,
+                list: list('p1-l', 'p1'),
+            },
+            { card: card('unfiled', 'p1'), project: p1, list: list('p1-l', 'p1') },
+            {
+                card: card('finished', 'p1', { sprint: 's-active' }),
+                project: p1,
+                list: { ...list('p1-l', 'p1'), category: 'done' },
+            },
+        ]
+        const built = buildMyCardRows({
+            rows,
+            labels: [],
+            sprints: [sprintRow('s-active', 'active'), sprintRow('s-planned', 'planned')],
+            users: [],
+            mode: 'all',
+            userId: 'u1',
+            text: '',
+            showClosed: true,
+        })
+        const groups = groupMyCards(built, 'sprint', NOW)
+        expect(groups.map(g => [g.title, g.rows.map(r => r.card.id)])).toEqual([
+            ['In the active sprint', ['now']],
+            ['In a planned sprint', ['soon']],
+            ['Backlog', ['unfiled']],
+            ['Closed', ['finished']],
         ])
     })
 })

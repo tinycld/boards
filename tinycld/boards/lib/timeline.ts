@@ -7,7 +7,7 @@
 // rounding the distance between two LOCAL midnights, never by dividing, so a
 // DST day (23 or 25 hours) still lands on its own column.
 
-import type { BoardCardView, BoardListView, BoardProject } from '../types'
+import type { BoardCardView, BoardListView, BoardProject, BoardSprint } from '../types'
 import { type BoardSort, compareCards } from './board-sort'
 import { type DueState, dueStateFor } from './due-state'
 
@@ -44,6 +44,32 @@ export interface Timeline {
     /** Every drawn card, top to bottom — what j/k walk. */
     visibleOrder: string[]
     todayCol: number
+}
+
+/** A dated sprint drawn as a band over the day axis. */
+export interface SprintSpan {
+    sprint: BoardSprint
+    startCol: number
+    endCol: number
+}
+
+/**
+ * The dated sprints that overlap the range, clipped to it. Sprints are read
+ * from the project rather than the rows so a sprint with no scheduled cards
+ * still shows where it sits.
+ */
+export function sprintSpans(project: BoardProject, range: TimelineRange): SprintSpan[] {
+    if (!project.sprintsEnabled) return []
+    const last = range.days - 1
+    const spans: SprintSpan[] = []
+    for (const sprint of project.sprints) {
+        if (!sprint.start || !sprint.end) continue
+        const startCol = dayIndex(range.start, sprint.start)
+        const endCol = dayIndex(range.start, sprint.end)
+        if (endCol < 0 || startCol > last) continue
+        spans.push({ sprint, startCol: Math.max(0, startCol), endCol: Math.min(last, endCol) })
+    }
+    return spans
 }
 
 export interface DayColumn {

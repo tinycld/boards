@@ -9,17 +9,19 @@ import type {
     BoardCardView,
     BoardMember,
     BoardsCards,
+    BoardsEpics,
     BoardsLabels,
     BoardsLists,
     BoardsProjects,
+    BoardsSprints,
 } from '../types'
 import { matchesKeyword } from './board-filter'
-import { toBoardCard } from './board-project'
+import { toBoardCard, toBoardEpic, toBoardSprint } from './board-project'
 import { dueStateFor } from './due-state'
 import { isClosedCategory, type ListCategory, normalizeListCategory } from './list-category'
 
 export type MyCardsMode = 'assigned' | 'reported' | 'watching' | 'all'
-export type MyCardsGroup = 'board' | 'due'
+export type MyCardsGroup = 'board' | 'due' | 'sprint'
 
 export const MY_CARDS_MODE_LABELS: Record<MyCardsMode, string> = {
     assigned: 'Assigned to me',
@@ -79,6 +81,9 @@ export interface JoinedRow {
 export interface BuildMyCardsInput {
     rows: JoinedRow[]
     labels: BoardsLabels[]
+    /** Every epic and sprint the client has synced, so a row resolves its chips. */
+    epics?: BoardsEpics[]
+    sprints?: BoardsSprints[]
     users: { id: string; name: string; email: string }[]
     mode: MyCardsMode
     userId: string
@@ -105,6 +110,10 @@ export function buildMyCardRows(input: BuildMyCardsInput): MyCardRow[] {
             { id: label.id, name: label.name, color: label.color },
         ])
     )
+    const epicsById = new Map((input.epics ?? []).map(epic => [epic.id, toBoardEpic(epic)]))
+    const sprintsById = new Map(
+        (input.sprints ?? []).map(sprint => [sprint.id, toBoardSprint(sprint)])
+    )
     const usersById = new Map<string, BoardMember>()
     for (const user of input.users) {
         const label = user.name || user.email || ''
@@ -118,7 +127,16 @@ export function buildMyCardRows(input: BuildMyCardsInput): MyCardRow[] {
         const category = normalizeListCategory(list.category)
         if (!input.showClosed && isClosedCategory(category)) continue
         if (!isMine(card, input.mode, input.userId, input.watchedCardIds)) continue
-        const view = toBoardCard(card, labelsById, usersById, project.slug, category)
+        const view = toBoardCard(
+            card,
+            labelsById,
+            usersById,
+            project.slug,
+            category,
+            '',
+            epicsById,
+            sprintsById
+        )
         if (!matchesKeyword(view, input.text)) continue
         out.push({
             card: view,
@@ -182,6 +200,7 @@ export function groupMyCards(
     by: MyCardsGroup,
     now: Date = new Date()
 ): MyCardsGroupView[] {
+    if (by === 'sprint') return groupBySprint(rows)
     if (by === 'board') {
         const groups = new Map<string, MyCardsGroupView>()
         for (const row of rows) {
@@ -211,6 +230,42 @@ export function groupMyCards(
         const bucketRows = buckets.get(bucket)
         return bucketRows ? [{ key: bucket, title: DUE_BUCKETS[bucket], rows: bucketRows }] : []
     })
+}
+
+const SPRINT_BUCKETS = {
+    active: 'In the active sprint',
+    planned: 'In a planned sprint',
+    none: 'Backlog',
+    closed: 'Closed',
+} as const
+
+type SprintBucket = keyof typeof SPRINT_BUCKETS
+const SPRINT_BUCKET_ORDER: SprintBucket[] = ['active', 'planned', 'none', 'closed']
+
+/**
+ * By sprint STATE rather than by sprint: the list spans boards, and "what am
+ * I on this sprint" is the question, whichever board's sprint it is. A card
+ * in a completed sprint that is somehow still open reads as backlog — its
+ * sprint is over.
+ */
+function groupBySprint(rows: MyCardRow[]): MyCardsGroupView[] {
+    const buckets = new Map<SprintBucket, MyCardRow[]>()
+    for (const row of rows) {
+        const bucket = sprintBucketFor(row.card)
+        const list = buckets.get(bucket)
+        if (list) list.push(row)
+        else buckets.set(bucket, [row])
+    }
+    return SPRINT_BUCKET_ORDER.flatMap(bucket => {
+        const bucketRows = buckets.get(bucket)
+        return bucketRows ? [{ key: bucket, title: SPRINT_BUCKETS[bucket], rows: bucketRows }] : []
+    })
+}
+
+function sprintBucketFor(card: BoardCardView): SprintBucket {
+    if (isClosedCategory(card.listCategory)) return 'closed'
+    if (!card.sprint || card.sprint.state === 'completed') return 'none'
+    return card.sprint.state === 'active' ? 'active' : 'planned'
 }
 
 function dueBucketFor(card: BoardCardView, now: Date): DueBucket {

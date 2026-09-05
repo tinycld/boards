@@ -1,7 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { EMPTY_FILTER } from '../tinycld/boards/lib/board-filter'
-import { selectViewMode, useBoardsUIStore } from '../tinycld/boards/stores/boards-ui-store'
+import {
+    persistedSprintScopes,
+    selectSprintScope,
+    selectViewMode,
+    useBoardsUIStore,
+} from '../tinycld/boards/stores/boards-ui-store'
 
 /**
  * The view preferences (collapsed columns, card density) and what persists.
@@ -297,6 +302,7 @@ describe('boards-ui-store view preferences', () => {
                 collapsedSprintIds: { sprint_a: true },
                 isCompactCards: true,
                 viewModeByProject: { proj_1: 'list' },
+                sprintScopeByProject: { proj_1: 'all' },
                 isMyCardsShowingClosed: true,
             })
 
@@ -306,6 +312,7 @@ describe('boards-ui-store view preferences', () => {
                 collapsedSprintIds: { sprint_a: true },
                 isCompactCards: true,
                 viewModeByProject: { proj_1: 'list' },
+                sprintScopeByProject: { proj_1: 'all' },
                 isMyCardsShowingClosed: true,
             })
         })
@@ -339,6 +346,7 @@ describe('boards-ui-store view preferences', () => {
                 'collapsedSprintIds',
                 'isCompactCards',
                 'isMyCardsShowingClosed',
+                'sprintScopeByProject',
                 'viewModeByProject',
             ])
         })
@@ -370,5 +378,36 @@ describe('the backlog view mode', () => {
         })
         toggleSprintCollapsed('sprint_a')
         expect(useBoardsUIStore.getState().collapsedSprintIds).toEqual({ completed: true })
+    })
+})
+
+describe('the sprint scope', () => {
+    beforeEach(() => {
+        useBoardsUIStore.setState({
+            sprintScopeByProject: {},
+            selectedCardIds: new Set(['c1']),
+            lastSelectedId: 'c1',
+        })
+    })
+
+    it('defaults to the active sprint and drops the selection when it changes', () => {
+        expect(selectSprintScope(useBoardsUIStore.getState(), 'proj_1')).toBe('active')
+        useBoardsUIStore.getState().setSprintScope('proj_1', { sprintId: 's1' })
+        const state = useBoardsUIStore.getState()
+        expect(selectSprintScope(state, 'proj_1')).toEqual({ sprintId: 's1' })
+        expect(state.selectedCardIds.size).toBe(0)
+    })
+
+    // A persisted sprint id would reopen next month scoped to a sprint that
+    // has since completed; only the two self-naming values are kept.
+    it('persists only the inert scopes', () => {
+        expect(
+            persistedSprintScopes({
+                a: 'active',
+                b: 'all',
+                c: 'backlog',
+                d: { sprintId: 's1' },
+            })
+        ).toEqual({ a: 'active', b: 'all' })
     })
 })
