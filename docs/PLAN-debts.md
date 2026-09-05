@@ -3,6 +3,42 @@
 Three separate changes across two repos. Independent of each other: any one can
 ship alone, and two of the three are in `tinycld`, not `cards`.
 
+> **Status, 2026-09-04 — two of the three have SHIPPED.** Read the sections
+> below as history, not as work outstanding.
+>
+> - **Debt 1 (core `Menu`) — DONE, both halves.** The overlay half:
+>   `core/ui/menu/index.tsx` documents a document-level listener that replaces
+>   the full-screen `Menu.Overlay` Pressable, and `Overlay` is a web no-op. The
+>   boards-side follow-up landed too — `tests/e2e/list-status.spec.ts` uses a
+>   plain `.click()`, with the `dispatchEvent` workaround gone. The measurement
+>   half: a `useLayoutEffect` re-measures `triggerRef` whenever `isOpen` flips
+>   with no `triggerPosition`, so a keyboard-opened menu positions itself.
+>   (That fix is necessary but NOT sufficient for a menu with no trigger at
+>   all — see PR #59, where the canvas pickers supply a rect instead.)
+> - **Debt 2 (CLI scope map) — DONE.** All four collections are in
+>   `core/server/oauth/middleware.go`: `boards_card_links`,
+>   `boards_comment_reactions` and `boards_card_watchers` as read+write, and
+>   `boards_activity` read-only with the schema rationale this plan asked for.
+>   The commands it unblocked shipped as PRs #60 and #61.
+> - **Debt 3 (cross-board link picker) — DONE** in PR #63, but the spec below
+>   turned out to be HALF the job, which is worth recording. It frames the debt
+>   as a picker limitation: the schema and rules already allow cross-board
+>   links, only the picker was limited. True — and the picker fix is as
+>   specced, including the MEMBERSHIP-filtered board list
+>   (`useMemberProjects`) rather than `useWritableProjects`, the difference
+>   this plan correctly called out.
+>
+>   What it missed: nothing could FILE such a link through the UI, so nothing
+>   had ever exercised the READ path with a real cross-board row. Making the
+>   picker work immediately exposed that `CardDetail`'s `cardsById` holds the
+>   open board's cards only — so a freshly-filed cross-board link rendered as
+>   "a card on another board" to the very person who had just filed it, and
+>   pressing it opened nothing (`CardPeek` resolves ids through
+>   `findCardEntry`, which knows one board). Both halves are fixed in #63;
+>   an e2e caught it, not review.
+>
+> **All three are now closed.** This file is history; nothing here is queued.
+
 ---
 
 ## Debt 1 — core `Menu`: submenu items cannot be clicked on web

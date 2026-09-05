@@ -136,6 +136,55 @@ export function useActiveBoard() {
 }
 
 /**
+ * Every board the caller is a MEMBER of, not archived — whatever their role.
+ *
+ * Deliberately not `useWritableProjects`, and the difference is load-bearing.
+ * The card-link create rule is `writerOf(source) && memberOf(target)`
+ * (pb-migrations/1980000016), so membership alone qualifies a board as a link
+ * TARGET. Filtering to owner|editor here would hide boards the rules would
+ * happily accept — a viewer on the target board can still be linked to, and a
+ * picker that omitted those would look like the link was forbidden.
+ *
+ * The write half is still enforced, just not here: the SOURCE board is the one
+ * needing write access, and that is the board the card is already open on.
+ */
+export function useMemberProjects() {
+    const [projectsCollection, membersCollection] = useStore(
+        'boards_projects',
+        'boards_project_members'
+    )
+    const { data: rows } = useOrgLiveQuery((query, { userId }) =>
+        query
+            .from({ member: membersCollection })
+            .innerJoin({ project: projectsCollection }, ({ member, project }) =>
+                eq(member.project, project.id)
+            )
+            .where(({ member }) => eq(member.user, userId))
+    )
+    return useMemo(() => selectLinkTargets(rows ?? []), [rows])
+}
+
+/**
+ * The membership rows that qualify as link TARGETS: every live board, whatever
+ * the role.
+ *
+ * Pure and exported so the role rule is testable without a hook harness —
+ * and it is the rule most likely to be "tidied" into a role filter by someone
+ * matching it to `useWritableProjects` below. It must not be: the create rule
+ * is `writerOf(source) && memberOf(target)`, so a board the caller can only
+ * VIEW is still a legitimate target, and filtering it out would make a link
+ * the server would accept look forbidden.
+ */
+export function selectLinkTargets<
+    TRow extends { project: { id: string; name: string; archived?: boolean } },
+>(rows: TRow[]): TRow['project'][] {
+    return rows
+        .filter(r => !r.project.archived)
+        .map(r => r.project)
+        .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/**
  * The boards the caller may add cards to — owner or editor, not archived.
  * What the "Move to board" picker offers.
  */

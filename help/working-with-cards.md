@@ -148,8 +148,13 @@ still appears, but as **a card on another board** with no name — enough to tel
 you a dependency exists, without showing you work from a board you have not
 been given access to.
 
-The Add link menu offers cards from the board you are on. To link across
-boards, ask someone on both boards to file it.
+To file one, pick the link type as usual, then use the **on** row to switch
+boards before choosing the card. It starts on the board you are already on, so
+linking within a board takes no extra step.
+
+The boards offered are the ones you are a member of — including any you can
+only view, since filing the link only needs permission to edit the card you
+start from.
 
 ## Moving a card that has sub-tasks
 

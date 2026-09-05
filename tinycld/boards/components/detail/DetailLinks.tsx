@@ -1,4 +1,6 @@
+import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
+import { useRouter } from 'expo-router'
 import { Link2, Lock, X } from 'lucide-react-native'
 import { Pressable, Text, View } from 'react-native'
 import { useCardLinks } from '../../hooks/useCardLinks'
@@ -10,12 +12,18 @@ import { LinkPicker } from './LinkPicker'
 
 interface DetailLinksProps {
     card: BoardCardView
-    /** Every card this client can see, for resolving the far end of a link. */
+    /**
+     * The OPEN BOARD's cards. A cross-board link's far card is not in here —
+     * useCardLinks fetches those by id — so this is also how a far card is
+     * told apart from a near one when deciding how to open it.
+     */
     cardsById: Map<string, BoardCardView>
     /** Whether the card set has settled — see lib/card-links.ts's three states. */
     isCardSetReady: boolean
-    /** Candidates the picker offers: the open board's cards. */
+    /** Candidates the picker offers by default: the open board's cards. */
     pickerCards: BoardCardView[]
+    /** The board the card is on, so the picker's board step defaults to it. */
+    projectId: string
     canEdit: boolean
 }
 
@@ -31,15 +39,18 @@ interface DetailLinksProps {
  *    known and its content is not.
  *  - A far card that has not SYNCED yet renders nothing at all, rather than
  *    briefly claiming to be redacted. lib/card-links.ts tells the two apart.
- *  - The picker offers only THIS board's cards. Linking across boards is
- *    supported by the schema and the rules, but choosing a card on a board
- *    that is not open needs a board picker of its own — filed, not faked.
+ *  - The picker CAN reach another board's cards. It defaults to the open
+ *    board, so the common case stays two clicks, and its board list is
+ *    filtered by MEMBERSHIP rather than write access — the create rule is
+ *    `writerOf(source) && memberOf(target)`, so a board you can only view is
+ *    still a legitimate target.
  */
 export function DetailLinks({
     card,
     cardsById,
     isCardSetReady,
     pickerCards,
+    projectId,
     canEdit,
 }: DetailLinksProps) {
     const { links, addLink, removeLink, isAdding } = useCardLinks(
@@ -68,6 +79,7 @@ export function DetailLinks({
                         <LinkRow
                             key={link.id}
                             link={link}
+                            isOnThisBoard={cardsById.has(link.farCardId)}
                             canEdit={canEdit}
                             onRemove={() => removeLink(link.id)}
                         />
@@ -78,6 +90,7 @@ export function DetailLinks({
                 <LinkPicker
                     cards={pickerCards}
                     subject={card}
+                    projectId={projectId}
                     isPending={isAdding}
                     onSelect={(targetCardId: string, type: LinkType) => addLink(targetCardId, type)}
                 />
@@ -88,10 +101,13 @@ export function DetailLinks({
 
 function LinkRow({
     link,
+    isOnThisBoard,
     canEdit,
     onRemove,
 }: {
     link: CardLinkView
+    /** Whether the far card is on the board currently open — see ResolvedFar. */
+    isOnThisBoard: boolean
     canEdit: boolean
     onRemove: () => void
 }) {
@@ -102,7 +118,11 @@ function LinkRow({
 
     return (
         <View className="flex-row items-center gap-2 py-1.5" testID="boards-link-row">
-            {link.far.state === 'redacted' ? <RedactedFar /> : <ResolvedFar link={link} />}
+            {link.far.state === 'redacted' ? (
+                <RedactedFar />
+            ) : (
+                <ResolvedFar link={link} isOnThisBoard={isOnThisBoard} />
+            )}
             {canEdit ? (
                 <Pressable
                     accessibilityRole="button"
@@ -138,20 +158,31 @@ function RedactedFar() {
     )
 }
 
-function ResolvedFar({ link }: { link: CardLinkView }) {
+function ResolvedFar({ link, isOnThisBoard }: { link: CardLinkView; isOnThisBoard: boolean }) {
     const openCard = useBoardsUIStore(s => s.openCard)
+    const router = useRouter()
+    const orgHref = useOrgHref()
     const mutedColor = useThemeColor('muted')
     const successColor = useThemeColor('success')
     if (link.far.state !== 'resolved') return null
 
     const far = link.far.card
+    // A card on ANOTHER board cannot open in the peek: CardPeek resolves its
+    // id through `findCardEntry(project, …)`, which only knows this board, so
+    // the peek would render nothing and the press would look broken. The
+    // full-page route takes a card KEY and reads that board without switching
+    // to it — see useCardRoute, which exists for exactly this shape of link.
+    const open = () => {
+        if (isOnThisBoard) openCard(far.id)
+        else if (far.key) router.push(orgHref(`boards/${far.key}`))
+    }
     const isDone = isClosedCategory(far.listCategory)
 
     return (
         <Pressable
             accessibilityRole="button"
             accessibilityLabel={far.title}
-            onPress={() => openCard(far.id)}
+            onPress={open}
             className="flex-row items-center gap-2 flex-1 active:opacity-60"
         >
             <Link2 size={13} color={isDone ? successColor : mutedColor} strokeWidth={2.2} />
