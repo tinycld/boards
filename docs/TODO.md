@@ -10,58 +10,88 @@ The ranking is by (1) how many of the three treat a feature as core,
 (2) how often it is touched in daily use, and (3) how much existing core
 infrastructure it can reuse. Ties go to the cheaper item.
 
-Status as of 2026-09-04: Tier 1 shipped on `feat/tier1-parity`. Tier 2's
-four chosen items — 8, 10, 12, 13 — and their rule/notification follow-ups
-shipped as five stacked branches (`feat/tier2-estimates` → `-status` →
-`-reactions` → `-timeline` → `-events`, PRs #46–#50), with the matching
-notification preferences on `tinycld`'s `feat/boards-notification-prefs`
-(PR #229). Sub-tasks (9a) followed on `feat/tier2-subtasks`, card links (9b)
-on `feat/tier2-links`, and time-based automation (11) on
-`feat/tier2-automation`. Epics (15) followed on `feat/tier2-epics` (PR #57),
-and the package was renamed cards→boards on `rename-boards` (PR #58).
+Status as of 2026-09-05. Everything through Tier 2 is now on `main`.
 
-**In review** — the last of Phase 0 of `docs/PLAN-tier2-open.md`. The other
-three closed out Tier 2's loose ends (deferrals that were waiting on core fixes
-which have since landed) and are merged:
+Tier 1 shipped on `feat/tier1-parity`. Tier 2's four chosen items — 8, 10, 12,
+13 — and their rule/notification follow-ups shipped as five stacked branches
+(`feat/tier2-estimates` → `-status` → `-reactions` → `-timeline` → `-events`,
+PRs #46–#50), with the matching notification preferences on `tinycld`'s
+`feat/boards-notification-prefs` (PR #229). Sub-tasks (9a) followed on
+`feat/tier2-subtasks`, card links (9b) on `feat/tier2-links`, and time-based
+automation (11) on `feat/tier2-automation`. Epics (15) followed on
+`feat/tier2-epics` (PR #57), and the package was renamed cards→boards on
+`rename-boards` (PR #58). Phase 0 of `docs/PLAN-tier2-open.md` closed out Tier
+2's loose ends — PRs #59 (`d`/`l`/`a`/`p`/`f` shortcuts), #60 (`card link` /
+`unlink`), #61 (`card react` / `unreact`) and #63 (Debt 3, the cross-board link
+picker). Bulk operations (19) followed on `feat/tier2-bulk-ops` (PR #64) — no
+migration and no server work, exactly as the ranking predicted.
 
-| PR | Branch | What |
-|---|---|---|
-| #59 | `feat/tier2-canvas-pickers` | `d`/`l`/`a`/`p`/`f` shortcuts — merged |
-| #60 | `feat/tier2-link-cli` | `card link` / `card unlink` — merged |
-| #61 | `feat/tier2-reaction-cli` | `card react` / `card unreact` — merged |
-| #63 | `feat/tier2-cross-board-picker` | Debt 3: the cross-board link picker |
+Sprints (14) shipped as a six-branch stack (PRs #65–#69, #74), carrying the
+backlog view, the sprint scope pill, the `sprint` CLI group, and the burndown /
+progress / velocity charts that close most of item 21.
 
-Bulk operations (19) followed on `feat/tier2-bulk-ops` (PR #64) — no migration
-and no server work, exactly as the ranking predicted. Sprints (14) shipped as a
-six-branch stack, and item 16's EXPORT half on `feat/boards-export`, stacked on
-it, with its core scope entries on `tinycld`'s `feat/boards-export-scopes` (the
-cross-repo step `PLAN-tier2-open.md` said would not be needed — see item 16).
-Item 16 shipped in two stacked branches — `feat/boards-export` (PR #71) and
-`feat/boards-import` — with the core scope entries on `tinycld`'s
-`feat/boards-export-scopes` (PR #235).
-WIP limits and aging (20) took the "cheap filler" slot the plan reserved for
-it, on `feat/boards-wip-aging` stacked on the importer — one appended
-migration, no new server code (the aging clock was already there), and no
-cross-repo step.
-Open: 17, 18, 21 and Tier 3. Next up is 17+18 (covers and templates) per
-`docs/PLAN-tier2-open.md`'s Phase 3.
+Import and export (16) and WIP limits and aging (20) shipped as a three-branch
+stack — `feat/boards-export` → `-import` → `-wip-aging`. **Read the merge note
+below before trusting a PR badge on any of them.**
+
+Open: 17, 21's cumulative flow, and Tier 3. Item 18 is out of scope. Next up is
+17 (card covers), which `docs/PLAN-tier2-open.md`'s Phase 3 pairs with 18 —
+that pairing is void now that 18 is dropped.
+
+**Merge note — how the last stack nearly went missing.** PRs #71 (export), #72
+(import) and #75 (WIP/aging) were stacked, each based on the one below, with
+#71 based on `feat/sprints-charts`. When that branch merged as PR #74 and was
+auto-deleted, GitHub **closed #71** and rebased nothing: #72 and #75 then
+reported MERGED, but they had merged into *stack branches*, never into `main`.
+The whole stack sat unmerged behind a closed PR while three of its four PRs
+looked green and done. It was merged into `main` by hand as `349c974`.
+Two things this cost, both worth knowing if it happens again:
+
+- The merge base predated four commits already on `main`, so the stack's copy
+  of this file reverted the "item 18 is out of scope" ruling. `main` won.
+- `core/types/pbSchema.ts` is generated from the on-disk migrations, so the new
+  `1980000019` migration typechecked as seven errors until
+  `pnpm run packages:generate` was re-run. That is the expected recovery, not a
+  bug — the file is gitignored and never hand-edited.
+
+**Still open cross-repo:** `tinycld` PR #235 (`feat/boards-export-scopes`) adds
+`GET /api/boards/export` and `POST /api/boards/import` to core's
+`endpointScopes`. Until it lands both routes work for a session cookie and
+**403 for any OAuth token, including the CLI** — so `boards export` and
+`boards import` are broken on arrival for token callers. This is the cross-repo
+step `PLAN-tier2-open.md` promised would not be needed.
 
 **Carried debt — none left.** `docs/PLAN-debts.md`'s Debts 1 (core `Menu`
 overlay + measurement) and 2 (the CLI scope map) shipped in core; Debt 3 (the
 cross-board link picker) is PR #63 above. With Phase 0 merged, Tier 2 carries
 no outstanding debt.
 
-**One unreproduced e2e failure**, recorded so it is not rediscovered from
-scratch: a single full-suite run failed `archive-restore.spec.ts:77` (the
-archived banner outlasting a restore) and `board-dnd.spec.ts:78` (a 30s
-timeout waiting for "+ New board"). Four subsequent full-suite runs passed,
-two of them on pristine `main`. Three hypotheses were tested and REFUTED:
-board count (a 60-board probe showed flat `createBoard` latency, 568-690ms,
-no trend), worker count (22/22 on a 2-worker subset), and expand/join
-staleness (disproven from pbtsdb's semantics — auto-expand upserts into the
-same collection the join reads, so an optimistic write is visible to it).
-Cause unknown; reproducing it needs a stress harness rather than another
-plain re-run.
+**Unreproduced e2e failures — now three, and they share a shape.** Recorded so
+they are not rediscovered from scratch:
+
+| Run | Spec | Symptom |
+|---|---|---|
+| earlier | `archive-restore.spec.ts:77` | the archived banner outlasting a restore |
+| earlier | `board-dnd.spec.ts:78` | a 30s timeout waiting for "+ New board" |
+| PR #69 merge to `main` | `card-editing.spec.ts:461` | a card missing from its column after leaving the board and coming back |
+
+The third is the informative one. At `:449` the SAME predicate passes — the
+card is in Doing, with its due chip and checklist ratio. The test then
+navigates to another board and back, and at `:461` the column polls empty for
+5s. So the write landed and rendered; what failed is the **re-entry read**,
+when the board tree is rebuilt from the query. That is the same shape as the
+archive-restore failure (a restored row not re-read) and unlike a write race.
+
+Three hypotheses were tested and REFUTED: board count (a 60-board probe showed
+flat `createBoard` latency, 568-690ms, no trend), worker count (22/22 on a
+2-worker subset), and expand/join staleness (disproven from pbtsdb's semantics
+— auto-expand upserts into the same collection the join reads, so an optimistic
+write is visible to it). Cause unknown. The next probe should target board
+re-entry specifically — mount, leave, re-mount under load — rather than another
+plain full-suite re-run, which has now passed far more often than it has
+failed.
+
+Both older specs are untouched since the rename, so the note stands as written.
 
 ## Tier 1 — table stakes in all three ✅ shipped
 
@@ -227,6 +257,49 @@ plain re-run.
     with a filter on it under-reported how many cards the cascade would destroy
     — in the one dialog whose entire purpose is naming that number.
 
+16. **Import and export** — both halves shipped.
+    `GET /api/boards/export?project=<id>&format=csv|json` — CSV is the
+    flat one-row-per-card projection for a spreadsheet, JSON is the whole board
+    including the checklists, comments and links a CSV row cannot hold. Both
+    carry archived cards, flagged, because an export doubles as a backup.
+    Reached from the board menu (Export…) and `boards export` on the CLI.
+    Three things worth carrying into the importer. The endpoint is a RAW route,
+    so it restates the rules by hand — membership, and the suspension clause
+    that `requireAuth` does not check (a raw route runs no rule engine, and a
+    token minted before an account was disabled keeps working); any member may
+    export and a non-member gets 404, never 403. Ordering is `position, id`
+    everywhere, so two exports of an unchanged board are byte-identical — which
+    is what will let the round-trip test assert equality. And the export is
+    deliberately UNFILTERED: `BoardFilter` has no wire format, so honouring it
+    would mean a second `cardMatchesFilter` in Go.
+    A `tinycld` commit was needed too, contrary to `PLAN-tier2-open.md`'s
+    "every phase is in `boards` alone" — a bespoke endpoint absent from core's
+    `endpointScopes` is default-denied for OAuth tokens while working for a
+    session.
+    The IMPORTER (`POST /api/boards/import`) accepts a Trello export or a board
+    export, sniffed on whether the file's lists carry a `category`, and always
+    creates a NEW board owned by the caller. Its parser is pure and separate
+    from its writer, so the writer never learns what Trello looks like and the
+    golden-file tests need no PocketBase app. Five decisions worth knowing:
+    duplicate label names FOLD (the unique index on (project, name), which
+    Trello does not have); comments are authored by the importer with the
+    original name written into the body (the author column is a relation that
+    must resolve); the board arrives with NO slug (keys are globally unique, so
+    the source's would collide); ranks are regenerated with
+    `fracdex.NKeysBetween` via `ranksAppending`, pinned to npm-captured vectors
+    in `server/testdata/nkeys_vectors.json`; and the write is deliberately NOT
+    one transaction, because the number allocator compare-and-swaps on a row the
+    same connection is writing and the counters recount from goroutines holding
+    a per-card lock — one transaction deadlocks against both.
+    A `hooks` flag (default OFF) suppresses per-card activity rows and
+    notifications; auto-watch stays on, since the importer owns the board.
+    Fixed alongside: the export sorted cards by rank GLOBALLY, but `position`
+    only orders within a list — so the export interleaved columns and a round
+    trip did not return the order it started with. Cards now come out by list,
+    then by rank.
+    Prior art used: `contacts/server/vcard_endpoints.go` (its `readImportBody`
+    handles multipart and raw alike) and `contacts/cli/transfer.go`.
+
 11. **Time-based automation and missing actions** — landed as `card-overdue`
     and `card-due-soon`, RECORD triggers watching the two notice stamps rather
     than anything scheduled. The due-notice sweep already stamped a card on
@@ -321,60 +394,22 @@ plain re-run.
 
 ### Open
 
-16. **Import and export.** ✅ Both halves shipped.
-    `GET /api/boards/export?project=<id>&format=csv|json` — CSV is the
-    flat one-row-per-card projection for a spreadsheet, JSON is the whole board
-    including the checklists, comments and links a CSV row cannot hold. Both
-    carry archived cards, flagged, because an export doubles as a backup.
-    Reached from the board menu (Export…) and `boards export` on the CLI.
-    Three things worth carrying into the importer. The endpoint is a RAW route,
-    so it restates the rules by hand — membership, and the suspension clause
-    that `requireAuth` does not check (a raw route runs no rule engine, and a
-    token minted before an account was disabled keeps working); any member may
-    export and a non-member gets 404, never 403. Ordering is `position, id`
-    everywhere, so two exports of an unchanged board are byte-identical — which
-    is what will let the round-trip test assert equality. And the export is
-    deliberately UNFILTERED: `BoardFilter` has no wire format, so honouring it
-    would mean a second `cardMatchesFilter` in Go.
-    A `tinycld` commit was needed too, contrary to `PLAN-tier2-open.md`'s
-    "every phase is in `boards` alone" — a bespoke endpoint absent from core's
-    `endpointScopes` is default-denied for OAuth tokens while working for a
-    session.
-    The IMPORTER (`POST /api/boards/import`) accepts a Trello export or a board
-    export, sniffed on whether the file's lists carry a `category`, and always
-    creates a NEW board owned by the caller. Its parser is pure and separate
-    from its writer, so the writer never learns what Trello looks like and the
-    golden-file tests need no PocketBase app. Five decisions worth knowing:
-    duplicate label names FOLD (the unique index on (project, name), which
-    Trello does not have); comments are authored by the importer with the
-    original name written into the body (the author column is a relation that
-    must resolve); the board arrives with NO slug (keys are globally unique, so
-    the source's would collide); ranks are regenerated with
-    `fracdex.NKeysBetween` via `ranksAppending`, pinned to npm-captured vectors
-    in `server/testdata/nkeys_vectors.json`; and the write is deliberately NOT
-    one transaction, because the number allocator compare-and-swaps on a row the
-    same connection is writing and the counters recount from goroutines holding
-    a per-card lock — one transaction deadlocks against both.
-    A `hooks` flag (default OFF) suppresses per-card activity rows and
-    notifications; auto-watch stays on, since the importer owns the board.
-    Fixed alongside: the export sorted cards by rank GLOBALLY, but `position`
-    only orders within a list — so the export interleaved columns and a round
-    trip did not return the order it started with. Cards now come out by list,
-    then by rank.
-    Prior art used: `contacts/server/vcard_endpoints.go` (its `readImportBody`
-    handles multipart and raw alike) and `contacts/cli/transfer.go`.
 17. **Card covers.** First image attachment as the cover, via core's
     thumbnail pipeline.  Requires improving file handling so files can be sorted
 18. **Card and board templates.** An `is_template` flag using the duplicate
     path, and a template picker in the New board dialog. **UPDATE: out of
-    scope.** Item 20 shipped and moved to the Shipped list.
-21. **Reports.** Burndown and velocity shipped with 14: a sprint's report
-    (burndown against the ideal line, or scope-vs-done) draws from the daily
-    `boards_sprint_snapshots` rows, and the backlog's Completed block opens
-    with velocity over the last six completed sprints (committed vs
-    completed stamps, never the live rollup). Still open: **cumulative
-    flow**, which reads the activity table (the auto-archive sweep's rows
-    count as system moves).
+    scope** — a deliberate ruling, not a deferral. `PLAN-tier2-open.md`'s
+    Phase 3 still pairs it with 17; that half is void.
+21. **Reports.** THREE charts shipped with 14, not the two this entry used to
+    claim. `SprintChart.tsx` is one component with a toggle — **burndown**
+    (remaining against the ideal line, Jira's) and **progress** (scope vs done,
+    Linear's) — both drawn from the daily `boards_sprint_snapshots` rows, and
+    `VelocityChart.tsx` opens the backlog's Completed block with the last six
+    completed sprints (committed vs completed stamps, never the live rollup).
+    Builders are `buildSprintChart` / `buildVelocity` in `lib/sprint-chart.ts`.
+    Still open: **cumulative flow**, which reads the activity table (the
+    auto-archive sweep's rows count as system moves). Verified absent — no
+    component, no builder, no server path.
 
 ## Tier 3 — single-product differentiators
 
@@ -401,8 +436,8 @@ plain re-run.
 - Description cap is 5000 characters (`descriptionRuneLimit`); Trello allows
   16k, Jira 32k, Linear far more.
 - Editing an existing comment to add a mention does not notify.
-- No responsive pass: fixed `COLUMN_WIDTH` / `PEEK_WIDTH`. The list and
-  timeline views read `useBreakpoint`; the canvas and peek do not.
+- No responsive pass: fixed `COLUMN_WIDTH` / `PEEK_WIDTH`. The list, timeline
+  and backlog views read `useBreakpoint`; the canvas and peek do not.
 - Rules cannot run at an exact time of day: the deadline triggers and
   `set-due-date` both work in whole days, because core carries no user time
   zone for the server to resolve an hour against.
@@ -436,15 +471,18 @@ was tried and abandoned — is load-bearing for anyone changing that area later.
 
 ## What is still open down here, and where it belongs
 
-Six items in the appendix are genuinely open. Four of them are already ranked
+Five items in the appendix are genuinely open. Three of them are already ranked
 in the Tier list above and are recorded here only for their design notes:
 
 | Appendix item | Ranked as |
 |---|---|
 | Image card covers (M6) | **17** |
-| CSV export (M7 follow-ups) | **16** |
 | Create a card from an email (M4) | **25** |
 | Field-scoped search (`reporter:me`) | **Tier 3**, and a CORE change |
+
+**CSV export (M7 follow-ups) has since SHIPPED** — item 16, and it grew a JSON
+format and a Trello importer alongside. Its design notes below are history now,
+not a queue.
 
 Two are not in the ranking because they are not parity features:
 
@@ -1154,9 +1192,12 @@ where there's a form, `captureException` context strings like
       nothing reads.
     - `Shift+N` is a no-op on an empty board, where `BoardCanvas` renders
       `EmptyBoard` and mounts no `AddListColumn`.
-- [ ] **Deferred: `d` / `l` / `a` / `p` / `f`** (due, labels, assignees,
-      priority, filter panel) — blocked, not
-      forgotten. All three are core `Menu` pickers, and **a keyboard-opened
+- [x] **SHIPPED in PR #59** — `d` / `l` / `a` / `p` / `f` (due, labels,
+      assignees, priority, filter panel). Core fixed the measurement gap
+      described below; the canvas case needed a supplied rect rather than the
+      re-measure this entry proposed, because a picker with NO trigger has
+      nothing to measure. The original diagnosis is kept because it is still
+      the reason the code is shaped this way: All three are core `Menu` pickers, and **a keyboard-opened
       `Menu` has never measured its trigger**: `setTriggerLayout` is called
       only from `Trigger`'s click and `onMouseEnter` handlers, so
       `Content.positionStyle` returns `{}` and an absolutely-positioned menu
@@ -2779,12 +2820,15 @@ wants them rather than guessing the shape now.
       sidebar, density from the board header. Moving any of those to a settings
       screen would put the control further from the thing it changes. Revisit
       only if a preference appears that is genuinely account-wide.
-- [ ] Unit tests: mutations (position assignment on move, project-create
-      bootstrap), due-state logic against real records. Mock only via
+- [x] Unit tests — 658 across 55 files as of 2026-09-05, covering mutations
+      (position assignment on move, project-create bootstrap), due-state logic,
+      and the newest arrivals (`wip`, `aging`, `board-export`,
+      `board-import`). Mock only via
       `tests/unit.helpers.tsx`. The `useProjectRole` gating logic is already
       covered: M3b shipped it as the pure `lib/permissions.ts` with its full
       truth table in `tests/permissions.test.ts`.
-- [ ] E2E (playwright, drive-the-UI only — no raw PB writes): create project →
+- [x] E2E — the flow below has shipped in full; the sub-notes are kept for the
+      four real bugs writing it surfaced. Original scope: create project →
       add list → add card → move via stepper → edit detail (due, checklist,
       comment, attach a file + open its preview) → share with second user →
       verify viewer restrictions. Navigation via `login`/`navigateToPackage`
@@ -2884,6 +2928,13 @@ wants them rather than guessing the shape now.
       cross-linked; M4 and M5 are unbuilt, so their topics come with them).
 - [ ] Website docs: offer a cards page for `web/` once the feature set is
       final.
+- [ ] **CI does not run the `cli/` Go tests.** `.github/workflows/ci.yml`'s
+      `go test` step sets `working-directory: ws/boards/server`, so
+      `cli/commands_test.go`, `key_test.go`, `rank_test.go`, `sprint_test.go`
+      and `testserver_test.go` never run on a PR. They pass locally
+      (`cd cli && go test ./...`, 0.4s) — this is a coverage hole, not a
+      failure. Same class as the `drive/server` and `calendar/server` suites
+      this milestone already flags as unrun.
 - [ ] Full gate: `pnpm exec tinycld-pkg check` + `test:e2e` in `cards/`,
       `pnpm run pkg:check` at the root; fix anything red.
       **Note `pkg:check` does not exist in a bootstrap-assembled root** — the
@@ -3155,7 +3206,9 @@ wants them rather than guessing the shape now.
       third package needs sharing, a drive-exported file-picker component if
       the M6 attach-from-drive picker outgrows its minimal version, image
       card covers if skipped in M6, board filtering/search, CSV export.
-- [ ] **Board filtering** (by label / assignee / due state / reporter). Filed
+- [x] **SHIPPED as Tier 1 item 2** — board filtering (by label / assignee /
+      due state / reporter), with a filter panel, chip bar, per-column
+      shown/total counts and a sort menu. Filed originally
       out of the reporter work, which deliberately shipped the field without
       it: there is no board filter UI at all to add a control to — the original
       Filter button was removed as dead chrome (it was a plain `View`, not even
