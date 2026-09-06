@@ -2,7 +2,7 @@
 title: Sharing boards
 summary: Adding people to a board, sharing it with a link, and what each role can do
 tags: [cards, sharing, members, roles, permissions, "share link"]
-order: 30
+order: 31
 ---
 
 ## Who can see a board

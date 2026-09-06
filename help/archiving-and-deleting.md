@@ -56,5 +56,5 @@ members are about to go. Only an owner can delete a board.
 If you are not sure, archive instead — it is reversible, and an archived board
 costs nothing to keep.
 
-From the command line, `tinycld boards archive` and `tinycld boards board
-remove` do the same; see [Boards from the command line](help://boards:command-line).
+From the command line, `tinycld boards archive` and `tinycld boards remove` do
+the same; see [Boards from the command line](help://boards:command-line).

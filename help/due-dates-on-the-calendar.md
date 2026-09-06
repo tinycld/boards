@@ -2,7 +2,7 @@
 title: Due dates on the calendar
 summary: Cards with due dates show up on the Calendar app as all-day items
 tags: [due dates, calendar, deadlines, schedule]
-order: 45
+order: 46
 ---
 
 If the Calendar app is installed in your workspace, every card with a due date

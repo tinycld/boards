@@ -99,6 +99,12 @@ tinycld boards import trello.json --name "Product launch"
 
 See [the command line](help://boards:command-line) for setting the tool up.
 
+> **Not yet available to the command-line tool.** Export and import work in the
+> app today, but the command-line tool signs in with a token, and the two
+> commands above are still waiting on the permission that admits one. Until
+> that ships they report a permission error. Export from the board menu in the
+> meantime.
+
 ## What export does not do
 
 The export always covers the whole board. A filter you have applied on screen

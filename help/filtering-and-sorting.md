@@ -1,7 +1,7 @@
 ---
-title: Filtering and sorting a board
-summary: Show only the cards you care about, and order each list by due date, priority, or title
-tags: [filter, sort, board, search, labels, assignees]
+title: Filtering, sorting and board views
+summary: Show only the cards you care about, order each list, and switch between the board, list, timeline and backlog views
+tags: [filter, sort, board, search, labels, assignees, views, list view, table, timeline]
 order: 30
 ---
 
@@ -46,20 +46,27 @@ While a sort is on, dragging a card up or down within its list does nothing —
 the sort decides the order. You can still drag a card to another list, where
 it takes its sorted place. Clearing the sort brings back your arrangement.
 
-## List view
+## Other views
 
-The view toggle beside the filter switches the board from columns to a table:
+The view toggle beside the filter switches between the board's views: the
+columns you start on, a **list**, a **timeline**, and — on a board that plans
+in [sprints](help://boards:sprints) — a **backlog**. The same filter applies in
+all of them, and the choice is remembered per board.
+
+### List view
+
+The list view shows the board as a table:
 one row per card, with its key, title, list, assignees, labels, start and due
-dates, priority and estimate. Click a column heading to sort by it; click again to reverse. The
-same filter applies in both views, and the choice is remembered per board.
+dates, priority and estimate. Click a column heading to sort by it; click again
+to reverse.
 
 There is no dragging in the list — to move a card, open it and use the list
 stepper or the card menu. The `j` and `k` keys walk the rows, and `Enter`
 opens the highlighted card.
 
-## Timeline view
+### Timeline view
 
-The third view lays the board out against a calendar: one row per card that
+The timeline lays the board out against a calendar: one row per card that
 has a start or due date, grouped by list, with a bar from start to due — or a
 dot on the one date a card has. Bars take the due date's colour, so late work
 reads red at a glance, and today is marked on the axis. Scroll sideways to

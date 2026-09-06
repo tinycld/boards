@@ -2,7 +2,7 @@
 title: WIP limits and card aging
 summary: Cap how many cards a column holds, and see at a glance which cards have stopped moving
 tags: [wip, limit, kanban, aging, stale, flow, column, list]
-order: 32
+order: 33
 ---
 
 Two signals about the health of a board, both off until you turn them on. A

@@ -44,45 +44,6 @@ tinycld boards card view OTTER-12     # one card, in full
 include them. `card view` shows the description, checklist and comments that
 the board view leaves out.
 
-## Reacting to comments
-
-```
-tinycld boards card react <comment-id> thumbs_up    # or the emoji itself
-tinycld boards card unreact <comment-id> thumbs_up
-```
-
-The six reactions are `thumbs_up`, `heart`, `laugh`, `party`, `eyes` and
-`rocket`. You can paste the emoji instead if you have it to hand; the name is
-easier to type in a terminal.
-
-Comment ids come from `card view --json`. `card view` shows the counts under
-each comment. `unreact` removes only your own reaction — no one can take back
-anyone else's.
-
-## Linking cards
-
-```
-tinycld boards card link OTTER-12 OTTER-40 --blocks       # 12 blocks 40
-tinycld boards card link OTTER-12 HOME-3 --related        # any two cards
-tinycld boards card link OTTER-12 OTTER-40 --duplicates
-tinycld boards card unlink OTTER-12 OTTER-40
-```
-
-A link is stored once and reads from both ends, so the same link shows as
-**Blocks** on one card and **Blocked by** on the other. `--related` and
-`--duplicates` work the same way; only blocking has a direction that matters.
-
-The two cards do not have to be on the same board. Filing a link needs
-permission to edit the first card's board and membership of the second's.
-
-`card view` lists a card's links. If one points at a card on a board you
-cannot open, the link still appears — shown as *(a card on another board)* —
-because a blocked card that looked unblocked would tell you something false
-about whether the work can go ahead.
-
-`unlink` does not care which order you name the two cards, and removes every
-link between them.
-
 ## Archiving and deleting a board
 
 ```
@@ -273,6 +234,7 @@ tinycld boards column rename "To do" Backlog --board "Product launch"
 tinycld boards column move Blocked 1 --board "Product launch"
 tinycld boards column category Blocked in_progress --board "Product launch"
 tinycld boards column done Shipped --board "Product launch"
+tinycld boards column wip Doing 5 --board "Product launch"
 ```
 
 `column move` takes the position the column should end up in, counting from zero.
@@ -280,6 +242,11 @@ tinycld boards column done Shipped --board "Product launch"
 `done` or `canceled`. Cards in a done or canceled column show as finished and
 get no reminders. `column done` is shorthand for `category done`; add `--unset`
 to make it an ordinary `todo` column again.
+
+`column wip` sets a work-in-progress limit; `0` clears it. The limit only
+warns — the column header turns amber at the limit and red past it, and
+nothing refuses a card. See [WIP limits and card
+aging](help://boards:wip-limits-and-aging).
 
 Deleting a column **also deletes every card in it**, which cannot be undone:
 
@@ -290,6 +257,20 @@ tinycld boards column remove Blocked --board "Product launch"
 The command refuses and tells you how many cards would go with it. Re-run with
 `--yes` once you are sure. An empty column is removed without asking. If you
 want to keep the cards, move them to another column first.
+
+## Exporting and importing a board
+
+```
+tinycld boards export "Product launch" --format csv --out board.csv
+tinycld boards export "Product launch" --format json --out board.json
+tinycld boards import trello-export.json --name "Product launch"
+```
+
+CSV is one row per card, for a spreadsheet. JSON carries the whole board —
+checklists, comments and links a CSV row cannot hold — and is what an import
+reads back. Both include archived cards, flagged, because an export doubles as
+a backup. `import` accepts a Trello export or a board exported here, and always
+creates a NEW board. See [Importing and exporting](help://boards:importing-and-exporting).
 
 ## Sharing stays in the app
 

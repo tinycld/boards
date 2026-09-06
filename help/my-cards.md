@@ -2,7 +2,7 @@
 title: My cards
 summary: Every card assigned to you or reported by you, across all your boards
 tags: [my cards, assigned, search, boards]
-order: 35
+order: 36
 ---
 
 **My cards**, at the top of the Boards sidebar, lists the cards that are yours
