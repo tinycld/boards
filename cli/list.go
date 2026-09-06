@@ -15,7 +15,7 @@ import (
 func newColumnCmd(c *client.Client) *cobra.Command {
 	l := &cobra.Command{
 		Use:     "column",
-		Short:   "Columns (lists): show, add, rename, move, remove",
+		Short:   "Columns (lists): show, add, rename, move, limit, remove",
 		Aliases: []string{"columns"},
 	}
 	l.AddCommand(
@@ -25,6 +25,7 @@ func newColumnCmd(c *client.Client) *cobra.Command {
 		newListMoveCmd(c),
 		newListCategoryCmd(c),
 		newListDoneCmd(c),
+		newListWipCmd(c),
 		newListRemoveCmd(c),
 	)
 	return l
@@ -52,10 +53,10 @@ func newListShowCmd(c *client.Client) *cobra.Command {
 			}
 			rows := make([][]string, len(lists))
 			for i, l := range lists {
-				rows[i] = []string{strconv.Itoa(i), l.Name, categoryCell(l), l.ID}
+				rows[i] = []string{strconv.Itoa(i), l.Name, categoryCell(l), wipCell(l), l.ID}
 			}
 			return o.Write(cmd.OutOrStdout(),
-				[]string{"#", "NAME", "STATUS", "ID"}, rows, lists)
+				[]string{"#", "NAME", "STATUS", "WIP", "ID"}, rows, lists)
 		},
 	}
 	addBoardFlag(cmd, &boardRef)
@@ -249,6 +250,63 @@ func setListCategory(cmd *cobra.Command, c *client.Client, boardRef, listRef, ca
 	return writeListResult(cmd, o, updated)
 }
 
+// newListWipCmd sets how many cards belong in a column at once.
+//
+// NOTHING ENFORCES THE LIMIT — it colours the board's column header and this
+// command's WIP column, and no write is ever refused because of it. See
+// pb-migrations/1980000019 for why blocking was rejected.
+func newListWipCmd(c *client.Client) *cobra.Command {
+	var boardRef string
+	cmd := &cobra.Command{
+		Use:   "wip <list> <limit>",
+		Short: "Set a column's WIP limit; 0 clears it (a warning only, never enforced)",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Validated BEFORE the request, the way newListCategoryCmd rejects
+			// an unknown category: a rejected value must never reach the
+			// server, where the column's own min/max would 400 with a message
+			// written for a schema rather than for a person.
+			limit, err := strconv.Atoi(args[1])
+			if err != nil {
+				return fmt.Errorf("limit %q is not a number", args[1])
+			}
+			if limit < 0 || limit > 999 {
+				return fmt.Errorf("limit %d is out of range (0-999, where 0 means no limit)", limit)
+			}
+			return setListWip(cmd, c, boardRef, args[0], limit)
+		},
+	}
+	addBoardFlag(cmd, &boardRef)
+	return cmd
+}
+
+func setListWip(cmd *cobra.Command, c *client.Client, boardRef, listRef string, limit int) error {
+	o, _, err := output.FromCommand(cmd)
+	if err != nil {
+		return err
+	}
+	ctx := cmd.Context()
+	p, err := requireProjectFlag(cmd, c, boardRef)
+	if err != nil {
+		return err
+	}
+	l, err := resolveList(ctx, c, p.ID, listRef)
+	if err != nil {
+		return err
+	}
+	updated, err := client.UpdateRecord[list](ctx, c, listsCollection, l.ID,
+		map[string]any{"wip_limit": limit})
+	if err != nil {
+		return err
+	}
+	if limit == 0 {
+		o.Info(cmd.ErrOrStderr(), "%q has no WIP limit", updated.Name)
+	} else {
+		o.Info(cmd.ErrOrStderr(), "%q is limited to %d cards", updated.Name, limit)
+	}
+	return writeListResult(cmd, o, updated)
+}
+
 // newListRemoveCmd deletes a column. `boards_cards.list` ships
 // cascadeDelete: true, so PocketBase deletes the column's cards server-side —
 // there is no way to delete a list without its cards short of moving them
@@ -357,8 +415,8 @@ func writeListResult(cmd *cobra.Command, o output.Options, l list) error {
 		return nil
 	case output.CSV:
 		return o.Write(cmd.OutOrStdout(),
-			[]string{"ID", "NAME", "STATUS", "POSITION"},
-			[][]string{{l.ID, l.Name, categoryCell(l), l.Position}}, l)
+			[]string{"ID", "NAME", "STATUS", "WIP", "POSITION"},
+			[][]string{{l.ID, l.Name, categoryCell(l), wipCell(l), l.Position}}, l)
 	default:
 		return o.Write(cmd.OutOrStdout(), nil, nil, l)
 	}

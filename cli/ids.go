@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"tinycld.org/cli/client"
@@ -40,6 +41,9 @@ type list struct {
 	// One of listCategories, or "" on a row written before the column
 	// existed — which the app reads as "todo".
 	Category string `json:"category"`
+	// Cards allowed in the column at once. 0 is no limit, and nothing
+	// enforces it — see pb-migrations/1980000019.
+	WipLimit int `json:"wip_limit"`
 }
 
 type card struct {
@@ -191,6 +195,15 @@ func categoryCell(l list) string {
 		return "todo"
 	}
 	return l.Category
+}
+
+// wipCell renders a column's WIP limit for a table. 0 is "no limit", and a
+// dash says that more clearly in a column of numbers than a 0 would.
+func wipCell(l list) string {
+	if l.WipLimit <= 0 {
+		return "-"
+	}
+	return strconv.Itoa(l.WipLimit)
 }
 
 // priorityCell renders a card's priority for a table. "" and "none" are the

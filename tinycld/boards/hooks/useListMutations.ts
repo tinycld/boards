@@ -30,6 +30,9 @@ export function useCreateList(projectId: string) {
                 name: input.name,
                 position: input.position,
                 category: 'todo',
+                // No limit. A column arrives unconstrained and the team sets one
+                // from the column menu — see lib/wip.ts.
+                wip_limit: 0,
             })
 
             return listId
@@ -42,10 +45,12 @@ export interface UpdateListInput {
     name?: string
     category?: ListCategory
     position?: string
+    /** Cards allowed in the column at once. 0 clears the limit — see lib/wip.ts. */
+    wipLimit?: number
 }
 
 /**
- * Rename a column, set its status, or move it.
+ * Rename a column, set its status, its WIP limit, or move it.
  *
  * All three are one update because they are one row, and a rename that arrives
  * as a separate write from a reorder would render the column in its old place
@@ -61,6 +66,7 @@ export function useUpdateList() {
                 if (input.name !== undefined) draft.name = input.name
                 if (input.category !== undefined) draft.category = input.category
                 if (input.position !== undefined) draft.position = input.position
+                if (input.wipLimit !== undefined) draft.wip_limit = input.wipLimit
             })
         }),
     })

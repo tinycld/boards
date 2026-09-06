@@ -39,9 +39,12 @@ cross-repo step `PLAN-tier2-open.md` said would not be needed — see item 16).
 Item 16 shipped in two stacked branches — `feat/boards-export` (PR #71) and
 `feat/boards-import` — with the core scope entries on `tinycld`'s
 `feat/boards-export-scopes` (PR #235).
-Open: 17, 18, 20, 21 and Tier 3. Next up is 17+18 (covers and templates) per
-`docs/PLAN-tier2-open.md`'s Phase 3, with 20 (WIP limits and aging) as the
-cheap filler if a phase finishes early.
+WIP limits and aging (20) took the "cheap filler" slot the plan reserved for
+it, on `feat/boards-wip-aging` stacked on the importer — one appended
+migration, no new server code (the aging clock was already there), and no
+cross-repo step.
+Open: 17, 18, 21 and Tier 3. Next up is 17+18 (covers and templates) per
+`docs/PLAN-tier2-open.md`'s Phase 3.
 
 **Carried debt — none left.** `docs/PLAN-debts.md`'s Debts 1 (core `Menu`
 overlay + measurement) and 2 (the CLI scope map) shipped in core; Debt 3 (the
@@ -176,6 +179,53 @@ plain re-run.
     cross-board move (`useMoveCardToBoard` is a per-card endpoint, so it is N
     serial round-trips with its own partial-failure report), and marquee
     drag-select.
+
+20. **WIP limits and card aging** — landed as `boards_lists.wip_limit` (0 = no
+    limit) and a per-board `boards_projects.aging_days` (0 = off), one appended
+    migration for both. TWO DEPARTURES from this entry as it was originally
+    written, both deliberate:
+
+    **Warn only, never block.** The column header colours — amber at the limit,
+    red and a warning triangle past it — and nothing else. No rule, no hook, no
+    endpoint refuses a write. A client-side block would make the UI refuse what
+    the REST API and the CLI allow; a server guard would fail bulk moves, the
+    Trello importer, cross-board moves and the automation actions PARTWAY
+    THROUGH, and a half-applied batch is worse than an over-full column. Trello
+    and Jira both warn rather than block.
+
+    **The aging clock is `list_changed_at`, not `updated`.** This entry said
+    `updated`, but that field moves on any write — a label toggle, a comment,
+    `server/counters.go`'s recount of a badge — so a genuinely stalled card
+    reads as freshly touched, which INVERTS the signal. `list_changed_at`
+    (1980000012) already exists, is already server-owned and ungameable
+    (`server/list_changed_at.go` restores the stored value on every update that
+    is not a list change), and means exactly "how long has this card sat in
+    THIS column". The aging half therefore needed no column of its own.
+
+    The count badge reads `totalCount`, never the filtered `cards.length`, and
+    that is the opposite choice from `EstimateTotal` sitting directly beside it
+    — a limit that relaxed because someone narrowed the board would be worse
+    than no limit, while a points total the user can see is exactly what the
+    filter should narrow. On a sprinting board the count is sprint-scoped,
+    which reads correctly: the limit governs work in flight. The collapsed
+    column spine carries the same badge, which is when it matters most.
+
+    Aging tints the face background through `cardSelectedClass`, with SELECTION
+    OUTRANKING AGE — the ladder `cardRingClass` documents. Two levels
+    (`warm` at the threshold, `stale` at twice it) rather than a gradient: an
+    interpolated tint reads as noise across a column. Closed cards never age,
+    the same `isClosedCategory` guard the due-reminder sweep uses.
+
+    `wip_limit` travels with the JSON export/import (`omitempty`, so an
+    unlimited board exports the file it did before the column existed) and is
+    clamped rather than trusted on the way in — a hostile value must not fail a
+    list's save and lose the column. CSV is unchanged: it is one row per card,
+    and a list-level limit has no column there. `column wip` on the CLI, with a
+    WIP column in `column show`.
+
+    Fixed alongside: `ColumnMenu`'s delete confirm counted `cards.length`, so
+    with a filter on it under-reported how many cards the cascade would destroy
+    — in the one dialog whose entire purpose is naming that number.
 
 11. **Time-based automation and missing actions** — landed as `card-overdue`
     and `card-due-soon`, RECORD triggers watching the two notice stamps rather
@@ -317,8 +367,6 @@ plain re-run.
     thumbnail pipeline.  Requires improving file handling so files can be sorted
 18. **Card and board templates.** An `is_template` flag using the duplicate
     path, and a template picker in the New board dialog.
-20. **WIP limits and card aging.** `wip_limit` on lists with a warning header;
-    aging as a face tint from `updated`.
 21. **Reports.** Burndown and velocity shipped with 14: a sprint's report
     (burndown against the ideal line, or scope-vs-done) draws from the daily
     `boards_sprint_snapshots` rows, and the backlog's Completed block opens

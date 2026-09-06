@@ -598,6 +598,56 @@ func TestListRenameAndCategory(t *testing.T) {
 	}
 }
 
+func TestListWipLimit(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	if _, _, err := runCmd(t, c, "boards", "column", "wip", "To do", "3", "--board", "prjA"); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.lists["lstTodo"].WipLimit; got != 3 {
+		t.Errorf("wip_limit = %d, want 3", got)
+	}
+
+	// 0 is how a limit is cleared — a distinct value, not an absent field.
+	if _, _, err := runCmd(t, c, "boards", "column", "wip", "To do", "0", "--board", "prjA"); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.lists["lstTodo"].WipLimit; got != 0 {
+		t.Errorf("wip_limit = %d, want 0", got)
+	}
+
+	// Both rejections happen BEFORE the request, so neither reaches the server.
+	for _, bad := range []string{"lots", "-1", "1000", "2.5"} {
+		if _, _, err := runCmd(t, c, "boards", "column", "wip", "To do", bad, "--board", "prjA"); err == nil {
+			t.Errorf("expected an error for a limit of %q", bad)
+		}
+	}
+	if got := f.lists["lstTodo"].WipLimit; got != 0 {
+		t.Errorf("a rejected limit must not reach the server: %d", got)
+	}
+}
+
+func TestListShowRendersTheWipLimit(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	if _, _, err := runCmd(t, c, "boards", "column", "wip", "To do", "5", "--board", "prjA"); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := runCmd(t, c, "boards", "column", "show", "--board", "prjA", "--output", "csv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "5") {
+		t.Errorf("column show did not render the limit:\n%s", out)
+	}
+	// An unlimited column reads as a dash, not as a bare 0 in a numeric column.
+	if !strings.Contains(out, "-") {
+		t.Errorf("an unlimited column should render as a dash:\n%s", out)
+	}
+}
+
 func TestListMoveReordersColumns(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()

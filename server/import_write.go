@@ -178,6 +178,10 @@ func writeImportedLists(app core.App, project *core.Record, lists []exportedList
 		record.Set("name", name)
 		record.Set("position", ranks[i])
 		record.Set("category", listCategoryOrTodo(list.Category))
+		// Clamped rather than trusted: the file is user-supplied, and the
+		// column's own min/max would reject the row outright and lose a list
+		// over a decorative field. Out of range reads as no limit.
+		record.Set("wip_limit", clampWipLimit(list.WipLimit))
 		if err := app.Save(record); err != nil {
 			failures = append(failures, fmt.Sprintf("list %q: %v", name, err))
 			continue
@@ -374,6 +378,16 @@ func importedTitle(title string) string {
 		return "Untitled card"
 	}
 	return truncateRunes(trimmed, 499)
+}
+
+// clampWipLimit keeps an out-of-range limit from failing the list's save. 0 is
+// "no limit", which is both the column default and the safe reading of a value
+// this server would not have written — a Trello import never sets one at all.
+func clampWipLimit(limit int) int {
+	if limit < 0 || limit > 999 {
+		return 0
+	}
+	return limit
 }
 
 // listCategoryOrTodo keeps an unknown or absent category off the row. The

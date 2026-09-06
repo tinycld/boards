@@ -168,6 +168,48 @@ func TestExportEndpoint_BlankCategoryReadsAsTodo(t *testing.T) {
 	}
 }
 
+// A limit is part of how a board is set up, so it has to survive the round
+// trip — an exported board that comes back unlimited has silently lost a
+// setting the team chose.
+func TestExportEndpoint_CarriesTheWipLimit(t *testing.T) {
+	env := setupCardsEnv(t)
+	seedExportBoard(t, env)
+
+	env.list.Set("wip_limit", 4)
+	if err := env.app.Save(env.list); err != nil {
+		t.Fatalf("set the limit: %v", err)
+	}
+
+	var board exportedBoard
+	if err := json.Unmarshal([]byte(exportBody(t, env, "json")), &board); err != nil {
+		t.Fatalf("decode export: %v", err)
+	}
+	found := false
+	for _, l := range board.Lists {
+		if l.ID == env.list.Id {
+			found = true
+			if l.WipLimit != 4 {
+				t.Errorf("wip_limit = %d, want 4", l.WipLimit)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("the seeded list is missing from the export")
+	}
+}
+
+// 0 is "no limit", and `omitempty` keeps it out of the file entirely — so a
+// board that sets none exports exactly the JSON it did before the column
+// existed, and an older importer reading this file sees nothing new.
+func TestExportEndpoint_OmitsAnAbsentWipLimit(t *testing.T) {
+	env := setupCardsEnv(t)
+	seedExportBoard(t, env)
+
+	if strings.Contains(exportBody(t, env, "json"), "wip_limit") {
+		t.Error("an unlimited column must not export a wip_limit key")
+	}
+}
+
 // Any member may export. A viewer already reads every card through the ordinary
 // REST, so refusing them a file would protect nothing.
 func TestExportEndpoint_ViewerMayExport(t *testing.T) {

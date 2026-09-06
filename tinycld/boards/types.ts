@@ -251,6 +251,15 @@ export interface BoardCardView {
      * not echoed yet. What "sort by created" orders on; see lib/created-order.
      */
     created: string
+    /**
+     * ISO timestamp from `list_changed_at` — when the card entered the column
+     * it is in now. '' for an optimistic insert the server has not echoed.
+     *
+     * The aging clock (lib/aging.ts), and deliberately NOT `updated`: that one
+     * moves on any write, so a stalled card would read as freshly touched.
+     * Server-owned, so it cannot be backdated by a client.
+     */
+    listChangedAt: string
     /** Denormalized counters, maintained by server/counters.go. */
     checklistTotal: number
     checklistDone: number
@@ -378,6 +387,14 @@ export interface BoardListView {
      * "3/12" count shows.
      */
     totalCount: number
+    /**
+     * How many cards belong in this column at once, or undefined for no limit.
+     * Already normalized — never 0 — see lib/wip.ts.
+     *
+     * Compared against `totalCount`, never `cards.length`: a limit that relaxed
+     * because someone filtered the board would be worse than no limit at all.
+     */
+    wipLimit?: number
 }
 
 /**
@@ -404,6 +421,13 @@ export interface BoardProject {
     color: BoardsColor
     /** Days a card sits in a done or canceled list before the server archives it; 0 = never. */
     autoArchiveDays: number
+    /**
+     * Days a card may sit in one column before its face is tinted; 0 = never.
+     *
+     * Counted from `card.listChangedAt`, the same column clock auto-archive
+     * uses, so a card reads the same age to both settings.
+     */
+    agingDays: number
     members: BoardMember[]
     lists: BoardListView[]
     /** `lists` reduced to ranks — identity changes only when list ROWS change. */

@@ -413,10 +413,18 @@ per sprint) and burndown has `boards_sprint_snapshots`; the charts are the last
 phase of the sprints work. Cumulative flow could read `boards_activity` today
 (and the auto-archive sweep's rows correctly count as system moves).
 
-**20 — WIP limits and card aging.** Genuinely cheap — `wip_limit` on lists with
-a warning header, aging as a face tint from `updated`. Kanban-purist polish that
-only Trello users look for. **Good filler if a phase finishes early**, which is
-why it is listed here rather than dropped.
+**20 — WIP limits and card aging.** ✅ Shipped on `feat/boards-wip-aging`,
+stacked on the importer — it took the filler slot when Phase 2 finished early,
+exactly as this entry predicted. It was as cheap as claimed: ONE appended
+migration for both halves and no new server code at all.
+
+Two things this entry got wrong, both recorded in `TODO.md`'s shipped entry.
+The face tint counts from **`list_changed_at`**, not `updated` — `updated`
+moves on any write, so a stalled card would read as freshly touched and the
+signal inverts; the right clock already existed and is already server-owned.
+And the warning header is **warn-only, enforced nowhere**: blocking client-side
+would make the UI refuse what the API allows, and a server guard would fail
+bulk moves and imports partway through.
 
 ---
 

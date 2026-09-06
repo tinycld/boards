@@ -315,6 +315,11 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		if v, ok := body["category"].(string); ok {
 			l.Category = v
 		}
+		// float64: encoding/json decodes every number into an interface{} as
+		// one, so a plain int assertion here would silently never fire.
+		if v, ok := body["wip_limit"].(float64); ok {
+			l.WipLimit = int(v)
+		}
 		json.NewEncoder(w).Encode(l)
 	})
 	mux.HandleFunc("DELETE /api/collections/boards_lists/records/{id}", func(w http.ResponseWriter, r *http.Request) {

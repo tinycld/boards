@@ -30,6 +30,7 @@ import { normalizeEstimate } from './estimate'
 import { type ListCategory, normalizeListCategory } from './list-category'
 import { normalizePriority } from './priority'
 import { activeSprint, normalizeSprintRollover, sprintLengthDays } from './sprint'
+import { normalizeWipLimit } from './wip'
 
 /** The subset of a user row the board actually renders. */
 type UserLike = Pick<Users, 'id' | 'name' | 'email'>
@@ -185,6 +186,7 @@ export function toBoardCard(
         estimate: normalizeEstimate(card.estimate),
         listCategory,
         created: card.created ?? '',
+        listChangedAt: card.list_changed_at ?? '',
         checklistTotal: card.checklist_total,
         checklistDone: card.checklist_done,
         commentCount: card.comment_count,
@@ -415,6 +417,7 @@ export function buildBoardProject(
         slug: project.slug,
         color: project.color,
         autoArchiveDays: project.auto_archive_days,
+        agingDays: project.aging_days,
         sprintsEnabled: project.sprints_enabled,
         sprintLengthDays: sprintLengthDays(project),
         sprintAutoStart: project.sprint_auto_start,
@@ -438,6 +441,7 @@ export function buildBoardProject(
             category: categoryByList.get(list.id) ?? 'todo',
             cards: cardsByList.get(list.id) ?? [],
             totalCount: totals.get(list.id) ?? 0,
+            wipLimit: normalizeWipLimit(list.wip_limit),
         })),
         listOrder: sortedLists.map(list => ({ id: list.id, position: list.position })),
         cardTotal,
@@ -543,6 +547,7 @@ function sameCard(a: BoardCardView, b: BoardCardView): boolean {
         a.estimate === b.estimate &&
         a.listCategory === b.listCategory &&
         a.created === b.created &&
+        a.listChangedAt === b.listChangedAt &&
         a.checklistTotal === b.checklistTotal &&
         a.checklistDone === b.checklistDone &&
         a.commentCount === b.commentCount &&
@@ -618,6 +623,7 @@ function shareTree(previous: BoardProject, fresh: BoardProject): BoardProject {
             // A filter that hides a card changes the count but not the list's
             // own row; without this line the column keeps its stale "12".
             prior.totalCount === list.totalCount &&
+            prior.wipLimit === list.wipLimit &&
             allShared(cards, prior.cards)
         ) {
             return prior
@@ -650,6 +656,7 @@ function shareTree(previous: BoardProject, fresh: BoardProject): BoardProject {
         previous.slug === fresh.slug &&
         previous.color === fresh.color &&
         previous.autoArchiveDays === fresh.autoArchiveDays &&
+        previous.agingDays === fresh.agingDays &&
         // The sprint settings live on the project row too; without these the
         // header would keep rendering sprint chrome a setting just turned off.
         previous.sprintsEnabled === fresh.sprintsEnabled &&

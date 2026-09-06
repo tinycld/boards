@@ -305,6 +305,10 @@ func TestImportEndpoint_RoundTripsAnExportedBoard(t *testing.T) {
 	env := setupCardsEnv(t)
 	seedExportBoard(t, env)
 	cardsComment(t, env.app, env.project, env.card, env.owner, "a comment that must survive")
+	env.list.Set("wip_limit", 6)
+	if err := env.app.Save(env.list); err != nil {
+		t.Fatalf("set the limit: %v", err)
+	}
 
 	original, err := collectBoard(env.app, env.project)
 	if err != nil {
@@ -352,6 +356,17 @@ func TestImportEndpoint_RoundTripsAnExportedBoard(t *testing.T) {
 	if got, want := categoriesOf(copied), categoriesOf(original); got != want {
 		t.Errorf("list categories after the round trip = %s, want %s", got, want)
 	}
+	// A limit is a setting the team chose, so it travels with the board the
+	// same way a category does.
+	limits := 0
+	for _, l := range copied.Lists {
+		if l.WipLimit == 6 {
+			limits++
+		}
+	}
+	if limits != 1 {
+		t.Errorf("the WIP limit did not survive the round trip: %d lists carry it", limits)
+	}
 	// The archived card is still archived — an export doubles as a backup, so
 	// restoring one must not quietly resurrect finished work.
 	archived := 0
@@ -362,6 +377,33 @@ func TestImportEndpoint_RoundTripsAnExportedBoard(t *testing.T) {
 	}
 	if archived != 1 {
 		t.Errorf("archived cards after the round trip = %d, want 1", archived)
+	}
+}
+
+// The file is user-supplied, so an out-of-range limit must not fail the list's
+// save and lose the column. It lands as 0 — no limit — rather than rejecting
+// the import over a decorative field.
+func TestImportEndpoint_ClampsAHostileWipLimit(t *testing.T) {
+	env := setupCardsEnv(t)
+
+	body := `{"name":"Hostile","lists":[` +
+		`{"id":"l1","name":"Way over","position":"a0","category":"todo","wip_limit":100000},` +
+		`{"id":"l2","name":"Negative","position":"a1","category":"todo","wip_limit":-5}` +
+		`],"cards":[],"labels":[]}`
+
+	result := importBoard(t, env, env.ownerToken, []byte(body), "")
+	if result.Lists != 2 {
+		t.Fatalf("lists = %d, want both to survive the clamp", result.Lists)
+	}
+
+	rows, err := env.app.FindAllRecords("boards_lists", dbx.HashExp{"project": result.Project})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range rows {
+		if got := row.GetInt("wip_limit"); got != 0 {
+			t.Errorf("%q kept an out-of-range limit: %d", row.GetString("name"), got)
+		}
 	}
 }
 

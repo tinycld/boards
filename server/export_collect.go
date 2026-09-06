@@ -79,6 +79,7 @@ func collectBoard(app core.App, project *core.Record) (exportedBoard, error) {
 			// list, which is what listCategory concludes — and what
 			// lib/list-category.ts concludes client-side.
 			Category: listCategory(l),
+			WipLimit: l.GetInt("wip_limit"),
 		})
 	}
 
