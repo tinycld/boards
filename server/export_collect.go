@@ -79,6 +79,7 @@ func collectBoard(app core.App, project *core.Record) (exportedBoard, error) {
 			// list, which is what listCategory concludes — and what
 			// lib/list-category.ts concludes client-side.
 			Category: listCategory(l),
+			WipLimit: l.GetInt("wip_limit"),
 		})
 	}
 
@@ -86,7 +87,29 @@ func collectBoard(app core.App, project *core.Record) (exportedBoard, error) {
 	if err != nil {
 		return board, err
 	}
-	sortByRank(cards)
+	// Ordered by LIST, then by rank within it — not by rank alone.
+	//
+	// `position` only orders cards inside one column, so a global rank sort
+	// interleaves the columns and puts a board's cards in an order no reader
+	// would recognise. It also made the export unstable in the one way that
+	// matters: re-importing it groups the cards by list again, so a round trip
+	// did not return the order it started with. The list's own rank is the
+	// outer key, so columns appear left to right.
+	listOrder := make(map[string]int, len(board.Lists))
+	for i, l := range board.Lists {
+		listOrder[l.ID] = i
+	}
+	sort.SliceStable(cards, func(i, j int) bool {
+		li, lj := listOrder[cards[i].GetString("list")], listOrder[cards[j].GetString("list")]
+		if li != lj {
+			return li < lj
+		}
+		pi, pj := cards[i].GetString("position"), cards[j].GetString("position")
+		if pi != pj {
+			return pi < pj
+		}
+		return cards[i].Id < cards[j].Id
+	})
 
 	checklist, err := collectChecklist(app, project.Id)
 	if err != nil {

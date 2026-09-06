@@ -1,0 +1,51 @@
+{
+    "name": "Trello Import Test",
+    "labels": [{ "id": "lbl_bug", "name": "bug", "color": "red" }],
+    "lists": [
+        { "id": "lst_todo", "name": "To Do", "pos": 1000, "closed": false },
+        { "id": "lst_done", "name": "Done", "pos": 2000, "closed": false }
+    ],
+    "cards": [
+        {
+            "id": "crd_copy",
+            "name": "Write the copy",
+            "desc": "From Trello",
+            "idList": "lst_todo",
+            "pos": 1000,
+            "closed": false,
+            "due": "",
+            "start": "",
+            "idLabels": ["lbl_bug"],
+            "idMembers": ["mem_ada"]
+        },
+        {
+            "id": "crd_ship",
+            "name": "Ship it",
+            "desc": "",
+            "idList": "lst_done",
+            "pos": 1000,
+            "closed": false,
+            "due": "",
+            "start": "",
+            "idLabels": [],
+            "idMembers": []
+        }
+    ],
+    "members": [{ "id": "mem_ada", "fullName": "Ada Lovelace", "username": "ada" }],
+    "checklists": [
+        {
+            "id": "chk",
+            "idCard": "crd_copy",
+            "pos": 1000,
+            "checkItems": [{ "name": "Draft the headline", "state": "complete", "pos": 1000 }]
+        }
+    ],
+    "actions": [
+        {
+            "type": "commentCard",
+            "date": "2026-09-01T09:00:00.000Z",
+            "data": { "text": "Looks good to me", "card": { "id": "crd_copy" } },
+            "memberCreator": { "id": "mem_ada", "fullName": "Ada Lovelace", "username": "ada" }
+        }
+    ]
+}

@@ -49,6 +49,8 @@ export interface UpdateProjectInput {
     slug?: string
     /** Days a card may sit in a done or canceled list before the server archives it; 0 = never. */
     autoArchiveDays?: number
+    /** Days in one column before a card's face is tinted. 0 = never — see lib/aging.ts. */
+    agingDays?: number
     /** The sprint settings — Board settings…, owner-only by rule. */
     sprintsEnabled?: boolean
     /** 0 means the default length — see lib/sprint.ts. */
@@ -72,6 +74,7 @@ export function useUpdateProject() {
                 if (input.autoArchiveDays !== undefined) {
                     draft.auto_archive_days = input.autoArchiveDays
                 }
+                if (input.agingDays !== undefined) draft.aging_days = input.agingDays
                 if (input.sprintsEnabled !== undefined) draft.sprints_enabled = input.sprintsEnabled
                 if (input.sprintLengthDays !== undefined) {
                     draft.sprint_length_days = input.sprintLengthDays
@@ -207,6 +210,8 @@ export function useCreateProject(options: { onError?: (error: unknown) => void }
                 // 0 is "never"; written rather than left to the column default
                 // for the reason every other insert here states its fields.
                 auto_archive_days: 0,
+                // Off. A new board tints nothing until an owner sets a threshold.
+                aging_days: 0,
                 // Sprints are opt-in per board (Board settings…); a new board
                 // starts without them and with the default cadence.
                 sprints_enabled: false,
@@ -234,6 +239,7 @@ export function useCreateProject(options: { onError?: (error: unknown) => void }
                     name: list.name,
                     position: ranks[index] ?? '',
                     category: list.category,
+                    wip_limit: 0,
                 })
             )
 

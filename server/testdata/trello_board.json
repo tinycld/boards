@@ -1,0 +1,82 @@
+{
+    "name": "Product Launch",
+    "desc": "Everything for the spring launch",
+    "closed": false,
+    "members": [
+        { "id": "mem_ada", "fullName": "Ada Lovelace", "username": "ada" },
+        { "id": "mem_alan", "fullName": "", "username": "alan" }
+    ],
+    "labels": [
+        { "id": "lbl_bug", "name": "bug", "color": "red" },
+        { "id": "lbl_bug2", "name": "Bug", "color": "orange" },
+        { "id": "lbl_chore", "name": "chore", "color": "sky" },
+        { "id": "lbl_plain", "name": "", "color": "purple" },
+        { "id": "lbl_weird", "name": "odd", "color": "chartreuse" }
+    ],
+    "lists": [
+        { "id": "lst_done", "name": "Done", "pos": 3000, "closed": false },
+        { "id": "lst_todo", "name": "To Do", "pos": 1000, "closed": false },
+        { "id": "lst_doing", "name": "In Progress", "pos": 2000, "closed": false },
+        { "id": "lst_ice", "name": "Icebox", "pos": 4000, "closed": true }
+    ],
+    "cards": [
+        {
+            "id": "crd_copy", "name": "Write the copy", "desc": "Landing page and emails",
+            "idList": "lst_todo", "pos": 2000, "closed": false,
+            "due": "2026-10-01T17:00:00.000Z", "start": "2026-09-20T00:00:00.000Z",
+            "idLabels": ["lbl_bug", "lbl_bug2"], "idMembers": ["mem_ada"]
+        },
+        {
+            "id": "crd_venue", "name": "Book the venue", "desc": "",
+            "idList": "lst_todo", "pos": 1000, "closed": false,
+            "due": "", "start": "", "idLabels": ["lbl_chore"], "idMembers": []
+        },
+        {
+            "id": "crd_deck", "name": "Design the deck", "desc": "",
+            "idList": "lst_doing", "pos": 1000, "closed": false,
+            "due": "", "start": "", "idLabels": [], "idMembers": ["mem_alan", "mem_ada"]
+        },
+        {
+            "id": "crd_old", "name": "Old idea", "desc": "",
+            "idList": "lst_ice", "pos": 1000, "closed": true,
+            "due": "", "start": "", "idLabels": [], "idMembers": []
+        },
+        {
+            "id": "crd_orphan", "name": "Card with no list", "desc": "",
+            "idList": "lst_missing", "pos": 1000, "closed": false,
+            "due": "", "start": "", "idLabels": [], "idMembers": []
+        }
+    ],
+    "checklists": [
+        {
+            "id": "chk_two", "idCard": "crd_copy", "pos": 2000,
+            "checkItems": [
+                { "name": "Proofread", "state": "incomplete", "pos": 1000 }
+            ]
+        },
+        {
+            "id": "chk_one", "idCard": "crd_copy", "pos": 1000,
+            "checkItems": [
+                { "name": "Draft the headline", "state": "complete", "pos": 2000 },
+                { "name": "Pick the hero image", "state": "incomplete", "pos": 1000 }
+            ]
+        }
+    ],
+    "actions": [
+        {
+            "type": "commentCard", "date": "2026-09-02T09:00:00.000Z",
+            "data": { "text": "Second comment", "card": { "id": "crd_copy" } },
+            "memberCreator": { "id": "mem_ada", "fullName": "Ada Lovelace", "username": "ada" }
+        },
+        {
+            "type": "commentCard", "date": "2026-09-01T09:00:00.000Z",
+            "data": { "text": "First comment", "card": { "id": "crd_copy" } },
+            "memberCreator": { "id": "mem_alan", "fullName": "", "username": "alan" }
+        },
+        {
+            "type": "updateCard", "date": "2026-09-03T09:00:00.000Z",
+            "data": { "text": "not a comment", "card": { "id": "crd_copy" } },
+            "memberCreator": { "id": "mem_ada", "fullName": "Ada Lovelace", "username": "ada" }
+        }
+    ]
+}

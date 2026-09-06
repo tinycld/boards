@@ -168,6 +168,48 @@ func TestExportEndpoint_BlankCategoryReadsAsTodo(t *testing.T) {
 	}
 }
 
+// A limit is part of how a board is set up, so it has to survive the round
+// trip — an exported board that comes back unlimited has silently lost a
+// setting the team chose.
+func TestExportEndpoint_CarriesTheWipLimit(t *testing.T) {
+	env := setupCardsEnv(t)
+	seedExportBoard(t, env)
+
+	env.list.Set("wip_limit", 4)
+	if err := env.app.Save(env.list); err != nil {
+		t.Fatalf("set the limit: %v", err)
+	}
+
+	var board exportedBoard
+	if err := json.Unmarshal([]byte(exportBody(t, env, "json")), &board); err != nil {
+		t.Fatalf("decode export: %v", err)
+	}
+	found := false
+	for _, l := range board.Lists {
+		if l.ID == env.list.Id {
+			found = true
+			if l.WipLimit != 4 {
+				t.Errorf("wip_limit = %d, want 4", l.WipLimit)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("the seeded list is missing from the export")
+	}
+}
+
+// 0 is "no limit", and `omitempty` keeps it out of the file entirely — so a
+// board that sets none exports exactly the JSON it did before the column
+// existed, and an older importer reading this file sees nothing new.
+func TestExportEndpoint_OmitsAnAbsentWipLimit(t *testing.T) {
+	env := setupCardsEnv(t)
+	seedExportBoard(t, env)
+
+	if strings.Contains(exportBody(t, env, "json"), "wip_limit") {
+		t.Error("an unlimited column must not export a wip_limit key")
+	}
+}
+
 // Any member may export. A viewer already reads every card through the ordinary
 // REST, so refusing them a file would protect nothing.
 func TestExportEndpoint_ViewerMayExport(t *testing.T) {
@@ -293,6 +335,42 @@ func TestExportIsStableAcrossRuns(t *testing.T) {
 	}
 	if string(a) != string(b) {
 		t.Error("two exports of an unchanged board differ")
+	}
+}
+
+// Cards come out grouped by their column, in column order, and ranked within
+// it. `position` only orders cards INSIDE one list, so a global rank sort
+// interleaves the columns — an order no reader would recognise, and one that a
+// re-import (which groups by list again) does not reproduce.
+func TestExportOrdersCardsByListThenRank(t *testing.T) {
+	env := setupCardsEnv(t)
+	seedExportBoard(t, env)
+
+	// A second card in the FIRST column, ranked after the seeded one but with a
+	// rank that sorts after the second column's card too — so a global sort
+	// would put it last rather than beside its neighbour.
+	late := cardsCard(t, env.app, env.project, env.list, "Also to do", "a9", env.owner)
+	late.Set("number", 3)
+	if err := env.app.Save(late); err != nil {
+		t.Fatal(err)
+	}
+
+	board, err := collectBoard(env.app, env.project)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Every card of the first list must appear before any card of the second.
+	firstList := board.Lists[0].ID
+	seenOther := false
+	for _, c := range board.Cards {
+		if c.List != firstList {
+			seenOther = true
+			continue
+		}
+		if seenOther {
+			t.Fatalf("card %q of the first column appears after another column's", c.Title)
+		}
 	}
 }
 

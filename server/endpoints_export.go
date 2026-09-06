@@ -83,6 +83,9 @@ type exportedList struct {
 	Name     string `json:"name"`
 	Position string `json:"position"`
 	Category string `json:"category"`
+	// omitempty on purpose: 0 IS "no limit", so a board that sets none exports
+	// exactly the JSON it did before the column existed.
+	WipLimit int `json:"wip_limit,omitempty"`
 }
 
 type exportedCard struct {

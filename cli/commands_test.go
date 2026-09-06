@@ -598,6 +598,56 @@ func TestListRenameAndCategory(t *testing.T) {
 	}
 }
 
+func TestListWipLimit(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	if _, _, err := runCmd(t, c, "boards", "column", "wip", "To do", "3", "--board", "prjA"); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.lists["lstTodo"].WipLimit; got != 3 {
+		t.Errorf("wip_limit = %d, want 3", got)
+	}
+
+	// 0 is how a limit is cleared — a distinct value, not an absent field.
+	if _, _, err := runCmd(t, c, "boards", "column", "wip", "To do", "0", "--board", "prjA"); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.lists["lstTodo"].WipLimit; got != 0 {
+		t.Errorf("wip_limit = %d, want 0", got)
+	}
+
+	// Both rejections happen BEFORE the request, so neither reaches the server.
+	for _, bad := range []string{"lots", "-1", "1000", "2.5"} {
+		if _, _, err := runCmd(t, c, "boards", "column", "wip", "To do", bad, "--board", "prjA"); err == nil {
+			t.Errorf("expected an error for a limit of %q", bad)
+		}
+	}
+	if got := f.lists["lstTodo"].WipLimit; got != 0 {
+		t.Errorf("a rejected limit must not reach the server: %d", got)
+	}
+}
+
+func TestListShowRendersTheWipLimit(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	if _, _, err := runCmd(t, c, "boards", "column", "wip", "To do", "5", "--board", "prjA"); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := runCmd(t, c, "boards", "column", "show", "--board", "prjA", "--output", "csv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "5") {
+		t.Errorf("column show did not render the limit:\n%s", out)
+	}
+	// An unlimited column reads as a dash, not as a bare 0 in a numeric column.
+	if !strings.Contains(out, "-") {
+		t.Errorf("an unlimited column should render as a dash:\n%s", out)
+	}
+}
+
 func TestListMoveReordersColumns(t *testing.T) {
 	f := board(t)
 	_, c := f.serve()
@@ -1897,5 +1947,112 @@ func TestBoardExportWritesToAFile(t *testing.T) {
 	}
 	if !strings.Contains(stderr, dest) {
 		t.Errorf("the command did not say where it saved:\n%s", stderr)
+	}
+}
+
+// `boards import` moves a file up and narrates the report. The mapping is the
+// server's, covered in server/import_trello_test.go against a real Trello
+// export; these cover the CLI's half.
+
+func TestBoardImportUploadsTheFileAndNarratesTheReport(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+	src := filepath.Join(t.TempDir(), "trello.json")
+	if err := os.WriteFile(src, []byte(`{"name":"Product Launch"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, stderr, err := runCmd(t, c, "boards", "import", src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.lastImportBody != `{"name":"Product Launch"}` {
+		t.Errorf("the file did not arrive intact: %q", f.lastImportBody)
+	}
+	for _, want := range []string{"Product Launch", "3 lists", "4 cards"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("the summary is missing %q:\n%s", want, stderr)
+		}
+	}
+	if !strings.Contains(stderr, "1 of those cards arrived archived") {
+		t.Errorf("the archived count was not reported:\n%s", stderr)
+	}
+}
+
+// A dropped assignee, a guessed column and a skipped card are exactly what
+// --quiet must NOT hide: a count alone would let someone believe a file
+// imported cleanly when part of it did not.
+func TestBoardImportReportsLossesEvenWhenQuiet(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+	src := filepath.Join(t.TempDir(), "trello.json")
+	if err := os.WriteFile(src, []byte(`{"name":"x"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, stderr, err := runCmd(t, c, "boards", "import", src, "--quiet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The summary line IS suppressed — that one is ordinary chatter.
+	if strings.Contains(stderr, "3 lists") {
+		t.Errorf("--quiet did not suppress the summary:\n%s", stderr)
+	}
+	for _, want := range []string{"Ada Lovelace", "Done → done", "its list is not in the file"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("--quiet hid %q, which it must not:\n%s", want, stderr)
+		}
+	}
+}
+
+func TestBoardImportPassesNameAndHooks(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+	src := filepath.Join(t.TempDir(), "trello.json")
+	if err := os.WriteFile(src, []byte(`{"name":"x"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := runCmd(t, c, "boards", "import", src, "--name", "Spring launch", "--hooks"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(f.lastImportQuery, "name=Spring+launch") {
+		t.Errorf("--name did not reach the server: %q", f.lastImportQuery)
+	}
+	if !strings.Contains(f.lastImportQuery, "hooks=true") {
+		t.Errorf("--hooks did not reach the server: %q", f.lastImportQuery)
+	}
+}
+
+// Hooks are off unless asked for: a few hundred cards arriving at once is not
+// news, and the flag's absence must not read as "true" to the server.
+func TestBoardImportLeavesHooksOffByDefault(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+	src := filepath.Join(t.TempDir(), "trello.json")
+	if err := os.WriteFile(src, []byte(`{"name":"x"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := runCmd(t, c, "boards", "import", src); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(f.lastImportQuery, "hooks") {
+		t.Errorf("hooks was sent without being asked for: %q", f.lastImportQuery)
+	}
+}
+
+// Checked before the upload so a typo'd path fails immediately with a
+// filesystem error rather than as a server-side 400.
+func TestBoardImportRefusesAMissingFile(t *testing.T) {
+	f := board(t)
+	_, c := f.serve()
+
+	_, _, err := runCmd(t, c, "boards", "import", filepath.Join(t.TempDir(), "nope.json"))
+	if err == nil {
+		t.Fatal("a missing file was accepted")
+	}
+	if f.lastImportBody != "" {
+		t.Error("the command uploaded something despite the missing file")
 	}
 }

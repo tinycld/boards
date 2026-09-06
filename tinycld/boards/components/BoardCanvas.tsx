@@ -54,6 +54,7 @@ export function BoardCanvas({ project }: { project: BoardProject }) {
                         listOrder={project.listOrder}
                         registerMeasure={dnd.registerColumnMeasure}
                         canEdit={canEdit}
+                        agingDays={project.agingDays}
                     />
                 ))}
                 {canEdit ? (
