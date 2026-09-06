@@ -16,6 +16,7 @@ import { type GestureResponderEvent, Pressable, Text, View } from 'react-native'
 import type { RemoteCardsPresence } from '../hooks/useBoardPresence'
 import { useCardFileDrop } from '../hooks/useCardFileDrop'
 import { useCardSelection } from '../hooks/useCardSelection'
+import { type AgingLevel, agingLevel } from '../lib/aging'
 import { dueStateFor } from '../lib/due-state'
 import { formatSchedule } from '../lib/due-time'
 import { formatEstimate } from '../lib/estimate'
@@ -41,6 +42,8 @@ interface BoardCardProps {
     category: ListCategory
     /** A grab cursor on a card a viewer cannot drag is a lie — drop it. */
     canDrag: boolean
+    /** The board's aging threshold in days, 0 when off — see lib/aging.ts. */
+    agingDays: number
 }
 
 function useCardPress(cardId: string) {
@@ -85,12 +88,24 @@ function cardRingClass(
     return idle
 }
 
-/** The selected card's background tint — see `cardRingClass`. */
-function cardSelectedClass(isSelected: boolean) {
-    return isSelected ? 'bg-primary/10' : 'bg-card'
+/**
+ * The card's background: selection first, then how long it has sat still.
+ *
+ * SELECTION OUTRANKS AGE, which continues the ladder `cardRingClass`
+ * documents. A stale tint that could paint over the selection would make a
+ * multi-card selection unreadable at exactly the moment it matters — the user
+ * is about to act on it — and age is information they can wait a beat for.
+ *
+ * The soft tokens carry both themes; no raw hex, per the style guide.
+ */
+function cardSelectedClass(isSelected: boolean, aging: AgingLevel) {
+    if (isSelected) return 'bg-primary/10'
+    if (aging === 'stale') return 'bg-danger-soft'
+    if (aging === 'warm') return 'bg-warning-soft'
+    return 'bg-card'
 }
 
-export function BoardCard({ card, projectId, category, canDrag }: BoardCardProps) {
+export function BoardCard({ card, projectId, category, canDrag, agingDays }: BoardCardProps) {
     const { isOpen, isFocused, isSelected, onPress } = useCardPress(card.id)
     // canDrag doubles as the edit gate: both come from the same role check.
     const { isDropTarget, dropRef } = useCardFileDrop(card.id, projectId, canDrag)
@@ -99,6 +114,12 @@ export function BoardCard({ card, projectId, category, canDrag }: BoardCardProps
     // re-render it. Every card face re-renders on toggle, which is fine: it
     // is a deliberate action taken at rest, never mid-drag.
     const isCompact = useBoardsUIStore(s => s.isCompactCards)
+
+    // Read at render rather than from a ticking clock: the threshold is in
+    // DAYS, so a tint that appears on the next board update instead of the
+    // exact stroke of midnight is indistinguishable, and a per-card timer
+    // across a large board would not be.
+    const aging = agingLevel(card.listChangedAt, agingDays, category, new Date())
 
     if (isClosedCategory(category)) {
         return (
@@ -126,7 +147,7 @@ export function BoardCard({ card, projectId, category, canDrag }: BoardCardProps
             accessibilityRole="button"
             testID={`board-card-${card.id}`}
             onPress={onPress}
-            className={`${cardSelectedClass(isSelected)} border rounded-[10px] shadow-sm ${layout} ${canDrag ? 'web:cursor-grab' : ''} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${cardRingClass(
+            className={`${cardSelectedClass(isSelected, aging)} border rounded-[10px] shadow-sm ${layout} ${canDrag ? 'web:cursor-grab' : ''} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${cardRingClass(
                 isOpen,
                 isFocused,
                 'border-border hover:border-muted/50',
@@ -137,6 +158,7 @@ export function BoardCard({ card, projectId, category, canDrag }: BoardCardProps
             <DropMarker isDropTarget={isDropTarget} cardId={card.id} />
             <FocusMarker isFocused={isFocused} cardId={card.id} />
             <SelectedMarker isSelected={isSelected} cardId={card.id} />
+            <AgingMarker aging={aging} cardId={card.id} />
             <CardFace card={card} isCompact={isCompact} />
         </Pressable>
     )
@@ -367,6 +389,18 @@ function SelectedMarker({ isSelected, cardId }: { isSelected: boolean; cardId: s
 }
 
 /**
+ * A zero-size marker naming the card's aging level.
+ *
+ * The tint is a background colour, and asserting a computed colour in an e2e is
+ * brittle in a way that asserting a level is not — the same reason
+ * SelectedMarker exists beside it.
+ */
+function AgingMarker({ aging, cardId }: { aging: AgingLevel; cardId: string }) {
+    if (aging === 'fresh') return null
+    return <View testID={`boards-card-aging-${aging}-${cardId}`} />
+}
+
+/**
  * Label colours without their names, capped and counted exactly as the full
  * face does — a card must not appear to lose labels when density changes, so
  * the overflow marker survives even though the words don't.
@@ -452,7 +486,7 @@ function ClosedCard({
             accessibilityRole="button"
             testID={`board-card-${cardId}`}
             onPress={onPress}
-            className={`${cardSelectedClass(isSelected)} border rounded-[10px] px-3 py-2.5 shadow-sm ${canDrag ? 'web:cursor-grab' : ''} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${cardRingClass(
+            className={`${cardSelectedClass(isSelected, 'fresh')} border rounded-[10px] px-3 py-2.5 shadow-sm ${canDrag ? 'web:cursor-grab' : ''} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${cardRingClass(
                 isOpen,
                 isFocused,
                 'border-border',

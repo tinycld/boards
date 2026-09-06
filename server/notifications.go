@@ -50,6 +50,12 @@ func registerCardNotifications(app core.App) {
 		return e.Next()
 	})
 	app.OnRecordAfterCreateSuccess("boards_comments").BindFunc(func(e *core.RecordEvent) error {
+		// An import carries a board's whole comment history across; notifying
+		// on each one would be a mailbox full of years-old conversation. See
+		// import_quiet.go.
+		if isQuietImport(e.Record) {
+			return e.Next()
+		}
 		go notifyNewComment(app, e.Record)
 		return e.Next()
 	})

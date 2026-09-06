@@ -24,6 +24,11 @@ const settingsSchema = z.object({
         .int('Whole days only')
         .min(0, 'Days cannot be negative')
         .max(365, 'At most a year'),
+    aging_days: z
+        .number({ message: 'Enter a number of days' })
+        .int('Whole days only')
+        .min(0, 'Days cannot be negative')
+        .max(365, 'At most a year'),
     sprints_enabled: z.boolean(),
     sprint_length_days: z
         .number({ message: 'Enter a number of days' })
@@ -49,7 +54,7 @@ interface BoardSettingsDialogProps {
 }
 
 /**
- * Board settings — auto-archive and the sprint cadence. A dialog of its own
+ * Board settings — auto-archive, card aging and the sprint cadence. A dialog of its own
  * rather than menu rows because a number needs a field, a hint and a save,
  * and the menu is the wrong place for all three.
  */
@@ -84,6 +89,7 @@ function SettingsForm({ project, onClose }: { project: BoardProject; onClose: ()
         resolver: zodResolver(settingsSchema),
         defaultValues: {
             auto_archive_days: project.autoArchiveDays,
+            aging_days: project.agingDays,
             sprints_enabled: project.sprintsEnabled,
             sprint_length_days: project.sprintLengthDays,
             sprint_auto_start: project.sprintAutoStart,
@@ -97,6 +103,7 @@ function SettingsForm({ project, onClose }: { project: BoardProject; onClose: ()
             {
                 projectId: project.id,
                 autoArchiveDays: values.auto_archive_days,
+                agingDays: values.aging_days,
                 sprintsEnabled: values.sprints_enabled,
                 sprintLengthDays: values.sprint_length_days,
                 sprintAutoStart: values.sprint_auto_start,
@@ -121,6 +128,16 @@ function SettingsForm({ project, onClose }: { project: BoardProject; onClose: ()
                 name="auto_archive_days"
                 label="Auto-archive finished cards after (days)"
                 hint="Cards that sit in a Done or Canceled list this long are archived. 0 means never."
+                min={0}
+                max={365}
+            />
+            {/* "untouched" rather than "unedited": the clock is when the card
+                entered its column, not when it was last written to. */}
+            <NumberInput
+                control={control}
+                name="aging_days"
+                label="Highlight cards untouched for (days)"
+                hint="Cards that sit in the same column this long are tinted, and more strongly at twice that. 0 means never."
                 min={0}
                 max={365}
             />

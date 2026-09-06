@@ -45,6 +45,10 @@ function toFarCardView(row: {
         assignees: [],
         priority: 'none',
         created: '',
+        // '' reads as fresh (lib/aging.ts), which is right for a reference the
+        // links section renders as a row rather than a face — there is no tint
+        // to get wrong.
+        listChangedAt: '',
         checklistTotal: 0,
         checklistDone: 0,
         commentCount: 0,

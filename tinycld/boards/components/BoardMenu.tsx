@@ -7,6 +7,7 @@ import { Modal, ModalBackdrop, ModalContent } from '@tinycld/core/ui/modal'
 import {
     Archive,
     ArchiveRestore,
+    Download,
     Layers,
     ListTree,
     MoreHorizontal,
@@ -27,6 +28,7 @@ import type { BoardProject } from '../types'
 import { BoardSettingsDialog } from './BoardSettingsDialog'
 import { DeleteBoardDialog } from './DeleteBoardDialog'
 import { EpicManagerDialog } from './EpicManagerDialog'
+import { ExportBoardDialog } from './ExportBoardDialog'
 
 interface BoardMenuProps {
     project: BoardProject
@@ -60,6 +62,7 @@ export function BoardMenu({ project, cardCount, isArchived, onRename }: BoardMen
     const [isPickingColor, setIsPickingColor] = useState(false)
     const [isEditingSettings, setIsEditingSettings] = useState(false)
     const [isManagingEpics, setIsManagingEpics] = useState(false)
+    const [isExporting, setIsExporting] = useState(false)
     const [isConfirmingArchive, setIsConfirmingArchive] = useState(false)
     const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
     const mutedColor = useThemeColor('muted')
@@ -99,6 +102,12 @@ export function BoardMenu({ project, cardCount, isArchived, onRename }: BoardMen
                         <BacklogItem
                             isVisible={project.sprintsEnabled}
                             onPress={() => setViewMode(project.id, 'backlog')}
+                        />
+                        <MenuActionItem
+                            label="Export…"
+                            icon={Download}
+                            testID="boards-export"
+                            onPress={() => setIsExporting(true)}
                         />
                         <MenuActionItem
                             label="Board settings…"
@@ -153,6 +162,13 @@ export function BoardMenu({ project, cardCount, isArchived, onRename }: BoardMen
                 onClose={() => setIsManagingEpics(false)}
                 projectId={project.id}
                 epics={project.epics}
+            />
+
+            <ExportBoardDialog
+                isVisible={isExporting}
+                onClose={() => setIsExporting(false)}
+                projectId={project.id}
+                boardName={project.name}
             />
 
             <BoardSettingsDialog

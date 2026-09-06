@@ -32,10 +32,19 @@ which have since landed) and are merged:
 | #63 | `feat/tier2-cross-board-picker` | Debt 3: the cross-board link picker |
 
 Bulk operations (19) followed on `feat/tier2-bulk-ops` (PR #64) — no migration
-and no server work, exactly as the ranking predicted.
-Open: 14, 16–18, 20, 21 and Tier 3. Next up is 16 (import/export) per
-`docs/PLAN-tier2-open.md`'s phase order, with 20 (WIP limits and aging) as the
-cheap filler if a phase finishes early.
+and no server work, exactly as the ranking predicted. Sprints (14) shipped as a
+six-branch stack, and item 16's EXPORT half on `feat/boards-export`, stacked on
+it, with its core scope entries on `tinycld`'s `feat/boards-export-scopes` (the
+cross-repo step `PLAN-tier2-open.md` said would not be needed — see item 16).
+Item 16 shipped in two stacked branches — `feat/boards-export` (PR #71) and
+`feat/boards-import` — with the core scope entries on `tinycld`'s
+`feat/boards-export-scopes` (PR #235).
+WIP limits and aging (20) took the "cheap filler" slot the plan reserved for
+it, on `feat/boards-wip-aging` stacked on the importer — one appended
+migration, no new server code (the aging clock was already there), and no
+cross-repo step.
+Open: 17, 18, 21 and Tier 3. Next up is 17+18 (covers and templates) per
+`docs/PLAN-tier2-open.md`'s Phase 3.
 
 **Carried debt — none left.** `docs/PLAN-debts.md`'s Debts 1 (core `Menu`
 overlay + measurement) and 2 (the CLI scope map) shipped in core; Debt 3 (the
@@ -171,6 +180,53 @@ plain re-run.
     serial round-trips with its own partial-failure report), and marquee
     drag-select.
 
+20. **WIP limits and card aging** — landed as `boards_lists.wip_limit` (0 = no
+    limit) and a per-board `boards_projects.aging_days` (0 = off), one appended
+    migration for both. TWO DEPARTURES from this entry as it was originally
+    written, both deliberate:
+
+    **Warn only, never block.** The column header colours — amber at the limit,
+    red and a warning triangle past it — and nothing else. No rule, no hook, no
+    endpoint refuses a write. A client-side block would make the UI refuse what
+    the REST API and the CLI allow; a server guard would fail bulk moves, the
+    Trello importer, cross-board moves and the automation actions PARTWAY
+    THROUGH, and a half-applied batch is worse than an over-full column. Trello
+    and Jira both warn rather than block.
+
+    **The aging clock is `list_changed_at`, not `updated`.** This entry said
+    `updated`, but that field moves on any write — a label toggle, a comment,
+    `server/counters.go`'s recount of a badge — so a genuinely stalled card
+    reads as freshly touched, which INVERTS the signal. `list_changed_at`
+    (1980000012) already exists, is already server-owned and ungameable
+    (`server/list_changed_at.go` restores the stored value on every update that
+    is not a list change), and means exactly "how long has this card sat in
+    THIS column". The aging half therefore needed no column of its own.
+
+    The count badge reads `totalCount`, never the filtered `cards.length`, and
+    that is the opposite choice from `EstimateTotal` sitting directly beside it
+    — a limit that relaxed because someone narrowed the board would be worse
+    than no limit, while a points total the user can see is exactly what the
+    filter should narrow. On a sprinting board the count is sprint-scoped,
+    which reads correctly: the limit governs work in flight. The collapsed
+    column spine carries the same badge, which is when it matters most.
+
+    Aging tints the face background through `cardSelectedClass`, with SELECTION
+    OUTRANKING AGE — the ladder `cardRingClass` documents. Two levels
+    (`warm` at the threshold, `stale` at twice it) rather than a gradient: an
+    interpolated tint reads as noise across a column. Closed cards never age,
+    the same `isClosedCategory` guard the due-reminder sweep uses.
+
+    `wip_limit` travels with the JSON export/import (`omitempty`, so an
+    unlimited board exports the file it did before the column existed) and is
+    clamped rather than trusted on the way in — a hostile value must not fail a
+    list's save and lose the column. CSV is unchanged: it is one row per card,
+    and a list-level limit has no column there. `column wip` on the CLI, with a
+    WIP column in `column show`.
+
+    Fixed alongside: `ColumnMenu`'s delete confirm counted `cards.length`, so
+    with a filter on it under-reported how many cards the cascade would destroy
+    — in the one dialog whose entire purpose is naming that number.
+
 11. **Time-based automation and missing actions** — landed as `card-overdue`
     and `card-due-soon`, RECORD triggers watching the two notice stamps rather
     than anything scheduled. The due-notice sweep already stamped a card on
@@ -265,15 +321,53 @@ plain re-run.
 
 ### Open
 
-16. **Import and export.** CSV export (also filed in the appendix's M7
-    follow-ups) and a Trello JSON importer first. Prior art: `contacts/server/vcard_endpoints.go`,
-    `calendar/server/ics_endpoints.go`, the `google-takeout-import` package.
+16. **Import and export.** ✅ Both halves shipped.
+    `GET /api/boards/export?project=<id>&format=csv|json` — CSV is the
+    flat one-row-per-card projection for a spreadsheet, JSON is the whole board
+    including the checklists, comments and links a CSV row cannot hold. Both
+    carry archived cards, flagged, because an export doubles as a backup.
+    Reached from the board menu (Export…) and `boards export` on the CLI.
+    Three things worth carrying into the importer. The endpoint is a RAW route,
+    so it restates the rules by hand — membership, and the suspension clause
+    that `requireAuth` does not check (a raw route runs no rule engine, and a
+    token minted before an account was disabled keeps working); any member may
+    export and a non-member gets 404, never 403. Ordering is `position, id`
+    everywhere, so two exports of an unchanged board are byte-identical — which
+    is what will let the round-trip test assert equality. And the export is
+    deliberately UNFILTERED: `BoardFilter` has no wire format, so honouring it
+    would mean a second `cardMatchesFilter` in Go.
+    A `tinycld` commit was needed too, contrary to `PLAN-tier2-open.md`'s
+    "every phase is in `boards` alone" — a bespoke endpoint absent from core's
+    `endpointScopes` is default-denied for OAuth tokens while working for a
+    session.
+    The IMPORTER (`POST /api/boards/import`) accepts a Trello export or a board
+    export, sniffed on whether the file's lists carry a `category`, and always
+    creates a NEW board owned by the caller. Its parser is pure and separate
+    from its writer, so the writer never learns what Trello looks like and the
+    golden-file tests need no PocketBase app. Five decisions worth knowing:
+    duplicate label names FOLD (the unique index on (project, name), which
+    Trello does not have); comments are authored by the importer with the
+    original name written into the body (the author column is a relation that
+    must resolve); the board arrives with NO slug (keys are globally unique, so
+    the source's would collide); ranks are regenerated with
+    `fracdex.NKeysBetween` via `ranksAppending`, pinned to npm-captured vectors
+    in `server/testdata/nkeys_vectors.json`; and the write is deliberately NOT
+    one transaction, because the number allocator compare-and-swaps on a row the
+    same connection is writing and the counters recount from goroutines holding
+    a per-card lock — one transaction deadlocks against both.
+    A `hooks` flag (default OFF) suppresses per-card activity rows and
+    notifications; auto-watch stays on, since the importer owns the board.
+    Fixed alongside: the export sorted cards by rank GLOBALLY, but `position`
+    only orders within a list — so the export interleaved columns and a round
+    trip did not return the order it started with. Cards now come out by list,
+    then by rank.
+    Prior art used: `contacts/server/vcard_endpoints.go` (its `readImportBody`
+    handles multipart and raw alike) and `contacts/cli/transfer.go`.
 17. **Card covers.** First image attachment as the cover, via core's
     thumbnail pipeline.  Requires improving file handling so files can be sorted
 18. **Card and board templates.** An `is_template` flag using the duplicate
-    path, and a template picker in the New board dialog. UPDATE: this is out of scope
-20. **WIP limits and card aging.** `wip_limit` on lists with a warning header;
-    aging as a face tint from `updated`.
+    path, and a template picker in the New board dialog. **UPDATE: out of
+    scope.** Item 20 shipped and moved to the Shipped list.
 21. **Reports.** Burndown and velocity shipped with 14: a sprint's report
     (burndown against the ideal line, or scope-vs-done) draws from the daily
     `boards_sprint_snapshots` rows, and the backlog's Completed block opens

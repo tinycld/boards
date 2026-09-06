@@ -6,6 +6,7 @@ import {
     ArrowLeft,
     ArrowRight,
     FoldHorizontal,
+    Gauge,
     MoreHorizontal,
     Pencil,
     Trash2,
@@ -18,6 +19,7 @@ import { rankForReorder } from '../lib/move'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
 import type { BoardListRank, BoardListView } from '../types'
 import { CategoryGlyph } from './CategoryGlyph'
+import { WipLimitDialog } from './WipLimitDialog'
 
 interface ColumnMenuProps {
     list: BoardListView
@@ -35,6 +37,7 @@ interface ColumnMenuProps {
  */
 export function ColumnMenu({ list, listOrder, onRename }: ColumnMenuProps) {
     const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
+    const [isEditingLimit, setIsEditingLimit] = useState(false)
     const mutedColor = useThemeColor('muted')
     const updateList = useUpdateList()
     const deleteList = useDeleteList()
@@ -53,7 +56,11 @@ export function ColumnMenu({ list, listOrder, onRename }: ColumnMenuProps) {
         })
     }
 
-    const cardCount = list.cards.length
+    // The TOTAL, not `cards.length`: the cascade destroys every card in the
+    // column, including the ones a filter is currently hiding. Naming the
+    // filtered count would under-report exactly what this dialog exists to
+    // warn about.
+    const cardCount = list.totalCount
 
     return (
         <>
@@ -93,6 +100,12 @@ export function ColumnMenu({ list, listOrder, onRename }: ColumnMenuProps) {
                             onSelect={category => updateList.mutate({ listId: list.id, category })}
                         />
                         <MenuActionItem
+                            label={limitLabel(list.wipLimit)}
+                            icon={Gauge}
+                            testID="boards-column-wip-limit"
+                            onPress={() => setIsEditingLimit(true)}
+                        />
+                        <MenuActionItem
                             label="Delete list"
                             icon={Trash2}
                             onPress={() => {
@@ -106,6 +119,12 @@ export function ColumnMenu({ list, listOrder, onRename }: ColumnMenuProps) {
                     </Menu.Content>
                 </Menu.Portal>
             </Menu>
+
+            <WipLimitDialog
+                list={list}
+                isOpen={isEditingLimit}
+                onClose={() => setIsEditingLimit(false)}
+            />
 
             <ConfirmDialog
                 isOpen={isConfirmingDelete}
@@ -159,4 +178,9 @@ function StatusSubmenu({
             </Menu.SubContent>
         </Menu.Sub>
     )
+}
+
+/** The menu row states the current limit, so the value is readable without opening the dialog. */
+function limitLabel(limit: number | undefined): string {
+    return limit === undefined ? 'Set WIP limit…' : `WIP limit: ${limit}`
 }

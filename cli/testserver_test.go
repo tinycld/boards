@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -58,6 +59,9 @@ type fakeCards struct {
 	lastSprintPatch    map[string]any
 	lastSprintStart    map[string]any
 	lastSprintComplete map[string]any
+	lastExportQuery    string
+	lastImportQuery    string
+	lastImportBody     string
 	startedSprint      string
 	completedSprint    string
 	deletedSprints     []string
@@ -311,6 +315,11 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		if v, ok := body["category"].(string); ok {
 			l.Category = v
 		}
+		// float64: encoding/json decodes every number into an interface{} as
+		// one, so a plain int assertion here would silently never fire.
+		if v, ok := body["wip_limit"].(float64); ok {
+			l.WipLimit = int(v)
+		}
 		json.NewEncoder(w).Encode(l)
 	})
 	mux.HandleFunc("DELETE /api/collections/boards_lists/records/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -547,6 +556,53 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 			}
 		}
 		w.WriteHeader(http.StatusNoContent)
+	})
+	// The export endpoint hands back a finished document, so the fake returns a
+	// canned one — the projection itself is the server's, and is tested in
+	// server/endpoints_export_test.go against the real collections. What this
+	// stub proves is the half the CLI owns: that it resolved the board, asked
+	// for the right format, and moved the bytes without touching them.
+	// The import endpoint returns a canned report. The mapping itself is the
+	// server's and is covered in server/import_trello_test.go against a real
+	// Trello export; what this proves is the CLI half — that the file went up
+	// as a multipart part, the flags rode along, and the report was narrated.
+	mux.HandleFunc("POST /api/boards/import", func(w http.ResponseWriter, r *http.Request) {
+		f.lastImportQuery = r.URL.RawQuery
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			http.Error(w, "not multipart", http.StatusBadRequest)
+			return
+		}
+		file, _, err := r.FormFile("file")
+		if err != nil {
+			http.Error(w, "missing file", http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+		raw, _ := io.ReadAll(file)
+		f.lastImportBody = string(raw)
+		json.NewEncoder(w).Encode(map[string]any{
+			"project": "prjNew", "name": "Product Launch",
+			"lists": 3, "cards": 4, "labels": 2,
+			"checklist_items": 3, "comments": 2, "archived_cards": 1,
+			"dropped_assignees":  []string{"Ada Lovelace"},
+			"guessed_categories": map[string]string{"Done": "done"},
+			"failed":             1,
+			"errors":             []string{`card "Orphan": its list is not in the file`},
+		})
+	})
+	mux.HandleFunc("GET /api/boards/export", func(w http.ResponseWriter, r *http.Request) {
+		f.lastExportQuery = r.URL.RawQuery
+		if _, ok := f.projects[r.URL.Query().Get("project")]; !ok {
+			notFound(w)
+			return
+		}
+		if r.URL.Query().Get("format") == "json" {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.Write([]byte(`{"name":"Product launch","cards":[]}`))
+			return
+		}
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Write([]byte("key,title\nPL-1,Write copy\n"))
 	})
 	mux.HandleFunc("POST /api/boards/sprints/{id}/start", func(w http.ResponseWriter, r *http.Request) {
 		s, ok := f.sprints[r.PathValue("id")]

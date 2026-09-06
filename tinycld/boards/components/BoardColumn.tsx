@@ -1,6 +1,7 @@
 import { hapticImpactLight, hapticSelection, hapticSuccess } from '@tinycld/core/lib/haptics'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
+import { TriangleAlert } from 'lucide-react-native'
 import { memo, useCallback, useRef, useState } from 'react'
 import { Pressable, ScrollView, Text, View } from 'react-native'
 import type { DraxDragWithReceiverEventData, DraxMonitorEventData } from 'react-native-drax'
@@ -18,6 +19,7 @@ import {
 } from '../lib/dnd'
 import { formatEstimate, sumEstimates } from '../lib/estimate'
 import { rankForAppend, rankForReorder } from '../lib/move'
+import { formatWipCount, type WipState, wipState } from '../lib/wip'
 import { selectBoardSort, useBoardsUIStore } from '../stores/boards-ui-store'
 import type { BoardCardView, BoardListRank, BoardListView } from '../types'
 import { BoardCard } from './BoardCard'
@@ -87,6 +89,15 @@ interface BoardColumnProps {
     registerMeasure: (listId: string, measure: (() => void) | null) => void
     /** viaWriter — every affordance in this column mutates content. */
     canEdit: boolean
+    /**
+     * The board's aging threshold in days, 0 when off (lib/aging.ts).
+     *
+     * A plain scalar prop rather than a store read, exactly like `isSorted`
+     * below it: it is board-wide, it changes only when an owner saves a
+     * setting, and it therefore never moves mid-drag. Reading it per card from
+     * a hook would put a board query behind every face.
+     */
+    agingDays: number
 }
 
 type DropSide = 'before' | 'after'
@@ -105,6 +116,7 @@ export const BoardColumn = memo(function BoardColumn({
     listOrder,
     registerMeasure,
     canEdit,
+    agingDays,
 }: BoardColumnProps) {
     const [isRenaming, setIsRenaming] = useState(false)
     const [isReceiving, setIsReceiving] = useState(false)
@@ -267,6 +279,7 @@ export const BoardColumn = memo(function BoardColumn({
                         onReceivingChange={setIsReceiving}
                         canEdit={canEdit}
                         isSorted={isSorted}
+                        agingDays={agingDays}
                     />
                 )}
                 {canEdit && !isCollapsed ? (
@@ -329,14 +342,14 @@ function CollapsedColumnFace({
                 onPress={onExpand}
                 className="items-center gap-2 py-2 rounded-[10px] hover:bg-foreground/5 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
             >
-                <View className="bg-foreground/[0.06] rounded-full px-1.5 py-px">
-                    <Text
-                        className="text-[11px] font-semibold text-muted"
-                        testID={`boards-column-count-${list.id}`}
-                    >
-                        {countLabel(list)}
-                    </Text>
-                </View>
+                {/* The COLOUR and the warning, but not the "7 / 3" text: the
+                    spine is COLLAPSED_COLUMN_WIDTH wide, sized for a two-digit
+                    pill, and a count over a limit does not fit. A collapsed
+                    column must still report being over — that is exactly when
+                    it matters, since none of its cards are visible — so the
+                    tint and the triangle carry it and the number stays bare. */}
+                <CountBadge list={list} isCompact />
+                <WipWarning list={list} />
                 <CollapsedColumnName name={list.name} />
             </Pressable>
         </DraxView>
@@ -567,7 +580,7 @@ function ColumnDragGhost({ list }: { list: BoardListView }) {
     )
 }
 
-/** The column's status glyph, name and card count. */
+/** The column's status glyph, name, card count and WIP state. */
 function ColumnTitle({ list }: { list: BoardListView }) {
     return (
         <>
@@ -583,17 +596,55 @@ function ColumnTitle({ list }: { list: BoardListView }) {
                 {list.name}
             </Text>
             {/* shrink-0: the count must never be squeezed to nothing. */}
-            <View className="bg-foreground/[0.06] rounded-full px-1.5 py-px shrink-0">
-                <Text
-                    className="text-[11px] font-semibold text-muted"
-                    testID={`boards-column-count-${list.id}`}
-                >
-                    {countLabel(list)}
-                </Text>
-            </View>
+            <CountBadge list={list} />
+            <WipWarning list={list} />
             <EstimateTotal list={list} />
         </>
     )
+}
+
+/**
+ * The card count, coloured by the column's WIP limit.
+ *
+ * READS `totalCount`, NOT `cards.length`, and the contrast with EstimateTotal
+ * directly beside it is deliberate rather than an inconsistency. The estimate
+ * sums what the column SHOWS, so a filter narrows it. A limit must not move: a
+ * column that goes back under its limit because someone filtered the board
+ * would be worse than having no limit at all, since the one moment the warning
+ * matters is the moment someone is looking for a place to put a card.
+ *
+ * On a sprinting board `totalCount` is scoped to the sprint (buildBoardProject
+ * applies the scope before the totals), which is the right reading too — the
+ * limit governs the work in flight, not the whole backlog behind it.
+ */
+function CountBadge({ list, isCompact = false }: { list: BoardListView; isCompact?: boolean }) {
+    const state = wipState(list.totalCount, list.wipLimit)
+    const label = isCompact
+        ? String(list.totalCount)
+        : formatWipCount(list.cards.length, list.totalCount, list.wipLimit)
+    return (
+        <View className={`${wipBadgeClass(state)} rounded-full px-1.5 py-px shrink-0`}>
+            <Text
+                className={`text-[11px] font-semibold ${wipTextClass(state)}`}
+                testID={`boards-column-count-${list.id}`}
+            >
+                {label}
+            </Text>
+        </View>
+    )
+}
+
+/** Amber on the limit, red past it — soft tokens, so both themes are handled. */
+function wipBadgeClass(state: WipState): string {
+    if (state === 'over') return 'bg-danger-soft'
+    if (state === 'at') return 'bg-warning-soft'
+    return 'bg-foreground/[0.06]'
+}
+
+function wipTextClass(state: WipState): string {
+    if (state === 'over') return 'text-danger-soft-foreground'
+    if (state === 'at') return 'text-warning-soft-foreground'
+    return 'text-muted'
 }
 
 /**
@@ -616,10 +667,21 @@ function EstimateTotal({ list }: { list: BoardListView }) {
     )
 }
 
-/** "7" normally; "3/7" while a filter hides some of the column. */
-function countLabel(list: BoardListView): string {
-    if (list.cards.length === list.totalCount) return String(list.totalCount)
-    return `${list.cards.length}/${list.totalCount}`
+/**
+ * The over-limit warning: an icon beside the count, not a replacement for it.
+ *
+ * The colour alone cannot carry this — it is the one signal a red/green
+ * colour-blind reader would lose entirely, and the badge is 11px. The testID
+ * also gives the e2e something to assert that is not a computed colour.
+ */
+function WipWarning({ list }: { list: BoardListView }) {
+    const dangerColor = useThemeColor('danger')
+    if (wipState(list.totalCount, list.wipLimit) !== 'over') return null
+    return (
+        <View className="shrink-0" testID={`boards-column-wip-${list.id}`}>
+            <TriangleAlert size={12} color={dangerColor} strokeWidth={2.4} />
+        </View>
+    )
 }
 
 /** The rename input. Mounted only while renaming — see the key at its call site. */
@@ -680,6 +742,8 @@ interface ColumnCardsProps {
     canEdit: boolean
     /** A non-manual sort is on: within-column reorders must not commit. */
     isSorted: boolean
+    /** The board's aging threshold — see BoardColumnProps. */
+    agingDays: number
 }
 
 /**
@@ -705,6 +769,7 @@ const ColumnCards = memo(function ColumnCards({
     onReceivingChange,
     canEdit,
     isSorted,
+    agingDays,
 }: ColumnCardsProps) {
     const scrollRef = useRef<ScrollView>(null)
     const moveCard = useMoveCard()
@@ -808,6 +873,7 @@ const ColumnCards = memo(function ColumnCards({
                                 projectId={projectId}
                                 category={list.category}
                                 canDrag={canEdit}
+                                agingDays={agingDays}
                             />
                         </NoNativeDrag>
                     </SortableItem>

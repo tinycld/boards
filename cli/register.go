@@ -19,6 +19,8 @@ func Register(root *cobra.Command, c *client.Client) {
 		newBoardViewCmd(c),
 		newBoardArchiveCmd(c),
 		newBoardRemoveCmd(c),
+		newBoardExportCmd(c),
+		newBoardImportCmd(c),
 		newColumnCmd(c),
 		newCardCmd(c),
 		newSprintCmd(c),

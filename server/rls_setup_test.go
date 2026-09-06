@@ -373,6 +373,11 @@ type req struct {
 	// exercises — but the endpoint suites must bind the SAME route table
 	// production does, so a test cannot keep passing after that table changes.
 	before func(e *core.ServeEvent)
+	// body, when non-nil, receives the response body. The endpoint suites that
+	// parse what they got — an export decoded as CSV or JSON, or two runs
+	// compared byte for byte — need the bytes themselves, which `content`
+	// (a substring assertion) cannot give them.
+	into *string
 }
 
 func (r req) run(t *testing.T, env *cardsEnv) {
@@ -402,10 +407,19 @@ func (r req) run(t *testing.T, env *cardsEnv) {
 		TestAppFactory:        func(testing.TB) *tests.TestApp { return env.app },
 		DisableTestAppCleanup: true,
 	}
-	if r.after != nil {
-		after := r.after
-		scenario.AfterTestFunc = func(t testing.TB, app *tests.TestApp, _ *http.Response) {
-			after(t, app)
+	if r.after != nil || r.into != nil {
+		after, into := r.after, r.into
+		scenario.AfterTestFunc = func(t testing.TB, app *tests.TestApp, res *http.Response) {
+			if into != nil {
+				raw, err := io.ReadAll(res.Body)
+				if err != nil {
+					t.Fatalf("read response body: %v", err)
+				}
+				*into = string(raw)
+			}
+			if after != nil {
+				after(t, app)
+			}
 		}
 	}
 	if r.before != nil {
