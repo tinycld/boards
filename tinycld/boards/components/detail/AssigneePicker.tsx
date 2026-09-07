@@ -18,10 +18,22 @@ type AssigneePickerProps = {
  * stays open for the next one, unlike the single-choice pickers.
  */
 export function AssigneePicker({ members, assignedIds, onToggle, ...anchor }: AssigneePickerProps) {
-    const assigned = new Set(assignedIds)
-
     return (
         <Menu {...anchorPropsFor(anchor)} placement="bottom-start" title="Assignees">
+            <AssigneePickerRows members={members} assignedIds={assignedIds} onToggle={onToggle} />
+        </Menu>
+    )
+}
+
+/** The rows alone, for a menu that hosts them itself — a toolbar's More submenu. */
+export function AssigneePickerRows({
+    members,
+    assignedIds,
+    onToggle,
+}: Omit<AssigneePickerProps, keyof PickerAnchor>) {
+    const assigned = new Set(assignedIds)
+    return (
+        <>
             <EmptyState isVisible={members.length === 0} />
             {members.map(member => (
                 <Menu.CheckboxItem
@@ -31,7 +43,7 @@ export function AssigneePicker({ members, assignedIds, onToggle, ...anchor }: As
                     onToggle={() => onToggle(member.id, assigned.has(member.id))}
                 />
             ))}
-        </Menu>
+        </>
     )
 }
 

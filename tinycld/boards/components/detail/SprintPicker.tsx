@@ -27,10 +27,22 @@ type SprintPickerProps = {
  * beside the cards going into it.
  */
 export function SprintPicker({ sprints, selectedId, onSelect, ...anchor }: SprintPickerProps) {
-    const offered = sprints.filter(sprint => isOpenForFiling(sprint) || sprint.id === selectedId)
-
     return (
         <Menu {...anchorPropsFor(anchor)} placement="bottom-start" title="Sprint">
+            <SprintPickerRows sprints={sprints} selectedId={selectedId} onSelect={onSelect} />
+        </Menu>
+    )
+}
+
+/** The rows alone, for a menu that hosts them itself — a toolbar's More submenu. */
+export function SprintPickerRows({
+    sprints,
+    selectedId,
+    onSelect,
+}: Omit<SprintPickerProps, keyof PickerAnchor>) {
+    const offered = sprints.filter(sprint => isOpenForFiling(sprint) || sprint.id === selectedId)
+    return (
+        <>
             <EmptyState isVisible={offered.length === 0} />
             {offered.map(sprint => (
                 <Menu.Item
@@ -46,7 +58,7 @@ export function SprintPicker({ sprints, selectedId, onSelect, ...anchor }: Sprin
                 isVisible={selectedId !== '' && selectedId !== undefined}
                 onSelect={onSelect}
             />
-        </Menu>
+        </>
     )
 }
 

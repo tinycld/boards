@@ -24,10 +24,28 @@ export function LabelPicker({
     onManage,
     ...anchor
 }: LabelPickerProps) {
-    const selected = new Set(selectedIds)
-
     return (
         <Menu {...anchorPropsFor(anchor)} placement="bottom-start" title="Labels">
+            <LabelPickerRows
+                labels={labels}
+                selectedIds={selectedIds}
+                onToggle={onToggle}
+                onManage={onManage}
+            />
+        </Menu>
+    )
+}
+
+/** The rows alone, for a menu that hosts them itself — a toolbar's More submenu. */
+export function LabelPickerRows({
+    labels,
+    selectedIds,
+    onToggle,
+    onManage,
+}: Omit<LabelPickerProps, keyof PickerAnchor>) {
+    const selected = new Set(selectedIds)
+    return (
+        <>
             <EmptyState isVisible={labels.length === 0} />
             {labels.map(label => (
                 <Menu.CheckboxItem
@@ -39,7 +57,7 @@ export function LabelPicker({
                 />
             ))}
             <Menu.Item label="Manage labels…" icon={Settings2} onSelect={onManage} />
-        </Menu>
+        </>
     )
 }
 
