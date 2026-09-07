@@ -11,6 +11,7 @@ import type { Awareness } from 'y-protocols/awareness'
 import type * as Y from 'yjs'
 import type { PresenceUser } from '../../hooks/useBoardPresence'
 import { useEditorImageActions } from '../../hooks/useEditorImageActions'
+import { useFlushBoardRoom } from '../../hooks/useFlushBoardRoom'
 import { useMentionTrigger } from '../../hooks/useMentionTrigger'
 import type { BoardAttachment } from '../../types'
 import { ImageAttachmentPicker } from './ImageAttachmentPicker'
@@ -162,6 +163,11 @@ export function useDescriptionEditor({
     // commenting standing — see useMentionTrigger.
     const mention = useMentionTrigger(projectId)
 
+    // Ending a session hands the surface back to the read view, which renders
+    // the RECORD — see useFlushBoardRoom for why that needs the server to
+    // catch up first.
+    const flushRoom = useFlushBoardRoom(projectId)
+
     const slots = useLazyEditor({
         surfaceId: `description:${cardId}`,
         readView,
@@ -273,7 +279,15 @@ export function useDescriptionEditor({
         renderEditor: editorSlots => {
             // Published here rather than in an effect: the options above hold a
             // ref to it, and it must be current before the first keystroke.
-            cancelRef.current = editorSlots.cancel
+            //
+            // Wrapped so that EVERY way of leaving — Escape, ⌘↩, the close
+            // button — flushes the room on the way out. Blur no longer ends a
+            // session, so these are the paths that hand the surface back to the
+            // read view.
+            cancelRef.current = () => {
+                editorSlots.cancel()
+                flushRoom()
+            }
             return (
                 <DescriptionBody
                     containerRef={containerRef}
