@@ -269,189 +269,205 @@ export function selectBoardSort(state: BoardsUIState, projectId: string): BoardS
 
 export const useBoardsUIStore = create<BoardsUIState>()(
     persist(
-        set => ({
-            activeProjectId: null,
-            // Switching boards closes the peek: the open card belongs to the
-            // board being left, so it would resolve to nothing and the peek
-            // would silently empty itself.
-            setActiveProject: projectId =>
-                set({
-                    activeProjectId: projectId,
-                    openCardId: null,
-                    openPickerFor: null,
-                    // The selection belongs to the board being left; carrying it
-                    // over would aim a bulk action at cards that are no longer
-                    // on screen.
-                    selectedCardIds: new Set<string>(),
-                    lastSelectedId: null,
-                }),
-            openCardId: null,
-            openCard: cardId => set({ openCardId: cardId }),
-            closeCard: () => set({ openCardId: null }),
-            isNewBoardOpen: false,
-            openNewBoard: () => set({ isNewBoardOpen: true }),
-            closeNewBoard: () => set({ isNewBoardOpen: false }),
-            isCardDragging: false,
-            setCardDragging: isDragging => set({ isCardDragging: isDragging }),
-            focusedCardId: null,
-            focusedColumnId: null,
-            // Moving the ring closes an open canvas picker. Its anchor is the
-            // rect of the card that WAS focused, so leaving it up would float a
-            // menu beside a card the ring has moved off, still writing to the
-            // card it was opened for.
-            focusCard: cardId =>
-                set({ focusedCardId: cardId, focusedColumnId: null, openPickerFor: null }),
-            focusColumn: columnId =>
-                set({ focusedCardId: null, focusedColumnId: columnId, openPickerFor: null }),
-            selectedCardIds: new Set<string>(),
-            lastSelectedId: null,
-            isSelectMode: false,
-            selectionOrderIds: [],
-            setSelectionOrder: ids => set({ selectionOrderIds: ids }),
-            selectSingle: cardId =>
-                set({ selectedCardIds: new Set([cardId]), lastSelectedId: cardId }),
-            // Re-anchors on every toggle, so a ⌘-click then ⇧-click extends
-            // from the card just picked rather than from an older one.
-            selectToggle: cardId =>
-                set(s => {
-                    const next = new Set(s.selectedCardIds)
-                    if (next.has(cardId)) next.delete(cardId)
-                    else next.add(cardId)
-                    return { selectedCardIds: next, lastSelectedId: cardId }
-                }),
-            // Falls back to a single selection when there is no anchor, or when
-            // either end is missing from `orderedIds` — which is what a filter
-            // hiding the anchor looks like. Extending from a card the user
-            // cannot see would select a run they never chose.
-            selectRange: (cardId, orderedIds) =>
-                set(s => {
-                    const anchor = s.lastSelectedId
-                    if (!anchor)
-                        return { selectedCardIds: new Set([cardId]), lastSelectedId: cardId }
-                    const from = orderedIds.indexOf(anchor)
-                    const to = orderedIds.indexOf(cardId)
-                    if (from === -1 || to === -1) {
-                        return { selectedCardIds: new Set([cardId]), lastSelectedId: cardId }
-                    }
-                    const lo = Math.min(from, to)
-                    const hi = Math.max(from, to)
-                    const range = orderedIds.slice(lo, hi + 1)
-                    return {
-                        selectedCardIds: new Set([...s.selectedCardIds, ...range]),
-                        lastSelectedId: cardId,
-                    }
-                }),
-            // Adds rather than toggling: "select all" pressed twice must leave
-            // everything selected, not invert the set. The anchor moves to the
-            // last id so a following shift-click extends from the end of the
-            // run, which is where the user's attention is.
-            selectMany: ids =>
-                set(s => ({
-                    selectedCardIds: new Set([...s.selectedCardIds, ...ids]),
-                    lastSelectedId: ids.at(-1) ?? s.lastSelectedId,
-                })),
-            clearSelection: () => set({ selectedCardIds: new Set<string>(), lastSelectedId: null }),
-            // Leaving the mode drops the selection: the bar goes with it, so a
-            // kept selection would be targeted by shortcuts with nothing on
-            // screen saying it exists.
-            setSelectMode: isOn =>
-                set(
-                    isOn
-                        ? { isSelectMode: true }
-                        : {
-                              isSelectMode: false,
-                              selectedCardIds: new Set<string>(),
-                              lastSelectedId: null,
-                          }
-                ),
-            collapsedColumnIds: {},
-            // Deletes rather than storing `false`, so the map holds only
-            // collapsed ids and never accumulates an entry per list the user
-            // has ever expanded.
-            toggleColumnCollapsed: listId =>
-                set(s => {
-                    const next = { ...s.collapsedColumnIds }
-                    if (next[listId]) delete next[listId]
-                    else next[listId] = true
-                    return { collapsedColumnIds: next }
-                }),
-            collapsedSprintIds: {},
-            toggleSprintCollapsed: key =>
-                set(s => {
-                    const next = { ...s.collapsedSprintIds }
-                    if (next[key]) delete next[key]
-                    else next[key] = true
-                    return { collapsedSprintIds: next }
-                }),
-            isCompactCards: false,
-            toggleCompactCards: () => set(s => ({ isCompactCards: !s.isCompactCards })),
-            composerOpenListId: null,
-            openComposer: listId => set({ composerOpenListId: listId }),
-            isAddListOpen: false,
-            setAddListOpen: isOpen => set({ isAddListOpen: isOpen }),
-            openPickerFor: null,
-            openCanvasPicker: picker => set({ openPickerFor: picker }),
-            isArchivedPanelOpen: false,
-            openArchivedPanel: () => set({ isArchivedPanelOpen: true }),
-            closeArchivedPanel: () => set({ isArchivedPanelOpen: false }),
-            isArchivedBoardsExpanded: false,
-            toggleArchivedBoards: () =>
-                set(s => ({ isArchivedBoardsExpanded: !s.isArchivedBoardsExpanded })),
-            boardFilters: {},
-            boardSorts: {},
-            // A selected card that the new filter hides is invisible but still
-            // targeted — the next bulk action would hit rows the user cannot
-            // see. Clearing here rather than in an effect keeps it at the one
-            // moment the filter actually changes.
-            setBoardFilter: (projectId, patch) =>
-                set(s => ({
-                    boardFilters: {
-                        ...s.boardFilters,
-                        [projectId]: { ...selectBoardFilter(s, projectId), ...patch },
-                    },
-                    selectedCardIds: new Set<string>(),
-                    lastSelectedId: null,
-                })),
-            // Deletes the key rather than storing EMPTY_FILTER, so the selector
-            // hands back the shared constant again.
-            clearBoardFilter: projectId =>
-                set(s => {
-                    const next = { ...s.boardFilters }
-                    delete next[projectId]
-                    return {
-                        boardFilters: next,
+        rawSet => {
+            // Every action below is a concise arrow (`() => set({...})`), so it
+            // RETURNS whatever `set` returns. Under `persist` that is the
+            // AsyncStorage write's promise, which makes each action — all typed
+            // `=> void` — a thenable. `act(() => store.openCard(id))` in a test
+            // then sees a thenable, switches to async mode, and is never
+            // awaited: React's act queue is left unflushed and the NEXT test's
+            // mount effects silently never run. Discarding the return value
+            // here fixes every action at once, including ones added later.
+            const set = (
+                partial: Partial<BoardsUIState> | ((state: BoardsUIState) => Partial<BoardsUIState>)
+            ): void => {
+                rawSet(partial)
+            }
+            return {
+                activeProjectId: null,
+                // Switching boards closes the peek: the open card belongs to the
+                // board being left, so it would resolve to nothing and the peek
+                // would silently empty itself.
+                setActiveProject: projectId =>
+                    set({
+                        activeProjectId: projectId,
+                        openCardId: null,
+                        openPickerFor: null,
+                        // The selection belongs to the board being left; carrying it
+                        // over would aim a bulk action at cards that are no longer
+                        // on screen.
                         selectedCardIds: new Set<string>(),
                         lastSelectedId: null,
-                    }
-                }),
-            setBoardSort: (projectId, sort) =>
-                set(s => ({ boardSorts: { ...s.boardSorts, [projectId]: sort } })),
-            isFilterPanelOpen: false,
-            setFilterPanelOpen: isOpen => set({ isFilterPanelOpen: isOpen }),
-            viewModeByProject: {},
-            // Switching view drops the selection, the way switching board
-            // does: a range picked on the canvas means something different in
-            // a table sorted by due date, and cards selected in one view can
-            // be off-screen in the next while still being targeted by `x`.
-            setViewMode: (projectId, mode) =>
-                set(s => ({
-                    viewModeByProject: { ...s.viewModeByProject, [projectId]: mode },
-                    selectedCardIds: new Set<string>(),
-                    lastSelectedId: null,
-                })),
-            sprintScopeByProject: {},
-            // A scope change is the fourth moment a selection goes stale: the
-            // cards it targeted may be off screen in the new scope.
-            setSprintScope: (projectId, scope) =>
-                set(s => ({
-                    sprintScopeByProject: { ...s.sprintScopeByProject, [projectId]: scope },
-                    selectedCardIds: new Set<string>(),
-                    lastSelectedId: null,
-                })),
-            isMyCardsShowingClosed: false,
-            toggleMyCardsShowClosed: () =>
-                set(s => ({ isMyCardsShowingClosed: !s.isMyCardsShowingClosed })),
-        }),
+                    }),
+                openCardId: null,
+                openCard: cardId => set({ openCardId: cardId }),
+                closeCard: () => set({ openCardId: null }),
+                isNewBoardOpen: false,
+                openNewBoard: () => set({ isNewBoardOpen: true }),
+                closeNewBoard: () => set({ isNewBoardOpen: false }),
+                isCardDragging: false,
+                setCardDragging: isDragging => set({ isCardDragging: isDragging }),
+                focusedCardId: null,
+                focusedColumnId: null,
+                // Moving the ring closes an open canvas picker. Its anchor is the
+                // rect of the card that WAS focused, so leaving it up would float a
+                // menu beside a card the ring has moved off, still writing to the
+                // card it was opened for.
+                focusCard: cardId =>
+                    set({ focusedCardId: cardId, focusedColumnId: null, openPickerFor: null }),
+                focusColumn: columnId =>
+                    set({ focusedCardId: null, focusedColumnId: columnId, openPickerFor: null }),
+                selectedCardIds: new Set<string>(),
+                lastSelectedId: null,
+                isSelectMode: false,
+                selectionOrderIds: [],
+                setSelectionOrder: ids => set({ selectionOrderIds: ids }),
+                selectSingle: cardId =>
+                    set({ selectedCardIds: new Set([cardId]), lastSelectedId: cardId }),
+                // Re-anchors on every toggle, so a ⌘-click then ⇧-click extends
+                // from the card just picked rather than from an older one.
+                selectToggle: cardId =>
+                    set(s => {
+                        const next = new Set(s.selectedCardIds)
+                        if (next.has(cardId)) next.delete(cardId)
+                        else next.add(cardId)
+                        return { selectedCardIds: next, lastSelectedId: cardId }
+                    }),
+                // Falls back to a single selection when there is no anchor, or when
+                // either end is missing from `orderedIds` — which is what a filter
+                // hiding the anchor looks like. Extending from a card the user
+                // cannot see would select a run they never chose.
+                selectRange: (cardId, orderedIds) =>
+                    set(s => {
+                        const anchor = s.lastSelectedId
+                        if (!anchor)
+                            return { selectedCardIds: new Set([cardId]), lastSelectedId: cardId }
+                        const from = orderedIds.indexOf(anchor)
+                        const to = orderedIds.indexOf(cardId)
+                        if (from === -1 || to === -1) {
+                            return { selectedCardIds: new Set([cardId]), lastSelectedId: cardId }
+                        }
+                        const lo = Math.min(from, to)
+                        const hi = Math.max(from, to)
+                        const range = orderedIds.slice(lo, hi + 1)
+                        return {
+                            selectedCardIds: new Set([...s.selectedCardIds, ...range]),
+                            lastSelectedId: cardId,
+                        }
+                    }),
+                // Adds rather than toggling: "select all" pressed twice must leave
+                // everything selected, not invert the set. The anchor moves to the
+                // last id so a following shift-click extends from the end of the
+                // run, which is where the user's attention is.
+                selectMany: ids =>
+                    set(s => ({
+                        selectedCardIds: new Set([...s.selectedCardIds, ...ids]),
+                        lastSelectedId: ids.at(-1) ?? s.lastSelectedId,
+                    })),
+                clearSelection: () =>
+                    set({ selectedCardIds: new Set<string>(), lastSelectedId: null }),
+                // Leaving the mode drops the selection: the bar goes with it, so a
+                // kept selection would be targeted by shortcuts with nothing on
+                // screen saying it exists.
+                setSelectMode: isOn =>
+                    set(
+                        isOn
+                            ? { isSelectMode: true }
+                            : {
+                                  isSelectMode: false,
+                                  selectedCardIds: new Set<string>(),
+                                  lastSelectedId: null,
+                              }
+                    ),
+                collapsedColumnIds: {},
+                // Deletes rather than storing `false`, so the map holds only
+                // collapsed ids and never accumulates an entry per list the user
+                // has ever expanded.
+                toggleColumnCollapsed: listId =>
+                    set(s => {
+                        const next = { ...s.collapsedColumnIds }
+                        if (next[listId]) delete next[listId]
+                        else next[listId] = true
+                        return { collapsedColumnIds: next }
+                    }),
+                collapsedSprintIds: {},
+                toggleSprintCollapsed: key =>
+                    set(s => {
+                        const next = { ...s.collapsedSprintIds }
+                        if (next[key]) delete next[key]
+                        else next[key] = true
+                        return { collapsedSprintIds: next }
+                    }),
+                isCompactCards: false,
+                toggleCompactCards: () => set(s => ({ isCompactCards: !s.isCompactCards })),
+                composerOpenListId: null,
+                openComposer: listId => set({ composerOpenListId: listId }),
+                isAddListOpen: false,
+                setAddListOpen: isOpen => set({ isAddListOpen: isOpen }),
+                openPickerFor: null,
+                openCanvasPicker: picker => set({ openPickerFor: picker }),
+                isArchivedPanelOpen: false,
+                openArchivedPanel: () => set({ isArchivedPanelOpen: true }),
+                closeArchivedPanel: () => set({ isArchivedPanelOpen: false }),
+                isArchivedBoardsExpanded: false,
+                toggleArchivedBoards: () =>
+                    set(s => ({ isArchivedBoardsExpanded: !s.isArchivedBoardsExpanded })),
+                boardFilters: {},
+                boardSorts: {},
+                // A selected card that the new filter hides is invisible but still
+                // targeted — the next bulk action would hit rows the user cannot
+                // see. Clearing here rather than in an effect keeps it at the one
+                // moment the filter actually changes.
+                setBoardFilter: (projectId, patch) =>
+                    set(s => ({
+                        boardFilters: {
+                            ...s.boardFilters,
+                            [projectId]: { ...selectBoardFilter(s, projectId), ...patch },
+                        },
+                        selectedCardIds: new Set<string>(),
+                        lastSelectedId: null,
+                    })),
+                // Deletes the key rather than storing EMPTY_FILTER, so the selector
+                // hands back the shared constant again.
+                clearBoardFilter: projectId =>
+                    set(s => {
+                        const next = { ...s.boardFilters }
+                        delete next[projectId]
+                        return {
+                            boardFilters: next,
+                            selectedCardIds: new Set<string>(),
+                            lastSelectedId: null,
+                        }
+                    }),
+                setBoardSort: (projectId, sort) =>
+                    set(s => ({ boardSorts: { ...s.boardSorts, [projectId]: sort } })),
+                isFilterPanelOpen: false,
+                setFilterPanelOpen: isOpen => set({ isFilterPanelOpen: isOpen }),
+                viewModeByProject: {},
+                // Switching view drops the selection, the way switching board
+                // does: a range picked on the canvas means something different in
+                // a table sorted by due date, and cards selected in one view can
+                // be off-screen in the next while still being targeted by `x`.
+                setViewMode: (projectId, mode) =>
+                    set(s => ({
+                        viewModeByProject: { ...s.viewModeByProject, [projectId]: mode },
+                        selectedCardIds: new Set<string>(),
+                        lastSelectedId: null,
+                    })),
+                sprintScopeByProject: {},
+                // A scope change is the fourth moment a selection goes stale: the
+                // cards it targeted may be off screen in the new scope.
+                setSprintScope: (projectId, scope) =>
+                    set(s => ({
+                        sprintScopeByProject: { ...s.sprintScopeByProject, [projectId]: scope },
+                        selectedCardIds: new Set<string>(),
+                        lastSelectedId: null,
+                    })),
+                isMyCardsShowingClosed: false,
+                toggleMyCardsShowClosed: () =>
+                    set(s => ({ isMyCardsShowingClosed: !s.isMyCardsShowingClosed })),
+            }
+        },
         {
             name: 'tinycld_boards_ui',
             storage: asyncStorage,

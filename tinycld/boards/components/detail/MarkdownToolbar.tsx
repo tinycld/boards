@@ -96,12 +96,10 @@ export function MarkdownToolbar({
                     activeColor={activeColor}
                 />
             ),
-            // A custom item without these three vanishes at narrow widths
-            // rather than folding into the overflow menu — and the peek panel
+            // A custom item without `overflow` is pinned: it vanishes at narrow
+            // widths rather than folding into the More menu — and the peek panel
             // is exactly the narrow case this toolbar has to survive.
-            overflowLabel: label,
-            overflowIcon: icon,
-            overflowPress: onPress,
+            overflow: { label, icon, onPress },
         })
 
         const headingLevel = toolbarState.activeHeadingLevel ?? null
