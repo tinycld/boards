@@ -85,7 +85,9 @@ test.describe('Boards — archive and restore', () => {
         const archivedToggle = page.getByTestId('boards-archived-boards')
         await expect(archivedToggle).toBeVisible()
         await archivedToggle.click()
-        await page.getByText(name, { exact: true }).click()
+        // Scoped to the SIDEBAR: the board's name also renders in the board
+        // header behind it, so an unscoped match is ambiguous.
+        await page.getByTestId('package-sidebar-mounted').getByText(name, { exact: true }).click()
 
         const banner = page.getByTestId('boards-archived-banner')
         await expect(banner).toBeVisible()

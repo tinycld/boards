@@ -32,7 +32,11 @@ import { addCard, boardCard, createBoard } from './helpers'
 const CARD_TITLE = 'Ship the release notes'
 
 async function openBoard(page: Page, name: string) {
-    await page.getByText(name, { exact: true }).first().click()
+    // Scoped to the SIDEBAR. A board's name renders in the board header too, so
+    // an unscoped match is ambiguous as soon as any board is showing, and
+    // `.first()` merely picked whichever the DOM happened to order first — the
+    // header, once a board is open.
+    await page.getByTestId('package-sidebar-mounted').getByText(name, { exact: true }).click()
     await expect(boardCard(page, CARD_TITLE)).toBeVisible()
 }
 

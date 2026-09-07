@@ -26,6 +26,18 @@ async function planSprint(page: import('@playwright/test').Page) {
     await expect(sprintTitle(page)).toHaveText('Sprint 1')
 }
 
+/**
+ * A second sprint, so the backlog has a section the active scope would empty.
+ *
+ * Gated on the TITLE rather than a section testID: a section is keyed by the
+ * sprint's record id, which the spec cannot know.
+ */
+async function planSprint2(page: import('@playwright/test').Page) {
+    await page.getByTestId('boards-new-sprint').click()
+    await page.getByTestId('boards-sprint-save').click()
+    await expect(page.getByText('Sprint 2', { exact: true }).first()).toBeVisible()
+}
+
 const sprintTitle = (page: import('@playwright/test').Page) =>
     page.getByTestId(/^boards-section-title-(?!backlog)/).first()
 
@@ -99,6 +111,66 @@ test.describe('Boards — backlog and sprints', () => {
         await page.keyboard.press('s')
         await page.getByTestId('boards-sprint-option-1').click()
         await expect(sprintSection(page).getByText('keyed')).toBeVisible()
+    })
+
+    /**
+     * The backlog shows EVERY sprint, whatever the board is scoped to.
+     *
+     * The scope pill defaults to "Active sprint", and that scope was applied to
+     * the backlog too — so the moment a team started a sprint, every OTHER
+     * section of their backlog read as empty. The planned sprint's cards and
+     * the backlog's cards were filtered out of the tree before the view ever
+     * sectioned them.
+     *
+     * Needs a STARTED sprint: with none running, `active` already resolves to
+     * every card and the bug is invisible.
+     */
+    test('shows every sprint’s cards even when a sprint is running', async ({ page }) => {
+        await freshSprintBoard(page, 'scope')
+        await addCard(page, 0, 'running work')
+        await addCard(page, 0, 'planned work')
+        await addCard(page, 0, 'backlog work')
+
+        await page.getByTestId('boards-view-backlog').click()
+        await planSprint(page)
+        await dragCardToSection(page, row(page, 'running work'), 'Sprint 1')
+        await expect(sprintSection(page).getByText('running work')).toBeVisible()
+
+        await page.getByTestId('boards-sprint-start-1').click()
+        await page.getByTestId('boards-start-sprint-confirm').click()
+
+        // A second sprint, so there is a section the active scope would empty.
+        await planSprint2(page)
+        await dragCardToSection(page, row(page, 'planned work'), 'Sprint 2')
+
+        // All three, across all three sections. Sprint 1 is active, so a board
+        // still honouring the scope here would show only "running work".
+        //
+        // Counted rather than asserted visible: drax renders each row inside a
+        // measuring wrapper as well as its section, so an unscoped text match
+        // resolves to the same row twice and trips strict mode. What matters
+        // here is that the card is PRESENT at all — under the bug its section
+        // was empty.
+        await expect(row(page, 'running work')).toBeVisible()
+        await expect(row(page, 'planned work')).toBeVisible()
+        await expect(
+            page
+                .getByTestId('boards-section-backlog')
+                .getByTestId(/^boards-row-/)
+                .filter({
+                    hasText: 'backlog work',
+                })
+        ).toBeVisible()
+
+        // And the control that would narrow it is not offered here at all.
+        await expect(page.getByTestId('boards-sprint-scope')).toHaveCount(0)
+
+        // The board view still honours it: switching back scopes to the active
+        // sprint, which is what makes this an exemption rather than a removal.
+        await page.getByTestId('boards-view-board').click()
+        await expect(page.getByTestId('boards-sprint-scope')).toBeVisible()
+        await expect(boardCard(page, 'running work')).toBeVisible()
+        await expect(boardCard(page, 'backlog work')).toHaveCount(0)
     })
 
     test('filters the board by sprint', async ({ page }) => {

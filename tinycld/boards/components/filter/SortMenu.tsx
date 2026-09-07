@@ -1,7 +1,9 @@
+import { Tooltip } from '@tinycld/core/components/Tooltip'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { Menu } from '@tinycld/core/ui/menu'
 import { ArrowDownAZ, ArrowUpAZ, ArrowUpDown } from 'lucide-react-native'
-import { Pressable } from 'react-native'
+import { forwardRef } from 'react'
+import { Pressable, type View } from 'react-native'
 import { SORT_FIELD_LABELS, type SortField } from '../../lib/board-sort'
 import { selectBoardSort, useBoardsUIStore } from '../../stores/boards-ui-store'
 
@@ -33,20 +35,10 @@ export function SortMenu({ projectId }: { projectId: string }) {
     return (
         <Menu
             trigger={
-                <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={
-                        isSorted ? `Sorted by ${SORT_FIELD_LABELS[sort.field]}` : 'Sort cards'
-                    }
-                    testID="boards-sort-button"
-                    className="w-7 h-7 items-center justify-center rounded-md hover:bg-foreground/10 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
-                >
-                    <ArrowUpDown
-                        size={15}
-                        color={isSorted ? activeColor : mutedColor}
-                        strokeWidth={2}
-                    />
-                </Pressable>
+                <SortTrigger
+                    label={isSorted ? `Sorted by ${SORT_FIELD_LABELS[sort.field]}` : 'Sort cards'}
+                    color={isSorted ? activeColor : mutedColor}
+                />
             }
             placement="bottom-end"
             title="Sort cards"
@@ -76,3 +68,31 @@ export function SortMenu({ projectId }: { projectId: string }) {
         </Menu>
     )
 }
+
+/**
+ * The trigger, as a forwardRef component rather than an inline Pressable.
+ *
+ * The Menu clones its trigger to inject an onPress and a ref it measures for
+ * placement. Tooltip is a Fragment on native, so an inline
+ * `<Tooltip><Pressable/></Tooltip>` would hand both to the Fragment and the
+ * menu would never open. Cloning a real component that forwards the ref to its
+ * own Pressable — with the tooltip inside — works on both platforms.
+ */
+const SortTrigger = forwardRef<View, { label: string; color: string; onPress?: () => void }>(
+    function SortTrigger({ label, color, onPress }, ref) {
+        return (
+            <Tooltip label={label}>
+                <Pressable
+                    ref={ref}
+                    accessibilityRole="button"
+                    accessibilityLabel={label}
+                    testID="boards-sort-button"
+                    onPress={onPress}
+                    className="w-7 h-7 items-center justify-center rounded-md hover:bg-foreground/10 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+                >
+                    <ArrowUpDown size={15} color={color} strokeWidth={2} />
+                </Pressable>
+            </Tooltip>
+        )
+    }
+)

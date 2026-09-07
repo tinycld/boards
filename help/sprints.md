@@ -98,6 +98,10 @@ specific sprint or the backlog is for the moment. The table, timeline and
 calendar follow the same scope, and the timeline draws each sprint as a band
 over its dates.
 
+The **backlog view is the exception** — it always shows every sprint, because
+seeing them side by side is what it is for. The pill isn't shown there. Switch
+back to the board and your scope is exactly as you left it.
+
 A board with sprints on but none running shows every card.
 
 ## Completing a sprint

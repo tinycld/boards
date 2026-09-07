@@ -5,10 +5,13 @@ import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
 import { useMemo, useRef } from 'react'
 import { type BoardViewOptions, buildBoardProject } from '../lib/board-project'
 import {
+    type SprintScope,
     selectBoardFilter,
     selectBoardSort,
     selectSprintScope,
+    selectViewMode,
     useBoardsUIStore,
+    type ViewMode,
 } from '../stores/boards-ui-store'
 import type { BoardProject } from '../types'
 import { useBoardLiveQuery } from './useBoardLiveQuery'
@@ -104,6 +107,27 @@ export function useSidebarBoards() {
     return { projects, archivedProjects, activeProjectId: resolvedId }
 }
 
+/**
+ * The scope a view may be narrowed by — every view but the backlog.
+ *
+ * The backlog IS the multi-sprint view: the active sprint, each planned sprint
+ * and the backlog, every one its own section. Narrowing it to a single sprint
+ * empties all the other sections, which is exactly what the default 'active'
+ * scope did to it — a board scoped to the active sprint showed a backlog whose
+ * every other section read as empty.
+ *
+ * Returns undefined rather than writing 'all' to the store, so switching back
+ * to the board restores whatever scope the reader had set there. Pure and
+ * exported because that distinction — ignored here, not reset — is the part a
+ * later tidy-up would collapse into a setSprintScope call.
+ */
+export function scopeForView(
+    viewMode: ViewMode,
+    storedScope: SprintScope
+): SprintScope | undefined {
+    return viewMode === 'backlog' ? undefined : storedScope
+}
+
 export function useActiveBoard() {
     const activeProjectId = useBoardsUIStore(s => s.activeProjectId)
     const { projects, archivedProjects, projectsLoading } = useBoardList()
@@ -121,11 +145,24 @@ export function useActiveBoard() {
     // The per-user view: filter + sort for THIS board, and who "me" is. The
     // selectors return shared constants when nothing is set, so the memo
     // below only rebuilds when a facet actually changes.
+    //
+    // All three keyed on the RESOLVED projectId. The scope used to read
+    // `activeProjectId ?? ''` — the STORED id — so on a cold start, or whenever
+    // the stored id named a board this user can no longer open, it looked its
+    // scope up under '' and silently answered 'active' for whichever board had
+    // actually been resolved.
     const filter = useBoardsUIStore(s => selectBoardFilter(s, projectId))
     const sort = useBoardsUIStore(s => selectBoardSort(s, projectId))
     const { user } = useAuth({ throwIfAnon: false })
     const userId = user?.id ?? ''
-    const sprintScope = useBoardsUIStore(s => selectSprintScope(s, activeProjectId ?? ''))
+    const storedScope = useBoardsUIStore(s => selectSprintScope(s, projectId))
+    // Whether the board plans in sprints, from the LIST rows — known before any
+    // content is built, which is what lets the view mode be resolved here
+    // rather than after the board exists.
+    const sprintsEnabled =
+        [...projects, ...archivedProjects].find(p => p.id === projectId)?.sprints_enabled ?? false
+    const viewMode = useBoardsUIStore(s => selectViewMode(s, projectId, sprintsEnabled))
+    const sprintScope = scopeForView(viewMode, storedScope)
     const view = useMemo<BoardViewOptions>(
         () => ({ filter, sort, userId, sprintScope }),
         [filter, sort, userId, sprintScope]
