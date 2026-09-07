@@ -220,28 +220,33 @@ function MintControls({
             <View className="flex-row items-center gap-2">
                 <PickerMenu
                     label={roleOptionLabel(role)}
+                    title="Link allows"
                     accessibilityLabel="Change what the link allows"
                     mutedColor={mutedColor}
                 >
                     {SHARE_LINK_ROLE_OPTIONS.map(option => (
                         <Menu.Item
                             key={option.value}
-                            onPress={() => onRoleChange(option.value as BoardsShareLinkRole)}
-                        >
-                            <Menu.ItemTitle>{option.label}</Menu.ItemTitle>
-                        </Menu.Item>
+                            label={option.label}
+                            isSelected={option.value === role}
+                            onSelect={() => onRoleChange(option.value as BoardsShareLinkRole)}
+                        />
                     ))}
                 </PickerMenu>
 
                 <PickerMenu
                     label={expiryOptionLabel(expiry)}
+                    title="Link expires"
                     accessibilityLabel="Change when the link expires"
                     mutedColor={mutedColor}
                 >
                     {SHARE_LINK_EXPIRY_OPTIONS.map(option => (
-                        <Menu.Item key={option.value} onPress={() => onExpiryChange(option.value)}>
-                            <Menu.ItemTitle>{option.label}</Menu.ItemTitle>
-                        </Menu.Item>
+                        <Menu.Item
+                            key={option.value}
+                            label={option.label}
+                            isSelected={option.value === expiry}
+                            onSelect={() => onExpiryChange(option.value)}
+                        />
                     ))}
                 </PickerMenu>
 
@@ -286,18 +291,21 @@ function ErrorNote({ message }: { message: string | null }) {
 
 function PickerMenu({
     label,
+    title,
     accessibilityLabel,
     mutedColor,
     children,
 }: {
     label: string
+    /** The sheet's heading on a phone. */
+    title: string
     accessibilityLabel: string
     mutedColor: string
     children: React.ReactNode
 }) {
     return (
-        <Menu>
-            <Menu.Trigger>
+        <Menu
+            trigger={
                 <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={accessibilityLabel}
@@ -306,13 +314,11 @@ function PickerMenu({
                     <Text className="text-[12px] font-medium text-foreground">{label}</Text>
                     <ChevronDown size={14} color={mutedColor} strokeWidth={2.2} />
                 </Pressable>
-            </Menu.Trigger>
-            <Menu.Portal>
-                <Menu.Overlay />
-                <Menu.Content presentation="popover" placement="bottom" align="start">
-                    {children}
-                </Menu.Content>
-            </Menu.Portal>
+            }
+            placement="bottom-start"
+            title={title}
+        >
+            {children}
         </Menu>
     )
 }

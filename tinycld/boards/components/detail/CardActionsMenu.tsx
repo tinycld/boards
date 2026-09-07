@@ -1,4 +1,3 @@
-import { MenuActionItem } from '@tinycld/core/components/DropdownMenu'
 import { notify } from '@tinycld/core/lib/notify'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { ConfirmDialog } from '@tinycld/core/ui/ConfirmDialog'
@@ -71,30 +70,29 @@ export function CardActionsMenu({ card, list, projectId, onDismiss }: CardAction
 
     return (
         <>
-            <Menu>
-                <Menu.Trigger>
+            <Menu
+                trigger={
                     <IconButton label="More actions">
                         <MoreHorizontal size={15} color={mutedColor} strokeWidth={2.2} />
                     </IconButton>
-                </Menu.Trigger>
-                <Menu.Portal>
-                    <Menu.Overlay />
-                    <Menu.Content presentation="popover" placement="bottom" align="end">
-                        <MenuActionItem label="Duplicate card" icon={Copy} onPress={duplicate} />
-                        <MenuActionItem
-                            label="Move to board…"
-                            icon={ArrowRightLeft}
-                            disabled={!hasOtherBoards}
-                            onPress={() => setIsMoving(true)}
-                        />
-                        <MenuActionItem label="Archive card" icon={Archive} onPress={archive} />
-                        <MenuActionItem
-                            label="Delete card"
-                            icon={Trash2}
-                            onPress={() => setIsConfirmingDelete(true)}
-                        />
-                    </Menu.Content>
-                </Menu.Portal>
+                }
+                placement="bottom-end"
+                title="Card actions"
+            >
+                <Menu.Item label="Duplicate card" icon={Copy} onSelect={duplicate} />
+                <Menu.Item
+                    label="Move to board…"
+                    icon={ArrowRightLeft}
+                    isDisabled={!hasOtherBoards}
+                    onSelect={() => setIsMoving(true)}
+                />
+                <Menu.Item label="Archive card" icon={Archive} onSelect={archive} />
+                <Menu.Item
+                    label="Delete card"
+                    icon={Trash2}
+                    isDestructive
+                    onSelect={() => setIsConfirmingDelete(true)}
+                />
             </Menu>
 
             <MoveToBoardDialog

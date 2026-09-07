@@ -2,7 +2,7 @@ import { MiniCalendar } from '@tinycld/core/components/MiniCalendar'
 import { addDays, fromDateString, startOfDay, toDateString } from '@tinycld/core/lib/dates'
 import { handleMutationErrorsWithForm } from '@tinycld/core/lib/errors'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
-import { Button, ButtonText } from '@tinycld/core/ui/button'
+import { Dialog } from '@tinycld/core/ui/dialog'
 import {
     FormErrorSummary,
     TextAreaInput,
@@ -11,9 +11,9 @@ import {
     z,
     zodResolver,
 } from '@tinycld/core/ui/form'
-import { Menu } from '@tinycld/core/ui/menu'
-import { Modal, ModalBackdrop, ModalContent } from '@tinycld/core/ui/modal'
+import { Popover } from '@tinycld/core/ui/popover'
 import { CalendarDays } from 'lucide-react-native'
+import { useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useSprintMutations } from '../../hooks/useSprintMutations'
 import { defaultSprintDates, plannedSprints, sprintLabel } from '../../lib/sprint'
@@ -113,84 +113,65 @@ function SprintDialogBody({ project, sprint, onClose }: SprintDialogProps) {
     const placeholder = isEditing ? `Sprint ${sprint.number}` : `Sprint ${nextNumber}`
 
     return (
-        <Modal isOpen onClose={onClose}>
-            <ModalBackdrop />
-            <ModalContent testID="boards-sprint-dialog" className="w-[400px] p-0">
-                <View className="px-5 pt-5 pb-3">
-                    <Text className="text-[15px] font-semibold text-foreground">{title}</Text>
+        <Dialog isOpen onClose={onClose} title={title} size="md" testID="boards-sprint-dialog">
+            <Dialog.Body contentClassName="px-5 pb-5 gap-2">
+                <FormErrorSummary
+                    errors={errors}
+                    isEnabled={isSubmitted}
+                    testID="boards-sprint-errors"
+                />
+                <TextInput control={control} name="name" label="Name" placeholder={placeholder} />
+                <TextAreaInput
+                    control={control}
+                    name="goal"
+                    label="Goal"
+                    placeholder="What this sprint is for"
+                />
+                <Text className="text-sm font-semibold text-foreground">Dates</Text>
+                <View className="flex-row items-center gap-2">
+                    <DateChip
+                        label={start ? formatDay(start) : 'Start'}
+                        value={start}
+                        title="Start date"
+                        testID="boards-sprint-start"
+                        onChange={day => setValue('start', day, { shouldValidate: true })}
+                    />
+                    <Text className="text-muted">→</Text>
+                    <DateChip
+                        label={end ? formatDay(end) : 'End'}
+                        value={end}
+                        title="End date"
+                        testID="boards-sprint-end"
+                        onChange={day => setValue('end', day, { shouldValidate: true })}
+                    />
                 </View>
-                <View className="px-5 pb-5 gap-2">
-                    <FormErrorSummary
-                        errors={errors}
-                        isEnabled={isSubmitted}
-                        testID="boards-sprint-errors"
-                    />
-                    <TextInput
-                        control={control}
-                        name="name"
-                        label="Name"
-                        placeholder={placeholder}
-                    />
-                    <TextAreaInput
-                        control={control}
-                        name="goal"
-                        label="Goal"
-                        placeholder="What this sprint is for"
-                    />
-                    <Text className="text-sm font-semibold text-foreground">Dates</Text>
-                    <View className="flex-row items-center gap-2">
-                        <DateChip
-                            label={start ? formatDay(start) : 'Start'}
-                            value={start}
-                            testID="boards-sprint-start"
-                            onChange={day => setValue('start', day, { shouldValidate: true })}
-                        />
-                        <Text className="text-muted">→</Text>
-                        <DateChip
-                            label={end ? formatDay(end) : 'End'}
-                            value={end}
-                            testID="boards-sprint-end"
-                            onChange={day => setValue('end', day, { shouldValidate: true })}
-                        />
-                    </View>
-                    <View className="flex-row flex-wrap gap-1.5">
-                        {DURATIONS.map(duration => (
-                            <Pressable
-                                key={duration.weeks}
-                                accessibilityRole="button"
-                                accessibilityLabel={`${duration.label} from the start date`}
-                                onPress={() => setDuration(duration.weeks)}
-                                className="rounded-full px-2.5 py-[3px] border border-border bg-foreground/[0.04]"
-                            >
-                                <Text className="text-[12px] font-medium text-foreground">
-                                    {duration.label}
-                                </Text>
-                            </Pressable>
-                        ))}
-                    </View>
-                    <DateError message={errors.end?.message} />
-                    <View className="flex-row justify-end gap-2 pt-2">
+                <View className="flex-row flex-wrap gap-1.5">
+                    {DURATIONS.map(duration => (
                         <Pressable
-                            onPress={onClose}
-                            className="px-3 py-1.5"
+                            key={duration.weeks}
                             accessibilityRole="button"
+                            accessibilityLabel={`${duration.label} from the start date`}
+                            onPress={() => setDuration(duration.weeks)}
+                            className="rounded-full px-2.5 py-[3px] border border-border bg-foreground/[0.04]"
                         >
-                            <Text className="text-[13px] text-muted">Cancel</Text>
+                            <Text className="text-[12px] font-medium text-foreground">
+                                {duration.label}
+                            </Text>
                         </Pressable>
-                        <Button
-                            onPress={onSubmit}
-                            isDisabled={!isValid || isPending}
-                            size="sm"
-                            testID="boards-sprint-save"
-                        >
-                            <ButtonText>
-                                {isPending ? 'Saving…' : isEditing ? 'Save' : 'Plan sprint'}
-                            </ButtonText>
-                        </Button>
-                    </View>
+                    ))}
                 </View>
-            </ModalContent>
-        </Modal>
+                <DateError message={errors.end?.message} />
+            </Dialog.Body>
+            <Dialog.Footer>
+                <Dialog.CancelButton onPress={onClose} />
+                <Dialog.ActionButton
+                    label={isPending ? 'Saving…' : isEditing ? 'Save' : 'Plan sprint'}
+                    onPress={onSubmit}
+                    isDisabled={!isValid || isPending}
+                    testID="boards-sprint-save"
+                />
+            </Dialog.Footer>
+        </Dialog>
     )
 }
 
@@ -204,23 +185,33 @@ function DateError({ message }: { message?: string }) {
     return <Text className="text-[12px] text-danger">{message}</Text>
 }
 
-/** A day chip opening core's month grid — the DuePicker's grid without its presets. */
+/**
+ * A day chip opening core's month grid — the DuePicker's grid without its
+ * presets. A Popover, not a Menu: a calendar is a widget, not a list of
+ * commands. Controlled so a pick closes it, since a day is a terminal choice.
+ */
 function DateChip({
     label,
+    title,
     value,
     testID,
     onChange,
 }: {
     label: string
+    /** The sheet's heading on a phone. */
+    title: string
     value: string
     testID: string
     onChange: (day: string) => void
 }) {
     const mutedColor = useThemeColor('muted')
+    const [isOpen, setIsOpen] = useState(false)
     const selected = fromDateString(value) ?? startOfDay(new Date())
     return (
-        <Menu>
-            <Menu.Trigger>
+        <Popover
+            isOpen={isOpen}
+            onOpenChange={setIsOpen}
+            trigger={
                 <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`${label} date`}
@@ -230,18 +221,20 @@ function DateChip({
                     <CalendarDays size={13} strokeWidth={2.2} color={mutedColor} />
                     <Text className="text-[13px] text-foreground">{label}</Text>
                 </Pressable>
-            </Menu.Trigger>
-            <Menu.Portal>
-                <Menu.Overlay />
-                <Menu.Content presentation="popover" placement="bottom" align="start">
-                    <View className="w-[268px] pb-2">
-                        <MiniCalendar
-                            selectedDate={selected}
-                            onDateSelect={day => onChange(toDateString(day))}
-                        />
-                    </View>
-                </Menu.Content>
-            </Menu.Portal>
-        </Menu>
+            }
+            placement="bottom-start"
+            title={title}
+            width={268}
+        >
+            <View className="pb-2">
+                <MiniCalendar
+                    selectedDate={selected}
+                    onDateSelect={day => {
+                        onChange(toDateString(day))
+                        setIsOpen(false)
+                    }}
+                />
+            </View>
+        </Popover>
     )
 }

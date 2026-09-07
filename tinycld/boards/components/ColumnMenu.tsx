@@ -1,4 +1,3 @@
-import { MenuActionItem } from '@tinycld/core/components/DropdownMenu'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { ConfirmDialog } from '@tinycld/core/ui/ConfirmDialog'
 import { Menu } from '@tinycld/core/ui/menu'
@@ -64,8 +63,8 @@ export function ColumnMenu({ list, listOrder, onRename }: ColumnMenuProps) {
 
     return (
         <>
-            <Menu>
-                <Menu.Trigger>
+            <Menu
+                trigger={
                     <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={`${list.name} list actions`}
@@ -73,51 +72,50 @@ export function ColumnMenu({ list, listOrder, onRename }: ColumnMenuProps) {
                     >
                         <MoreHorizontal size={15} color={mutedColor} strokeWidth={2} />
                     </Pressable>
-                </Menu.Trigger>
-                <Menu.Portal>
-                    <Menu.Overlay />
-                    <Menu.Content presentation="popover" placement="bottom" align="end">
-                        <MenuActionItem label="Rename list" icon={Pencil} onPress={onRename} />
-                        <MenuActionItem
-                            label="Collapse list"
-                            icon={FoldHorizontal}
-                            onPress={() => toggleCollapsed(list.id)}
-                        />
-                        <MenuActionItem
-                            label="Move left"
-                            icon={ArrowLeft}
-                            onPress={() => move(-1)}
-                            disabled={!canMoveLeft}
-                        />
-                        <MenuActionItem
-                            label="Move right"
-                            icon={ArrowRight}
-                            onPress={() => move(1)}
-                            disabled={!canMoveRight}
-                        />
-                        <StatusSubmenu
-                            selected={list.category}
-                            onSelect={category => updateList.mutate({ listId: list.id, category })}
-                        />
-                        <MenuActionItem
-                            label={limitLabel(list.wipLimit)}
-                            icon={Gauge}
-                            testID="boards-column-wip-limit"
-                            onPress={() => setIsEditingLimit(true)}
-                        />
-                        <MenuActionItem
-                            label="Delete list"
-                            icon={Trash2}
-                            onPress={() => {
-                                // An empty column destroys nothing, so it skips
-                                // the confirm entirely rather than asking about
-                                // zero cards.
-                                if (cardCount === 0) deleteList.mutate(list.id)
-                                else setIsConfirmingDelete(true)
-                            }}
-                        />
-                    </Menu.Content>
-                </Menu.Portal>
+                }
+                placement="bottom-end"
+                title={`${list.name} list`}
+            >
+                <Menu.Item label="Rename list" icon={Pencil} onSelect={onRename} />
+                <Menu.Item
+                    label="Collapse list"
+                    icon={FoldHorizontal}
+                    onSelect={() => toggleCollapsed(list.id)}
+                />
+                <Menu.Item
+                    label="Move left"
+                    icon={ArrowLeft}
+                    onSelect={() => move(-1)}
+                    isDisabled={!canMoveLeft}
+                />
+                <Menu.Item
+                    label="Move right"
+                    icon={ArrowRight}
+                    onSelect={() => move(1)}
+                    isDisabled={!canMoveRight}
+                />
+                <StatusSubmenu
+                    selected={list.category}
+                    onSelect={category => updateList.mutate({ listId: list.id, category })}
+                />
+                <Menu.Item
+                    label={limitLabel(list.wipLimit)}
+                    icon={Gauge}
+                    testID="boards-column-wip-limit"
+                    onSelect={() => setIsEditingLimit(true)}
+                />
+                <Menu.Item
+                    label="Delete list"
+                    icon={Trash2}
+                    isDestructive
+                    onSelect={() => {
+                        // An empty column destroys nothing, so it skips
+                        // the confirm entirely rather than asking about
+                        // zero cards.
+                        if (cardCount === 0) deleteList.mutate(list.id)
+                        else setIsConfirmingDelete(true)
+                    }}
+                />
             </Menu>
 
             <WipLimitDialog
@@ -151,6 +149,7 @@ export function ColumnMenu({ list, listOrder, onRename }: ColumnMenuProps) {
  * The list's status, as a submenu: one row per category, the current one
  * marked. A submenu rather than five top-level rows so the menu stays the
  * length it was, and a single nesting level, which is all core's Menu offers.
+ * On a phone the rows render inline under a "Status" heading.
  */
 function StatusSubmenu({
     selected,
@@ -160,22 +159,17 @@ function StatusSubmenu({
     onSelect: (category: ListCategory) => void
 }) {
     return (
-        <Menu.Sub>
-            <Menu.SubTrigger>
-                <Menu.ItemTitle>{`Status: ${categoryLabel(selected)}`}</Menu.ItemTitle>
-            </Menu.SubTrigger>
-            <Menu.SubContent>
-                {LIST_CATEGORIES.map(category => (
-                    <MenuActionItem
-                        key={category}
-                        label={categoryLabel(category)}
-                        isActive={category === selected}
-                        leading={<CategoryGlyph category={category} size={14} />}
-                        testID={`boards-list-status-${category}`}
-                        onPress={() => onSelect(category)}
-                    />
-                ))}
-            </Menu.SubContent>
+        <Menu.Sub label={`Status: ${categoryLabel(selected)}`}>
+            {LIST_CATEGORIES.map(category => (
+                <Menu.Item
+                    key={category}
+                    label={categoryLabel(category)}
+                    isSelected={category === selected}
+                    leading={<CategoryGlyph category={category} size={14} />}
+                    testID={`boards-list-status-${category}`}
+                    onSelect={() => onSelect(category)}
+                />
+            ))}
         </Menu.Sub>
     )
 }

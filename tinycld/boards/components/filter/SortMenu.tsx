@@ -1,4 +1,3 @@
-import { MenuActionItem } from '@tinycld/core/components/DropdownMenu'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { Menu } from '@tinycld/core/ui/menu'
 import { ArrowDownAZ, ArrowUpAZ, ArrowUpDown } from 'lucide-react-native'
@@ -32,8 +31,8 @@ export function SortMenu({ projectId }: { projectId: string }) {
     const DirectionIcon = sort.direction === 'asc' ? ArrowDownAZ : ArrowUpAZ
 
     return (
-        <Menu>
-            <Menu.Trigger>
+        <Menu
+            trigger={
                 <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={
@@ -48,34 +47,32 @@ export function SortMenu({ projectId }: { projectId: string }) {
                         strokeWidth={2}
                     />
                 </Pressable>
-            </Menu.Trigger>
-            <Menu.Portal>
-                <Menu.Overlay />
-                <Menu.Content presentation="popover" placement="bottom" align="end">
-                    {FIELDS.map(field => (
-                        <MenuActionItem
-                            key={field}
-                            label={SORT_FIELD_LABELS[field]}
-                            isActive={sort.field === field}
-                            testID={`boards-sort-${field}`}
-                            onPress={() => setBoardSort(projectId, { field, direction: 'asc' })}
-                        />
-                    ))}
-                    {isSorted ? (
-                        <MenuActionItem
-                            label={sort.direction === 'asc' ? 'Ascending' : 'Descending'}
-                            icon={DirectionIcon}
-                            testID="boards-sort-direction"
-                            onPress={() =>
-                                setBoardSort(projectId, {
-                                    field: sort.field,
-                                    direction: sort.direction === 'asc' ? 'desc' : 'asc',
-                                })
-                            }
-                        />
-                    ) : null}
-                </Menu.Content>
-            </Menu.Portal>
+            }
+            placement="bottom-end"
+            title="Sort cards"
+        >
+            {FIELDS.map(field => (
+                <Menu.Item
+                    key={field}
+                    label={SORT_FIELD_LABELS[field]}
+                    isSelected={sort.field === field}
+                    testID={`boards-sort-${field}`}
+                    onSelect={() => setBoardSort(projectId, { field, direction: 'asc' })}
+                />
+            ))}
+            {isSorted ? (
+                <Menu.Item
+                    label={sort.direction === 'asc' ? 'Ascending' : 'Descending'}
+                    icon={DirectionIcon}
+                    testID="boards-sort-direction"
+                    onSelect={() =>
+                        setBoardSort(projectId, {
+                            field: sort.field,
+                            direction: sort.direction === 'asc' ? 'desc' : 'asc',
+                        })
+                    }
+                />
+            ) : null}
         </Menu>
     )
 }

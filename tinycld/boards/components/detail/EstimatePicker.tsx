@@ -1,4 +1,3 @@
-import { MenuActionItem } from '@tinycld/core/components/DropdownMenu'
 import { Menu } from '@tinycld/core/ui/menu'
 import type { ReactElement } from 'react'
 import { ESTIMATE_PRESETS, formatEstimate } from '../../lib/estimate'
@@ -22,30 +21,22 @@ interface EstimatePickerProps {
  */
 export function EstimatePicker({ selected, onSelect, children }: EstimatePickerProps) {
     return (
-        <Menu>
-            <Menu.Trigger>{children}</Menu.Trigger>
-            <Menu.Portal>
-                <Menu.Overlay />
-                <Menu.Content presentation="popover" placement="bottom" align="start">
-                    {ESTIMATE_PRESETS.map(points => (
-                        <MenuActionItem
-                            key={points}
-                            label={formatEstimate(points)}
-                            isActive={points === selected}
-                            testID={`boards-estimate-${points}`}
-                            onPress={() => onSelect(points)}
-                        />
-                    ))}
-                    <ClearItem isVisible={selected !== undefined} onPress={() => onSelect(0)} />
-                </Menu.Content>
-            </Menu.Portal>
+        <Menu trigger={children} placement="bottom-start" title="Estimate">
+            {ESTIMATE_PRESETS.map(points => (
+                <Menu.Item
+                    key={points}
+                    label={formatEstimate(points)}
+                    isSelected={points === selected}
+                    testID={`boards-estimate-${points}`}
+                    onSelect={() => onSelect(points)}
+                />
+            ))}
+            <ClearItem isVisible={selected !== undefined} onPress={() => onSelect(0)} />
         </Menu>
     )
 }
 
 function ClearItem({ isVisible, onPress }: { isVisible: boolean; onPress: () => void }) {
     if (!isVisible) return null
-    return (
-        <MenuActionItem label="Clear estimate" testID="boards-estimate-clear" onPress={onPress} />
-    )
+    return <Menu.Item label="Clear estimate" testID="boards-estimate-clear" onSelect={onPress} />
 }

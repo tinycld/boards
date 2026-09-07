@@ -19,10 +19,9 @@ export interface CardRect {
  *
  * NATIVE returns null: `measureInWindow` is asynchronous, so it cannot answer
  * inside the synchronous keypress handler that needs the rect. That is not a
- * gap — these shortcuts are a hardware-keyboard affordance, and a native menu
- * with no `triggerPosition` falls back to the core Menu's own measurement
- * rather than mispositioning. An iPad with a keyboard opens the picker; it just
- * does not anchor it to the card.
+ * gap — these shortcuts are a hardware-keyboard affordance, and
+ * useBoardShortcuts declines to open a picker it cannot anchor. An iPad with a
+ * keyboard keeps the mouse path.
  */
 export function focusedCardRect(cardId: string): CardRect | null {
     if (Platform.OS !== 'web') return null

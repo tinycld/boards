@@ -1,9 +1,7 @@
-import { MenuActionItem } from '@tinycld/core/components/DropdownMenu'
-import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { Menu } from '@tinycld/core/ui/menu'
-import { Text, View } from 'react-native'
+import { Text } from 'react-native'
 import type { BoardMember } from '../../types'
-import { menuPropsFor, type PickerAnchor } from './picker-anchor'
+import { anchorPropsFor, type PickerAnchor } from './picker-anchor'
 
 type AssigneePickerProps = {
     /**
@@ -15,44 +13,37 @@ type AssigneePickerProps = {
     onToggle: (memberId: string, isSelected: boolean) => void
 } & PickerAnchor
 
+/**
+ * Multi-select, so the rows are checkbox items: a pick toggles and the menu
+ * stays open for the next one, unlike the single-choice pickers.
+ */
 export function AssigneePicker({ members, assignedIds, onToggle, ...anchor }: AssigneePickerProps) {
     const assigned = new Set(assignedIds)
 
     return (
-        <Menu {...menuPropsFor(anchor)}>
-            {anchor.children ? <Menu.Trigger>{anchor.children}</Menu.Trigger> : null}
-            <Menu.Portal>
-                <Menu.Overlay />
-                <Menu.Content presentation="popover" placement="bottom" align="start">
-                    {members.length === 0 ? (
-                        // A guest reaching a board by share link reads no
-                        // roster at all (member-AND-non-guest by rule), so this
-                        // empty state is expected, not broken.
-                        <View className="px-3 py-2 w-[220px]">
-                            <Text className="text-[12.5px] text-muted">
-                                No project members to assign.
-                            </Text>
-                        </View>
-                    ) : (
-                        members.map(member => (
-                            <MenuActionItem
-                                key={member.id}
-                                label={`${member.firstName} ${member.lastName}`.trim()}
-                                isActive={assigned.has(member.id)}
-                                leading={
-                                    <NameAvatar
-                                        firstName={member.firstName}
-                                        lastName={member.lastName}
-                                        size={18}
-                                        colorKey={member.id}
-                                    />
-                                }
-                                onPress={() => onToggle(member.id, assigned.has(member.id))}
-                            />
-                        ))
-                    )}
-                </Menu.Content>
-            </Menu.Portal>
+        <Menu {...anchorPropsFor(anchor)} placement="bottom-start" title="Assignees">
+            <EmptyState isVisible={members.length === 0} />
+            {members.map(member => (
+                <Menu.CheckboxItem
+                    key={member.id}
+                    label={`${member.firstName} ${member.lastName}`.trim()}
+                    isChecked={assigned.has(member.id)}
+                    onToggle={() => onToggle(member.id, assigned.has(member.id))}
+                />
+            ))}
         </Menu>
+    )
+}
+
+/**
+ * A guest reaching a board by share link reads no roster at all
+ * (member-AND-non-guest by rule), so this empty state is expected, not broken.
+ */
+function EmptyState({ isVisible }: { isVisible: boolean }) {
+    if (!isVisible) return null
+    return (
+        <Menu.Custom className="px-3 py-2 w-[220px]">
+            <Text className="text-[12.5px] text-muted">No project members to assign.</Text>
+        </Menu.Custom>
     )
 }

@@ -3,11 +3,11 @@ import { useStore } from '@tinycld/core/lib/pocketbase'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
 import { Button, ButtonText } from '@tinycld/core/ui/button'
-import { Modal, ModalBackdrop, ModalContent } from '@tinycld/core/ui/modal'
+import { Dialog } from '@tinycld/core/ui/dialog'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
-import { Search, X } from 'lucide-react-native'
+import { Search } from 'lucide-react-native'
 import { useMemo, useState } from 'react'
-import { Pressable, ScrollView, Text, View } from 'react-native'
+import { Pressable, Text, View } from 'react-native'
 import { useAddMember } from '../../hooks/useMemberMutations'
 import { toBoardMember } from '../../lib/board-project'
 import type { BoardsMemberRole } from '../../types'
@@ -95,46 +95,28 @@ export function AddMemberDialog({
         onClose()
     }
 
-    if (!isVisible) return null
-
     return (
-        <Modal isOpen onClose={handleClose}>
-            <ModalBackdrop />
-            <ModalContent className="w-[90%] max-w-[440px] max-h-[560px] p-0 rounded-xl">
-                <DialogHeader onClose={handleClose} />
-                <View className="px-4 pt-3 pb-2 gap-3">
-                    <SearchRow query={query} onChange={setQuery} />
-                    <RolePicker role={role} onChange={setRole} />
-                    {errorMessage ? (
-                        <View className="px-3 py-2 rounded-md bg-danger/10">
-                            <Text className="text-[12px] text-danger">{errorMessage}</Text>
-                        </View>
-                    ) : null}
-                </View>
-                <CandidateList
-                    candidates={candidates}
-                    hasQuery={query.trim().length > 0}
-                    isPending={addMember.isPending}
-                    onAdd={handleAdd}
-                />
-            </ModalContent>
-        </Modal>
+        <Dialog isOpen={isVisible} onClose={handleClose} title="Add people" size="md">
+            <View className="px-5 pb-2 gap-3">
+                <SearchRow query={query} onChange={setQuery} />
+                <RolePicker role={role} onChange={setRole} />
+                <AddError message={errorMessage} />
+            </View>
+            <CandidateList
+                candidates={candidates}
+                hasQuery={query.trim().length > 0}
+                isPending={addMember.isPending}
+                onAdd={handleAdd}
+            />
+        </Dialog>
     )
 }
 
-function DialogHeader({ onClose }: { onClose: () => void }) {
-    const mutedColor = useThemeColor('muted')
+function AddError({ message }: { message: string | null }) {
+    if (!message) return null
     return (
-        <View className="flex-row items-center justify-between px-4 py-3 border-b border-border">
-            <Text className="text-[15px] font-semibold text-foreground">Add people</Text>
-            <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Close"
-                onPress={onClose}
-                className="p-1"
-            >
-                <X size={16} color={mutedColor} strokeWidth={2.2} />
-            </Pressable>
+        <View className="px-3 py-2 rounded-md bg-danger/10">
+            <Text className="text-[12px] text-danger">{message}</Text>
         </View>
     )
 }
@@ -207,7 +189,7 @@ function CandidateList({
 }) {
     if (candidates.length === 0) {
         return (
-            <View className="px-4 py-6">
+            <View className="px-5 py-6">
                 <Text className="text-[13px] text-muted">
                     {hasQuery ? 'No matching people' : 'Everyone is already on this board'}
                 </Text>
@@ -216,7 +198,7 @@ function CandidateList({
     }
 
     return (
-        <ScrollView className="max-h-[340px]" contentContainerStyle={{ paddingBottom: 12 }}>
+        <Dialog.Body contentClassName="pb-3">
             {candidates.map(candidate => (
                 <CandidateRow
                     key={candidate.userId}
@@ -225,7 +207,7 @@ function CandidateList({
                     onAdd={onAdd}
                 />
             ))}
-        </ScrollView>
+        </Dialog.Body>
     )
 }
 

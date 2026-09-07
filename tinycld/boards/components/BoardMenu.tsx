@@ -1,9 +1,8 @@
-import { MenuActionItem } from '@tinycld/core/components/DropdownMenu'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { ConfirmDialog } from '@tinycld/core/ui/ConfirmDialog'
 import { ColorPickerGrid } from '@tinycld/core/ui/color-picker'
+import { Dialog } from '@tinycld/core/ui/dialog'
 import { Menu } from '@tinycld/core/ui/menu'
-import { Modal, ModalBackdrop, ModalContent } from '@tinycld/core/ui/modal'
 import {
     Archive,
     ArchiveRestore,
@@ -17,7 +16,7 @@ import {
     Trash2,
 } from 'lucide-react-native'
 import { useState } from 'react'
-import { Pressable, Text, View } from 'react-native'
+import { Pressable } from 'react-native'
 import {
     useArchiveProject,
     useRestoreProject,
@@ -49,11 +48,11 @@ interface BoardMenuProps {
 function BacklogItem({ isVisible, onPress }: { isVisible: boolean; onPress: () => void }) {
     if (!isVisible) return null
     return (
-        <MenuActionItem
+        <Menu.Item
             label="Backlog & sprints"
             icon={ListTree}
             testID="boards-menu-backlog"
-            onPress={onPress}
+            onSelect={onPress}
         />
     )
 }
@@ -73,8 +72,8 @@ export function BoardMenu({ project, cardCount, isArchived, onRename }: BoardMen
 
     return (
         <>
-            <Menu>
-                <Menu.Trigger>
+            <Menu
+                trigger={
                     <Pressable
                         accessibilityRole="button"
                         accessibilityLabel="Board actions"
@@ -82,80 +81,75 @@ export function BoardMenu({ project, cardCount, isArchived, onRename }: BoardMen
                     >
                         <MoreHorizontal size={15} color={mutedColor} strokeWidth={2.2} />
                     </Pressable>
-                </Menu.Trigger>
-                <Menu.Portal>
-                    <Menu.Overlay />
-                    <Menu.Content presentation="popover" placement="bottom" align="end">
-                        <MenuActionItem label="Rename board" icon={Pencil} onPress={onRename} />
-                        <MenuActionItem
-                            label="Change color"
-                            icon={Palette}
-                            colorDot={project.color}
-                            onPress={() => setIsPickingColor(true)}
-                        />
-                        <MenuActionItem
-                            label="Epics…"
-                            icon={Layers}
-                            testID="boards-manage-epics"
-                            onPress={() => setIsManagingEpics(true)}
-                        />
-                        <BacklogItem
-                            isVisible={project.sprintsEnabled}
-                            onPress={() => setViewMode(project.id, 'backlog')}
-                        />
-                        <MenuActionItem
-                            label="Export…"
-                            icon={Download}
-                            testID="boards-export"
-                            onPress={() => setIsExporting(true)}
-                        />
-                        <MenuActionItem
-                            label="Board settings…"
-                            icon={Settings2}
-                            testID="boards-settings"
-                            onPress={() => setIsEditingSettings(true)}
-                        />
-                        {isArchived ? (
-                            <MenuActionItem
-                                label="Restore board"
-                                icon={ArchiveRestore}
-                                onPress={() => restoreProject.mutate(project.id)}
-                            />
-                        ) : (
-                            <MenuActionItem
-                                label="Archive board"
-                                icon={Archive}
-                                onPress={() => setIsConfirmingArchive(true)}
-                            />
-                        )}
-                        <MenuActionItem
-                            label="Delete board…"
-                            icon={Trash2}
-                            onPress={() => setIsConfirmingDelete(true)}
-                        />
-                    </Menu.Content>
-                </Menu.Portal>
+                }
+                placement="bottom-end"
+                title="Board actions"
+            >
+                <Menu.Item label="Rename board" icon={Pencil} onSelect={onRename} />
+                <Menu.Item
+                    label="Change color"
+                    icon={Palette}
+                    colorDot={project.color}
+                    onSelect={() => setIsPickingColor(true)}
+                />
+                <Menu.Item
+                    label="Epics…"
+                    icon={Layers}
+                    testID="boards-manage-epics"
+                    onSelect={() => setIsManagingEpics(true)}
+                />
+                <BacklogItem
+                    isVisible={project.sprintsEnabled}
+                    onPress={() => setViewMode(project.id, 'backlog')}
+                />
+                <Menu.Item
+                    label="Export…"
+                    icon={Download}
+                    testID="boards-export"
+                    onSelect={() => setIsExporting(true)}
+                />
+                <Menu.Item
+                    label="Board settings…"
+                    icon={Settings2}
+                    testID="boards-settings"
+                    onSelect={() => setIsEditingSettings(true)}
+                />
+                {isArchived ? (
+                    <Menu.Item
+                        label="Restore board"
+                        icon={ArchiveRestore}
+                        onSelect={() => restoreProject.mutate(project.id)}
+                    />
+                ) : (
+                    <Menu.Item
+                        label="Archive board"
+                        icon={Archive}
+                        onSelect={() => setIsConfirmingArchive(true)}
+                    />
+                )}
+                <Menu.Item
+                    label="Delete board…"
+                    icon={Trash2}
+                    isDestructive
+                    onSelect={() => setIsConfirmingDelete(true)}
+                />
             </Menu>
 
-            <Modal isOpen={isPickingColor} onClose={() => setIsPickingColor(false)}>
-                <ModalBackdrop />
-                <ModalContent className="w-[360px] p-0">
-                    <View className="px-5 pt-5 pb-3">
-                        <Text className="text-[15px] font-semibold text-foreground">
-                            Board color
-                        </Text>
-                    </View>
-                    <View className="px-5 pb-5">
-                        <ColorPickerGrid
-                            selected={project.color}
-                            onSelect={color => {
-                                updateProject.mutate({ projectId: project.id, color })
-                                setIsPickingColor(false)
-                            }}
-                        />
-                    </View>
-                </ModalContent>
-            </Modal>
+            <Dialog
+                isOpen={isPickingColor}
+                onClose={() => setIsPickingColor(false)}
+                title="Board color"
+            >
+                <Dialog.Body>
+                    <ColorPickerGrid
+                        selected={project.color}
+                        onSelect={color => {
+                            updateProject.mutate({ projectId: project.id, color })
+                            setIsPickingColor(false)
+                        }}
+                    />
+                </Dialog.Body>
+            </Dialog>
 
             <EpicManagerDialog
                 isVisible={isManagingEpics}

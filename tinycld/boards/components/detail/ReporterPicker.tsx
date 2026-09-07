@@ -1,9 +1,8 @@
-import { MenuActionItem } from '@tinycld/core/components/DropdownMenu'
 import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { Menu } from '@tinycld/core/ui/menu'
 import { UserMinus } from 'lucide-react-native'
 import type { ReactElement } from 'react'
-import { Text, View } from 'react-native'
+import { Text } from 'react-native'
 import type { BoardMember } from '../../types'
 
 interface ReporterPickerProps {
@@ -29,54 +28,55 @@ interface ReporterPickerProps {
  */
 export function ReporterPicker({ members, selectedId, onSelect, children }: ReporterPickerProps) {
     return (
-        <Menu>
-            <Menu.Trigger>{children}</Menu.Trigger>
-            <Menu.Portal>
-                <Menu.Overlay />
-                <Menu.Content presentation="popover" placement="bottom" align="start">
-                    {members.length === 0 ? (
-                        // A guest reaching a board by share link reads no roster
-                        // at all (member-AND-non-guest by rule), so this empty
-                        // state is expected, not broken.
-                        <View className="px-3 py-2 w-[220px]">
-                            <Text className="text-[12.5px] text-muted">
-                                No project members to report to.
-                            </Text>
-                        </View>
-                    ) : (
-                        members.map(member => (
-                            <MenuActionItem
-                                key={member.id}
-                                label={`${member.firstName} ${member.lastName}`.trim()}
-                                isActive={member.id === selectedId}
-                                leading={
-                                    <NameAvatar
-                                        firstName={member.firstName}
-                                        lastName={member.lastName}
-                                        size={18}
-                                        colorKey={member.id}
-                                    />
-                                }
-                                onPress={() => onSelect(member.id)}
-                            />
-                        ))
-                    )}
-                    {/*
-                     * The field is optional and the rules permit clearing it, so
-                     * it needs an affordance — a capability with no way to reach
-                     * it is dead. Offered only when there is something to clear.
-                     * Note this restores the created_by fallback rather than
-                     * emptying the row: the card reports to its creator again.
-                     */}
-                    {selectedId !== undefined && (
-                        <MenuActionItem
-                            label="Clear reporter"
-                            icon={UserMinus}
-                            onPress={() => onSelect('')}
+        <Menu trigger={children} placement="bottom-start" title="Reporter">
+            <EmptyState isVisible={members.length === 0} />
+            {members.map(member => (
+                <Menu.Item
+                    key={member.id}
+                    label={`${member.firstName} ${member.lastName}`.trim()}
+                    isSelected={member.id === selectedId}
+                    leading={
+                        <NameAvatar
+                            firstName={member.firstName}
+                            lastName={member.lastName}
+                            size={18}
+                            colorKey={member.id}
                         />
-                    )}
-                </Menu.Content>
-            </Menu.Portal>
+                    }
+                    onSelect={() => onSelect(member.id)}
+                />
+            ))}
+            <ClearItem isVisible={selectedId !== undefined} onSelect={onSelect} />
         </Menu>
     )
+}
+
+/**
+ * A guest reaching a board by share link reads no roster at all
+ * (member-AND-non-guest by rule), so this empty state is expected, not broken.
+ */
+function EmptyState({ isVisible }: { isVisible: boolean }) {
+    if (!isVisible) return null
+    return (
+        <Menu.Custom className="px-3 py-2 w-[220px]">
+            <Text className="text-[12.5px] text-muted">No project members to report to.</Text>
+        </Menu.Custom>
+    )
+}
+
+/**
+ * The field is optional and the rules permit clearing it, so it needs an
+ * affordance — a capability with no way to reach it is dead. Offered only when
+ * there is something to clear. Note this restores the created_by fallback
+ * rather than emptying the row: the card reports to its creator again.
+ */
+function ClearItem({
+    isVisible,
+    onSelect,
+}: {
+    isVisible: boolean
+    onSelect: (memberId: string) => void
+}) {
+    if (!isVisible) return null
+    return <Menu.Item label="Clear reporter" icon={UserMinus} onSelect={() => onSelect('')} />
 }

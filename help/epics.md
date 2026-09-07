@@ -29,6 +29,10 @@ You can rename or recolor an epic at any time from the same dialog.
 Open a card and use the **Epic** row in its details. A card belongs to at most
 one epic — pick a different one to move it, or **No epic** to unfile it.
 
+The row only appears once the board has an epic to file under. On a board
+without any, the card's details leave it out, the same way the **Sprint** row
+stays out of sight on a board that does not plan in sprints.
+
 The epic then shows on the card's face as a colored dot and its name, beside the
 sub-task chip. Epics only ever offer the boards' own board, so a card is never
 filed under a plan its readers cannot see.

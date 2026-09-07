@@ -1,4 +1,3 @@
-import { MenuActionItem } from '@tinycld/core/components/DropdownMenu'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { ConfirmDialog } from '@tinycld/core/ui/ConfirmDialog'
 import { Menu } from '@tinycld/core/ui/menu'
@@ -45,8 +44,8 @@ export function SprintMenu({
     const label = sprintLabel(sprint)
     return (
         <>
-            <Menu>
-                <Menu.Trigger>
+            <Menu
+                trigger={
                     <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={`${label} actions`}
@@ -55,30 +54,29 @@ export function SprintMenu({
                     >
                         <MoreHorizontal size={14} color={mutedColor} strokeWidth={2.2} />
                     </Pressable>
-                </Menu.Trigger>
-                <Menu.Portal>
-                    <Menu.Overlay />
-                    <Menu.Content presentation="popover" placement="bottom" align="end">
-                        <MenuActionItem
-                            label="Move up"
-                            icon={ArrowUp}
-                            disabled={!canMoveUp}
-                            onPress={() => move(-1)}
-                        />
-                        <MenuActionItem
-                            label="Move down"
-                            icon={ArrowDown}
-                            disabled={!canMoveDown}
-                            onPress={() => move(1)}
-                        />
-                        <MenuActionItem
-                            label="Delete sprint…"
-                            icon={Trash2}
-                            testID={`boards-sprint-delete-${sprint.number}`}
-                            onPress={() => setIsConfirmingDelete(true)}
-                        />
-                    </Menu.Content>
-                </Menu.Portal>
+                }
+                placement="bottom-end"
+                title={`${label} actions`}
+            >
+                <Menu.Item
+                    label="Move up"
+                    icon={ArrowUp}
+                    isDisabled={!canMoveUp}
+                    onSelect={() => move(-1)}
+                />
+                <Menu.Item
+                    label="Move down"
+                    icon={ArrowDown}
+                    isDisabled={!canMoveDown}
+                    onSelect={() => move(1)}
+                />
+                <Menu.Item
+                    label="Delete sprint…"
+                    icon={Trash2}
+                    isDestructive
+                    testID={`boards-sprint-delete-${sprint.number}`}
+                    onSelect={() => setIsConfirmingDelete(true)}
+                />
             </Menu>
             <ConfirmDialog
                 isOpen={isConfirmingDelete}

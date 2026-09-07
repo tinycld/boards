@@ -4,6 +4,7 @@ import type { ListCategory } from './lib/list-category'
 import type { CardPriority } from './lib/priority'
 import { initialRanks } from './lib/rank'
 import type { ReactionEmoji } from './lib/reactions'
+import { DEFAULT_SPRINT_LENGTH_DAYS } from './lib/sprint'
 
 function log(...args: unknown[]) {
     process.stdout.write(`[seed:boards] ${args.join(' ')}\n`)
@@ -77,6 +78,8 @@ interface CardSeed {
     priority?: CardPriority
     /** Points. Left unset on most cards so the demo shows both states. */
     estimate?: number
+    /** The TITLE of the epic this card is filed under, resolved against the board's own epics. */
+    epic?: string
     /**
      * The TITLE of the card this one is a sub-task of, resolved after every
      * card exists.
@@ -104,7 +107,20 @@ interface CardSeed {
 interface ListSeed {
     name: string
     category?: ListCategory
+    /** Cards allowed at once; the header turns amber at the limit and red past it. */
+    wipLimit?: number
     cards: CardSeed[]
+}
+
+/**
+ * An epic and its color. Cards name their epic by TITLE (CardSeed.epic), the
+ * way they name labels — the epics are created first, so the id is in hand
+ * by the time the cards are written.
+ */
+interface EpicSeed {
+    title: string
+    color: string
+    description?: string
 }
 
 /**
@@ -137,6 +153,9 @@ interface BoardSeed {
     owner: Who
     /** Days a finished card sits before the server archives it; 0 (the default) never does. */
     autoArchiveDays?: number
+    /** Days a card sits in one column before it is tinted; 0 (the default) never tints. */
+    agingDays?: number
+    epics?: EpicSeed[]
     /**
      * Roles for the non-owner members, cycled in order. On a 'me'-owned board
      * every teammate gets a row (a populated ShareDialog roster); on a
@@ -166,7 +185,22 @@ const BOARDS: BoardSeed[] = [
         // Demonstrates the sweep without ever firing on fresh demo data: the
         // seeded Done cards entered their list today.
         autoArchiveDays: 30,
+        // Likewise never fires on fresh data — every card entered its column
+        // today — but the setting shows as ON in Board settings.
+        agingDays: 10,
         memberRoles: ['editor', 'commentor', 'viewer'],
+        // The one board that uses everything: sprints AND epics, so a fresh DB
+        // shows the Epic row, the epic filter and the points rollup beside the
+        // sprint scope — the two axes the help contrasts (epics.md, sprints.md).
+        epics: [
+            {
+                title: 'Launch announcement',
+                color: '#6A1B9A',
+                description: 'Everything that has to be true before the post goes out.',
+            },
+            { title: 'Board performance', color: '#E64A19' },
+            { title: 'Data portability', color: '#2E7D32' },
+        ],
         sprints: [
             {
                 goal: 'Settle the shape of boards before the announcement',
@@ -221,9 +255,12 @@ const BOARDS: BoardSeed[] = [
                         priority: 'low',
                         estimate: 3,
                         labels: ['Feature'],
+                        epic: 'Data portability',
                     },
                     {
                         title: 'Investigate slow board load on large projects',
+                        epic: 'Board performance',
+                        estimate: 5,
                         // Deliberately the richest markdown in the seed: a
                         // heading, emphasis, a code span, a list, a link and a
                         // table, so `db:reset` leaves behind a card that shows
@@ -260,6 +297,7 @@ const BOARDS: BoardSeed[] = [
                 cards: [
                     {
                         title: 'Draft the launch announcement',
+                        epic: 'Launch announcement',
                         links: [{ type: 'blocks', to: 'Press kit landing page' }],
                         priority: 'medium',
                         estimate: 5,
@@ -306,13 +344,16 @@ const BOARDS: BoardSeed[] = [
                     {
                         title: 'Write the headline and subhead',
                         parentTitle: 'Draft the launch announcement',
+                        epic: 'Launch announcement',
                         estimate: 1,
                         assignees: ['me'],
                     },
                     {
                         title: 'Get legal sign-off on the claims',
                         parentTitle: 'Draft the launch announcement',
+                        epic: 'Launch announcement',
                         priority: 'high',
+                        estimate: 2,
                         assignees: ['teammate'],
                     },
                 ],
@@ -320,14 +361,21 @@ const BOARDS: BoardSeed[] = [
             {
                 name: 'Doing',
                 category: 'in_progress',
+                // Three cards against a limit of three: the header reads 3 / 3
+                // in amber, and one more card pushes it red.
+                wipLimit: 3,
                 cards: [
                     {
                         title: 'Pick the hero screenshot',
                         parentTitle: 'Draft the launch announcement',
+                        epic: 'Launch announcement',
+                        estimate: 1,
                         labels: ['Design'],
                     },
                     {
                         title: 'Press kit landing page',
+                        epic: 'Launch announcement',
+                        estimate: 3,
                         description: [
                             'One page: **logo pack**, product shots, boilerplate copy.',
                             '',
@@ -371,6 +419,10 @@ const BOARDS: BoardSeed[] = [
                     { title: 'Rename workspace settings tabs' },
                     {
                         title: 'Ship fractional ranking for card moves',
+                        // A done card with points, so the performance epic's
+                        // rollup reads as partly finished rather than 0 / n.
+                        epic: 'Board performance',
+                        estimate: 3,
                         comments: [
                             {
                                 author: 'me',
@@ -488,8 +540,9 @@ async function seedBoard(
         created_by: ownerId,
         archived: false,
         auto_archive_days: board.autoArchiveDays ?? 0,
+        aging_days: board.agingDays ?? 0,
         sprints_enabled: (board.sprints?.length ?? 0) > 0,
-        sprint_length_days: 0,
+        sprint_length_days: DEFAULT_SPRINT_LENGTH_DAYS,
         sprint_auto_start: false,
         sprint_auto_complete: false,
         sprint_rollover: 'next',
@@ -528,6 +581,8 @@ async function seedBoard(
         labelIds[label.name] = record.id
     }
 
+    const epicIds = await seedEpics(pb, project.id, board.epics ?? [])
+
     const listRanks = initialRanks(board.lists.length)
     // Card ids by title, for the sub-task pass below.
     const cardIdsByTitle: Record<string, string> = {}
@@ -538,54 +593,107 @@ async function seedBoard(
             name: list.name,
             position: listRanks[listIndex] ?? '',
             category: list.category ?? 'todo',
+            wip_limit: list.wipLimit ?? 0,
         })
-
-        const cardRanks = initialRanks(list.cards.length)
-        for (const [cardIndex, card] of list.cards.entries()) {
-            // checklist_total / checklist_done / comment_count are deliberately
-            // absent: server/counters.go recomputes them from the checklist and
-            // comment writes below (the REST hooks fire for superusers too).
-            const cardRecord = await pb.collection('boards_cards').create({
-                project: project.id,
-                list: listRecord.id,
-                position: cardRanks[cardIndex] ?? '',
-                title: card.title,
-                description: card.description ?? '',
-                due: card.due ? card.due() : '',
-                due_has_time: card.dueHasTime ?? false,
-                start: card.start ? card.start() : '',
-                assignees: [...new Set((card.assignees ?? []).map(who))],
-                labels: (card.labels ?? [])
-                    .map(name => labelIds[name])
-                    .filter(id => id !== undefined),
-                created_by: ownerId,
-                reporter: card.reporter ? who(card.reporter) : ownerId,
-                priority: card.priority ?? 'none',
-                estimate: card.estimate ?? 0,
-                archived: false,
-            })
-
-            if (card.checklist?.length) {
-                const itemRanks = initialRanks(card.checklist.length)
-                for (const [itemIndex, item] of card.checklist.entries()) {
-                    await pb.collection('boards_checklist_items').create({
-                        card: cardRecord.id,
-                        project: project.id,
-                        title: item.title,
-                        is_done: item.done ?? false,
-                        position: itemRanks[itemIndex] ?? '',
-                    })
-                }
-            }
-
-            await seedComments(pb, project.id, cardRecord.id, card.comments ?? [], who)
-            cardIdsByTitle[card.title] = cardRecord.id
-        }
+        await seedCards(pb, list.cards, cardIdsByTitle, {
+            projectId: project.id,
+            listId: listRecord.id,
+            ownerId,
+            who,
+            labelIds,
+            epicIds,
+        })
     }
 
     await seedSubtasks(pb, board, cardIdsByTitle)
     await seedLinks(pb, board, cardIdsByTitle)
     await seedSprints(pb, project.id, ownerId, board.sprints ?? [], cardIdsByTitle)
+}
+
+/** Everything a card write needs to resolve its by-name references. */
+interface CardSeedContext {
+    projectId: string
+    listId: string
+    ownerId: string
+    who: (w: Who) => string
+    labelIds: Record<string, string>
+    epicIds: Record<string, string>
+}
+
+/** One list's cards, in order, with their checklists and comments. Records each id by title. */
+async function seedCards(
+    pb: PocketBase,
+    cards: CardSeed[],
+    cardIdsByTitle: Record<string, string>,
+    { projectId, listId, ownerId, who, labelIds, epicIds }: CardSeedContext
+) {
+    const cardRanks = initialRanks(cards.length)
+    for (const [cardIndex, card] of cards.entries()) {
+        // checklist_total / checklist_done / comment_count are deliberately
+        // absent: server/counters.go recomputes them from the checklist and
+        // comment writes below (the REST hooks fire for superusers too).
+        const cardRecord = await pb.collection('boards_cards').create({
+            project: projectId,
+            list: listId,
+            position: cardRanks[cardIndex] ?? '',
+            title: card.title,
+            description: card.description ?? '',
+            due: card.due ? card.due() : '',
+            due_has_time: card.dueHasTime ?? false,
+            start: card.start ? card.start() : '',
+            assignees: [...new Set((card.assignees ?? []).map(who))],
+            labels: (card.labels ?? []).map(name => labelIds[name]).filter(id => id !== undefined),
+            created_by: ownerId,
+            reporter: card.reporter ? who(card.reporter) : ownerId,
+            priority: card.priority ?? 'none',
+            estimate: card.estimate ?? 0,
+            epic: card.epic ? (epicIds[card.epic] ?? '') : '',
+            archived: false,
+        })
+
+        if (card.checklist?.length) {
+            const itemRanks = initialRanks(card.checklist.length)
+            for (const [itemIndex, item] of card.checklist.entries()) {
+                await pb.collection('boards_checklist_items').create({
+                    card: cardRecord.id,
+                    project: projectId,
+                    title: item.title,
+                    is_done: item.done ?? false,
+                    position: itemRanks[itemIndex] ?? '',
+                })
+            }
+        }
+
+        await seedComments(pb, projectId, cardRecord.id, card.comments ?? [], who)
+        cardIdsByTitle[card.title] = cardRecord.id
+    }
+}
+
+/**
+ * The board's epics, in declared order. Returns ids by title for the card
+ * writes. `points_total` / `points_done` are left to server/epic_rollup.go,
+ * which recomputes them from the cards filed below — the seed never writes a
+ * server-owned column.
+ */
+async function seedEpics(
+    pb: PocketBase,
+    projectId: string,
+    epics: EpicSeed[]
+): Promise<Record<string, string>> {
+    const ids: Record<string, string> = {}
+    const ranks = initialRanks(epics.length)
+    for (const [index, epic] of epics.entries()) {
+        const record = await pb.collection('boards_epics').create({
+            project: projectId,
+            title: epic.title,
+            description: epic.description ?? '',
+            color: epic.color,
+            position: ranks[index] ?? '',
+            archived: false,
+        })
+        ids[epic.title] = record.id
+    }
+    return ids
 }
 
 /**

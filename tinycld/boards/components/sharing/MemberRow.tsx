@@ -91,8 +91,8 @@ function RoleControl({
     }
 
     return (
-        <Menu>
-            <Menu.Trigger>
+        <Menu
+            trigger={
                 <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Change role for ${member.name || member.email}`}
@@ -103,20 +103,18 @@ function RoleControl({
                     </Text>
                     <ChevronDown size={14} color={mutedColor} strokeWidth={2.2} />
                 </Pressable>
-            </Menu.Trigger>
-            <Menu.Portal>
-                <Menu.Overlay />
-                <Menu.Content presentation="popover" placement="bottom" align="end">
-                    {ROLE_OPTIONS.map(option => (
-                        <Menu.Item
-                            key={option.value}
-                            onPress={() => onRoleChange(member.membershipId, option.value)}
-                        >
-                            <Menu.ItemTitle>{option.label}</Menu.ItemTitle>
-                        </Menu.Item>
-                    ))}
-                </Menu.Content>
-            </Menu.Portal>
+            }
+            placement="bottom-end"
+            title="Role"
+        >
+            {ROLE_OPTIONS.map(option => (
+                <Menu.Item
+                    key={option.value}
+                    label={option.label}
+                    isSelected={option.value === member.role}
+                    onSelect={() => onRoleChange(member.membershipId, option.value)}
+                />
+            ))}
         </Menu>
     )
 }

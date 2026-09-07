@@ -142,12 +142,12 @@ interface BoardsUIState {
      * focused card. The composer arrangement above, with one addition.
      *
      * It carries the focused card's RECT, and that is not redundant with the
-     * core Menu's own measurement. Menu re-measures `triggerRef` on every open
-     * so a keyboard-opened menu positions itself — but a canvas picker has no
-     * trigger to measure: nothing on the board is the "due date chip" of a card
-     * that is not open. The rect stands in for the trigger that would have been
-     * there, and Menu prefers a supplied `triggerPosition` over its own layout
-     * precisely so a caller can do this.
+     * surface's own measurement. A Menu measures its trigger's ref on every
+     * open so a keyboard-opened menu positions itself — but a canvas picker
+     * has no trigger to measure: nothing on the board is the "due date chip"
+     * of a card that is not open. The rect stands in for the trigger that
+     * would have been there, handed to the Menu as a point `anchor`, which is
+     * precisely what that prop exists for.
      *
      * Measured at KEYPRESS time rather than stored per card: it is a viewport
      * rect, so a scroll or a column collapse invalidates it, and the only

@@ -1,10 +1,10 @@
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { COLOR_PALETTE, ColorPickerGrid } from '@tinycld/core/ui/color-picker'
-import { Modal, ModalBackdrop, ModalContent } from '@tinycld/core/ui/modal'
+import { Dialog } from '@tinycld/core/ui/dialog'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
-import { Archive, ArchiveRestore, Plus, Trash2, X } from 'lucide-react-native'
+import { Archive, ArchiveRestore, Plus, Trash2 } from 'lucide-react-native'
 import { useState } from 'react'
-import { Pressable, ScrollView, Text, View } from 'react-native'
+import { Pressable, Text, View } from 'react-native'
 import { useEpicMutations } from '../hooks/useEpicMutations'
 import { formatEstimate } from '../lib/estimate'
 import type { BoardEpic } from '../types'
@@ -37,38 +37,18 @@ export function EpicManagerDialog({
     projectId,
     epics,
 }: EpicManagerDialogProps) {
-    if (!isVisible) return null
-
     return (
-        <Modal isOpen onClose={onClose}>
-            <ModalBackdrop />
-            <ModalContent className="w-[380px] max-h-[480px] p-0">
-                <View className="flex-row items-center px-5 pt-5 pb-3">
-                    <Text className="text-[15px] font-semibold text-foreground flex-1">Epics</Text>
-                    <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Close"
-                        onPress={onClose}
-                    >
-                        <CloseIcon />
-                    </Pressable>
-                </View>
-                <EpicManagerBody projectId={projectId} epics={epics} />
-            </ModalContent>
-        </Modal>
+        <Dialog isOpen={isVisible} onClose={onClose} title="Epics">
+            <EpicManagerBody projectId={projectId} epics={epics} />
+        </Dialog>
     )
-}
-
-function CloseIcon() {
-    const mutedColor = useThemeColor('muted')
-    return <X size={16} color={mutedColor} strokeWidth={2.2} />
 }
 
 function EpicManagerBody({ projectId, epics }: { projectId: string; epics: BoardEpic[] }) {
     const { createEpic, updateEpic, deleteEpic } = useEpicMutations(projectId)
 
     return (
-        <ScrollView className="px-5 pb-5" contentContainerClassName="gap-1">
+        <Dialog.Body contentClassName="px-5 pb-5 gap-1">
             {epics.map(epic => (
                 <EpicRow
                     key={epic.id}
@@ -83,7 +63,7 @@ function EpicManagerBody({ projectId, epics }: { projectId: string; epics: Board
                 onCreate={(title, color) => createEpic.mutate({ title, color, after: epics })}
                 isPending={createEpic.isPending}
             />
-        </ScrollView>
+        </Dialog.Body>
     )
 }
 

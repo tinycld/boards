@@ -55,9 +55,9 @@ async function assignCollaborator(page: Page) {
     await peek(page).getByRole('button', { name: 'Assign' }).click()
     // The picker lists display NAMES, not emails; the seeded collaborator's
     // name contains "Collaborator".
-    await page.getByRole('menuitem', { name: /Collaborator/ }).click()
+    await page.getByRole('menuitemcheckbox', { name: /Collaborator/ }).click()
     await expect(peek(page).getByRole('button', { name: 'Change assignees' })).toBeVisible()
-    if ((await page.getByRole('menuitem').count()) > 0) await page.keyboard.press('Escape')
+    if ((await page.getByRole('menuitemcheckbox').count()) > 0) await page.keyboard.press('Escape')
 }
 
 async function postComment(page: Page, text: string) {

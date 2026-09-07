@@ -1,8 +1,7 @@
-import { Button, ButtonText } from '@tinycld/core/ui/button'
-import { Modal, ModalBackdrop, ModalContent } from '@tinycld/core/ui/modal'
+import { Dialog } from '@tinycld/core/ui/dialog'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
 import { useState } from 'react'
-import { Pressable, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
 import { useArchivedCards } from '../hooks/useArchivedCards'
 import { useDeleteProject } from '../hooks/useProjectMutations'
 import type { BoardProject } from '../types'
@@ -53,12 +52,14 @@ function DeleteBoardDialogBody({
     }
 
     return (
-        <Modal isOpen onClose={onClose}>
-            <ModalBackdrop />
-            <ModalContent testID="boards-delete-board-dialog" className="w-[400px] p-4 gap-3">
-                <Text className="text-foreground" style={{ fontSize: 20, fontWeight: '600' }}>
-                    Delete "{project.name}"?
-                </Text>
+        <Dialog
+            isOpen
+            onClose={onClose}
+            title={`Delete "${project.name}"?`}
+            size="md"
+            testID="boards-delete-board-dialog"
+        >
+            <Dialog.Body>
                 <Text className="text-foreground text-sm">
                     This permanently deletes the board with its {summary}, along with every comment,
                     checklist and attachment. Share links to it stop working. This cannot be undone
@@ -81,26 +82,16 @@ function DeleteBoardDialogBody({
                         style={{ fontSize: 15 }}
                     />
                 </View>
-                <View className="flex-row gap-3 justify-end">
-                    <Pressable
-                        onPress={onClose}
-                        className="px-3 py-2"
-                        disabled={deleteProject.isPending}
-                    >
-                        <Text className="text-foreground" style={{ fontSize: 13 }}>
-                            Cancel
-                        </Text>
-                    </Pressable>
-                    <Button
-                        onPress={confirm}
-                        isDisabled={!matches || deleteProject.isPending}
-                        size="sm"
-                        variant="destructive"
-                    >
-                        <ButtonText>Delete board</ButtonText>
-                    </Button>
-                </View>
-            </ModalContent>
-        </Modal>
+            </Dialog.Body>
+            <Dialog.Footer>
+                <Dialog.CancelButton onPress={onClose} isDisabled={deleteProject.isPending} />
+                <Dialog.ActionButton
+                    label="Delete board"
+                    onPress={confirm}
+                    isDisabled={!matches || deleteProject.isPending}
+                    isDestructive
+                />
+            </Dialog.Footer>
+        </Dialog>
     )
 }

@@ -1,11 +1,11 @@
 import { LabelBadge } from '@tinycld/core/components/LabelBadge'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { COLOR_PALETTE, ColorPickerGrid } from '@tinycld/core/ui/color-picker'
-import { Modal, ModalBackdrop, ModalContent } from '@tinycld/core/ui/modal'
+import { Dialog } from '@tinycld/core/ui/dialog'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
-import { Plus, Trash2, X } from 'lucide-react-native'
+import { Plus, Trash2 } from 'lucide-react-native'
 import { useState } from 'react'
-import { Pressable, ScrollView, Text, View } from 'react-native'
+import { Pressable, Text, View } from 'react-native'
 import { useLabelMutations } from '../hooks/useLabelMutations'
 import type { BoardLabel } from '../types'
 
@@ -35,35 +35,17 @@ export function LabelManagerDialog({
     if (!isVisible) return null
 
     return (
-        <Modal isOpen onClose={onClose}>
-            <ModalBackdrop />
-            <ModalContent className="w-[360px] max-h-[480px] p-0">
-                <View className="flex-row items-center px-5 pt-5 pb-3">
-                    <Text className="text-[15px] font-semibold text-foreground flex-1">Labels</Text>
-                    <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Close"
-                        onPress={onClose}
-                    >
-                        <CloseIcon />
-                    </Pressable>
-                </View>
-                <LabelManagerBody projectId={projectId} labels={labels} />
-            </ModalContent>
-        </Modal>
+        <Dialog isOpen onClose={onClose} title="Labels">
+            <LabelManagerBody projectId={projectId} labels={labels} />
+        </Dialog>
     )
-}
-
-function CloseIcon() {
-    const mutedColor = useThemeColor('muted')
-    return <X size={16} color={mutedColor} strokeWidth={2.2} />
 }
 
 function LabelManagerBody({ projectId, labels }: { projectId: string; labels: BoardLabel[] }) {
     const { createLabel, updateLabel, deleteLabel } = useLabelMutations(projectId)
 
     return (
-        <ScrollView className="px-5 pb-5" contentContainerClassName="gap-1">
+        <Dialog.Body contentClassName="px-5 pb-5 gap-1">
             {labels.map(label => (
                 <LabelRow
                     key={label.id}
@@ -77,7 +59,7 @@ function LabelManagerBody({ projectId, labels }: { projectId: string; labels: Bo
                 onCreate={(name, color) => createLabel.mutate({ name, color })}
                 isPending={createLabel.isPending}
             />
-        </ScrollView>
+        </Dialog.Body>
     )
 }
 

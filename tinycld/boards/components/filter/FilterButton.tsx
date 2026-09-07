@@ -14,8 +14,8 @@ interface FilterButtonProps {
  * constraint are on, which is what someone wondering "why is the board
  * half-empty" needs to know first.
  *
- * forwardRef + optional onPress because it doubles as a Menu.Trigger child on
- * wide screens, where the trigger clones it to inject both.
+ * forwardRef + optional onPress because it is the filter Popover's trigger,
+ * which clones it to inject both.
  */
 export const FilterButton = forwardRef<View, FilterButtonProps>(function FilterButton(
     { activeCount, onPress },

@@ -49,11 +49,12 @@ test.describe('Boards — activity history', () => {
         )
 
         await peek(page).getByRole('button', { name: 'Assign' }).click()
-        await page.getByRole('menuitem').first().click()
+        await page.getByRole('menuitemcheckbox').first().click()
         await expect(peek(page).getByRole('button', { name: 'Change assignees' })).toBeVisible()
         // The multi-select stays open after a pick; Escape closes it. Pressing
         // Escape with the menu already gone would close the peek instead.
-        if ((await page.getByRole('menuitem').count()) > 0) await page.keyboard.press('Escape')
+        if ((await page.getByRole('menuitemcheckbox').count()) > 0)
+            await page.keyboard.press('Escape')
         await expect(peek(page).getByTestId('boards-activity-assignee_added')).toContainText(
             'assigned'
         )

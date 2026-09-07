@@ -1,10 +1,9 @@
 import { EmptyState } from '@tinycld/core/components/EmptyState'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
-import { Button, ButtonText } from '@tinycld/core/ui/button'
-import { Modal, ModalBackdrop, ModalContent } from '@tinycld/core/ui/modal'
+import { Dialog } from '@tinycld/core/ui/dialog'
 import { Check } from 'lucide-react-native'
 import { useState } from 'react'
-import { Pressable, ScrollView, Text, View } from 'react-native'
+import { Pressable, Text, View } from 'react-native'
 import { useBoardContent, useWritableProjects } from '../../hooks/useActiveBoard'
 import { useMoveCardToBoard } from '../../hooks/useMoveCardToBoard'
 import { rankForAppend } from '../../lib/move'
@@ -81,44 +80,32 @@ function MoveToBoardDialogBody({ card, projectId, onClose, onMoved }: MoveToBoar
     }
 
     return (
-        <Modal isOpen onClose={onClose}>
-            <ModalBackdrop />
-            <ModalContent testID="boards-move-board-dialog" className="w-[420px] max-h-[80vh] p-0">
-                <View className="px-4 pt-4 pb-2">
-                    <Text className="text-[16px] font-semibold text-foreground">
-                        Move “{card.title}” to another board
-                    </Text>
-                </View>
-                <ScrollView style={{ maxHeight: 360 }}>
-                    <BoardChoices
-                        boards={boards}
-                        selectedId={targetId}
-                        onSelect={id => {
-                            setTargetId(id)
-                            setListId('')
-                        }}
-                    />
-                    <ListChoices target={target} selectedId={list?.id ?? ''} onSelect={setListId} />
-                    <FamilyChoices card={card} selected={family} onSelect={setFamily} />
-                    <EpicChoices card={card} target={target} selected={epic} onSelect={setEpic} />
-                    <Preview card={card} target={target} />
-                </ScrollView>
-                <View className="flex-row gap-3 justify-end p-3 border-t border-border">
-                    <Pressable
-                        onPress={onClose}
-                        className="px-3 py-2"
-                        disabled={moveCard.isPending}
-                    >
-                        <Text className="text-foreground" style={{ fontSize: 13 }}>
-                            Cancel
-                        </Text>
-                    </Pressable>
-                    <Button onPress={confirm} isDisabled={!canMove} size="sm">
-                        <ButtonText>Move</ButtonText>
-                    </Button>
-                </View>
-            </ModalContent>
-        </Modal>
+        <Dialog
+            isOpen
+            onClose={onClose}
+            title={`Move “${card.title}” to another board`}
+            size="md"
+            testID="boards-move-board-dialog"
+        >
+            <Dialog.Body contentClassName="pb-2">
+                <BoardChoices
+                    boards={boards}
+                    selectedId={targetId}
+                    onSelect={id => {
+                        setTargetId(id)
+                        setListId('')
+                    }}
+                />
+                <ListChoices target={target} selectedId={list?.id ?? ''} onSelect={setListId} />
+                <FamilyChoices card={card} selected={family} onSelect={setFamily} />
+                <EpicChoices card={card} target={target} selected={epic} onSelect={setEpic} />
+                <Preview card={card} target={target} />
+            </Dialog.Body>
+            <Dialog.Footer>
+                <Dialog.CancelButton onPress={onClose} isDisabled={moveCard.isPending} />
+                <Dialog.ActionButton label="Move" onPress={confirm} isDisabled={!canMove} />
+            </Dialog.Footer>
+        </Dialog>
     )
 }
 

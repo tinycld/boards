@@ -1,11 +1,11 @@
 import { MiniCalendar } from '@tinycld/core/components/MiniCalendar'
 import { addDays, startOfDay } from '@tinycld/core/lib/dates'
-import { Menu } from '@tinycld/core/ui/menu'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
+import { Popover } from '@tinycld/core/ui/popover'
 import { useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { type DueTime, encodeDue, formatDueTime, parseTimeText, timeOf } from '../../lib/due-time'
-import { menuPropsFor, type PickerAnchor } from './picker-anchor'
+import { anchorPropsFor, type PickerAnchor } from './picker-anchor'
 
 /** What a pick writes: a bare day, an instant with the flag, or a clear. */
 export interface DatePick {
@@ -20,12 +20,15 @@ type DuePickerProps = {
     hasTime?: boolean
     /** Offer a time row. Off for the start date, which is always a day. */
     allowTime?: boolean
+    /** The sheet's heading on a phone. */
+    title?: string
     onChange: (pick: DatePick) => void
 } & PickerAnchor
 
 /**
  * The date popover: a row of relative shortcuts over a month grid, and — for
- * the due date — a row of times beneath.
+ * the due date — a row of times beneath. A Popover rather than a Menu because
+ * nothing in it is a row of commands.
  *
  * The shortcuts are not decoration. Nearly every due date someone sets on a
  * kanban card is today, tomorrow, or end of week, and making those a single
@@ -41,6 +44,7 @@ export function DuePicker({
     value,
     hasTime = false,
     allowTime = false,
+    title = 'Due date',
     onChange,
     ...anchor
 }: DuePickerProps) {
@@ -61,21 +65,23 @@ export function DuePicker({
         else setIsOpen(false)
     }
 
+    const openProps = anchor.anchor ? anchorPropsFor(anchor) : { isOpen, onOpenChange: setIsOpen }
+
     return (
-        <Menu {...(anchor.anchor ? menuPropsFor(anchor) : { isOpen, onOpenChange: setIsOpen })}>
-            {anchor.children ? <Menu.Trigger>{anchor.children}</Menu.Trigger> : null}
-            <Menu.Portal>
-                <Menu.Overlay />
-                <Menu.Content presentation="popover" placement="bottom" align="start">
-                    <DuePickerContent
-                        value={value}
-                        hasTime={allowTime && hasTime}
-                        allowTime={allowTime}
-                        onChange={choose}
-                    />
-                </Menu.Content>
-            </Menu.Portal>
-        </Menu>
+        <Popover
+            {...openProps}
+            trigger={anchor.children}
+            placement="bottom-start"
+            title={title}
+            width={268}
+        >
+            <DuePickerContent
+                value={value}
+                hasTime={allowTime && hasTime}
+                allowTime={allowTime}
+                onChange={choose}
+            />
+        </Popover>
     )
 }
 
@@ -109,7 +115,7 @@ function DuePickerContent({
     ]
 
     return (
-        <View className="w-[268px]">
+        <View>
             <View className="flex-row flex-wrap gap-1.5 px-3 pt-3 pb-1">
                 {presets.map(preset => (
                     <PresetChip
