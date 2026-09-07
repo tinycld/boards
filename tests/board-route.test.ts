@@ -77,12 +77,9 @@ describe('paths', () => {
 
     // A card the server has not numbered has no page yet, so it links peeked.
     it('links a card to its page, or peeked on its board before it is numbered', () => {
-        const orgHref = (path: string, extra?: Record<string, string>): Href =>
-            appHref(path, extra)
+        const orgHref = (path: string, extra?: Record<string, string>): Href => appHref(path, extra)
         const board = { id: 'p1', slug: 'PL' }
-        expect(cardHref(orgHref, board, { id: 'c12', number: 12 })).toEqual(
-            appHref('boards/PL/12')
-        )
+        expect(cardHref(orgHref, board, { id: 'c12', number: 12 })).toEqual(appHref('boards/PL/12'))
         expect(cardHref(orgHref, board, { id: 'c0', number: 0 })).toEqual(
             appHref('boards/PL', { focused: 'c0' })
         )
