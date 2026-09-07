@@ -1,6 +1,6 @@
 import { log } from '@tinycld/core/lib/logger'
 import { pb } from '@tinycld/core/lib/pocketbase'
-import { useCallback } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 
 /** Must match `roomKindBoards` in boards/server/realtime.go. */
 const ROOM_KIND = 'boards'
@@ -17,10 +17,10 @@ const ROOM_KIND = 'boards'
  * room), but the surface the reader is looking at has not heard about it.
  *
  * The room is keyed per BOARD, not per card, so closing a card never empties
- * it and the coordinator's teardown flush never fires. Ending a description
- * session is therefore the only moment that knows the read view is about to
- * become the thing on screen. Flushing here makes the record current before
- * anyone reads it.
+ * it and the coordinator's teardown flush never fires. The editor going away
+ * is therefore the only moment that knows the read view is about to become
+ * the thing on screen. Flushing then makes the record current before anyone
+ * reads it.
  *
  * Fire-and-forget on purpose: the flush is an optimization of what the
  * debounce would do anyway, so a failure costs at most the 3s wait it was
@@ -43,4 +43,37 @@ export function useFlushBoardRoom(projectId: string) {
                 })
             })
     }, [projectId])
+}
+
+/**
+ * Flush when an open editing session GOES AWAY, however it goes away.
+ *
+ * Closing the card peek unmounts the whole tree without ever calling the
+ * editor's own cancel — the Close button drives the store directly — so
+ * hooking the explicit exits (Escape, ⌘↩, the header's ✕) misses the most
+ * common one of all. Unmount is the single event every exit shares.
+ *
+ * Returns the marker to call once a session is known to have opened; the
+ * cleanup fires only if it was. That is what distinguishes "the reader typed
+ * and left" from "the card was opened and closed", and it has to be a ref
+ * rather than a dependency because the flush belongs to the UNMOUNT, which by
+ * then can no longer read render state.
+ */
+export function useFlushOnEditEnd(projectId: string) {
+    const flush = useFlushBoardRoom(projectId)
+    const wasEditingRef = useRef(false)
+
+    const flushRef = useRef(flush)
+    flushRef.current = flush
+
+    useEffect(
+        () => () => {
+            if (wasEditingRef.current) flushRef.current()
+        },
+        []
+    )
+
+    return useCallback(() => {
+        wasEditingRef.current = true
+    }, [])
 }
