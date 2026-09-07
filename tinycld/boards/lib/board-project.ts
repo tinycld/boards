@@ -157,6 +157,7 @@ export function toBoardCard(
         // carries no reference back to it. formatCardKey returns '' for a board
         // with no slug and for the beat before the server assigns a number.
         key: formatCardKey(projectSlug, card.number),
+        number: card.number ?? 0,
         listId: card.list,
         position: card.position,
         title: card.title,
@@ -536,6 +537,7 @@ function sameCard(a: BoardCardView, b: BoardCardView): boolean {
         // card: the number arrives from the server a beat later, and a node
         // that compares equal keeps being reused from the previous tree.
         a.key === b.key &&
+        a.number === b.number &&
         a.listId === b.listId &&
         a.position === b.position &&
         a.title === b.title &&

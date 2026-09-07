@@ -6,6 +6,7 @@ import { useStore } from '@tinycld/core/lib/pocketbase'
 import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
 import type { Href } from 'expo-router'
 import { useMemo } from 'react'
+import { boardSegment, cardPagePath } from './lib/board-route'
 import { parseDueValue } from './lib/due-time'
 
 // Calendar event source: cards with due dates, contributed via the manifest's
@@ -18,6 +19,8 @@ interface DueCardRow {
     title: string
     due: string
     due_has_time: boolean
+    number: number
+    board: { id: string; slug: string }
 }
 
 /** A timed deadline lands on the grid as this long a block. */
@@ -51,7 +54,11 @@ export function buildDueItems(
             start: due.toISOString(),
             end: end.toISOString(),
             allDay: !row.due_has_time,
-            href: orgHref('boards/[cardId]', { cardId: row.id }),
+            // The card's page. A card the server has not numbered yet has no
+            // page URL; its record id still resolves (the board route redirects).
+            href: orgHref(
+                row.number ? cardPagePath(boardSegment(row.board), row.number) : `boards/${row.id}`
+            ),
         })
     }
     return items
@@ -96,11 +103,13 @@ export function useEventSource({ start, end }: EventSourceRange): {
                         eq(project.archived, false)
                     )
                 )
-                .select(({ card }) => ({
+                .select(({ card, project }) => ({
                     id: card.id,
                     title: card.title,
                     due: card.due,
                     due_has_time: card.due_has_time,
+                    number: card.number,
+                    board: { id: project.id, slug: project.slug },
                 })),
         [startDay, dayAfterEnd]
     )

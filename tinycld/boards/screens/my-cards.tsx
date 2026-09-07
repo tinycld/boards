@@ -14,6 +14,7 @@ import { useMemo, useState } from 'react'
 import { Pressable, SectionList, Text, View } from 'react-native'
 import { CardRow } from '../components/table/CardRow'
 import { useBoardLiveQuery } from '../hooks/useBoardLiveQuery'
+import { boardSegment, cardPagePath } from '../lib/board-route'
 import {
     buildMyCardRows,
     groupMyCards,
@@ -133,8 +134,16 @@ export default function MyCardsScreen() {
         showClosed,
     ])
 
+    // A card the server has not numbered yet has no page URL of its own; its
+    // record id still resolves (the board route redirects to the page).
     const openRow = (row: MyCardRow) =>
-        router.push(orgHref('boards/[cardId]', { cardId: row.card.key || row.card.id }))
+        router.push(
+            orgHref(
+                row.card.number
+                    ? cardPagePath(boardSegment(row.board), row.card.number)
+                    : `boards/${row.card.id}`
+            )
+        )
 
     useMyCardsShortcuts(() => router.push(orgHref('boards')))
 

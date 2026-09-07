@@ -138,7 +138,7 @@ func notifyDescriptionMentions(app core.App, projectID, cardID, prev, next strin
 			// No author to name — see the header.
 			Title: "You were mentioned on a card",
 			Body:  truncateRunes(cardTitle(app, cardID), 200),
-			URL:   descriptionMentionURL(app, cardID),
+			URL:   cardURL(app, cardID),
 			Meta: map[string]any{
 				"targetCollection": "boards_cards",
 				"targetRecord":     cardID,
@@ -162,17 +162,6 @@ func cardTitle(app core.App, cardID string) string {
 	return "Untitled card"
 }
 
-// descriptionMentionURL deep-links to the card, matching the shape
-// core/server/notify/comment_mentions.go builds for a cards comment mention:
-// the board route with the card peeked open (usePeekUrl reads `?focused=`,
-// which accepts a record id as well as an OTTER-123 key).
-func descriptionMentionURL(app core.App, cardID string) string {
-	appURL := app.Settings().Meta.AppURL
-	for len(appURL) > 0 && appURL[len(appURL)-1] == '/' {
-		appURL = appURL[:len(appURL)-1]
-	}
-	return appURL + "/boards?focused=" + cardID
-}
 
 // truncateRunes caps a notification body without splitting a rune.
 func truncateRunes(s string, limit int) string {

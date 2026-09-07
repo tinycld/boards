@@ -212,6 +212,13 @@ export interface BoardCardView {
      * numbered (the optimistic-insert gap); see lib/card-key.ts.
      */
     key: string
+    /**
+     * The card's number on its board — the `123` of `OTTER-123` — or 0 before
+     * the server assigns one. Kept beside the key because the full-page URL
+     * spells the two halves as separate segments (`boards/OTTER/123`), and a
+     * board with no slug still numbers its cards.
+     */
+    number: number
     listId: string
     /** Fractional rank — see lib/rank.ts. Sort by `position, id`. */
     position: string

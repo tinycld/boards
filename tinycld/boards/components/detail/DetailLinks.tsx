@@ -167,11 +167,11 @@ function ResolvedFar({ link, isOnThisBoard }: { link: CardLinkView; isOnThisBoar
     if (link.far.state !== 'resolved') return null
 
     const far = link.far.card
-    // A card on ANOTHER board cannot open in the peek: CardPeek resolves its
-    // id through `findCardEntry(project, …)`, which only knows this board, so
-    // the peek would render nothing and the press would look broken. The
-    // full-page route takes a card KEY and reads that board without switching
-    // to it — see useCardRoute, which exists for exactly this shape of link.
+    // A card on ANOTHER board cannot open in this board's peek: CardPeek
+    // resolves its id through `findCardEntry(project, …)`, which only knows
+    // this board, so the peek would render nothing and the press would look
+    // broken. `/a/boards/<KEY>` opens the other board with the card peeked —
+    // a real navigation, so Back returns here.
     const open = () => {
         if (isOnThisBoard) openCard(far.id)
         else if (far.key) router.push(orgHref(`boards/${far.key}`))

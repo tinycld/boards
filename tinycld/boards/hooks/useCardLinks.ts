@@ -35,6 +35,7 @@ function toFarCardView(row: {
     return {
         id: row.card.id,
         key: formatCardKey(row.project.slug, row.card.number),
+        number: row.card.number,
         title: row.card.title,
         listCategory: normalizeListCategory(row.list.category),
         listId: row.card.list,

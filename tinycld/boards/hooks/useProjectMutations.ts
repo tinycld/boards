@@ -1,7 +1,10 @@
 import { useAuth } from '@tinycld/core/lib/auth'
 import { mutation, useMutation } from '@tinycld/core/lib/mutations'
+import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { useStore } from '@tinycld/core/lib/pocketbase'
+import { useRouter } from 'expo-router'
 import { newRecordId } from 'pbtsdb/core'
+import { boardPath } from '../lib/board-route'
 import type { ListCategory } from '../lib/list-category'
 import { initialRanks } from '../lib/rank'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
@@ -104,6 +107,8 @@ export function useUpdateProject() {
 export function useArchiveProject() {
     const [projectsCollection] = useStore('boards_projects')
     const setActiveProject = useBoardsUIStore(s => s.setActiveProject)
+    const router = useRouter()
+    const orgHref = useOrgHref()
 
     return useMutation<void, Error, string>({
         mutationKey: ['boards', 'project', 'archive'],
@@ -112,10 +117,13 @@ export function useArchiveProject() {
                 draft.archived = true
             })
         }),
-        // Clearing the stored id lets useActiveBoard fall back to the first
-        // remaining board; leaving it would point the store at a project the
-        // query no longer returns.
-        onSuccess: () => setActiveProject(''),
+        // Leave the board: an archived one is still openable from the sidebar,
+        // but "archive" means "get it out of my way". Clearing the stored id
+        // first makes the bare /a/boards land on the first remaining board.
+        onSuccess: () => {
+            setActiveProject('')
+            router.replace(orgHref('boards'))
+        },
     })
 }
 
@@ -150,13 +158,18 @@ export function useRestoreProject() {
 export function useDeleteProject() {
     const [projectsCollection] = useStore('boards_projects')
     const setActiveProject = useBoardsUIStore(s => s.setActiveProject)
+    const router = useRouter()
+    const orgHref = useOrgHref()
 
     return useMutation<void, Error, string>({
         mutationKey: ['boards', 'project', 'delete'],
         mutationFn: mutation(function* (projectId: string) {
             yield projectsCollection.delete(projectId)
         }),
-        onSuccess: () => setActiveProject(''),
+        onSuccess: () => {
+            setActiveProject('')
+            router.replace(orgHref('boards'))
+        },
     })
 }
 
@@ -190,8 +203,9 @@ export function useCreateProject(options: { onError?: (error: unknown) => void }
         'boards_project_members',
         'boards_lists'
     )
-    const setActiveProject = useBoardsUIStore(s => s.setActiveProject)
     const closeNewBoard = useBoardsUIStore(s => s.closeNewBoard)
+    const router = useRouter()
+    const orgHref = useOrgHref()
 
     return useMutation<string, Error, CreateProjectInput>({
         mutationKey: ['boards', 'project', 'create'],
@@ -245,9 +259,12 @@ export function useCreateProject(options: { onError?: (error: unknown) => void }
 
             return projectId
         }),
-        onSuccess: projectId => {
-            setActiveProject(projectId)
+        // The board is in the URL, so "open the new board" is a navigation.
+        // Its optimistic row is already in the local store, which is what the
+        // board route resolves against, so the screen renders it at once.
+        onSuccess: (projectId, input) => {
             closeNewBoard()
+            router.navigate(orgHref(boardPath(input.slug || projectId)))
         },
         // Omitted when the caller passes nothing, so the default error toast +
         // Sentry report stay in place. A form caller passes
