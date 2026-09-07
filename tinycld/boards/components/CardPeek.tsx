@@ -9,7 +9,7 @@ import { type RefObject, useCallback, useMemo, useRef, useState } from 'react'
 import { Platform, Pressable, StyleSheet, View } from 'react-native'
 import { useProjectRole } from '../hooks/useProjectRole'
 import { type CardEntry, findCardEntry, flattenCards, neighborCardId } from '../lib/board-cards'
-import { boardSegment, cardPagePath } from '../lib/board-route'
+import { cardHref } from '../lib/board-route'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
 import type { BoardProject } from '../types'
 import { CardActionsMenu } from './detail/CardActionsMenu'
@@ -121,17 +121,7 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
         [project]
     )
 
-    // The card's page, `/a/boards/PL/12`. A card the server has not numbered
-    // yet has no page URL of its own; its record id still resolves — the board
-    // route redirects to the page once the number lands.
-    const expandCard = () =>
-        router.push(
-            orgHref(
-                entry.card.number
-                    ? cardPagePath(boardSegment(project), entry.card.number)
-                    : `boards/${entry.card.id}`
-            )
-        )
+    const expandCard = () => router.push(cardHref(orgHref, project, entry.card))
 
     return (
         <>

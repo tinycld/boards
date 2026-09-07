@@ -10,19 +10,12 @@ import type { BoardProject } from '../tinycld/boards/types'
 // only the rows its query would have matched.
 const h = vi.hoisted(() => ({
     projects: [] as { id: string; slug: string; archived?: boolean }[],
-    cards: [] as { id: string; project: string; number: number }[],
-    storedProjects: new Map<string, { id: string; slug: string }>(),
     boardContentCalledWith: [] as string[],
     board: null as BoardProject | null,
 }))
 
 vi.mock('@tinycld/core/lib/pocketbase', () => ({
-    useStore: (...names: string[]) =>
-        names.map(name => ({
-            __name: name,
-            get: (id: string) =>
-                name === 'boards_projects' ? h.storedProjects.get(id) : undefined,
-        })),
+    useStore: (...names: string[]) => names.map(name => ({ __name: name })),
 }))
 
 vi.mock('@tinycld/core/lib/auth', () => ({
@@ -42,7 +35,6 @@ vi.mock('~/tinycld/boards/hooks/useBoardLiveQuery', () => ({
         const result = queryFn(builder)
         if (result === null || result === undefined) return { data: [], isLoading: false }
         if (target === 'boards_projects') return { data: h.projects, isLoading: false }
-        if (target === 'boards_cards') return { data: h.cards, isLoading: false }
         return { data: [], isLoading: false }
     },
 }))
@@ -94,8 +86,6 @@ function board(): BoardProject {
 describe('useBoardRoute', () => {
     afterEach(() => {
         h.projects = []
-        h.cards = []
-        h.storedProjects = new Map()
         h.boardContentCalledWith = []
         h.board = null
         vi.clearAllMocks()
@@ -152,27 +142,6 @@ describe('useBoardRoute', () => {
 
         expect(h.boardContentCalledWith).toContain('r8f3k2m9x1p7q4w')
         expect(result.current.segment).toBe('r8f3k2m9x1p7q4w')
-        expect(result.current.legacyCardPath).toBeNull()
-    })
-
-    // Every link minted before keys existed — and every calendar and My cards
-    // link for a card the server had not numbered — spells a card as
-    // /a/boards/<id>. It has a page now; the route says where.
-    it('redirects a card record id to the card page', () => {
-        h.cards = [{ id: 'r8f3k2m9x1p7q4w', project: 'p1', number: 7 }]
-        h.storedProjects.set('p1', { id: 'p1', slug: 'OTTER' })
-
-        const { result } = renderHook(() => useBoardRoute('r8f3k2m9x1p7q4w'))
-
-        expect(result.current.legacyCardPath).toBe('boards/OTTER/7')
-    })
-
-    it('falls back to the project id for a redirected card whose board has no slug', () => {
-        h.cards = [{ id: 'r8f3k2m9x1p7q4w', project: 'p1', number: 7 }]
-
-        const { result } = renderHook(() => useBoardRoute('r8f3k2m9x1p7q4w'))
-
-        expect(result.current.legacyCardPath).toBe('boards/p1/7')
     })
 
     it('resolves nothing for a slug that names no board', () => {

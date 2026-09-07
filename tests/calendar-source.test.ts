@@ -109,9 +109,8 @@ describe('buildDueItems', () => {
     })
 
     // A board with no slug is addressed by id; a card the server has not
-    // numbered has no page of its own and keeps its record-id link, which the
-    // board route redirects once the number lands.
-    it('spells the page by board id without a slug, and by record id without a number', () => {
+    // numbered has no page of its own and is linked peeked on its board.
+    it('spells the page by board id without a slug, and the peek without a number', () => {
         const [noSlug, noNumber] = buildDueItems(
             [
                 {
@@ -134,7 +133,7 @@ describe('buildDueItems', () => {
             orgHref
         )
         expect(noSlug.href).toEqual({ pathname: '/a/boards/p9/3', params: undefined })
-        expect(noNumber.href).toEqual({ pathname: '/a/boards/b', params: undefined })
+        expect(noNumber.href).toEqual({ pathname: '/a/boards/PL', params: { focused: 'b' } })
     })
 
     it('preserves row order', () => {

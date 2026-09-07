@@ -5,8 +5,8 @@ import {
     activeBoardIdFromPath,
     boardPath,
     boardSegment,
+    cardHref,
     cardPagePath,
-    isRecordId,
     parseBoardSegment,
     parseCardNumber,
     peekHref,
@@ -67,20 +67,25 @@ describe('parseCardNumber', () => {
     })
 })
 
-describe('isRecordId', () => {
-    it('recognizes a PocketBase id and nothing shorter', () => {
-        expect(isRecordId('r8f3k2m9x1p7q4w')).toBe(true)
-        expect(isRecordId('PL')).toBe(false)
-        expect(isRecordId('PLATFORMENG')).toBe(false)
-    })
-})
-
 describe('paths', () => {
     it('spells a board by slug, or by id when it has none', () => {
         expect(boardSegment({ id: 'p1', slug: 'PL' })).toBe('PL')
         expect(boardSegment({ id: 'p1', slug: '' })).toBe('p1')
         expect(boardPath('PL')).toBe('boards/PL')
         expect(cardPagePath('PL', 12)).toBe('boards/PL/12')
+    })
+
+    // A card the server has not numbered has no page yet, so it links peeked.
+    it('links a card to its page, or peeked on its board before it is numbered', () => {
+        const orgHref = (path: string, extra?: Record<string, string>): Href =>
+            appHref(path, extra)
+        const board = { id: 'p1', slug: 'PL' }
+        expect(cardHref(orgHref, board, { id: 'c12', number: 12 })).toEqual(
+            appHref('boards/PL/12')
+        )
+        expect(cardHref(orgHref, board, { id: 'c0', number: 0 })).toEqual(
+            appHref('boards/PL', { focused: 'c0' })
+        )
     })
 
     it('puts a keyed card in the path and a keyless one in ?focused=', () => {
@@ -159,7 +164,7 @@ describe('resolveCardOnBoard', () => {
         expect(resolveCardOnBoard(board(), 'home-2')).toBe('c2')
     })
 
-    // Links minted before keys existed must keep working.
+    // The `?focused=<id>` spelling: core's notifications, and a keyless card.
     it('resolves a raw record id', () => {
         expect(resolveCardOnBoard(board(), 'c1')).toBe('c1')
     })

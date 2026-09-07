@@ -23,8 +23,8 @@ import { parseCardKey } from './card-key'
  * ONE segment, told apart by `parseCardKey`: a key has a hyphen followed by
  * digits, a slug has neither, and a 15-character PocketBase id has no hyphen
  * at all. So `my-cards` and a record id both fall through to "board" without
- * a special case. Which record id names a card rather than a board is the one
- * question a parser cannot answer — useBoardRoute asks the local collections.
+ * a special case. A record id in the segment always names a BOARD; a card is
+ * only ever spelled by its key, its number, or `?focused=<id>`.
  */
 
 export interface BoardSegment {
@@ -51,11 +51,6 @@ export function parseCardNumber(segment: string): number {
     if (!/^[1-9]\d*$/.test(trimmed)) return 0
     const number = Number(trimmed)
     return Number.isSafeInteger(number) ? number : 0
-}
-
-/** Could this segment be a PocketBase record id? (Slugs stop at ten characters.) */
-export function isRecordId(segment: string): boolean {
-    return /^[a-z0-9]{15}$/.test(segment)
 }
 
 /** A board's canonical URL segment: its slug, or its id when it has none. */
@@ -92,6 +87,23 @@ export function peekParams(
 
 type HrefBuilder = (path: string, extra?: Record<string, string>) => Href
 
+/**
+ * A link to `card`'s full page, `boards/PL/12`.
+ *
+ * A card the server has not numbered yet has no page of its own, so it is
+ * linked peeked on its board instead — the same `?focused=` fallback every
+ * other keyless link uses. Once the number lands, the next link is the page.
+ */
+export function cardHref(
+    orgHref: HrefBuilder,
+    board: { id: string; slug: string },
+    card: { id: string; number: number }
+): Href {
+    const segment = boardSegment(board)
+    if (card.number) return orgHref(cardPagePath(segment, card.number))
+    return peekHref(orgHref, segment, { key: '', id: card.id })
+}
+
 /** A link to `card` peeked on its board — what search and cross-board links navigate to. */
 export function peekHref(
     orgHref: HrefBuilder,
@@ -117,9 +129,9 @@ export function urlCardParam(boardSlug: string, focused: string): string {
 /**
  * A URL's card param -> a card id on THIS board, or ''.
  *
- * Accepts a key or a raw record id. A key is checked against the board's own
- * slug so `OTTER-2` on the FOX board resolves to nothing rather than to
- * whichever card happens to be numbered 2 here.
+ * Accepts a key or a raw record id (the `?focused=` spelling). A key is
+ * checked against the board's own slug so `OTTER-2` on the FOX board resolves
+ * to nothing rather than to whichever card happens to be numbered 2 here.
  */
 export function resolveCardOnBoard(project: BoardProject, param: string): string {
     if (!param) return ''

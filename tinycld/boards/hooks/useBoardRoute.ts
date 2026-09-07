@@ -6,14 +6,11 @@ import { flattenCards } from '../lib/board-cards'
 import type { BoardViewOptions } from '../lib/board-project'
 import {
     boardSegment,
-    cardPagePath,
-    isRecordId,
     parseBoardSegment,
     parseCardNumber,
     resolveCardOnBoard,
     urlCardParam,
 } from '../lib/board-route'
-import { parseCardKey } from '../lib/card-key'
 import {
     selectBoardFilter,
     selectBoardSort,
@@ -35,11 +32,7 @@ import { useBoardLiveQuery } from './useBoardLiveQuery'
  * decide what to render; the screen writes the store afterwards so the bare
  * `/a/boards` can return to where the reader was.
  *
- * The segment shapes are documented in lib/board-route.ts. The one thing a
- * parser cannot tell is whether a 15-character record id names a board or a
- * card — every link minted before keys existed spells a card that way — so
- * both are asked of the local collections, and a card answers with the page
- * URL it now lives at (`legacyCardPath`) for the screen to redirect to.
+ * The segment shapes are documented in lib/board-route.ts.
  */
 export interface BoardRoute {
     project: BoardProject | null
@@ -57,8 +50,6 @@ export interface BoardRoute {
     isArchived: boolean
     /** Live cards across the board before the reader's filter, for the header. */
     cardCount: number
-    /** Set when the segment is a CARD's record id: the page path it now lives at. */
-    legacyCardPath: string | null
 }
 
 interface UseBoardRouteOptions {
@@ -77,7 +68,7 @@ export function useBoardRoute(
     cardSegment = '',
     { focused = '', isViewed = true }: UseBoardRouteOptions = {}
 ): BoardRoute {
-    const [projectsCollection, cardsCollection] = useStore('boards_projects', 'boards_cards')
+    const [projectsCollection] = useStore('boards_projects')
 
     const { slug } = useMemo(() => parseBoardSegment(routeSegment), [routeSegment])
 
@@ -96,27 +87,6 @@ export function useBoardRoute(
     )
     const projectRow = projectRows?.[0]
     const projectId = projectRow?.id ?? ''
-
-    // A record id may instead be a CARD, which is what every link minted before
-    // keys existed spells. Asked as a query rather than a `.get()` so a cold
-    // load waits for the collection to sync instead of flashing "no such board".
-    const mayBeCardId = !parseCardKey(routeSegment) && isRecordId(routeSegment)
-    const { data: legacyCardRows, isLoading: legacyCardLoading } = useBoardLiveQuery(
-        query => {
-            if (!mayBeCardId) return null
-            return query
-                .from({ card: cardsCollection })
-                .where(({ card }) => eq(card.id, routeSegment))
-        },
-        [mayBeCardId, routeSegment, cardsCollection]
-    )
-    const legacyCard = legacyCardRows?.[0]
-    const legacyCardPath = useMemo(() => {
-        if (!legacyCard) return null
-        const owner = projectsCollection.get(legacyCard.project)
-        const segment = owner ? boardSegment(owner) : legacyCard.project
-        return cardPagePath(segment, legacyCard.number)
-    }, [legacyCard, projectsCollection])
 
     // The reader's view, applied only where a view exists. The full-page card
     // renders one card and must not be filtered out from under itself.
@@ -155,11 +125,10 @@ export function useBoardRoute(
         // A card needs the board's cards to have landed before "no such card"
         // can be true; without that a deep link flashes not-found on every
         // cold load.
-        isLoading: projectLoading || legacyCardLoading || contentLoading,
+        isLoading: projectLoading || contentLoading,
         segment: projectRow ? boardSegment(projectRow) : '',
         isArchived: projectRow?.archived ?? false,
         cardCount,
-        legacyCardPath,
     }
 }
 

@@ -1,8 +1,7 @@
 import { DocumentTitle } from '@tinycld/core/components/DocumentTitle'
 import { LoadingState } from '@tinycld/core/components/LoadingState'
-import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { useDeviceInsets } from '@tinycld/core/lib/use-safe-area'
-import { Redirect, useLocalSearchParams } from 'expo-router'
+import { useLocalSearchParams } from 'expo-router'
 import { useEffect } from 'react'
 import { Text, View } from 'react-native'
 import { ArchivedBoardBanner } from '../../components/ArchivedBoardBanner'
@@ -34,20 +33,13 @@ export default function BoardScreen() {
     const params = useLocalSearchParams<{ boardSlug?: string; focused?: string }>()
     const boardSlug = paramString(params.boardSlug)
     const focused = paramString(params.focused)
-    const orgHref = useOrgHref()
-    const { project, isLoading, segment, isArchived, cardCount, legacyCardPath } = useBoardRoute(
-        boardSlug,
-        '',
-        { focused }
-    )
+    const { project, isLoading, segment, isArchived, cardCount } = useBoardRoute(boardSlug, '', {
+        focused,
+    })
     useVisitedBoard(project?.id ?? '')
     // A LOADING board is not a board yet: the project row can land before its
     // cards do, and in that window a link's card is not there to be found.
     usePeekUrl(isLoading ? null : project, segment)
-
-    // A card's record id in the board segment — every link minted before keys
-    // existed. It has a proper page now; send the reader there.
-    if (legacyCardPath) return <Redirect href={orgHref(legacyCardPath)} />
 
     // Loading is checked FIRST: without it, a cold load renders not-found for
     // a frame before the query settles.
