@@ -35,7 +35,11 @@ export function boardCard(page: Page, title: string): Locator {
  * board the cards screen restores on entry is not necessarily this spec's.
  */
 export async function openBoard(page: Page, name: string, cardTitle: string) {
-    await page.getByText(name, { exact: true }).first().click()
+    // Scoped to the SIDEBAR. A board's name renders in the board header too, so
+    // an unscoped `getByText(name)` matches twice as soon as any board is open
+    // — and `.first()` merely picked whichever the DOM happened to order first,
+    // which is the header when the board is already showing.
+    await page.getByTestId('package-sidebar-mounted').getByText(name, { exact: true }).click()
     await expect(boardCard(page, cardTitle)).toBeVisible()
 }
 

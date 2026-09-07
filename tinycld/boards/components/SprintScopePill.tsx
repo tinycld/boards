@@ -1,8 +1,9 @@
+import { Tooltip } from '@tinycld/core/components/Tooltip'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { Menu } from '@tinycld/core/ui/menu'
 import { ChevronDown, CircleCheck, Play, Timer } from 'lucide-react-native'
-import { useState } from 'react'
-import { Pressable, Text } from 'react-native'
+import { forwardRef, useState } from 'react'
+import { Pressable, Text, type View } from 'react-native'
 import { useProjectRole } from '../hooks/useProjectRole'
 import {
     activeSprint,
@@ -48,18 +49,7 @@ export function SprintScopePill({
         <>
             <Menu
                 trigger={
-                    <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`Board scope: ${label}`}
-                        testID="boards-sprint-scope"
-                        className="flex-row items-center gap-1.5 rounded-md border border-border px-2 py-1 hover:bg-foreground/[0.04]"
-                    >
-                        <Timer size={12} color={mutedColor} strokeWidth={2.2} />
-                        <Text className="text-[12px] font-medium text-foreground" numberOfLines={1}>
-                            {label}
-                        </Text>
-                        <ChevronDown size={12} color={foreground} strokeWidth={2.2} />
-                    </Pressable>
+                    <ScopeTrigger label={label} mutedColor={mutedColor} foreground={foreground} />
                 }
                 placement="bottom-end"
                 title="Board scope"
@@ -160,3 +150,34 @@ function activeSummary(sprint: BoardSprint): string {
     if (progress.total > 0) parts.push(`${progress.done}/${progress.total} ${progress.unit}`)
     return parts.join(' · ')
 }
+
+/**
+ * The trigger, as a forwardRef component rather than an inline Pressable — see
+ * SortMenu's SortTrigger for why a Menu trigger cannot be wrapped from outside.
+ *
+ * The pill already names its own scope, so the tooltip says what the control
+ * DOES rather than repeating the label back.
+ */
+const ScopeTrigger = forwardRef<
+    View,
+    { label: string; mutedColor: string; foreground: string; onPress?: () => void }
+>(function ScopeTrigger({ label, mutedColor, foreground, onPress }, ref) {
+    return (
+        <Tooltip label="Which sprint the board shows">
+            <Pressable
+                ref={ref}
+                accessibilityRole="button"
+                accessibilityLabel={`Board scope: ${label}`}
+                testID="boards-sprint-scope"
+                onPress={onPress}
+                className="flex-row items-center gap-1.5 rounded-md border border-border px-2 py-1 hover:bg-foreground/[0.04]"
+            >
+                <Timer size={12} color={mutedColor} strokeWidth={2.2} />
+                <Text className="text-[12px] font-medium text-foreground" numberOfLines={1}>
+                    {label}
+                </Text>
+                <ChevronDown size={12} color={foreground} strokeWidth={2.2} />
+            </Pressable>
+        </Tooltip>
+    )
+})

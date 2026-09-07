@@ -8,8 +8,11 @@ order: 20
 ## Opening a card
 
 Click any card on the board to open it in a panel on the right. The board stays
-visible behind the panel — click a different card to switch to it without
-closing anything.
+visible behind the panel.
+
+To close the card, click anywhere on the board behind it, press **Esc**, or use
+the ✕ in the panel's corner. To move to the next or previous card without
+closing, press **j** or **k**.
 
 To give a card the whole screen, click the expand button (the arrows in the
 panel's top corner). Your browser's back button returns you to the board.

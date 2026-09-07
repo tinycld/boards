@@ -1,3 +1,4 @@
+import { Tooltip } from '@tinycld/core/components/Tooltip'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { ListFilter } from 'lucide-react-native'
 import { forwardRef } from 'react'
@@ -25,23 +26,29 @@ export const FilterButton = forwardRef<View, FilterButtonProps>(function FilterB
     const activeColor = useThemeColor('primary')
     const isActive = activeCount > 0
 
+    const label = isActive ? `Filter cards (${activeCount} active)` : 'Filter cards'
+
+    // Inside the forwardRef, around the Pressable — see IconButton for why a
+    // Popover trigger must not be wrapped from the outside.
     return (
-        <Pressable
-            ref={ref}
-            accessibilityRole="button"
-            accessibilityLabel={isActive ? `Filter cards (${activeCount} active)` : 'Filter cards'}
-            testID="boards-filter-button"
-            onPress={onPress}
-            className="flex-row items-center gap-1 h-7 px-1.5 rounded-md hover:bg-foreground/10 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
-        >
-            <ListFilter size={15} color={isActive ? activeColor : mutedColor} strokeWidth={2} />
-            {isActive ? (
-                <View className="bg-primary rounded-full min-w-[16px] h-4 px-1 items-center justify-center">
-                    <Text className="text-[10px] font-bold text-primary-foreground">
-                        {activeCount}
-                    </Text>
-                </View>
-            ) : null}
-        </Pressable>
+        <Tooltip label={label}>
+            <Pressable
+                ref={ref}
+                accessibilityRole="button"
+                accessibilityLabel={label}
+                testID="boards-filter-button"
+                onPress={onPress}
+                className="flex-row items-center gap-1 h-7 px-1.5 rounded-md hover:bg-foreground/10 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+            >
+                <ListFilter size={15} color={isActive ? activeColor : mutedColor} strokeWidth={2} />
+                {isActive ? (
+                    <View className="bg-primary rounded-full min-w-[16px] h-4 px-1 items-center justify-center">
+                        <Text className="text-[10px] font-bold text-primary-foreground">
+                            {activeCount}
+                        </Text>
+                    </View>
+                ) : null}
+            </Pressable>
+        </Tooltip>
     )
 })

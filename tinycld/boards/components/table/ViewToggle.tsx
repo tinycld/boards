@@ -1,3 +1,4 @@
+import { Tooltip } from '@tinycld/core/components/Tooltip'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { ChartGantt, Columns3, List, ListTree } from 'lucide-react-native'
 import { Pressable, View } from 'react-native'
@@ -100,16 +101,20 @@ function Segment({
     onPress: () => void
     colors: { muted: string; active: string }
 }) {
+    // Four 13px glyphs in a 24px-wide segmented control, with nothing but the
+    // icon to tell Board from List from Timeline from Backlog.
     return (
-        <Pressable
-            testID={`boards-view-${mode}`}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: isActive }}
-            accessibilityLabel={`${label} view`}
-            onPress={onPress}
-            className={`items-center justify-center w-6 h-5 rounded ${isActive ? 'bg-foreground/10' : ''}`}
-        >
-            <Icon size={13} color={isActive ? colors.active : colors.muted} strokeWidth={2.2} />
-        </Pressable>
+        <Tooltip label={`${label} view`}>
+            <Pressable
+                testID={`boards-view-${mode}`}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: isActive }}
+                accessibilityLabel={`${label} view`}
+                onPress={onPress}
+                className={`items-center justify-center w-6 h-5 rounded ${isActive ? 'bg-foreground/10' : ''}`}
+            >
+                <Icon size={13} color={isActive ? colors.active : colors.muted} strokeWidth={2.2} />
+            </Pressable>
+        </Tooltip>
     )
 }

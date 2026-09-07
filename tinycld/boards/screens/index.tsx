@@ -64,7 +64,12 @@ export default function BoardsIndex() {
             <View className="flex-1 bg-background">
                 <DocumentTitle pkg="Boards" title={project.name} />
                 <ProjectWash color={project.color} bleedRight={insets.right} />
-                <BoardHeader project={project} cardCount={cardCount} isArchived={isArchived} />
+                <BoardHeader
+                    project={project}
+                    cardCount={cardCount}
+                    isArchived={isArchived}
+                    viewMode={viewMode}
+                />
                 <ArchivedBoardBanner project={project} isVisible={isArchived} />
                 <BoardView project={project} viewMode={viewMode} />
                 <CardPeek project={project} />

@@ -108,12 +108,16 @@ function find(list: Block[], prefix: string): Block {
  * Relative geometry only — the surfaces sit at different absolute positions on
  * the page, so every assertion is a gap or an offset within one rendering.
  */
-function expectSameLayout(read: Block[], edit: Block[]) {
-    // Every block in SAMPLE, compared to the one before it. Relative geometry
+function expectSameLayout(
+    read: Block[],
+    edit: Block[],
+    expected: readonly { marker: string; label: string }[] = SAMPLE
+) {
+    // Every expected block, compared to the one before it. Relative geometry
     // only: the two surfaces sit at different absolute y on the page, so what
     // must agree is each block's size and its distance from its predecessor.
     let previous: { r: Block; e: Block } | null = null
-    for (const { marker, label } of SAMPLE) {
+    for (const { marker, label } of expected) {
         const r = find(read, marker)
         const e = find(edit, marker)
 
@@ -135,8 +139,9 @@ function expectSameLayout(read: Block[], edit: Block[]) {
         }
         // Indent, measured from the first block's left edge — a list's marker
         // and text move together, so this catches either drifting.
-        const firstRead = find(read, SAMPLE[0].marker)
-        const firstEdit = find(edit, SAMPLE[0].marker)
+        const origin = expected[0]?.marker ?? ''
+        const firstRead = find(read, origin)
+        const firstEdit = find(edit, origin)
         expectWithin(r.left - firstRead.left, e.left - firstEdit.left, `${label}: indent`)
 
         previous = { r, e }
@@ -170,6 +175,51 @@ async function typeSample(page: Page, editor: Locator) {
         await editor.pressSequentially(block.source, { delay: 15 })
         if (i < SAMPLE.length - 1) await page.keyboard.press('Enter')
     }
+}
+
+/**
+ * A numbered list long enough to reach double-digit markers, then a nested
+ * bullet under it.
+ *
+ * `LISTS[0].marker` has to stay the FIRST block on screen, because
+ * expectSameLayout measures every indent relative to it.
+ */
+const LISTS = [
+    { source: 'Lists below', marker: 'Lists below', label: 'lead paragraph' },
+    { source: '1. Ordered one', marker: 'Ordered one', label: 'ordered 1' },
+    { source: 'Ordered two', marker: 'Ordered two', label: 'ordered 2' },
+    { source: 'Ordered three', marker: 'Ordered three', label: 'ordered 3' },
+    { source: 'Ordered four', marker: 'Ordered four', label: 'ordered 4' },
+    { source: 'Ordered five', marker: 'Ordered five', label: 'ordered 5' },
+    { source: 'Ordered six', marker: 'Ordered six', label: 'ordered 6' },
+    { source: 'Ordered seven', marker: 'Ordered seven', label: 'ordered 7' },
+    { source: 'Ordered eight', marker: 'Ordered eight', label: 'ordered 8' },
+    { source: 'Ordered nine', marker: 'Ordered nine', label: 'ordered 9' },
+    { source: 'Ordered ten', marker: 'Ordered ten', label: 'ordered 10' },
+] as const
+
+/** The bullet list typed after the ordered one, and the level nested inside it. */
+const NESTED = [
+    { marker: 'Bullet outer', label: 'nested level 1' },
+    { marker: 'Bullet inner', label: 'nested level 2' },
+] as const
+
+async function typeLists(page: Page, editor: Locator) {
+    await editor.click()
+    await expect(editor).toBeFocused()
+    for (const [i, block] of LISTS.entries()) {
+        await editor.pressSequentially(block.source, { delay: 15 })
+        if (i < LISTS.length - 1) await page.keyboard.press('Enter')
+    }
+    // Two Enters leave the list — the reason SAMPLE could never hold one.
+    await page.keyboard.press('Enter')
+    await page.keyboard.press('Enter')
+
+    await editor.pressSequentially(`- ${NESTED[0].marker}`, { delay: 15 })
+    await page.keyboard.press('Enter')
+    // Tab nests, so the second level is a real sub-list rather than a sibling.
+    await page.keyboard.press('Tab')
+    await editor.pressSequentially(NESTED[1].marker, { delay: 15 })
 }
 
 /**
@@ -228,6 +278,40 @@ test.describe('the editor lays out exactly as the read view', () => {
         await expect(readView).toBeVisible()
 
         expectSameLayout(await blocks(readView), edit)
+    })
+
+    /**
+     * Ordered and nested lists, which the sample above cannot reach.
+     *
+     * SAMPLE types one block per Enter, and leaving a list takes two — so the
+     * only list it ever exercised was a bullet. That blind spot hid a real bug
+     * for the whole life of this spec: the read view reserved a marker box of a
+     * fixed `fontSize * 1.2` (two codepoints, a disc's `"• "`), while the list
+     * library lays out `maxNumOfCodepoints * fontSize * 0.6` — three for
+     * `"1. "`, four for `"10. "`. A three-item numbered list therefore rendered
+     * 8.4px right of the editor and snapped back on tap.
+     *
+     * Ten items on purpose: the marker widens again at double digits, and past
+     * that point it is wider than the whole 21px indent — which the editor
+     * handles by letting the marker overflow LEFT rather than moving the text.
+     */
+    test('ordered and nested lists', async ({ page }) => {
+        await createBoard(page, `parity-lists-${Date.now()}`)
+        await addCard(page, 0, 'Parity card')
+        await openCard(page, 'Parity card')
+
+        await page.getByRole('button', { name: 'Edit description' }).click()
+        const editor = page.getByTestId('boards-description-editor').locator('.ProseMirror')
+        await expect(editor).toBeVisible()
+        await typeLists(page, editor)
+        const edit = await blocks(editor)
+
+        await closeCardPeek(page)
+        await openCard(page, 'Parity card')
+        const readView = page.getByTestId('boards-description-read')
+        await expect(readView).toBeVisible()
+
+        expectSameLayout(await blocks(readView), edit, [...LISTS, ...NESTED])
     })
 
     test('a comment', async ({ page }) => {

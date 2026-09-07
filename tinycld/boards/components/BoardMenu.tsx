@@ -1,3 +1,4 @@
+import { Tooltip } from '@tinycld/core/components/Tooltip'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { ConfirmDialog } from '@tinycld/core/ui/ConfirmDialog'
 import { ColorPickerGrid } from '@tinycld/core/ui/color-picker'
@@ -15,8 +16,8 @@ import {
     Settings2,
     Trash2,
 } from 'lucide-react-native'
-import { useState } from 'react'
-import { Pressable } from 'react-native'
+import { forwardRef, useState } from 'react'
+import { Pressable, type View } from 'react-native'
 import {
     useArchiveProject,
     useRestoreProject,
@@ -73,15 +74,7 @@ export function BoardMenu({ project, cardCount, isArchived, onRename }: BoardMen
     return (
         <>
             <Menu
-                trigger={
-                    <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Board actions"
-                        className="w-7 h-7 items-center justify-center rounded-[7px] hover:bg-foreground/5 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ml-1"
-                    >
-                        <MoreHorizontal size={15} color={mutedColor} strokeWidth={2.2} />
-                    </Pressable>
-                }
+                trigger={<BoardMenuTrigger color={mutedColor} />}
                 placement="bottom-end"
                 title="Board actions"
             >
@@ -194,3 +187,25 @@ export function BoardMenu({ project, cardCount, isArchived, onRename }: BoardMen
         </>
     )
 }
+
+/**
+ * The trigger, as a forwardRef component rather than an inline Pressable — see
+ * SortMenu's SortTrigger for why a Menu trigger cannot be wrapped from outside.
+ */
+const BoardMenuTrigger = forwardRef<View, { color: string; onPress?: () => void }>(
+    function BoardMenuTrigger({ color, onPress }, ref) {
+        return (
+            <Tooltip label="Board actions">
+                <Pressable
+                    ref={ref}
+                    accessibilityRole="button"
+                    accessibilityLabel="Board actions"
+                    onPress={onPress}
+                    className="w-7 h-7 items-center justify-center rounded-[7px] hover:bg-foreground/5 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ml-1"
+                >
+                    <MoreHorizontal size={15} color={color} strokeWidth={2.2} />
+                </Pressable>
+            </Tooltip>
+        )
+    }
+)

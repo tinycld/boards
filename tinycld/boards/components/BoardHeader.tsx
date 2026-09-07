@@ -1,5 +1,6 @@
 import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { PresenceAvatars } from '@tinycld/core/components/PresenceAvatars'
+import { Tooltip } from '@tinycld/core/components/Tooltip'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useCurrentRole } from '@tinycld/core/lib/use-current-role'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
@@ -8,7 +9,7 @@ import { useState } from 'react'
 import { Platform, Pressable, Text, View } from 'react-native'
 import { useUpdateProject } from '../hooks/useProjectMutations'
 import { useProjectRole } from '../hooks/useProjectRole'
-import { useBoardsUIStore } from '../stores/boards-ui-store'
+import { useBoardsUIStore, type ViewMode } from '../stores/boards-ui-store'
 import type { BoardProject, BoardsMemberRole } from '../types'
 import { BoardMenu } from './BoardMenu'
 import { useBoardPresenceContext } from './BoardPresenceProvider'
@@ -24,13 +25,15 @@ interface BoardHeaderProps {
     project: BoardProject
     cardCount: number
     isArchived: boolean
+    /** Which view is on screen — the scope pill is meaningless on the backlog. */
+    viewMode: ViewMode
 }
 
 function pluralize(count: number, noun: string): string {
     return `${count} ${noun}${count === 1 ? '' : 's'}`
 }
 
-export function BoardHeader({ project, cardCount, isArchived }: BoardHeaderProps) {
+export function BoardHeader({ project, cardCount, isArchived, viewMode }: BoardHeaderProps) {
     const [isRenaming, setIsRenaming] = useState(false)
     const [isSharing, setIsSharing] = useState(false)
     const { isOwner, role, isReady, canEdit } = useProjectRole(project.id)
@@ -77,7 +80,13 @@ export function BoardHeader({ project, cardCount, isArchived }: BoardHeaderProps
                     onPress={isGuest ? undefined : () => setIsSharing(true)}
                 />
                 <ViewToggle projectId={project.id} isSprintsEnabled={project.sprintsEnabled} />
-                <SprintScopePill project={project} isVisible={project.sprintsEnabled} />
+                {/* Hidden on the backlog, which shows every sprint by
+                definition — a scope there narrows the board to one sprint and
+                empties every other section, so the control could only mislead. */}
+                <SprintScopePill
+                    project={project}
+                    isVisible={project.sprintsEnabled && viewMode !== 'backlog'}
+                />
                 <FilterPopover project={project} />
                 <SortMenu projectId={project.id} />
                 <SelectModeToggle isVisible={canEdit} />
@@ -181,6 +190,8 @@ function SelectModeToggle({ isVisible }: { isVisible: boolean }) {
     const mutedColor = useThemeColor('muted')
     const primaryColor = useThemeColor('primary')
 
+    // Native-only, so no Tooltip: it is web-only by design and this control
+    // never renders there.
     if (Platform.OS === 'web' || !isVisible) return null
     return (
         <Pressable
@@ -207,15 +218,20 @@ function DensityToggle() {
     const Icon = isCompact ? Rows3 : Rows2
 
     return (
-        <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={label}
-            testID="boards-density-toggle"
-            onPress={toggleCompact}
-            className="w-7 h-7 items-center justify-center rounded-md hover:bg-foreground/10 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
-        >
-            <Icon size={15} color={mutedColor} strokeWidth={2} />
-        </Pressable>
+        // One string for both: the tooltip is what a pointer reads, the
+        // accessibilityLabel what a screen reader announces, and two copies
+        // would drift the moment the label flips with the state.
+        <Tooltip label={label}>
+            <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={label}
+                testID="boards-density-toggle"
+                onPress={toggleCompact}
+                className="w-7 h-7 items-center justify-center rounded-md hover:bg-foreground/10 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+            >
+                <Icon size={15} color={mutedColor} strokeWidth={2} />
+            </Pressable>
+        </Tooltip>
     )
 }
 
@@ -230,15 +246,17 @@ function ArchivedCardsButton() {
     const mutedColor = useThemeColor('muted')
 
     return (
-        <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Archived cards"
-            testID="boards-archived-button"
-            onPress={openArchivedPanel}
-            className="w-7 h-7 items-center justify-center rounded-md hover:bg-foreground/10 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
-        >
-            <Archive size={15} color={mutedColor} strokeWidth={2} />
-        </Pressable>
+        <Tooltip label="Archived cards">
+            <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Archived cards"
+                testID="boards-archived-button"
+                onPress={openArchivedPanel}
+                className="w-7 h-7 items-center justify-center rounded-md hover:bg-foreground/10 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+            >
+                <Archive size={15} color={mutedColor} strokeWidth={2} />
+            </Pressable>
+        </Tooltip>
     )
 }
 
@@ -307,14 +325,16 @@ function TeamAvatars({ project, onPress }: { project: BoardProject; onPress?: ()
     if (!onPress) return stack
 
     return (
-        <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Share board"
-            onPress={onPress}
-            className="rounded-full web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
-        >
-            {stack}
-        </Pressable>
+        <Tooltip label="Share board">
+            <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Share board"
+                onPress={onPress}
+                className="rounded-full web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+            >
+                {stack}
+            </Pressable>
+        </Tooltip>
     )
 }
 

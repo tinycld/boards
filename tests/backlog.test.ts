@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { scopeForView } from '../tinycld/boards/hooks/useActiveBoard'
 import { BACKLOG_KEY, backlogVisibleOrder, buildBacklog } from '../tinycld/boards/lib/backlog'
 import type {
     BoardCardView,
@@ -214,5 +215,35 @@ describe('backlogVisibleOrder', () => {
         )
         expect(backlogVisibleOrder(backlog, () => false)).toEqual(['a', 'b', 'c'])
         expect(backlogVisibleOrder(backlog, key => key === 's-active')).toEqual(['b', 'c'])
+    })
+})
+
+/**
+ * The backlog shows EVERY sprint, so it must never be narrowed by the scope.
+ *
+ * The default scope is 'active', so a board with a running sprint opened its
+ * backlog with the active sprint's section populated and every planned sprint's
+ * section empty — the cards were filtered out of the tree before buildBacklog
+ * ever sectioned them.
+ */
+describe('scopeForView', () => {
+    it('drops the scope on the backlog, whatever it is set to', () => {
+        expect(scopeForView('backlog', 'active')).toBeUndefined()
+        expect(scopeForView('backlog', 'backlog')).toBeUndefined()
+        expect(scopeForView('backlog', { sprintId: 's1' })).toBeUndefined()
+    })
+
+    it('keeps it on every view that shows one set of cards', () => {
+        expect(scopeForView('board', 'active')).toBe('active')
+        expect(scopeForView('list', 'active')).toBe('active')
+        expect(scopeForView('timeline', { sprintId: 's1' })).toEqual({ sprintId: 's1' })
+    })
+
+    // Ignored, not reset: returning to the board restores what was set there.
+    // Writing 'all' to the store instead would silently discard it.
+    it('leaves the stored scope alone rather than overwriting it', () => {
+        const stored = { sprintId: 's1' } as const
+        expect(scopeForView('backlog', stored)).toBeUndefined()
+        expect(scopeForView('board', stored)).toBe(stored)
     })
 })
