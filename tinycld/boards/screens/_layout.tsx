@@ -16,5 +16,8 @@ import { Stack } from 'expo-router'
  */
 export default function BoardsLayout() {
     useEditorNeeded()
-    return <Stack screenOptions={{ headerShown: false }} />
+    // No push/pop animation: a card opens as a change of content, not a
+    // drill-down. The platform default slid the card page in from the right
+    // and back out on close, which read as a page transition on a phone.
+    return <Stack screenOptions={{ headerShown: false, animation: 'none' }} />
 }
