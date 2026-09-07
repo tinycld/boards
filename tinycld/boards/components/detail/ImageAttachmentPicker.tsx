@@ -1,8 +1,8 @@
 import { Thumbnail } from '@tinycld/core/file-viewer/Thumbnail'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
-import { Modal, ModalBackdrop, ModalContent } from '@tinycld/core/ui/modal'
+import { Dialog } from '@tinycld/core/ui/dialog'
 import { Upload } from 'lucide-react-native'
-import { Pressable, ScrollView, Text, View } from 'react-native'
+import { Pressable, Text, View } from 'react-native'
 import { attachmentToSource } from '../../lib/attachment-source'
 import { isImageAttachment } from '../../lib/description-image'
 import type { BoardAttachment } from '../../types'
@@ -38,17 +38,11 @@ export function ImageAttachmentPicker({
     onUploadNew,
 }: ImageAttachmentPickerProps) {
     const mutedColor = useThemeColor('muted-foreground')
-    if (!isOpen) return null
-
     const images = attachments.filter(isImageAttachment)
 
     return (
-        <Modal isOpen onClose={onClose}>
-            <ModalBackdrop />
-            <ModalContent className="w-[360px] p-4 gap-3">
-                <Text className="text-foreground" style={{ fontSize: 20, fontWeight: '600' }}>
-                    Insert image
-                </Text>
+        <Dialog isOpen={isOpen} onClose={onClose} title="Insert image">
+            <Dialog.Body>
                 <ImageList images={images} onPick={onPick} />
                 <Pressable
                     onPress={onUploadNew}
@@ -62,15 +56,11 @@ export function ImageAttachmentPicker({
                     </View>
                     <Text className="text-[13px] text-foreground">Upload image</Text>
                 </Pressable>
-                <View className="flex-row justify-end">
-                    <Pressable onPress={onClose} className="px-3 py-2">
-                        <Text className="text-foreground" style={{ fontSize: 13 }}>
-                            Cancel
-                        </Text>
-                    </Pressable>
-                </View>
-            </ModalContent>
-        </Modal>
+            </Dialog.Body>
+            <Dialog.Footer>
+                <Dialog.CancelButton onPress={onClose} />
+            </Dialog.Footer>
+        </Dialog>
     )
 }
 
@@ -85,7 +75,7 @@ function ImageList({
         return <Text className="text-[13px] text-muted">No image attachments yet.</Text>
     }
     return (
-        <ScrollView style={{ maxHeight: 280 }}>
+        <View>
             {images.map(attachment => (
                 <Pressable
                     key={attachment.id}
@@ -105,6 +95,6 @@ function ImageList({
                     </Text>
                 </Pressable>
             ))}
-        </ScrollView>
+        </View>
     )
 }

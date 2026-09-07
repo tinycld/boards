@@ -1,10 +1,10 @@
 import { formatRelativeDate } from '@tinycld/core/lib/format-utils'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { ConfirmDialog } from '@tinycld/core/ui/ConfirmDialog'
-import { Modal, ModalBackdrop, ModalContent } from '@tinycld/core/ui/modal'
-import { ArchiveRestore, Trash2, X } from 'lucide-react-native'
+import { Dialog } from '@tinycld/core/ui/dialog'
+import { ArchiveRestore, Trash2 } from 'lucide-react-native'
 import { useState } from 'react'
-import { Pressable, ScrollView, Text, View } from 'react-native'
+import { Pressable, Text, View } from 'react-native'
 import { useArchivedCards } from '../hooks/useArchivedCards'
 import { useArchiveCard, useDeleteCard } from '../hooks/useCardMutations'
 import { useProjectRole } from '../hooks/useProjectRole'
@@ -38,33 +38,22 @@ function ArchivedCardsPanelBody({
 }: ArchivedCardsPanelProps & { onClose: () => void }) {
     const rows = useArchivedCards(project)
     const { canEdit } = useProjectRole(project.id)
-    const mutedColor = useThemeColor('muted')
 
     return (
-        <Modal isOpen onClose={onClose}>
-            <ModalBackdrop />
-            <ModalContent testID="boards-archived-panel" className="w-[440px] max-h-[70vh] p-0">
-                <View className="flex-row items-center px-4 pt-4 pb-2">
-                    <Text className="flex-1 text-[16px] font-semibold text-foreground">
-                        Archived cards
-                    </Text>
-                    <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Close"
-                        onPress={onClose}
-                        className="w-7 h-7 items-center justify-center rounded-md hover:bg-foreground/10"
-                    >
-                        <X size={15} color={mutedColor} strokeWidth={2.2} />
-                    </Pressable>
-                </View>
-                <ScrollView style={{ maxHeight: 400 }}>
-                    <EmptyRows isVisible={rows.length === 0} />
-                    {rows.map(row => (
-                        <ArchivedRow key={row.id} row={row} canEdit={canEdit} />
-                    ))}
-                </ScrollView>
-            </ModalContent>
-        </Modal>
+        <Dialog
+            isOpen
+            onClose={onClose}
+            title="Archived cards"
+            size="md"
+            testID="boards-archived-panel"
+        >
+            <Dialog.Body contentClassName="pb-3">
+                <EmptyRows isVisible={rows.length === 0} />
+                {rows.map(row => (
+                    <ArchivedRow key={row.id} row={row} canEdit={canEdit} />
+                ))}
+            </Dialog.Body>
+        </Dialog>
     )
 }
 

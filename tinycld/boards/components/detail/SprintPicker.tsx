@@ -1,10 +1,9 @@
-import { MenuActionItem } from '@tinycld/core/components/DropdownMenu'
 import { Menu } from '@tinycld/core/ui/menu'
 import { CircleDot, Inbox } from 'lucide-react-native'
-import { Text, View } from 'react-native'
+import { Text } from 'react-native'
 import { isOpenForFiling, sprintLabel } from '../../lib/sprint'
 import type { BoardSprint } from '../../types'
-import { menuPropsFor, type PickerAnchor } from './picker-anchor'
+import { anchorPropsFor, type PickerAnchor } from './picker-anchor'
 
 type SprintPickerProps = {
     /** Every sprint on the board, in the backlog's order. */
@@ -31,36 +30,34 @@ export function SprintPicker({ sprints, selectedId, onSelect, ...anchor }: Sprin
     const offered = sprints.filter(sprint => isOpenForFiling(sprint) || sprint.id === selectedId)
 
     return (
-        <Menu {...menuPropsFor(anchor)}>
-            {anchor.children ? <Menu.Trigger>{anchor.children}</Menu.Trigger> : null}
-            <Menu.Portal>
-                <Menu.Overlay />
-                <Menu.Content presentation="popover" placement="bottom" align="start">
-                    {offered.length === 0 ? (
-                        <View className="px-3 pt-2 pb-1 w-[220px]">
-                            <Text className="text-[12.5px] text-muted">
-                                No sprints planned yet. Plan one from the backlog view.
-                            </Text>
-                        </View>
-                    ) : (
-                        offered.map(sprint => (
-                            <MenuActionItem
-                                key={sprint.id}
-                                label={sprintLabel(sprint)}
-                                icon={sprint.state === 'active' ? CircleDot : undefined}
-                                isActive={sprint.id === selectedId}
-                                testID={`boards-sprint-option-${sprint.number}`}
-                                onPress={() => onSelect(sprint.id)}
-                            />
-                        ))
-                    )}
-                    <BacklogItem
-                        isVisible={selectedId !== '' && selectedId !== undefined}
-                        onSelect={onSelect}
-                    />
-                </Menu.Content>
-            </Menu.Portal>
+        <Menu {...anchorPropsFor(anchor)} placement="bottom-start" title="Sprint">
+            <EmptyState isVisible={offered.length === 0} />
+            {offered.map(sprint => (
+                <Menu.Item
+                    key={sprint.id}
+                    label={sprintLabel(sprint)}
+                    icon={sprint.state === 'active' ? CircleDot : undefined}
+                    isSelected={sprint.id === selectedId}
+                    testID={`boards-sprint-option-${sprint.number}`}
+                    onSelect={() => onSelect(sprint.id)}
+                />
+            ))}
+            <BacklogItem
+                isVisible={selectedId !== '' && selectedId !== undefined}
+                onSelect={onSelect}
+            />
         </Menu>
+    )
+}
+
+function EmptyState({ isVisible }: { isVisible: boolean }) {
+    if (!isVisible) return null
+    return (
+        <Menu.Custom className="px-3 pt-2 pb-1 w-[220px]">
+            <Text className="text-[12.5px] text-muted">
+                No sprints planned yet. Plan one from the backlog view.
+            </Text>
+        </Menu.Custom>
     )
 }
 
@@ -74,11 +71,11 @@ function BacklogItem({
 }) {
     if (!isVisible) return null
     return (
-        <MenuActionItem
+        <Menu.Item
             label="Move to backlog"
             icon={Inbox}
             testID="boards-sprint-option-backlog"
-            onPress={() => onSelect('')}
+            onSelect={() => onSelect('')}
         />
     )
 }

@@ -1,8 +1,7 @@
 import { handleMutationErrorsWithForm } from '@tinycld/core/lib/errors'
-import { Button, ButtonText } from '@tinycld/core/ui/button'
 import { COLOR_PALETTE, ColorPickerGrid } from '@tinycld/core/ui/color-picker'
+import { Dialog } from '@tinycld/core/ui/dialog'
 import { FormErrorSummary, TextInput, useForm, z, zodResolver } from '@tinycld/core/ui/form'
-import { Modal, ModalBackdrop, ModalContent } from '@tinycld/core/ui/modal'
 import { useRef, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useCreateProject } from '../hooks/useProjectMutations'
@@ -69,60 +68,63 @@ function NewBoardForm({ onClose }: { onClose: () => void }) {
     const canSubmit = isValid && !createProject.isPending
 
     return (
-        <View className="px-5 pb-5 gap-3">
-            <FormErrorSummary errors={errors} isEnabled={isSubmitted} testID="new-board-errors" />
+        <>
+            <Dialog.Body>
+                <FormErrorSummary
+                    errors={errors}
+                    isEnabled={isSubmitted}
+                    testID="new-board-errors"
+                />
 
-            <TextInput
-                control={control}
-                name="name"
-                label="Board name"
-                placeholder="Product launch"
-                autoFocus
-                onSubmitEditing={onSubmit}
-                onValueChange={value => {
-                    if (isSlugEditedRef.current) return
-                    setValue('slug', deriveSlug(value), { shouldValidate: true })
-                }}
-            />
+                <TextInput
+                    control={control}
+                    name="name"
+                    label="Board name"
+                    placeholder="Product launch"
+                    autoFocus
+                    onSubmitEditing={onSubmit}
+                    onValueChange={value => {
+                        if (isSlugEditedRef.current) return
+                        setValue('slug', deriveSlug(value), { shouldValidate: true })
+                    }}
+                />
 
-            <TextInput
-                control={control}
-                name="slug"
-                label="Key"
-                placeholder="PL"
-                autoCapitalize="characters"
-                hint={
-                    slug
-                        ? `Cards on this board will be ${slug}-1, ${slug}-2, …`
-                        : 'An optional short code used to identify cards, like OTTER-123'
-                }
-                onSubmitEditing={onSubmit}
-                // Uppercased as typed rather than on submit: the field rejects
-                // lowercase, and silently "fixing" it at the end would let
-                // someone watch their own input fail validation as they type.
-                onValueChange={value => {
-                    isSlugEditedRef.current = true
-                    const upper = value.toUpperCase()
-                    if (upper !== value) setValue('slug', upper, { shouldValidate: true })
-                }}
-            />
+                <TextInput
+                    control={control}
+                    name="slug"
+                    label="Key"
+                    placeholder="PL"
+                    autoCapitalize="characters"
+                    hint={
+                        slug
+                            ? `Cards on this board will be ${slug}-1, ${slug}-2, …`
+                            : 'An optional short code used to identify cards, like OTTER-123'
+                    }
+                    onSubmitEditing={onSubmit}
+                    // Uppercased as typed rather than on submit: the field rejects
+                    // lowercase, and silently "fixing" it at the end would let
+                    // someone watch their own input fail validation as they type.
+                    onValueChange={value => {
+                        isSlugEditedRef.current = true
+                        const upper = value.toUpperCase()
+                        if (upper !== value) setValue('slug', upper, { shouldValidate: true })
+                    }}
+                />
 
-            <View className="gap-1.5">
-                <Text className="text-xs font-medium text-foreground">Color</Text>
-                <ColorPickerGrid selected={color} onSelect={c => setValue('color', c)} />
-            </View>
-
-            <View className="flex-row justify-end gap-2 pt-2">
-                <Pressable onPress={onClose} className="px-3 py-1.5" accessibilityRole="button">
-                    <Text className="text-[13px] text-muted">Cancel</Text>
-                </Pressable>
-                <Button onPress={onSubmit} isDisabled={!canSubmit} size="sm">
-                    <ButtonText>
-                        {createProject.isPending ? 'Creating…' : 'Create board'}
-                    </ButtonText>
-                </Button>
-            </View>
-        </View>
+                <View className="gap-1.5">
+                    <Text className="text-xs font-medium text-foreground">Color</Text>
+                    <ColorPickerGrid selected={color} onSelect={c => setValue('color', c)} />
+                </View>
+            </Dialog.Body>
+            <Dialog.Footer>
+                <Dialog.CancelButton onPress={onClose} />
+                <Dialog.ActionButton
+                    label={createProject.isPending ? 'Creating…' : 'Create board'}
+                    onPress={onSubmit}
+                    isDisabled={!canSubmit}
+                />
+            </Dialog.Footer>
+        </>
     )
 }
 
@@ -173,27 +175,21 @@ export function NewBoardDialog() {
     const setActiveProject = useBoardsUIStore(s => s.setActiveProject)
     const [mode, setMode] = useState<BoardMode>('create')
 
-    if (!isOpen) return null
-
     return (
-        <Modal isOpen onClose={closeNewBoard}>
-            <ModalBackdrop />
-            <ModalContent className="w-[360px] p-0">
-                <View className="px-5 pt-5 pb-3">
-                    <Text className="text-[15px] font-semibold text-foreground">
-                        {mode === 'create' ? 'New board' : 'Import a board'}
-                    </Text>
-                </View>
-                <ModeTabs mode={mode} onChange={setMode} />
-                {mode === 'create' ? (
-                    <NewBoardForm onClose={closeNewBoard} />
-                ) : (
-                    <ImportBoardForm
-                        onClose={closeNewBoard}
-                        onImported={projectId => setActiveProject(projectId)}
-                    />
-                )}
-            </ModalContent>
-        </Modal>
+        <Dialog
+            isOpen={isOpen}
+            onClose={closeNewBoard}
+            title={mode === 'create' ? 'New board' : 'Import a board'}
+        >
+            <ModeTabs mode={mode} onChange={setMode} />
+            {mode === 'create' ? (
+                <NewBoardForm onClose={closeNewBoard} />
+            ) : (
+                <ImportBoardForm
+                    onClose={closeNewBoard}
+                    onImported={projectId => setActiveProject(projectId)}
+                />
+            )}
+        </Dialog>
     )
 }

@@ -1,8 +1,7 @@
-import { MenuActionItem } from '@tinycld/core/components/DropdownMenu'
 import { Menu } from '@tinycld/core/ui/menu'
 import { type CardPriority, PRIORITIES, priorityLabel } from '../../lib/priority'
 import { PriorityGlyph } from '../PriorityGlyph'
-import { menuPropsFor, type PickerAnchor } from './picker-anchor'
+import { anchorPropsFor, type PickerAnchor } from './picker-anchor'
 
 type PriorityPickerProps = {
     /**
@@ -24,22 +23,16 @@ type PriorityPickerProps = {
  */
 export function PriorityPicker({ selected, onSelect, ...anchor }: PriorityPickerProps) {
     return (
-        <Menu {...menuPropsFor(anchor)}>
-            {anchor.children ? <Menu.Trigger>{anchor.children}</Menu.Trigger> : null}
-            <Menu.Portal>
-                <Menu.Overlay />
-                <Menu.Content presentation="popover" placement="bottom" align="start">
-                    {PRIORITIES.map(priority => (
-                        <MenuActionItem
-                            key={priority}
-                            label={priorityLabel(priority)}
-                            isActive={priority === selected}
-                            leading={<PriorityGlyph priority={priority} size={14} />}
-                            onPress={() => onSelect(priority)}
-                        />
-                    ))}
-                </Menu.Content>
-            </Menu.Portal>
+        <Menu {...anchorPropsFor(anchor)} placement="bottom-start" title="Priority">
+            {PRIORITIES.map(priority => (
+                <Menu.Item
+                    key={priority}
+                    label={priorityLabel(priority)}
+                    isSelected={priority === selected}
+                    leading={<PriorityGlyph priority={priority} size={14} />}
+                    onSelect={() => onSelect(priority)}
+                />
+            ))}
         </Menu>
     )
 }

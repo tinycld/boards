@@ -27,7 +27,7 @@ async function assignSelf(page: Page, title: string) {
     await boardCard(page, title).click()
     await expect(peek(page).getByText('Description', { exact: true })).toBeVisible()
     await peek(page).getByRole('button', { name: 'Assign' }).click()
-    await page.getByRole('menuitem').first().click()
+    await page.getByRole('menuitemcheckbox').first().click()
     await expect(peek(page).getByRole('button', { name: 'Change assignees' })).toBeVisible()
     // The multi-select menu stays open after a pick; Escape closes it. If the
     // menu had already closed, that same Escape reaches the peek and closes

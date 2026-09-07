@@ -1,4 +1,3 @@
-import { MenuActionItem } from '@tinycld/core/components/DropdownMenu'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { Menu } from '@tinycld/core/ui/menu'
 import { ChevronDown, CircleCheck, Play, Timer } from 'lucide-react-native'
@@ -47,8 +46,8 @@ export function SprintScopePill({
 
     return (
         <>
-            <Menu>
-                <Menu.Trigger>
+            <Menu
+                trigger={
                     <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={`Board scope: ${label}`}
@@ -61,59 +60,55 @@ export function SprintScopePill({
                         </Text>
                         <ChevronDown size={12} color={foreground} strokeWidth={2.2} />
                     </Pressable>
-                </Menu.Trigger>
-                <Menu.Portal>
-                    <Menu.Overlay />
-                    <Menu.Content presentation="popover" placement="bottom" align="end">
-                        <MenuActionItem
-                            label={
-                                active
-                                    ? `Active sprint — ${sprintLabel(active)}`
-                                    : 'Active sprint (none yet)'
-                            }
-                            isActive={scope === 'active'}
-                            testID="boards-scope-active"
-                            onPress={() => pick('active')}
-                        />
-                        <MenuActionItem
-                            label="All cards"
-                            isActive={scope === 'all'}
-                            testID="boards-scope-all"
-                            onPress={() => pick('all')}
-                        />
-                        <MenuActionItem
-                            label="Backlog"
-                            isActive={scope === 'backlog'}
-                            testID="boards-scope-backlog"
-                            onPress={() => pick('backlog')}
-                        />
-                        {plannedSprints(project.sprints).map(sprint => (
-                            <MenuActionItem
-                                key={sprint.id}
-                                label={sprintLabel(sprint)}
-                                isActive={typeof scope === 'object' && scope.sprintId === sprint.id}
-                                testID={`boards-scope-sprint-${sprint.number}`}
-                                onPress={() => pick({ sprintId: sprint.id })}
-                            />
-                        ))}
-                        <TransitionItem
-                            isVisible={canEdit && !active && next !== undefined}
-                            icon={Play}
-                            label={next ? `Start ${sprintLabel(next)}…` : ''}
-                            testID="boards-scope-start-sprint"
-                            onPress={() => next && setTransition({ kind: 'start', sprint: next })}
-                        />
-                        <TransitionItem
-                            isVisible={canEdit && active !== undefined}
-                            icon={CircleCheck}
-                            label={active ? `Complete ${sprintLabel(active)}…` : ''}
-                            testID="boards-scope-complete-sprint"
-                            onPress={() =>
-                                active && setTransition({ kind: 'complete', sprint: active })
-                            }
-                        />
-                    </Menu.Content>
-                </Menu.Portal>
+                }
+                placement="bottom-end"
+                title="Board scope"
+            >
+                <Menu.Item
+                    label={
+                        active
+                            ? `Active sprint — ${sprintLabel(active)}`
+                            : 'Active sprint (none yet)'
+                    }
+                    isSelected={scope === 'active'}
+                    testID="boards-scope-active"
+                    onSelect={() => pick('active')}
+                />
+                <Menu.Item
+                    label="All cards"
+                    isSelected={scope === 'all'}
+                    testID="boards-scope-all"
+                    onSelect={() => pick('all')}
+                />
+                <Menu.Item
+                    label="Backlog"
+                    isSelected={scope === 'backlog'}
+                    testID="boards-scope-backlog"
+                    onSelect={() => pick('backlog')}
+                />
+                {plannedSprints(project.sprints).map(sprint => (
+                    <Menu.Item
+                        key={sprint.id}
+                        label={sprintLabel(sprint)}
+                        isSelected={typeof scope === 'object' && scope.sprintId === sprint.id}
+                        testID={`boards-scope-sprint-${sprint.number}`}
+                        onSelect={() => pick({ sprintId: sprint.id })}
+                    />
+                ))}
+                <TransitionItem
+                    isVisible={canEdit && !active && next !== undefined}
+                    icon={Play}
+                    label={next ? `Start ${sprintLabel(next)}…` : ''}
+                    testID="boards-scope-start-sprint"
+                    onPress={() => next && setTransition({ kind: 'start', sprint: next })}
+                />
+                <TransitionItem
+                    isVisible={canEdit && active !== undefined}
+                    icon={CircleCheck}
+                    label={active ? `Complete ${sprintLabel(active)}…` : ''}
+                    testID="boards-scope-complete-sprint"
+                    onPress={() => active && setTransition({ kind: 'complete', sprint: active })}
+                />
             </Menu>
             <SprintTransitionDialogs
                 project={project}
@@ -142,7 +137,7 @@ function TransitionItem({
     onPress: () => void
 }) {
     if (!isVisible) return null
-    return <MenuActionItem icon={icon} label={label} testID={testID} onPress={onPress} />
+    return <Menu.Item icon={icon} label={label} testID={testID} onSelect={onPress} />
 }
 
 /** "Sprint 3 · 6 days left · 12/30 pts", or what else the scope names. */

@@ -67,7 +67,7 @@ test.describe('Boards — bulk operations', () => {
         // losing the selection to it would make labelling a range impossible.
         await expect(page.getByTestId('boards-bulk-count')).toHaveText('3 selected')
         await page.getByTestId('boards-bulk-label').click()
-        await page.getByRole('menuitem', { name: 'blocked' }).click()
+        await page.getByRole('menuitemcheckbox', { name: 'blocked' }).click()
 
         // Read the label back off each FACE. The bar clears on success, which
         // is itself the signal the writes landed.

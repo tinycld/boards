@@ -3,10 +3,10 @@ import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useCurrentRole } from '@tinycld/core/lib/use-current-role'
 import { Button, ButtonText } from '@tinycld/core/ui/button'
 import { ConfirmDialog } from '@tinycld/core/ui/ConfirmDialog'
-import { Modal, ModalBackdrop, ModalContent } from '@tinycld/core/ui/modal'
-import { UserPlus, X } from 'lucide-react-native'
+import { Dialog } from '@tinycld/core/ui/dialog'
+import { UserPlus } from 'lucide-react-native'
 import { useState } from 'react'
-import { Pressable, ScrollView, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
 import { useChangeMemberRole, useRemoveMember } from '../../hooks/useMemberMutations'
 import { type ProjectMemberRow, useProjectMembers } from '../../hooks/useProjectMembers'
 import { useProjectRole } from '../../hooks/useProjectRole'
@@ -54,7 +54,6 @@ function ShareDialogContent({ onClose, project }: { onClose: () => void; project
     const { members, ownerCount } = useProjectMembers(project.id)
     const [isAdding, setIsAdding] = useState(false)
     const [isLeaving, setIsLeaving] = useState(false)
-    const mutedColor = useThemeColor('muted')
     const fgColor = useThemeColor('foreground')
 
     const { actionError, changeRole, removeMember, leaveBoard } = useMemberActions(onClose)
@@ -72,85 +71,82 @@ function ShareDialogContent({ onClose, project }: { onClose: () => void; project
         changeRole.mutate({ membershipId, role })
 
     return (
-        <Modal isOpen onClose={onClose}>
-            <ModalBackdrop />
-            <ModalContent className="w-[90%] max-w-[480px] max-h-[600px] p-0 rounded-xl">
-                <View className="flex-row items-center justify-between px-4 py-3 border-b border-border">
-                    <Text className="text-[15px] font-semibold text-foreground" numberOfLines={1}>
-                        Share “{project.name}”
-                    </Text>
-                    <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Close"
-                        onPress={onClose}
-                        className="p-1"
-                    >
-                        <X size={16} color={mutedColor} strokeWidth={2.2} />
-                    </Pressable>
+        <Dialog isOpen onClose={onClose} title={`Share “${project.name}”`} size="lg">
+            <ActionError message={actionError} />
+            <Dialog.Body contentClassName="px-5 pb-3">
+                <View className="rounded-xl border border-border overflow-hidden">
+                    {members.map((member, index) => (
+                        <View
+                            key={member.membershipId}
+                            className={index > 0 ? 'border-t border-border' : ''}
+                        >
+                            <MemberRow
+                                member={member}
+                                actions={actionsFor(member)}
+                                onRoleChange={onRoleChange}
+                                onRemove={membershipId => removeMember.mutate(membershipId)}
+                                onLeave={() => setIsLeaving(true)}
+                            />
+                        </View>
+                    ))}
                 </View>
-
-                {actionError ? (
-                    <View className="mx-4 mt-3 px-3 py-2 rounded-md bg-danger/10">
-                        <Text className="text-[12px] text-danger">{actionError}</Text>
-                    </View>
-                ) : null}
-
-                <ScrollView
-                    className="px-4 pt-3"
-                    style={{ flexShrink: 1 }}
-                    contentContainerStyle={{ paddingBottom: 4 }}
-                >
-                    <View className="rounded-xl border border-border overflow-hidden">
-                        {members.map((member, index) => (
-                            <View
-                                key={member.membershipId}
-                                className={index > 0 ? 'border-t border-border' : ''}
-                            >
-                                <MemberRow
-                                    member={member}
-                                    actions={actionsFor(member)}
-                                    onRoleChange={onRoleChange}
-                                    onRemove={membershipId => removeMember.mutate(membershipId)}
-                                    onLeave={() => setIsLeaving(true)}
-                                />
-                            </View>
-                        ))}
-                    </View>
-                    <GuestRosterNote isVisible={isGuest && orgRoleReady} />
-                    <ShareLinkSection projectId={project.id} isVisible={isOwner} />
-                </ScrollView>
-
-                <View className="flex-row items-center px-4 py-3 border-t border-border">
-                    {isOwner ? (
-                        <Button size="sm" variant="outline" onPress={() => setIsAdding(true)}>
-                            <UserPlus size={14} color={fgColor} strokeWidth={2.2} />
-                            <ButtonText>Add people</ButtonText>
-                        </Button>
-                    ) : null}
-                    <View className="flex-1" />
-                    <Button size="sm" onPress={onClose}>
-                        <ButtonText>Done</ButtonText>
-                    </Button>
-                </View>
-
-                <AddMemberDialog
-                    isVisible={isAdding}
-                    projectId={project.id}
-                    existingUserIds={new Set(members.map(member => member.userId))}
-                    onClose={() => setIsAdding(false)}
+                <GuestRosterNote isVisible={isGuest && orgRoleReady} />
+                <ShareLinkSection projectId={project.id} isVisible={isOwner} />
+            </Dialog.Body>
+            <Dialog.Footer>
+                <AddPeopleButton
+                    isVisible={isOwner}
+                    color={fgColor}
+                    onPress={() => setIsAdding(true)}
                 />
-                <LeaveConfirm
-                    isOpen={isLeaving}
-                    projectName={project.name}
-                    onClose={() => setIsLeaving(false)}
-                    onConfirm={() => {
-                        const ownRow = members.find(member => member.isCurrentUser)
-                        if (ownRow) leaveBoard.mutate(ownRow.membershipId)
-                    }}
-                    isSubmitting={leaveBoard.isPending}
-                />
-            </ModalContent>
-        </Modal>
+                <View className="flex-1" />
+                <Dialog.ActionButton label="Done" onPress={onClose} />
+            </Dialog.Footer>
+
+            <AddMemberDialog
+                isVisible={isAdding}
+                projectId={project.id}
+                existingUserIds={new Set(members.map(member => member.userId))}
+                onClose={() => setIsAdding(false)}
+            />
+            <LeaveConfirm
+                isOpen={isLeaving}
+                projectName={project.name}
+                onClose={() => setIsLeaving(false)}
+                onConfirm={() => {
+                    const ownRow = members.find(member => member.isCurrentUser)
+                    if (ownRow) leaveBoard.mutate(ownRow.membershipId)
+                }}
+                isSubmitting={leaveBoard.isPending}
+            />
+        </Dialog>
+    )
+}
+
+function ActionError({ message }: { message: string | null }) {
+    if (!message) return null
+    return (
+        <View className="mx-5 mb-3 px-3 py-2 rounded-md bg-danger/10">
+            <Text className="text-[12px] text-danger">{message}</Text>
+        </View>
+    )
+}
+
+function AddPeopleButton({
+    isVisible,
+    color,
+    onPress,
+}: {
+    isVisible: boolean
+    color: string
+    onPress: () => void
+}) {
+    if (!isVisible) return null
+    return (
+        <Button size="sm" variant="outline" onPress={onPress}>
+            <UserPlus size={14} color={color} strokeWidth={2.2} />
+            <ButtonText>Add people</ButtonText>
+        </Button>
     )
 }
 

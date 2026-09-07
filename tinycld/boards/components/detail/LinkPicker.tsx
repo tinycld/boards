@@ -1,4 +1,3 @@
-import { MenuActionItem } from '@tinycld/core/components/DropdownMenu'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { Menu } from '@tinycld/core/ui/menu'
 import { Plus } from 'lucide-react-native'
@@ -62,8 +61,8 @@ export function LinkPicker({ cards, subject, projectId, isPending, onSelect }: L
     }
 
     return (
-        <Menu>
-            <Menu.Trigger>
+        <Menu
+            trigger={
                 <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Add link"
@@ -74,19 +73,17 @@ export function LinkPicker({ cards, subject, projectId, isPending, onSelect }: L
                     <Plus size={14} color={mutedColor} strokeWidth={2.2} />
                     <Text className="text-[13px] font-medium text-muted">Add link</Text>
                 </Pressable>
-            </Menu.Trigger>
-            <Menu.Portal>
-                <Menu.Overlay />
-                <Menu.Content presentation="popover" placement="bottom" align="start">
-                    {LINK_TYPES.map(type => (
-                        <MenuActionItem
-                            key={type}
-                            label={LINK_LABELS[type].fromSource}
-                            onPress={() => setPendingType(type)}
-                        />
-                    ))}
-                </Menu.Content>
-            </Menu.Portal>
+            }
+            placement="bottom-start"
+            title="Link type"
+        >
+            {LINK_TYPES.map(type => (
+                <Menu.Item
+                    key={type}
+                    label={LINK_LABELS[type].fromSource}
+                    onSelect={() => setPendingType(type)}
+                />
+            ))}
         </Menu>
     )
 }
@@ -179,8 +176,8 @@ function BoardRow({
     return (
         <View className="flex-row items-center gap-2 px-2 py-1">
             <Text className="text-[11px] text-muted">on</Text>
-            <Menu>
-                <Menu.Trigger>
+            <Menu
+                trigger={
                     <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={`Board: ${current?.name ?? 'this board'}. Change board`}
@@ -197,21 +194,19 @@ function BoardRow({
                             {current?.name ?? 'this board'}
                         </Text>
                     </Pressable>
-                </Menu.Trigger>
-                <Menu.Portal>
-                    <Menu.Overlay />
-                    <Menu.Content presentation="popover" placement="bottom" align="start">
-                        {boards.map(board => (
-                            <MenuActionItem
-                                key={board.id}
-                                label={board.name}
-                                colorDot={board.color}
-                                isActive={board.id === boardId}
-                                onPress={() => onChange(board.id)}
-                            />
-                        ))}
-                    </Menu.Content>
-                </Menu.Portal>
+                }
+                placement="bottom-start"
+                title="Board"
+            >
+                {boards.map(board => (
+                    <Menu.Item
+                        key={board.id}
+                        label={board.name}
+                        colorDot={board.color}
+                        isSelected={board.id === boardId}
+                        onSelect={() => onChange(board.id)}
+                    />
+                ))}
             </Menu>
         </View>
     )

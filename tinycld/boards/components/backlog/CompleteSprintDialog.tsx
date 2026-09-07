@@ -1,7 +1,6 @@
 import { notify } from '@tinycld/core/lib/notify'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
-import { Button, ButtonText } from '@tinycld/core/ui/button'
-import { Modal, ModalBackdrop, ModalContent } from '@tinycld/core/ui/modal'
+import { Dialog } from '@tinycld/core/ui/dialog'
 import { Check } from 'lucide-react-native'
 import { useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
@@ -70,40 +69,32 @@ function CompleteSprintDialogBody({ project, sprint, onClose }: CompleteSprintDi
         )
 
     return (
-        <Modal isOpen onClose={onClose}>
-            <ModalBackdrop />
-            <ModalContent testID="boards-complete-sprint-dialog" className="w-[420px] p-0">
-                <View className="px-5 pt-5 pb-3">
-                    <Text className="text-[15px] font-semibold text-foreground">
-                        Complete {sprintLabel(sprint)}
-                    </Text>
-                    <Text className="text-[12.5px] text-muted mt-1">
-                        {done} {done === 1 ? 'card' : 'cards'} done · {unfinished} unfinished
-                    </Text>
-                </View>
+        <Dialog
+            isOpen
+            onClose={onClose}
+            title={`Complete ${sprintLabel(sprint)}`}
+            description={`${done} ${done === 1 ? 'card' : 'cards'} done · ${unfinished} unfinished`}
+            size="md"
+            testID="boards-complete-sprint-dialog"
+        >
+            <Dialog.Body contentClassName="pb-2">
                 <UnfinishedChoices
                     isVisible={unfinished > 0}
                     next={next}
                     choice={choice}
                     onChoose={setChoice}
                 />
-                <View className="flex-row justify-end gap-2 px-5 pb-5 pt-2">
-                    <Pressable onPress={onClose} className="px-3 py-1.5" accessibilityRole="button">
-                        <Text className="text-[13px] text-muted">Cancel</Text>
-                    </Pressable>
-                    <Button
-                        onPress={confirm}
-                        isDisabled={completeSprint.isPending}
-                        size="sm"
-                        testID="boards-complete-sprint-confirm"
-                    >
-                        <ButtonText>
-                            {completeSprint.isPending ? 'Completing…' : 'Complete sprint'}
-                        </ButtonText>
-                    </Button>
-                </View>
-            </ModalContent>
-        </Modal>
+            </Dialog.Body>
+            <Dialog.Footer>
+                <Dialog.CancelButton onPress={onClose} />
+                <Dialog.ActionButton
+                    label={completeSprint.isPending ? 'Completing…' : 'Complete sprint'}
+                    onPress={confirm}
+                    isDisabled={completeSprint.isPending}
+                    testID="boards-complete-sprint-confirm"
+                />
+            </Dialog.Footer>
+        </Dialog>
     )
 }
 

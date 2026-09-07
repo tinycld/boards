@@ -1,9 +1,8 @@
-import { MenuActionItem } from '@tinycld/core/components/DropdownMenu'
 import { Menu } from '@tinycld/core/ui/menu'
 import { Settings2 } from 'lucide-react-native'
-import { Text, View } from 'react-native'
+import { Text } from 'react-native'
 import type { BoardLabel } from '../../types'
-import { menuPropsFor, type PickerAnchor } from './picker-anchor'
+import { anchorPropsFor, type PickerAnchor } from './picker-anchor'
 
 type LabelPickerProps = {
     /** Every label defined on this board. */
@@ -14,6 +13,10 @@ type LabelPickerProps = {
     onManage: () => void
 } & PickerAnchor
 
+/**
+ * Multi-select, so the label rows are checkbox items that keep the menu open;
+ * "Manage labels…" is a command and closes it.
+ */
 export function LabelPicker({
     labels,
     selectedIds,
@@ -24,31 +27,27 @@ export function LabelPicker({
     const selected = new Set(selectedIds)
 
     return (
-        <Menu {...menuPropsFor(anchor)}>
-            {anchor.children ? <Menu.Trigger>{anchor.children}</Menu.Trigger> : null}
-            <Menu.Portal>
-                <Menu.Overlay />
-                <Menu.Content presentation="popover" placement="bottom" align="start">
-                    {labels.length === 0 ? (
-                        <View className="px-3 pt-2 pb-1 w-[220px]">
-                            <Text className="text-[12.5px] text-muted">
-                                No labels on this board yet.
-                            </Text>
-                        </View>
-                    ) : (
-                        labels.map(label => (
-                            <MenuActionItem
-                                key={label.id}
-                                label={label.name}
-                                colorDot={label.color}
-                                isActive={selected.has(label.id)}
-                                onPress={() => onToggle(label.id, selected.has(label.id))}
-                            />
-                        ))
-                    )}
-                    <MenuActionItem label="Manage labels…" icon={Settings2} onPress={onManage} />
-                </Menu.Content>
-            </Menu.Portal>
+        <Menu {...anchorPropsFor(anchor)} placement="bottom-start" title="Labels">
+            <EmptyState isVisible={labels.length === 0} />
+            {labels.map(label => (
+                <Menu.CheckboxItem
+                    key={label.id}
+                    label={label.name}
+                    colorDot={label.color}
+                    isChecked={selected.has(label.id)}
+                    onToggle={() => onToggle(label.id, selected.has(label.id))}
+                />
+            ))}
+            <Menu.Item label="Manage labels…" icon={Settings2} onSelect={onManage} />
         </Menu>
+    )
+}
+
+function EmptyState({ isVisible }: { isVisible: boolean }) {
+    if (!isVisible) return null
+    return (
+        <Menu.Custom className="px-3 pt-2 pb-1 w-[220px]">
+            <Text className="text-[12.5px] text-muted">No labels on this board yet.</Text>
+        </Menu.Custom>
     )
 }

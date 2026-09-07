@@ -1,5 +1,5 @@
 import { handleMutationErrorsWithForm } from '@tinycld/core/lib/errors'
-import { Button, ButtonText } from '@tinycld/core/ui/button'
+import { Dialog } from '@tinycld/core/ui/dialog'
 import {
     type Control,
     FormErrorSummary,
@@ -10,8 +10,7 @@ import {
     z,
     zodResolver,
 } from '@tinycld/core/ui/form'
-import { Modal, ModalBackdrop, ModalContent } from '@tinycld/core/ui/modal'
-import { Pressable, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
 import { useUpdateProject } from '../hooks/useProjectMutations'
 import { DEFAULT_SPRINT_LENGTH_DAYS } from '../lib/sprint'
 import type { BoardProject } from '../types'
@@ -59,19 +58,10 @@ interface BoardSettingsDialogProps {
  * and the menu is the wrong place for all three.
  */
 export function BoardSettingsDialog({ project, isOpen, onClose }: BoardSettingsDialogProps) {
-    if (!isOpen) return null
     return (
-        <Modal isOpen onClose={onClose}>
-            <ModalBackdrop />
-            <ModalContent className="w-[360px] p-0">
-                <View className="px-5 pt-5 pb-3">
-                    <Text className="text-[15px] font-semibold text-foreground">
-                        Board settings
-                    </Text>
-                </View>
-                <SettingsForm project={project} onClose={onClose} />
-            </ModalContent>
-        </Modal>
+        <Dialog isOpen={isOpen} onClose={onClose} title="Board settings">
+            <SettingsForm project={project} onClose={onClose} />
+        </Dialog>
     )
 }
 
@@ -117,54 +107,52 @@ function SettingsForm({ project, onClose }: { project: BoardProject; onClose: ()
     const sprintsEnabled = watch('sprints_enabled')
 
     return (
-        <View className="px-5 pb-5 gap-3">
-            <FormErrorSummary
-                errors={errors}
-                isEnabled={isSubmitted}
-                testID="boards-settings-errors"
-            />
-            <NumberInput
-                control={control}
-                name="auto_archive_days"
-                label="Auto-archive finished cards after (days)"
-                hint="Cards that sit in a Done or Canceled list this long are archived. 0 means never."
-                min={0}
-                max={365}
-            />
-            {/* "untouched" rather than "unedited": the clock is when the card
-                entered its column, not when it was last written to. */}
-            <NumberInput
-                control={control}
-                name="aging_days"
-                label="Highlight cards untouched for (days)"
-                hint="Cards that sit in the same column this long are tinted, and more strongly at twice that. 0 means never."
-                min={0}
-                max={365}
-            />
-            <Text className="text-[10.5px] font-bold uppercase tracking-wide text-muted pt-1">
-                Sprints
-            </Text>
-            <Toggle
-                control={control}
-                name="sprints_enabled"
-                label="Plan work in sprints"
-                hint="Adds a backlog view, a sprint on every card, and scopes the board to the active sprint."
-            />
-            <SprintFields control={control} isVisible={sprintsEnabled} />
-            <View className="flex-row justify-end gap-2 pt-2">
-                <Pressable onPress={onClose} className="px-3 py-1.5" accessibilityRole="button">
-                    <Text className="text-[13px] text-muted">Cancel</Text>
-                </Pressable>
-                <Button
+        <>
+            <Dialog.Body>
+                <FormErrorSummary
+                    errors={errors}
+                    isEnabled={isSubmitted}
+                    testID="boards-settings-errors"
+                />
+                <NumberInput
+                    control={control}
+                    name="auto_archive_days"
+                    label="Auto-archive finished cards after (days)"
+                    hint="Cards that sit in a Done or Canceled list this long are archived. 0 means never."
+                    min={0}
+                    max={365}
+                />
+                {/* "untouched" rather than "unedited": the clock is when the card
+                    entered its column, not when it was last written to. */}
+                <NumberInput
+                    control={control}
+                    name="aging_days"
+                    label="Highlight cards untouched for (days)"
+                    hint="Cards that sit in the same column this long are tinted, and more strongly at twice that. 0 means never."
+                    min={0}
+                    max={365}
+                />
+                <Text className="text-[10.5px] font-bold uppercase tracking-wide text-muted pt-1">
+                    Sprints
+                </Text>
+                <Toggle
+                    control={control}
+                    name="sprints_enabled"
+                    label="Plan work in sprints"
+                    hint="Adds a backlog view, a sprint on every card, and scopes the board to the active sprint."
+                />
+                <SprintFields control={control} isVisible={sprintsEnabled} />
+            </Dialog.Body>
+            <Dialog.Footer>
+                <Dialog.CancelButton onPress={onClose} />
+                <Dialog.ActionButton
+                    label={updateProject.isPending ? 'Saving…' : 'Save'}
                     onPress={onSubmit}
                     isDisabled={!canSubmit}
-                    size="sm"
                     testID="boards-settings-save"
-                >
-                    <ButtonText>{updateProject.isPending ? 'Saving…' : 'Save'}</ButtonText>
-                </Button>
-            </View>
-        </View>
+                />
+            </Dialog.Footer>
+        </>
     )
 }
 

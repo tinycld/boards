@@ -1,8 +1,7 @@
-import { MenuActionItem } from '@tinycld/core/components/DropdownMenu'
 import { Menu } from '@tinycld/core/ui/menu'
 import { CircleSlash } from 'lucide-react-native'
 import type { ReactElement } from 'react'
-import { Text, View } from 'react-native'
+import { Text } from 'react-native'
 import type { BoardEpic } from '../../types'
 
 interface EpicPickerProps {
@@ -31,43 +30,34 @@ export function EpicPicker({ epics, selectedId, onSelect, children }: EpicPicker
     const offered = epics.filter(epic => !epic.archived || epic.id === selectedId)
 
     return (
-        <Menu>
-            <Menu.Trigger>{children}</Menu.Trigger>
-            <Menu.Portal>
-                <Menu.Overlay />
-                <Menu.Content presentation="popover" placement="bottom" align="start">
-                    {offered.length === 0 ? (
-                        <View className="px-3 pt-2 pb-1 w-[220px]">
-                            <Text className="text-[12.5px] text-muted">
-                                No epics on this board yet.
-                            </Text>
-                        </View>
-                    ) : (
-                        offered.map(epic => (
-                            <MenuActionItem
-                                key={epic.id}
-                                label={epic.title}
-                                colorDot={epic.color}
-                                isActive={epic.id === selectedId}
-                                onPress={() => onSelect(epic.id)}
-                            />
-                        ))
-                    )}
-                    <ClearEpicItem isVisible={selectedId !== ''} onSelect={onSelect} />
-                </Menu.Content>
-            </Menu.Portal>
+        <Menu trigger={children} placement="bottom-start" title="Epic">
+            <EmptyState isVisible={offered.length === 0} />
+            {offered.map(epic => (
+                <Menu.Item
+                    key={epic.id}
+                    label={epic.title}
+                    colorDot={epic.color}
+                    isSelected={epic.id === selectedId}
+                    onSelect={() => onSelect(epic.id)}
+                />
+            ))}
+            <ClearEpicItem isVisible={selectedId !== ''} onSelect={onSelect} />
         </Menu>
+    )
+}
+
+function EmptyState({ isVisible }: { isVisible: boolean }) {
+    if (!isVisible) return null
+    return (
+        <Menu.Custom className="px-3 pt-2 pb-1 w-[220px]">
+            <Text className="text-[12.5px] text-muted">No epics on this board yet.</Text>
+        </Menu.Custom>
     )
 }
 
 /**
  * The "No epic" row, offered only when there is something to clear: an unfiled
  * card has nothing to remove, and the item would read as a bug.
- *
- * Its own component rather than `{selectedId && <MenuActionItem …>}` inline —
- * the conditional-visibility convention in CLAUDE.md. Core's MenuActionItem
- * takes no `isVisible` of its own, so the gate lives in this wrapper rather
- * than being added to a shared component for one caller's sake.
  */
 function ClearEpicItem({
     isVisible,
@@ -77,5 +67,5 @@ function ClearEpicItem({
     onSelect: (epicId: string) => void
 }) {
     if (!isVisible) return null
-    return <MenuActionItem label="No epic" icon={CircleSlash} onPress={() => onSelect('')} />
+    return <Menu.Item label="No epic" icon={CircleSlash} onSelect={() => onSelect('')} />
 }

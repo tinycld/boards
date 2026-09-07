@@ -1,6 +1,6 @@
 import type { PickedFile } from '@tinycld/core/file-viewer/picked-file'
 import { usePickFiles } from '@tinycld/core/file-viewer/use-pick-files'
-import { Button, ButtonText } from '@tinycld/core/ui/button'
+import { Dialog } from '@tinycld/core/ui/dialog'
 import { FileUp } from 'lucide-react-native'
 import { useState } from 'react'
 import { Pressable, ScrollView, Text, View } from 'react-native'
@@ -48,38 +48,35 @@ export function ImportBoardForm({ onClose, onImported }: ImportBoardFormProps) {
     }
 
     return (
-        <View className="px-5 pb-5 gap-3">
-            <Text className="text-[12px] text-muted">
-                Choose a Trello export, or a board exported from here. The import creates a new
-                board that you own.
-            </Text>
-
-            <Pressable
-                accessibilityRole="button"
-                testID="boards-import-pick"
-                onPress={choose}
-                className="flex-row items-center gap-2.5 rounded-lg border border-dashed border-border p-3"
-            >
-                <FileUp size={18} className="text-muted" />
-                <Text className="text-[13px] text-foreground flex-1" numberOfLines={1}>
-                    {picked ? picked.name : 'Choose a file…'}
+        <>
+            <Dialog.Body>
+                <Text className="text-[12px] text-muted">
+                    Choose a Trello export, or a board exported from here. The import creates a new
+                    board that you own.
                 </Text>
-            </Pressable>
 
-            <View className="flex-row justify-end gap-2 pt-2">
-                <Pressable onPress={onClose} className="px-3 py-1.5" accessibilityRole="button">
-                    <Text className="text-[13px] text-muted">Cancel</Text>
+                <Pressable
+                    accessibilityRole="button"
+                    testID="boards-import-pick"
+                    onPress={choose}
+                    className="flex-row items-center gap-2.5 rounded-lg border border-dashed border-border p-3"
+                >
+                    <FileUp size={18} className="text-muted" />
+                    <Text className="text-[13px] text-foreground flex-1" numberOfLines={1}>
+                        {picked ? picked.name : 'Choose a file…'}
+                    </Text>
                 </Pressable>
-                <Button
+            </Dialog.Body>
+            <Dialog.Footer>
+                <Dialog.CancelButton onPress={onClose} />
+                <Dialog.ActionButton
+                    label={importBoard.isPending ? 'Importing…' : 'Import'}
                     onPress={start}
                     isDisabled={!picked || importBoard.isPending}
-                    size="sm"
                     testID="boards-import-confirm"
-                >
-                    <ButtonText>{importBoard.isPending ? 'Importing…' : 'Import'}</ButtonText>
-                </Button>
-            </View>
-        </View>
+                />
+            </Dialog.Footer>
+        </>
     )
 }
 
@@ -94,20 +91,23 @@ function ImportSummary({ result, onDone }: { result: BoardImportResult; onDone: 
     const caveats = importCaveats(result)
 
     return (
-        <View className="px-5 pb-5 gap-3">
-            <Text className="text-[13px] text-foreground">
-                Imported <Text className="font-semibold">{result.name}</Text> — {result.lists}{' '}
-                columns, {result.cards} cards, {result.labels} labels.
-            </Text>
+        <>
+            <Dialog.Body>
+                <Text className="text-[13px] text-foreground">
+                    Imported <Text className="font-semibold">{result.name}</Text> — {result.lists}{' '}
+                    columns, {result.cards} cards, {result.labels} labels.
+                </Text>
 
-            <CaveatList caveats={caveats} />
-
-            <View className="flex-row justify-end pt-2">
-                <Button onPress={onDone} size="sm" testID="boards-import-done">
-                    <ButtonText>Open the board</ButtonText>
-                </Button>
-            </View>
-        </View>
+                <CaveatList caveats={caveats} />
+            </Dialog.Body>
+            <Dialog.Footer>
+                <Dialog.ActionButton
+                    label="Open the board"
+                    onPress={onDone}
+                    testID="boards-import-done"
+                />
+            </Dialog.Footer>
+        </>
     )
 }
 

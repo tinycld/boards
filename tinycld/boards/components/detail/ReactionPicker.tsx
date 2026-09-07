@@ -1,6 +1,7 @@
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
-import { Menu } from '@tinycld/core/ui/menu'
+import { Popover } from '@tinycld/core/ui/popover'
 import { SmilePlus } from 'lucide-react-native'
+import { useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import {
     REACTION_KEYS,
@@ -14,16 +15,26 @@ interface ReactionPickerProps {
 }
 
 /**
- * The six-emoji grid behind the smiley. Menu.Item rows so a pick closes the
- * popover and the keyboard works on web; laid out three across rather than
- * one per row because six glyphs in a column reads as a list of nothing.
- * No search and no wider set — the palette is the schema.
+ * The six-emoji grid behind the smiley. A Popover rather than a Menu because
+ * a grid of glyphs is not a list of commands; laid out three across rather
+ * than one per row because six glyphs in a column reads as a list of nothing.
+ * Controlled so a pick closes it. No search and no wider set — the palette is
+ * the schema.
  */
 export function ReactionPicker({ onPick }: ReactionPickerProps) {
     const mutedColor = useThemeColor('muted')
+    const [isOpen, setIsOpen] = useState(false)
+
+    const pick = (emoji: ReactionEmoji) => {
+        onPick(emoji)
+        setIsOpen(false)
+    }
+
     return (
-        <Menu>
-            <Menu.Trigger>
+        <Popover
+            isOpen={isOpen}
+            onOpenChange={setIsOpen}
+            trigger={
                 <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Add reaction"
@@ -32,29 +43,24 @@ export function ReactionPicker({ onPick }: ReactionPickerProps) {
                 >
                     <SmilePlus size={13} color={mutedColor} strokeWidth={2.2} />
                 </Pressable>
-            </Menu.Trigger>
-            <Menu.Portal>
-                <Menu.Overlay />
-                <Menu.Content presentation="popover" placement="bottom" align="start">
-                    <View className="flex-row flex-wrap w-[168px]">
-                        {REACTION_PALETTE.map(emoji => (
-                            <Menu.Item
-                                key={emoji}
-                                className="w-14 items-center justify-center"
-                                testID={`boards-reaction-pick-${REACTION_KEYS[emoji]}`}
-                                onPress={() => onPick(emoji)}
-                            >
-                                <Text
-                                    accessibilityLabel={REACTION_LABELS[emoji]}
-                                    className="text-[18px]"
-                                >
-                                    {emoji}
-                                </Text>
-                            </Menu.Item>
-                        ))}
-                    </View>
-                </Menu.Content>
-            </Menu.Portal>
-        </Menu>
+            }
+            placement="bottom-start"
+            title="Add reaction"
+        >
+            <View className="flex-row flex-wrap w-[168px]">
+                {REACTION_PALETTE.map(emoji => (
+                    <Pressable
+                        key={emoji}
+                        accessibilityRole="button"
+                        accessibilityLabel={REACTION_LABELS[emoji]}
+                        testID={`boards-reaction-pick-${REACTION_KEYS[emoji]}`}
+                        onPress={() => pick(emoji)}
+                        className="w-14 h-10 items-center justify-center rounded-md hover:bg-accent web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+                    >
+                        <Text className="text-[18px]">{emoji}</Text>
+                    </Pressable>
+                ))}
+            </View>
+        </Popover>
     )
 }

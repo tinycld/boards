@@ -291,7 +291,7 @@ test.describe('Boards — editing a card', () => {
         // roster's CONTENTS are board-sharing's subject, the toggle is this
         // spec's.
         await peek(page).getByRole('button', { name: 'Assign' }).click()
-        const option = page.getByRole('menuitem').first()
+        const option = page.getByRole('menuitemcheckbox').first()
         const assigneeName = ((await option.textContent()) ?? '').trim()
         await option.click()
 
@@ -300,11 +300,17 @@ test.describe('Boards — editing a card', () => {
         await expect(assigned).toBeVisible()
         await expect(assigned).toContainText(assigneeName)
 
+        // The multi-select stays open after a pick, and a click on its
+        // trigger while it is open closes it rather than reopening — so close
+        // it with Escape first.
+        await page.keyboard.press('Escape')
+        await expect(page.getByRole('menuitemcheckbox')).toHaveCount(0)
+
         // Toggling the same member off returns the row to its empty state —
         // the toggle passes the CURRENT selected-ness, so an inverted flag
         // would re-assign rather than clear.
         await assigned.click()
-        await page.getByRole('menuitem').first().click()
+        await page.getByRole('menuitemcheckbox').first().click()
         await expect(peek(page).getByRole('button', { name: 'Assign' })).toBeVisible()
     })
 
@@ -373,14 +379,17 @@ test.describe('Boards — editing a card', () => {
 
         // Apply it from the picker, which now has something to offer.
         await peek(page).getByRole('button', { name: 'Add label' }).click()
-        await page.getByRole('menuitem', { name: 'blocked' }).click()
+        await page.getByRole('menuitemcheckbox', { name: 'blocked' }).click()
         const applied = page.getByRole('button', { name: 'Change labels' })
         await expect(applied).toBeVisible()
         await expect(applied).toContainText('blocked')
 
-        // And off again — same toggle semantics as assignees.
+        // And off again — same toggle semantics as assignees, including the
+        // Escape before the trigger is clicked again.
+        await page.keyboard.press('Escape')
+        await expect(page.getByRole('menuitemcheckbox')).toHaveCount(0)
         await applied.click()
-        await page.getByRole('menuitem', { name: 'blocked' }).click()
+        await page.getByRole('menuitemcheckbox', { name: 'blocked' }).click()
         await expect(peek(page).getByRole('button', { name: 'Add label' })).toBeVisible()
     })
 

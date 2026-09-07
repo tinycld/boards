@@ -128,7 +128,7 @@ async function pressUntil(
  * This is the regression the canvas pickers actually need. A picker opened by a
  * keypress has no trigger to measure — nothing on the board is the "due date
  * chip" of a card that is not open — so it is handed the focused card's rect as
- * `triggerPosition`. Drop that and the menu still OPENS and every visibility
+ * a point `anchor`. Drop that and the menu still OPENS and every visibility
  * assertion still passes; it just renders at (0, 0). Only a geometry assertion
  * catches it.
  *
@@ -447,7 +447,7 @@ test.describe('Boards — keyboard control', () => {
         // targets 'labelled' — and now the picker has something to offer.
         await expectFocused(page, 'labelled')
         await page.keyboard.press('l')
-        const labelRow = page.getByRole('menuitem', { name: 'urgent-ish' })
+        const labelRow = page.getByRole('menuitemcheckbox', { name: 'urgent-ish' })
         await expect(labelRow).toBeVisible()
         await expectAnchoredToCard(page, labelRow, 'labelled')
 
@@ -469,7 +469,7 @@ test.describe('Boards — keyboard control', () => {
 
         await page.keyboard.press('a')
         // A fresh board's only member is its creator.
-        const member = page.getByRole('menuitem').first()
+        const member = page.getByRole('menuitemcheckbox').first()
         await expect(member).toBeVisible()
         await expectAnchoredToCard(page, member, 'assigned')
 

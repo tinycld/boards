@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react'
-import { Pressable } from 'react-native'
+import { forwardRef, type ReactNode } from 'react'
+import { Pressable, type View } from 'react-native'
 
 interface IconButtonProps {
     label: string
@@ -7,9 +7,17 @@ interface IconButtonProps {
     children: ReactNode
 }
 
-export function IconButton({ label, onPress, children }: IconButtonProps) {
+/**
+ * forwardRef because it doubles as a Menu trigger, which is cloned with an
+ * `onPress` and the ref the surface anchors against.
+ */
+export const IconButton = forwardRef<View, IconButtonProps>(function IconButton(
+    { label, onPress, children },
+    ref
+) {
     return (
         <Pressable
+            ref={ref}
             accessibilityRole="button"
             accessibilityLabel={label}
             onPress={onPress}
@@ -18,4 +26,4 @@ export function IconButton({ label, onPress, children }: IconButtonProps) {
             {children}
         </Pressable>
     )
-}
+})

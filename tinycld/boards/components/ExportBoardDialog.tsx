@@ -1,5 +1,4 @@
-import { Button, ButtonText } from '@tinycld/core/ui/button'
-import { Modal, ModalBackdrop, ModalContent } from '@tinycld/core/ui/modal'
+import { Dialog } from '@tinycld/core/ui/dialog'
 import { FileJson, FileSpreadsheet } from 'lucide-react-native'
 import { useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
@@ -81,18 +80,10 @@ export function ExportBoardDialog({
     projectId,
     boardName,
 }: ExportBoardDialogProps) {
-    if (!isVisible) return null
-
     return (
-        <Modal isOpen onClose={onClose}>
-            <ModalBackdrop />
-            <ModalContent className="w-[360px] p-0">
-                <View className="px-5 pt-5 pb-3">
-                    <Text className="text-[15px] font-semibold text-foreground">Export board</Text>
-                </View>
-                <ExportBoardForm projectId={projectId} boardName={boardName} onClose={onClose} />
-            </ModalContent>
-        </Modal>
+        <Dialog isOpen={isVisible} onClose={onClose} title="Export board">
+            <ExportBoardForm projectId={projectId} boardName={boardName} onClose={onClose} />
+        </Dialog>
     )
 }
 
@@ -119,31 +110,28 @@ function ExportBoardForm({
         exportBoard.mutate({ projectId, boardName, format }, { onSuccess: onClose })
 
     return (
-        <View className="px-5 pb-5 gap-3">
-            <View className="gap-2" accessibilityRole="radiogroup">
-                {OPTIONS.map(option => (
-                    <FormatRow
-                        key={option.format}
-                        option={option}
-                        isSelected={format === option.format}
-                        onSelect={() => setFormat(option.format)}
-                    />
-                ))}
-            </View>
-
-            <View className="flex-row justify-end gap-2 pt-2">
-                <Pressable onPress={onClose} className="px-3 py-1.5" accessibilityRole="button">
-                    <Text className="text-[13px] text-muted">Cancel</Text>
-                </Pressable>
-                <Button
+        <>
+            <Dialog.Body>
+                <View className="gap-2" accessibilityRole="radiogroup">
+                    {OPTIONS.map(option => (
+                        <FormatRow
+                            key={option.format}
+                            option={option}
+                            isSelected={format === option.format}
+                            onSelect={() => setFormat(option.format)}
+                        />
+                    ))}
+                </View>
+            </Dialog.Body>
+            <Dialog.Footer>
+                <Dialog.CancelButton onPress={onClose} />
+                <Dialog.ActionButton
+                    label={exportBoard.isPending ? 'Exporting…' : 'Export'}
                     onPress={onExport}
                     isDisabled={exportBoard.isPending}
-                    size="sm"
                     testID="boards-export-confirm"
-                >
-                    <ButtonText>{exportBoard.isPending ? 'Exporting…' : 'Export'}</ButtonText>
-                </Button>
-            </View>
-        </View>
+                />
+            </Dialog.Footer>
+        </>
     )
 }

@@ -1,8 +1,7 @@
-import { MenuActionItem } from '@tinycld/core/components/DropdownMenu'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { Menu } from '@tinycld/core/ui/menu'
 import { Archive, Gauge, ListFilter, Tag, Timer, Users, X } from 'lucide-react-native'
-import { useState } from 'react'
+import { forwardRef, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useCardBulkActions } from '../hooks/useCardBulkActions'
 import { allHave, partialCount, resolveSelection, sharedValue } from '../lib/board-selection'
@@ -203,23 +202,19 @@ function MoveToListButton({
     actions: ReturnType<typeof useCardBulkActions>
 }) {
     return (
-        <Menu>
-            <Menu.Trigger>
-                <BarButton icon={ListFilter} label="Move" testID="boards-bulk-move" />
-            </Menu.Trigger>
-            <Menu.Portal>
-                <Menu.Overlay />
-                <Menu.Content presentation="popover" placement="top" align="start">
-                    {project.lists.map(list => (
-                        <MenuActionItem
-                            key={list.id}
-                            label={list.name}
-                            testID={`boards-bulk-move-${list.id}`}
-                            onPress={() => actions.moveToList.mutate(list)}
-                        />
-                    ))}
-                </Menu.Content>
-            </Menu.Portal>
+        <Menu
+            trigger={<BarButton icon={ListFilter} label="Move" testID="boards-bulk-move" />}
+            placement="top-start"
+            title="Move to list"
+        >
+            {project.lists.map(list => (
+                <Menu.Item
+                    key={list.id}
+                    label={list.name}
+                    testID={`boards-bulk-move-${list.id}`}
+                    onSelect={() => actions.moveToList.mutate(list)}
+                />
+            ))}
         </Menu>
     )
 }
@@ -248,10 +243,18 @@ interface BarButtonProps {
     partialCount?: number
 }
 
-function BarButton({ icon: Icon, label, testID, onPress, partialCount = 0 }: BarButtonProps) {
+/**
+ * forwardRef because every button but Archive is a picker's trigger, which
+ * is cloned with an `onPress` and the ref the surface anchors against.
+ */
+const BarButton = forwardRef<View, BarButtonProps>(function BarButton(
+    { icon: Icon, label, testID, onPress, partialCount = 0 },
+    ref
+) {
     const mutedColor = useThemeColor('muted')
     return (
         <Pressable
+            ref={ref}
             accessibilityRole="button"
             testID={testID}
             onPress={onPress}
@@ -262,7 +265,7 @@ function BarButton({ icon: Icon, label, testID, onPress, partialCount = 0 }: Bar
             <PartialHint count={partialCount} />
         </Pressable>
     )
-}
+})
 
 /** "·2" beside a button whose selection carries that many values unevenly. */
 function PartialHint({ count }: { count: number }) {
