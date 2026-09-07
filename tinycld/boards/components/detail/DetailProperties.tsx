@@ -7,6 +7,7 @@ import { Pressable, Text, View } from 'react-native'
 import { useToggleCardRelation, useUpdateCard } from '../../hooks/useCardMutations'
 import { dueStateFor, formatDueDate } from '../../lib/due-state'
 import { formatSchedule } from '../../lib/due-time'
+import { boardUsesEpics } from '../../lib/epics'
 import { formatEstimate } from '../../lib/estimate'
 import { type CardPriority, priorityLabel } from '../../lib/priority'
 import { sprintLabel } from '../../lib/sprint'
@@ -49,12 +50,13 @@ export function DetailProperties({
 }: DetailPropertiesProps) {
     const updateCard = useUpdateCard()
     const toggleRelation = useToggleCardRelation()
+    const hasEpics = boardUsesEpics(projectEpics, card)
 
     const toggle = (field: 'labels' | 'assignees') => (id: string, isSelected: boolean) =>
         toggleRelation.mutate({ cardId: card.id, field, id, isSelected })
 
-    // The Value components double as the pickers' Menu.Trigger children; a
-    // trigger injects onPress by cloning, so rendering one bare (no picker
+    // The Value components double as the pickers' triggers; a trigger is
+    // cloned with an onPress and a ref, so rendering one bare (no picker
     // wrapper, no onPress) is what makes it read-only — see their no-onPress
     // branches.
     if (!canEdit) {
@@ -69,9 +71,9 @@ export function DetailProperties({
                 <PropertyRow name="Labels">
                     <LabelsValue card={card} />
                 </PropertyRow>
-                <PropertyRow name="Epic">
+                <EpicPropertyRow isVisible={hasEpics}>
                     <EpicValue epic={card.epic} />
-                </PropertyRow>
+                </EpicPropertyRow>
                 <SprintPropertyRow isVisible={sprintsEnabled}>
                     <SprintValue sprint={card.sprint} />
                 </SprintPropertyRow>
@@ -121,7 +123,7 @@ export function DetailProperties({
                     <LabelsValue card={card} />
                 </LabelPicker>
             </PropertyRow>
-            <PropertyRow name="Epic">
+            <EpicPropertyRow isVisible={hasEpics}>
                 <EpicPicker
                     epics={projectEpics}
                     selectedId={card.epic?.id ?? ''}
@@ -129,7 +131,7 @@ export function DetailProperties({
                 >
                     <EpicValue epic={card.epic} />
                 </EpicPicker>
-            </PropertyRow>
+            </EpicPropertyRow>
             <SprintPropertyRow isVisible={sprintsEnabled}>
                 <SprintPicker
                     sprints={projectSprints}
@@ -142,6 +144,7 @@ export function DetailProperties({
             <PropertyRow name="Start">
                 <DuePicker
                     value={card.start}
+                    title="Start date"
                     onChange={pick => updateCard.mutate({ cardId: card.id, start: pick.date })}
                 >
                     <StartValue start={card.start} />
@@ -181,6 +184,12 @@ export function DetailProperties({
             </PropertyRow>
         </View>
     )
+}
+
+/** The Epic row, only on a board that has epics to file under. */
+function EpicPropertyRow({ isVisible, children }: { isVisible: boolean; children: ReactElement }) {
+    if (!isVisible) return null
+    return <PropertyRow name="Epic">{children}</PropertyRow>
 }
 
 /** The Sprint row, only on a board that plans in sprints. */
@@ -314,8 +323,8 @@ const EstimateValue = forwardRef<View, { estimate?: number; onPress?: () => void
 
 /**
  * The priority chip, and the PriorityPicker's trigger — the DueValue shape:
- * a Pressable root in every openable state so Menu.Trigger has something to
- * clone onPress into, and a plain View when the card is read-only.
+ * a Pressable root in every openable state so the picker's trigger has
+ * something to clone onPress into, and a plain View when the card is read-only.
  */
 const PriorityValue = forwardRef<View, { priority: CardPriority; onPress?: () => void }>(
     function PriorityValue({ priority, onPress }, ref) {
@@ -430,8 +439,8 @@ const ReporterValue = forwardRef<View, { card: BoardCardView; onPress?: () => vo
  * The assignee chips, and the AssigneePicker's trigger.
  *
  * A populated row wraps its chips in ONE Pressable rather than returning a
- * fragment: Menu.Trigger clones a single child to inject onPress and a ref, and
- * a fragment has neither.
+ * fragment: the picker clones its single trigger element to inject onPress and
+ * a ref, and a fragment has neither.
  */
 const AssigneesValue = forwardRef<View, { card: BoardCardView; onPress?: () => void }>(
     function AssigneesValue({ card, onPress }, ref) {
@@ -573,7 +582,7 @@ const StartValue = forwardRef<View, { start?: Date; onPress?: () => void }>(func
 
 /**
  * The due chip — and the DuePicker's trigger, which is why its root is a
- * Pressable in both states: Menu.Trigger clones its child to inject onPress and
+ * Pressable in both states: the picker clones its trigger to inject onPress and
  * a ref, so a plain View here would render a chip that cannot be opened.
  */
 const DueValue = forwardRef<View, { due?: Date; dueHasTime: boolean; onPress?: () => void }>(
