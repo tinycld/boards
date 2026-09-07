@@ -4,7 +4,6 @@ import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useDeviceInsets } from '@tinycld/core/lib/use-safe-area'
 import { useOverlayLayer } from '@tinycld/core/ui/overlay'
 import { useFocusEffect, useRouter } from 'expo-router'
-import { Maximize2, X } from 'lucide-react-native'
 import { type RefObject, useCallback, useMemo, useRef, useState } from 'react'
 import { Platform, Pressable, StyleSheet, View } from 'react-native'
 import { useProjectRole } from '../hooks/useProjectRole'
@@ -12,13 +11,9 @@ import { type CardEntry, findCardEntry, flattenCards, neighborCardId } from '../
 import { cardHref } from '../lib/board-route'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
 import type { BoardProject } from '../types'
-import { CardActionsMenu } from './detail/CardActionsMenu'
 import { CardDetail } from './detail/CardDetail'
-import { CardKeyBadge } from './detail/CardKeyBadge'
+import { CardHeaderToolbar } from './detail/CardHeaderToolbar'
 import type { EditableTextHandle } from './detail/EditableText'
-import { IconButton } from './detail/IconButton'
-import { ListStepper } from './detail/ListStepper'
-import { WatchButton } from './detail/WatchButton'
 import { ProjectWash } from './ProjectWash'
 
 interface CardPeekProps {
@@ -106,7 +101,6 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
     const router = useRouter()
     const orgHref = useOrgHref()
     const closeCard = useBoardsUIStore(s => s.closeCard)
-    const mutedColor = useThemeColor('muted')
     const { canEdit } = useProjectRole(project.id)
     const insets = useDeviceInsets()
     const titleRef = useRef<EditableTextHandle>(null)
@@ -148,31 +142,14 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
                 }}
             >
                 <ProjectWash color={project.color} height={180} />
-                <View className="flex-row items-center gap-1 pl-4 pr-3 pt-3 pb-2">
-                    <ListStepper
-                        project={project}
-                        card={entry.card}
-                        list={entry.list}
-                        isInteractive={canEdit}
-                    />
-                    <CardKeyBadge cardKey={entry.card.key} />
-                    <View className="flex-1" />
-                    <WatchButton projectId={project.id} cardId={entry.card.id} />
-                    <IconButton label="Open full page" onPress={expandCard}>
-                        <Maximize2 size={14} color={mutedColor} strokeWidth={2.2} />
-                    </IconButton>
-                    {canEdit ? (
-                        <CardActionsMenu
-                            card={entry.card}
-                            list={entry.list}
-                            projectId={project.id}
-                            onDismiss={closeCard}
-                        />
-                    ) : null}
-                    <IconButton label="Close" onPress={closeCard}>
-                        <X size={15} color={mutedColor} strokeWidth={2.2} />
-                    </IconButton>
-                </View>
+                <CardHeaderToolbar
+                    project={project}
+                    entry={entry}
+                    canEdit={canEdit}
+                    onDismiss={closeCard}
+                    onExpand={expandCard}
+                    onClose={closeCard}
+                />
                 <CardDetail
                     // Remounts on card switch. The description editor binds to
                     // ONE Yjs fragment for its lifetime, so switching cards has

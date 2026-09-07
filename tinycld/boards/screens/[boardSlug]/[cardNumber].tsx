@@ -1,5 +1,6 @@
 import { DocumentTitle } from '@tinycld/core/components/DocumentTitle'
 import { LoadingState } from '@tinycld/core/components/LoadingState'
+import type { ToolbarItem } from '@tinycld/core/components/ResponsiveToolbar'
 import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { type Shortcut, useRegisterShortcuts, useShortcutScope } from '@tinycld/core/lib/shortcuts'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
@@ -10,12 +11,9 @@ import { ChevronLeft } from 'lucide-react-native'
 import { type RefObject, useMemo, useRef } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { BoardPresenceProvider } from '../../components/BoardPresenceProvider'
-import { CardActionsMenu } from '../../components/detail/CardActionsMenu'
 import { CardDetail } from '../../components/detail/CardDetail'
-import { CardKeyBadge } from '../../components/detail/CardKeyBadge'
+import { CardHeaderToolbar } from '../../components/detail/CardHeaderToolbar'
 import type { EditableTextHandle } from '../../components/detail/EditableText'
-import { ListStepper } from '../../components/detail/ListStepper'
-import { WatchButton } from '../../components/detail/WatchButton'
 import { ProjectWash } from '../../components/ProjectWash'
 import { useBoardRoute } from '../../hooks/useBoardRoute'
 import { useProjectRole } from '../../hooks/useProjectRole'
@@ -171,30 +169,25 @@ function CardPage({ project, segment, entry, cardId, navigateBack }: CardPagePro
         [project]
     )
 
+    const backItems: ToolbarItem[] = [
+        {
+            type: 'custom',
+            key: 'back',
+            element: <BackButton label={project.name} onPress={navigateBack} />,
+        },
+    ]
+
     return (
         <View className="flex-1 bg-background">
             <DocumentTitle pkg="Boards" title={entry.card.title} />
             <ProjectWash color={project.color} bleedRight={insets.right} />
-            <View className="flex-row items-center gap-2 pl-3 pr-4 pt-3 pb-2">
-                <BackButton label={project.name} onPress={navigateBack} />
-                <ListStepper
-                    project={project}
-                    card={entry.card}
-                    list={entry.list}
-                    isInteractive={canEdit}
-                />
-                <CardKeyBadge cardKey={entry.card.key} />
-                <View className="flex-1" />
-                <WatchButton projectId={project.id} cardId={entry.card.id} />
-                {canEdit ? (
-                    <CardActionsMenu
-                        card={entry.card}
-                        list={entry.list}
-                        projectId={project.id}
-                        onDismiss={navigateBack}
-                    />
-                ) : null}
-            </View>
+            <CardHeaderToolbar
+                project={project}
+                entry={entry}
+                canEdit={canEdit}
+                onDismiss={navigateBack}
+                leadingItems={backItems}
+            />
             <CardDetail
                 // See CardPeek: the description editor is bound to one Yjs
                 // fragment per mount, so the card id is the identity.

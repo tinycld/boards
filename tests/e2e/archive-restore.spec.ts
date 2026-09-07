@@ -42,7 +42,7 @@ test.describe('Boards — archive and restore', () => {
         await freshBoard(page)
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
-        await peek(page).getByRole('button', { name: 'More actions' }).click()
+        await peek(page).getByRole('button', { name: 'Card actions' }).click()
         await page.getByText('Archive card', { exact: true }).click()
         await expect(boardCard(page, CARD_TITLE)).toHaveCount(0)
 
@@ -63,7 +63,7 @@ test.describe('Boards — archive and restore', () => {
         await freshBoard(page)
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
-        await peek(page).getByRole('button', { name: 'More actions' }).click()
+        await peek(page).getByRole('button', { name: 'Card actions' }).click()
         await page.getByText('Archive card', { exact: true }).click()
 
         await page.getByTestId('boards-archived-button').click()

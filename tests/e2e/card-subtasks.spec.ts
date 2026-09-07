@@ -118,7 +118,7 @@ test('deleting a parent leaves its sub-tasks on the board', async ({ page }) => 
     await addSubtask(page, PARENT, CHILD)
 
     await openCard(page, PARENT)
-    await peek(page).getByRole('button', { name: 'More actions' }).click()
+    await peek(page).getByRole('button', { name: 'Card actions' }).click()
     await page.getByText('Delete card', { exact: true }).click()
     await page.getByRole('button', { name: 'Delete', exact: true }).click()
 
