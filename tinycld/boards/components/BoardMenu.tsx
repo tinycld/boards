@@ -1,5 +1,3 @@
-import { Tooltip } from '@tinycld/core/components/Tooltip'
-import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { ConfirmDialog } from '@tinycld/core/ui/ConfirmDialog'
 import { ColorPickerGrid } from '@tinycld/core/ui/color-picker'
 import { Dialog } from '@tinycld/core/ui/dialog'
@@ -10,14 +8,12 @@ import {
     Download,
     Layers,
     ListTree,
-    MoreHorizontal,
     Palette,
     Pencil,
     Settings2,
     Trash2,
 } from 'lucide-react-native'
-import { forwardRef, useState } from 'react'
-import { Pressable, type View } from 'react-native'
+import { useState } from 'react'
 import {
     useArchiveProject,
     useRestoreProject,
@@ -30,7 +26,7 @@ import { DeleteBoardDialog } from './DeleteBoardDialog'
 import { EpicManagerDialog } from './EpicManagerDialog'
 import { ExportBoardDialog } from './ExportBoardDialog'
 
-interface BoardMenuProps {
+interface BoardActionsInput {
     project: BoardProject
     cardCount: number
     isArchived: boolean
@@ -38,13 +34,72 @@ interface BoardMenuProps {
 }
 
 /**
- * The board's own menu: rename, recolor, settings, archive (or restore), delete.
+ * The board's own menu — rename, recolor, epics, export, settings, archive (or
+ * restore), delete — split into the rows and the dialogs they open.
+ *
+ * The rows render inside the header toolbar's More menu, and a menu unmounts
+ * its rows the moment one is chosen; a dialog owned by a row would close as
+ * it opened. So the dialogs and the state that opens them live here and
+ * render beside the toolbar.
  *
  * Archive is offered first and confirms with a plain dialog, because the
  * board vanishing from the sidebar looks identical to losing it. Delete sits
  * last and demands the board's name typed back — see useDeleteProject for
  * what the cascade takes with it.
  */
+export function useBoardActions({ project, cardCount, isArchived, onRename }: BoardActionsInput) {
+    const [isPickingColor, setIsPickingColor] = useState(false)
+    const [isEditingSettings, setIsEditingSettings] = useState(false)
+    const [isManagingEpics, setIsManagingEpics] = useState(false)
+    const [isExporting, setIsExporting] = useState(false)
+    const [isConfirmingArchive, setIsConfirmingArchive] = useState(false)
+    const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
+    const updateProject = useUpdateProject()
+    const archiveProject = useArchiveProject()
+    const restoreProject = useRestoreProject()
+    const setViewMode = useBoardsUIStore(s => s.setViewMode)
+
+    return {
+        project,
+        cardCount,
+        isArchived,
+        rename: onRename,
+        pickColor: () => setIsPickingColor(true),
+        manageEpics: () => setIsManagingEpics(true),
+        showBacklog: () => setViewMode(project.id, 'backlog'),
+        exportBoard: () => setIsExporting(true),
+        editSettings: () => setIsEditingSettings(true),
+        restore: () => restoreProject.mutate(project.id),
+        requestArchive: () => setIsConfirmingArchive(true),
+        requestDelete: () => setIsConfirmingDelete(true),
+        dialogs: {
+            isPickingColor,
+            closeColor: () => setIsPickingColor(false),
+            setColor: (color: string) => {
+                updateProject.mutate({ projectId: project.id, color })
+                setIsPickingColor(false)
+            },
+            isManagingEpics,
+            closeEpics: () => setIsManagingEpics(false),
+            isExporting,
+            closeExport: () => setIsExporting(false),
+            isEditingSettings,
+            closeSettings: () => setIsEditingSettings(false),
+            isConfirmingArchive,
+            closeArchive: () => setIsConfirmingArchive(false),
+            confirmArchive: () =>
+                archiveProject.mutate(project.id, {
+                    onSuccess: () => setIsConfirmingArchive(false),
+                }),
+            isArchiving: archiveProject.isPending,
+            isConfirmingDelete,
+            closeDelete: () => setIsConfirmingDelete(false),
+        },
+    }
+}
+
+type BoardActions = ReturnType<typeof useBoardActions>
+
 /** The way to the backlog view from the menu, on a board that plans in sprints. */
 function BacklogItem({ isVisible, onPress }: { isVisible: boolean; onPress: () => void }) {
     if (!isVisible) return null
@@ -58,154 +113,110 @@ function BacklogItem({ isVisible, onPress }: { isVisible: boolean; onPress: () =
     )
 }
 
-export function BoardMenu({ project, cardCount, isArchived, onRename }: BoardMenuProps) {
-    const [isPickingColor, setIsPickingColor] = useState(false)
-    const [isEditingSettings, setIsEditingSettings] = useState(false)
-    const [isManagingEpics, setIsManagingEpics] = useState(false)
-    const [isExporting, setIsExporting] = useState(false)
-    const [isConfirmingArchive, setIsConfirmingArchive] = useState(false)
-    const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
-    const mutedColor = useThemeColor('muted')
-    const updateProject = useUpdateProject()
-    const archiveProject = useArchiveProject()
-    const restoreProject = useRestoreProject()
-    const setViewMode = useBoardsUIStore(s => s.setViewMode)
-
+/** The menu rows. Must render inside a `Menu`. */
+export function BoardMenuRows({ actions }: { actions: BoardActions }) {
+    const { project } = actions
     return (
         <>
-            <Menu
-                trigger={<BoardMenuTrigger color={mutedColor} />}
-                placement="bottom-end"
-                title="Board actions"
-            >
-                <Menu.Item label="Rename board" icon={Pencil} onSelect={onRename} />
-                <Menu.Item
-                    label="Change color"
-                    icon={Palette}
-                    colorDot={project.color}
-                    onSelect={() => setIsPickingColor(true)}
-                />
-                <Menu.Item
-                    label="Epics…"
-                    icon={Layers}
-                    testID="boards-manage-epics"
-                    onSelect={() => setIsManagingEpics(true)}
-                />
-                <BacklogItem
-                    isVisible={project.sprintsEnabled}
-                    onPress={() => setViewMode(project.id, 'backlog')}
-                />
-                <Menu.Item
-                    label="Export…"
-                    icon={Download}
-                    testID="boards-export"
-                    onSelect={() => setIsExporting(true)}
-                />
-                <Menu.Item
-                    label="Board settings…"
-                    icon={Settings2}
-                    testID="boards-settings"
-                    onSelect={() => setIsEditingSettings(true)}
-                />
-                {isArchived ? (
-                    <Menu.Item
-                        label="Restore board"
-                        icon={ArchiveRestore}
-                        onSelect={() => restoreProject.mutate(project.id)}
-                    />
-                ) : (
-                    <Menu.Item
-                        label="Archive board"
-                        icon={Archive}
-                        onSelect={() => setIsConfirmingArchive(true)}
-                    />
-                )}
-                <Menu.Item
-                    label="Delete board…"
-                    icon={Trash2}
-                    isDestructive
-                    onSelect={() => setIsConfirmingDelete(true)}
-                />
-            </Menu>
+            <Menu.Item label="Rename board" icon={Pencil} onSelect={actions.rename} />
+            <Menu.Item
+                label="Change color"
+                icon={Palette}
+                colorDot={project.color}
+                onSelect={actions.pickColor}
+            />
+            <Menu.Item
+                label="Epics…"
+                icon={Layers}
+                testID="boards-manage-epics"
+                onSelect={actions.manageEpics}
+            />
+            <BacklogItem isVisible={project.sprintsEnabled} onPress={actions.showBacklog} />
+            <Menu.Item
+                label="Export…"
+                icon={Download}
+                testID="boards-export"
+                onSelect={actions.exportBoard}
+            />
+            <Menu.Item
+                label="Board settings…"
+                icon={Settings2}
+                testID="boards-settings"
+                onSelect={actions.editSettings}
+            />
+            {actions.isArchived ? (
+                <Menu.Item label="Restore board" icon={ArchiveRestore} onSelect={actions.restore} />
+            ) : (
+                <Menu.Item label="Archive board" icon={Archive} onSelect={actions.requestArchive} />
+            )}
+            <Menu.Item
+                label="Delete board…"
+                icon={Trash2}
+                isDestructive
+                onSelect={actions.requestDelete}
+            />
+        </>
+    )
+}
 
+/** The dialogs the rows open. Render beside the toolbar, never inside the menu. */
+export function BoardMenuDialogs({
+    actions,
+    isVisible,
+}: {
+    actions: BoardActions
+    isVisible: boolean
+}) {
+    const { project, dialogs } = actions
+    if (!isVisible) return null
+    return (
+        <>
             <Dialog
-                isOpen={isPickingColor}
-                onClose={() => setIsPickingColor(false)}
+                isOpen={dialogs.isPickingColor}
+                onClose={dialogs.closeColor}
                 title="Board color"
             >
                 <Dialog.Body>
-                    <ColorPickerGrid
-                        selected={project.color}
-                        onSelect={color => {
-                            updateProject.mutate({ projectId: project.id, color })
-                            setIsPickingColor(false)
-                        }}
-                    />
+                    <ColorPickerGrid selected={project.color} onSelect={dialogs.setColor} />
                 </Dialog.Body>
             </Dialog>
 
             <EpicManagerDialog
-                isVisible={isManagingEpics}
-                onClose={() => setIsManagingEpics(false)}
+                isVisible={dialogs.isManagingEpics}
+                onClose={dialogs.closeEpics}
                 projectId={project.id}
                 epics={project.epics}
             />
 
             <ExportBoardDialog
-                isVisible={isExporting}
-                onClose={() => setIsExporting(false)}
+                isVisible={dialogs.isExporting}
+                onClose={dialogs.closeExport}
                 projectId={project.id}
                 boardName={project.name}
             />
 
             <BoardSettingsDialog
                 project={project}
-                isOpen={isEditingSettings}
-                onClose={() => setIsEditingSettings(false)}
+                isOpen={dialogs.isEditingSettings}
+                onClose={dialogs.closeSettings}
             />
 
             <ConfirmDialog
-                isOpen={isConfirmingArchive}
-                onClose={() => setIsConfirmingArchive(false)}
-                onConfirm={() =>
-                    archiveProject.mutate(project.id, {
-                        onSuccess: () => setIsConfirmingArchive(false),
-                    })
-                }
+                isOpen={dialogs.isConfirmingArchive}
+                onClose={dialogs.closeArchive}
+                onConfirm={dialogs.confirmArchive}
                 title={`Archive "${project.name}"?`}
                 message="The board is removed from your sidebar. Its lists and cards are kept."
                 confirmLabel="Archive"
-                isSubmitting={archiveProject.isPending}
+                isSubmitting={dialogs.isArchiving}
             />
 
             <DeleteBoardDialog
                 project={project}
-                cardCount={cardCount}
-                isOpen={isConfirmingDelete}
-                onClose={() => setIsConfirmingDelete(false)}
+                cardCount={actions.cardCount}
+                isOpen={dialogs.isConfirmingDelete}
+                onClose={dialogs.closeDelete}
             />
         </>
     )
 }
-
-/**
- * The trigger, as a forwardRef component rather than an inline Pressable — see
- * SortMenu's SortTrigger for why a Menu trigger cannot be wrapped from outside.
- */
-const BoardMenuTrigger = forwardRef<View, { color: string; onPress?: () => void }>(
-    function BoardMenuTrigger({ color, onPress }, ref) {
-        return (
-            <Tooltip label="Board actions">
-                <Pressable
-                    ref={ref}
-                    accessibilityRole="button"
-                    accessibilityLabel="Board actions"
-                    onPress={onPress}
-                    className="w-7 h-7 items-center justify-center rounded-[7px] hover:bg-foreground/5 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ml-1"
-                >
-                    <MoreHorizontal size={15} color={color} strokeWidth={2.2} />
-                </Pressable>
-            </Tooltip>
-        )
-    }
-)

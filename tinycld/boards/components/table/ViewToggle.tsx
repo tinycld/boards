@@ -1,25 +1,40 @@
 import { Tooltip } from '@tinycld/core/components/Tooltip'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
+import { Menu } from '@tinycld/core/ui/menu'
 import { ChartGantt, Columns3, List, ListTree } from 'lucide-react-native'
 import { Pressable, View } from 'react-native'
 import { selectViewMode, useBoardsUIStore, type ViewMode } from '../../stores/boards-ui-store'
+
+const VIEW_MODES: { mode: ViewMode; label: string; icon: typeof List }[] = [
+    { mode: 'board', label: 'Board', icon: Columns3 },
+    { mode: 'list', label: 'List', icon: List },
+    { mode: 'timeline', label: 'Timeline', icon: ChartGantt },
+    // The fourth segment, only on a board whose sprints are on.
+    { mode: 'backlog', label: 'Backlog', icon: ListTree },
+]
+
+interface ViewToggleProps {
+    projectId: string
+    isSprintsEnabled: boolean
+}
+
+function useViewModes({ projectId, isSprintsEnabled }: ViewToggleProps) {
+    const viewMode = useBoardsUIStore(s => selectViewMode(s, projectId, isSprintsEnabled))
+    const setViewMode = useBoardsUIStore(s => s.setViewMode)
+    const modes = VIEW_MODES.filter(entry => entry.mode !== 'backlog' || isSprintsEnabled)
+    return { viewMode, modes, select: (mode: ViewMode) => setViewMode(projectId, mode) }
+}
 
 /**
  * Board, list, timeline — and the backlog, on a board with sprints — drive's
  * ViewToggle shape. A per-board preference that persists (a stale board id is
  * inert), unlike the filter beside it.
  */
-export function ViewToggle({
-    projectId,
-    isSprintsEnabled,
-}: {
-    projectId: string
-    isSprintsEnabled: boolean
-}) {
-    const viewMode = useBoardsUIStore(s => selectViewMode(s, projectId, isSprintsEnabled))
-    const setViewMode = useBoardsUIStore(s => s.setViewMode)
+export function ViewToggle(props: ViewToggleProps) {
+    const { viewMode, modes, select } = useViewModes(props)
     const mutedColor = useThemeColor('muted')
     const activeColor = useThemeColor('foreground')
+    const colors = { muted: mutedColor, active: activeColor }
 
     return (
         <View
@@ -27,62 +42,37 @@ export function ViewToggle({
             accessibilityLabel="View mode"
             className="flex-row rounded-md border border-border p-0.5"
         >
-            <Segment
-                mode="board"
-                label="Board"
-                icon={Columns3}
-                isActive={viewMode === 'board'}
-                onPress={() => setViewMode(projectId, 'board')}
-                colors={{ muted: mutedColor, active: activeColor }}
-            />
-            <Segment
-                mode="list"
-                label="List"
-                icon={List}
-                isActive={viewMode === 'list'}
-                onPress={() => setViewMode(projectId, 'list')}
-                colors={{ muted: mutedColor, active: activeColor }}
-            />
-            <Segment
-                mode="timeline"
-                label="Timeline"
-                icon={ChartGantt}
-                isActive={viewMode === 'timeline'}
-                onPress={() => setViewMode(projectId, 'timeline')}
-                colors={{ muted: mutedColor, active: activeColor }}
-            />
-            <BacklogSegment
-                isVisible={isSprintsEnabled}
-                isActive={viewMode === 'backlog'}
-                onPress={() => setViewMode(projectId, 'backlog')}
-                colors={{ muted: mutedColor, active: activeColor }}
-            />
+            {modes.map(entry => (
+                <Segment
+                    key={entry.mode}
+                    mode={entry.mode}
+                    label={entry.label}
+                    icon={entry.icon}
+                    isActive={viewMode === entry.mode}
+                    onPress={() => select(entry.mode)}
+                    colors={colors}
+                />
+            ))}
         </View>
     )
 }
 
-/** The fourth segment, only on a board whose sprints are on. */
-function BacklogSegment({
-    isVisible,
-    isActive,
-    onPress,
-    colors,
-}: {
-    isVisible: boolean
-    isActive: boolean
-    onPress: () => void
-    colors: { muted: string; active: string }
-}) {
-    if (!isVisible) return null
+/** The same choice as menu rows, for the header's More submenu once the toggle folds. */
+export function ViewModeRows(props: ViewToggleProps) {
+    const { viewMode, modes, select } = useViewModes(props)
     return (
-        <Segment
-            mode="backlog"
-            label="Backlog"
-            icon={ListTree}
-            isActive={isActive}
-            onPress={onPress}
-            colors={colors}
-        />
+        <>
+            {modes.map(entry => (
+                <Menu.Item
+                    key={entry.mode}
+                    label={entry.label}
+                    icon={entry.icon}
+                    isSelected={viewMode === entry.mode}
+                    testID={`boards-view-menu-${entry.mode}`}
+                    onSelect={() => select(entry.mode)}
+                />
+            ))}
+        </>
     )
 }
 
