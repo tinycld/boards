@@ -31,8 +31,11 @@ export default function BoardsIndex() {
     )
     // Mirrors the open peek into `?focused=` and back. Called before the early
     // returns below because hooks cannot be conditional; it no-ops until there
-    // is a board.
-    usePeekUrl(project)
+    // is a board. A LOADING board is not a board yet: the project row can land
+    // before its cards do, and in that window a deep link's `?focused=` names a
+    // card the hook cannot find — which it would read as "nothing open" and
+    // strip from the URL before the card ever arrived.
+    usePeekUrl(isLoading ? null : project)
 
     // Three states, guarded once here so everything below takes a non-null
     // board. Loading is checked FIRST: without it, a cold load renders the
