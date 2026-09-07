@@ -73,13 +73,12 @@ const manifest = {
     //
     // The scopes are asymmetric on purpose. boards:write covers board CONTENT;
     // the sharing surface (boards_project_members, boards_share_links) is
-    // registered READ-ONLY in core's collectionScopes, so there are
+    // registered READ-ONLY in server/oauth_scopes.go, so there are
     // deliberately no `boards share` commands — adding one means widening that
     // grant first, which is a security decision rather than a CLI one.
     cli: {
         package: 'cli',
         module: 'tinycld.org/packages/boards/cli',
-        scopes: ['boards:read', 'boards:write'],
     },
     collections: { register: 'collections', types: 'types' },
     // Trigger + action catalog for workflow rules. The Go side
