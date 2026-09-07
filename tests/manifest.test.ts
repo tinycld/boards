@@ -54,19 +54,8 @@ describe('boards manifest', () => {
         expect(manifest.cli?.module).toBe('tinycld.org/packages/boards/cli')
     })
 
-    // The CLI holds boards:read and boards:write, and NOTHING ELSE. Both halves
-    // matter. A missing scope 403s every command against a real server while
-    // the Go suite — which runs no scope middleware — stays green. An extra
-    // scope silently widens what a boards grant can reach on the consent
-    // screen, which is the kind of change that should never arrive as a side
-    // effect of editing a manifest.
-    //
-    // Note what these scopes deliberately do NOT buy: boards_project_members
-    // and boards_share_links are registered READ-ONLY for OAuth callers in
-    // core's collectionScopes, so boards:write cannot add a member or mint a
-    // public share link. That asymmetry is asserted on the core side in
-    // route_classification_test.go.
-    it('requests exactly the boards scopes', () => {
-        expect(manifest.cli?.scopes).toEqual(['boards:read', 'boards:write'])
-    })
+    // The CLI's scopes (boards:read and boards:write, and nothing else) are no
+    // longer a manifest field: server/oauth_scopes.go registers them with
+    // core's OAuth registry, and server/oauth_scopes_test.go pins the surface
+    // — including that the sharing collections stay read-only to a token.
 })
