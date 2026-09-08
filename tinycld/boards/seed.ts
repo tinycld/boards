@@ -3,7 +3,6 @@ import type PocketBase from 'pocketbase'
 import type { ListCategory } from './lib/list-category'
 import type { CardPriority } from './lib/priority'
 import { initialRanks } from './lib/rank'
-import type { ReactionEmoji } from './lib/reactions'
 import { DEFAULT_SPRINT_LENGTH_DAYS } from './lib/sprint'
 
 function log(...args: unknown[]) {
@@ -56,7 +55,7 @@ interface CommentSeed {
     editedBody?: string
     replies?: { author: Who; body: string }[]
     /** Who reacted with what; two people on one emoji is what makes a count. */
-    reactions?: { by: Who; emoji: ReactionEmoji }[]
+    reactions?: { by: Who; emoji: string }[]
 }
 
 interface CardSeed {

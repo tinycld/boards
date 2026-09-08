@@ -8,7 +8,7 @@ import { useMemo } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { type ActivityContext, buildActivityFeed, describeActivity } from '../../lib/activity-feed'
 import { buildCommentThreads } from '../../lib/comment-threads'
-import type { ReactionEmoji, ReactionGroup } from '../../lib/reactions'
+import type { ReactionGroup } from '../../lib/reactions'
 import type { BoardActivity, BoardAttachment, BoardComment } from '../../types'
 import { COMMENT_HEADER_HEIGHT, InlineCommentEditor } from './CommentEditor'
 import { MarkdownText } from './MarkdownText'
@@ -26,7 +26,7 @@ interface DetailActivityProps {
     canModerate: boolean
     /** The reaction groups for a comment — a stable empty array when none. */
     reactionsFor: (commentId: string) => ReactionGroup[]
-    onToggleReaction: (commentId: string, emoji: ReactionEmoji) => void
+    onToggleReaction: (commentId: string, emoji: string) => void
     /** For the inline editor's image inserts — they become card attachments. */
     cardId: string
     projectId: string
@@ -166,7 +166,7 @@ interface CommentRowProps {
     canComment: boolean
     canModerate: boolean
     reactionsFor: (commentId: string) => ReactionGroup[]
-    onToggleReaction: (commentId: string, emoji: ReactionEmoji) => void
+    onToggleReaction: (commentId: string, emoji: string) => void
     cardId: string
     projectId: string
     attachments: BoardAttachment[]

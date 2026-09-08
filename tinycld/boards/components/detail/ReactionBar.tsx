@@ -1,10 +1,5 @@
 import { Pressable, Text, View } from 'react-native'
-import {
-    REACTION_KEYS,
-    REACTION_LABELS,
-    type ReactionEmoji,
-    type ReactionGroup,
-} from '../../lib/reactions'
+import { type ReactionGroup, reactionKey } from '../../lib/reactions'
 import { ReactionPicker } from './ReactionPicker'
 
 interface ReactionBarProps {
@@ -12,7 +7,7 @@ interface ReactionBarProps {
     groups: ReactionGroup[]
     /** viaCommenter — a viewer sees the chips but cannot add or remove one. */
     canReact: boolean
-    onToggle: (emoji: ReactionEmoji) => void
+    onToggle: (emoji: string) => void
 }
 
 /**
@@ -54,8 +49,11 @@ function ReactionChip({
     const tint = isOwn
         ? 'bg-primary/10 border-primary/40'
         : 'bg-foreground/[0.06] border-transparent'
-    const label = `${REACTION_LABELS[group.emoji]} ${group.count}`
-    const testID = `boards-reaction-${commentId}-${REACTION_KEYS[group.emoji]}`
+    // The glyph itself is the accessible name: with an open palette there is
+    // no closed set of names to look up, and a screen reader announces an
+    // emoji from its own Unicode name anyway.
+    const label = `${group.emoji} ${group.count}`
+    const testID = `boards-reaction-${commentId}-${reactionKey(group.emoji)}`
     const content = (
         <>
             <Text className="text-[12px]">{group.emoji}</Text>
@@ -94,7 +92,7 @@ function PickerSlot({
     onPick,
 }: {
     isVisible: boolean
-    onPick: (emoji: ReactionEmoji) => void
+    onPick: (emoji: string) => void
 }) {
     if (!isVisible) return null
     return <ReactionPicker onPick={onPick} />

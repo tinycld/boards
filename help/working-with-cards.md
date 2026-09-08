@@ -344,10 +344,19 @@ longer comment does not send itself half-written. Reply to a comment to keep a
 thread together.
 
 To react to a comment without writing one, click the smiley under it and pick
-an emoji — a thumbs up, a heart, a laugh, a party, eyes, or a rocket. The
-reaction appears as a chip with a count; click a chip to add yours to it or
-take yours back. Anyone who can comment can react, and anyone who can see the
-card, including people reading a shared board by link, sees the reactions.
+an emoji. The picker opens on the emoji you use most, and you can jump to a
+category with the icons along the top or type in the search box to find one by
+name — "party", "rocket", "thinking". Set a skin tone with the hand beside the
+search box and it is remembered for next time, on every device you sign in on.
+
+The reaction appears as a chip with a count; click a chip to add yours to it
+or take yours back. An emoji picked in a skin tone counts on its own, so a
+thumbs up and a thumbs up in a different tone sit side by side rather than
+merging. Anyone who can comment can react, and anyone who can see the card,
+including people reading a shared board by link, sees the reactions.
+
+Country flags are not in the picker. A reaction set from somewhere else still
+shows on the card, but the picker will not find one to add.
 
 To fix or expand one of your own comments, click it — it opens for editing
 with the same formatting buttons. Save (⌘↩, or clicking elsewhere) keeps the

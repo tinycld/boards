@@ -1790,17 +1790,38 @@ func TestCommentReactAcceptsTheEmojiItself(t *testing.T) {
 
 // The palette is closed and short, so an unknown value shows the whole set
 // rather than only refusing.
-func TestCommentReactRejectsAnEmojiOutsideThePalette(t *testing.T) {
+// The CLI no longer owns the vocabulary: it sends what it was given and the
+// server decides. So an unfamiliar emoji is PASSED THROUGH, not refused here —
+// listing ~1650 emoji is not an error message.
+func TestCommentReactSendsAnyEmojiThrough(t *testing.T) {
 	f := board(t)
 	f.comments["cmt1"] = &comment{ID: "cmt1", Card: "crdCopy", Author: "user1", Body: "Looks good"}
 	_, c := f.serve()
 
-	_, _, err := runCmd(t, c, "boards", "card", "react", "cmt1", "🦆")
+	if _, _, err := runCmd(t, c, "boards", "card", "react", "cmt1", "🦆"); err != nil {
+		t.Fatalf("an emoji the CLI does not know a name for should still be sent: %v", err)
+	}
+	for _, r := range f.reactions {
+		if r.Comment == "cmt1" && r.Emoji == "🦆" {
+			return
+		}
+	}
+	t.Fatal("the reaction was not stored")
+}
+
+// A word that is not a known shorthand is worth catching locally: it is never
+// an emoji, so the server round-trip would only produce a worse message.
+func TestCommentReactRejectsAWordThatIsNotAShorthand(t *testing.T) {
+	f := board(t)
+	f.comments["cmt1"] = &comment{ID: "cmt1", Card: "crdCopy", Author: "user1", Body: "Looks good"}
+	_, c := f.serve()
+
+	_, _, err := runCmd(t, c, "boards", "card", "react", "cmt1", "definitely_not_a_reaction")
 	if err == nil {
-		t.Fatal("an emoji outside the palette must be refused")
+		t.Fatal("an unknown ASCII shorthand must be refused")
 	}
 	if !strings.Contains(err.Error(), "thumbs_up") {
-		t.Errorf("the refusal should list the palette, got: %v", err)
+		t.Errorf("the refusal should list the shorthands, got: %v", err)
 	}
 }
 
@@ -1863,19 +1884,40 @@ func TestCardViewShowsReactionCounts(t *testing.T) {
 }
 
 // Palette order, not arrival order, so the same set always reads the same way.
-func TestReactionSummaryUsesPaletteOrder(t *testing.T) {
+// Count descending, then the emoji itself for ties — the same rule
+// groupReactions uses for the bar, so the CLI and the app order a set the
+// same way. Map iteration order would otherwise differ between runs.
+func TestReactionSummaryOrdersByCount(t *testing.T) {
 	rows := []reaction{
 		{Comment: "cmt1", Emoji: "🚀"},
+		{Comment: "cmt1", Emoji: "👍"},
 		{Comment: "cmt1", Emoji: "👍"},
 		{Comment: "cmt1", Emoji: "❤️"},
 		// A different comment's row must not leak into this one's summary.
 		{Comment: "cmt2", Emoji: "🎉"},
 	}
-	if got, want := reactionSummary(rows, "cmt1"), "👍 1  ❤️ 1  🚀 1"; got != want {
+	if got, want := reactionSummary(rows, "cmt1"), "👍 2  ❤️ 1  🚀 1"; got != want {
 		t.Errorf("reactionSummary = %q, want %q", got, want)
 	}
 	if got := reactionSummary(rows, "cmt3"); got != "" {
 		t.Errorf("a comment with no reactions should yield \"\", got %q", got)
+	}
+}
+
+// Stable across runs: the same input must not reorder because Go randomized
+// map iteration.
+func TestReactionSummaryIsDeterministic(t *testing.T) {
+	rows := []reaction{
+		{Comment: "c", Emoji: "🦄"},
+		{Comment: "c", Emoji: "🎉"},
+		{Comment: "c", Emoji: "🚀"},
+		{Comment: "c", Emoji: "👀"},
+	}
+	first := reactionSummary(rows, "c")
+	for i := 0; i < 20; i++ {
+		if got := reactionSummary(rows, "c"); got != first {
+			t.Fatalf("run %d gave %q, first run gave %q", i, got, first)
+		}
 	}
 }
 

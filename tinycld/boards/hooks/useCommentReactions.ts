@@ -1,11 +1,12 @@
 import { eq } from '@tanstack/db'
 import { useAuth } from '@tinycld/core/lib/auth'
+import { normalizeEmoji } from '@tinycld/core/lib/emoji/normalize'
 import { mutation, useMutation } from '@tinycld/core/lib/mutations'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
 import { newRecordId } from 'pbtsdb/core'
 import { useMemo } from 'react'
-import { groupReactions, type ReactionEmoji, type ReactionGroup } from '../lib/reactions'
+import { groupReactions, type ReactionGroup } from '../lib/reactions'
 
 const NO_REACTIONS: ReactionGroup[] = []
 
@@ -40,9 +41,20 @@ export function useCommentReactions(projectId: string, cardId: string) {
     )
     const byComment = useMemo(() => groupReactions(rows ?? [], userId), [rows, userId])
 
-    const toggle = useMutation<void, Error, { commentId: string; emoji: ReactionEmoji }>({
+    const toggle = useMutation<void, Error, { commentId: string; emoji: string }>({
         mutationKey: ['boards', 'reaction', 'toggle'],
-        mutationFn: mutation(function* ({ commentId, emoji }) {
+        mutationFn: mutation(function* ({ commentId, emoji: raw }) {
+            // Normalize BEFORE the own-row lookup, not just before the insert:
+            // stored rows are canonical, so a bare "❤" would fail to match the
+            // stored "❤️" and this would try to insert a duplicate the unique
+            // index then refuses. The server refuses a non-canonical value
+            // outright (server/reaction_emoji.go), so a miss here is a bug
+            // worth failing on rather than passing along.
+            const emoji = normalizeEmoji(raw)
+            if (emoji === null) {
+                throw new Error(`${raw} is not an emoji this deployment stores`)
+            }
+
             const own = byComment.get(commentId)?.find(group => group.emoji === emoji)?.ownId
             if (own) {
                 yield reactionsCollection.delete(own)
@@ -61,7 +73,6 @@ export function useCommentReactions(projectId: string, cardId: string) {
 
     return {
         reactionsFor: (commentId: string) => byComment.get(commentId) ?? NO_REACTIONS,
-        toggleReaction: (commentId: string, emoji: ReactionEmoji) =>
-            toggle.mutate({ commentId, emoji }),
+        toggleReaction: (commentId: string, emoji: string) => toggle.mutate({ commentId, emoji }),
     }
 }
