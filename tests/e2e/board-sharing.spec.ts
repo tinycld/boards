@@ -129,6 +129,13 @@ test.describe('Boards — board sharing and role gates', () => {
             ).toBeVisible()
             await expect(bobPage.getByRole('button', { name: 'Move to Doing' })).toHaveCount(0)
             await expect(bobPage.getByTestId('boards-comment-composer')).toHaveCount(0)
+            // The optional-section chips are an invitation to ADD, so a viewer
+            // gets none — and the empty sections they stand for stay hidden, as
+            // they already did before the chips existed. This is the only place
+            // a real viewer session exists, so a regression that offered a
+            // viewer a chip it could not use would pass every other spec.
+            await expect(bobPage.getByTestId('boards-section-chips')).toHaveCount(0)
+            await expect(bobPage.getByTestId('boards-section-heading-checklist')).toHaveCount(0)
             await bobPage.keyboard.press('Escape')
             await expect(bobPage.getByTestId('boards-card-peek')).toHaveCount(0)
 

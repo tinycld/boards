@@ -1,15 +1,19 @@
 import { DropZone } from '@tinycld/core/components/DropZone'
 import { MARKDOWN_TRAILING_SPACE } from '@tinycld/core/components/help/MarkdownRenderer'
+import { useUploadsForScope } from '@tinycld/core/file-viewer/upload-store'
 import { useAuth } from '@tinycld/core/lib/auth'
 import { type RefObject, useMemo, useRef, useState } from 'react'
 import { ScrollView, Text, View } from 'react-native'
 import { useAttachmentMutations } from '../../hooks/useAttachmentMutations'
 import { useCardDetail } from '../../hooks/useCardDetail'
+import { useCardLinks } from '../../hooks/useCardLinks'
 import { useUpdateCard } from '../../hooks/useCardMutations'
 import { useCommentMutations } from '../../hooks/useCommentMutations'
 import { useCommentReactions } from '../../hooks/useCommentReactions'
 import { useProjectRole } from '../../hooks/useProjectRole'
+import { type SectionKey, visibleSections } from '../../lib/card-sections'
 import { type DescriptionMode, descriptionMode } from '../../lib/description-mode'
+import { childrenOf } from '../../lib/subtasks'
 import type {
     BoardAttachment,
     BoardCardView,
@@ -33,6 +37,7 @@ import { DetailAttachments, filesToPicked } from './DetailAttachments'
 import { DetailChecklist } from './DetailChecklist'
 import { DetailLinks } from './DetailLinks'
 import { DetailProperties } from './DetailProperties'
+import { DetailSectionChips } from './DetailSectionChips'
 import { DetailSubtasks } from './DetailSubtasks'
 import { EditableText, type EditableTextHandle } from './EditableText'
 import { MarkdownText } from './MarkdownText'
@@ -199,6 +204,88 @@ export function CardDetail({
         setEditingCommentId(current => (current === commentId ? null : current))
     }
 
+    // Which optional sections the reader has opened but not yet filled.
+    //
+    // ONE piece of state carries both "revealed" and "its composer is open",
+    // because the two begin and end together: a chip opens the section with its
+    // add action already active, and closing that action un-reveals the section.
+    // A second flag would be a duplicate that could drift out of step.
+    //
+    // Never persisted, and cleared by the `key={card.id}` remount both
+    // containers do. A reveal that outlived the card would put an empty heading
+    // back on a card nobody filled — the clutter this removes.
+    const [revealed, setRevealed] = useState<ReadonlySet<SectionKey>>(() => new Set())
+    const setRevealedFor = (key: SectionKey, isOpen: boolean) =>
+        setRevealed(current => {
+            if (current.has(key) === isOpen) return current
+            const next = new Set(current)
+            if (isOpen) next.add(key)
+            else next.delete(key)
+            return next
+        })
+
+    // An upload is content before its attachment record exists, so a dropped
+    // file opens the section immediately rather than when the upload settles —
+    // otherwise the progress row it draws has nowhere to render.
+    const uploads = useUploadsForScope(card.id)
+    // Lifted out of DetailLinks so the count is readable here; the section still
+    // owns adding and removing. One query either way — the hook is not run twice.
+    //
+    // The card set is always ready by this point, by construction rather than by
+    // luck: the peek renders nothing until it finds the open card inside an
+    // already-built BoardProject, and the full-page screen returns
+    // <LoadingState/> while its query is in flight. Either way this board's
+    // cards ARE loaded by the time we render, so a far card still missing is
+    // genuinely unreadable rather than late — the distinction the redacted row
+    // depends on.
+    const {
+        links,
+        addLink,
+        removeLink,
+        isAdding: isAddingLink,
+        isReady: areLinksReady,
+    } = useCardLinks(card.id, cardsById, true)
+
+    // Derived every render, never sampled at mount: useCardDetail is on-demand,
+    // so before it settles an empty result is indistinguishable from a card that
+    // genuinely has nothing — and a teammate's realtime insert has to open the
+    // section on its own.
+    //
+    // A card that IS a sub-task can never have sub-tasks of its own (the server
+    // caps the depth at one level), so it is excluded from the chip row rather
+    // than offered a section it could not fill.
+    const { visible, chips } = visibleSections({
+        has: {
+            attachments: attachments.length > 0 || uploads.length > 0,
+            checklist: checklist.length > 0,
+            // The SERVER'S count, not the children visible here. `projectCards`
+            // is the board's cards as this surface sees them — filtered by the
+            // reader's board filter, and on a cold load not necessarily
+            // delivered yet — so a card whose children are absent from that
+            // array still has sub-tasks, and hiding the section loses them.
+            // `subtask_total` rides on the card record itself and is authoritative.
+            subtasks: card.subtaskTotal > 0 || childrenOf(projectCards, card).length > 0,
+            links: links.length > 0,
+        },
+        // Emptiness only counts once the query behind it has SETTLED. Without
+        // this, every fresh load and every reload reads all four as empty while
+        // their queries are in flight and hides sections the card really has —
+        // the reader sees a chip claiming the card is bare, and a link or
+        // checklist they filed a moment ago appears to have vanished.
+        isReady: {
+            attachments: isReady,
+            checklist: isReady,
+            // Sub-tasks need no settle gate: `subtaskTotal` is a field on the
+            // card record, which both containers resolved before mounting this
+            // component, so it is never an unsettled zero.
+            subtasks: true,
+            links: areLinksReady,
+        },
+        revealed,
+    })
+    const isSectionVisible = (key: SectionKey) => visible.includes(key)
+    const offeredChips = card.parent ? chips.filter(key => key !== 'subtasks') : chips
+
     const description = useDescriptionSection({
         cardId: card.id,
         projectId,
@@ -259,6 +346,19 @@ export function CardDetail({
                     <View className={`px-6 mb-6 overflow-visible ${widthClass}`}>
                         {description.body}
                     </View>
+                    {/* Directly under the description, and ABOVE the sections
+                        themselves: the row is a fixed landmark, so it does not
+                        wander down the card as sections open. Revealing one
+                        inserts it below this row rather than moving the row.
+                        Editors only — a reader has nothing to add. */}
+                    {canEdit ? (
+                        <View className={`px-6 ${widthClass}`}>
+                            <DetailSectionChips
+                                chips={offeredChips}
+                                onReveal={key => setRevealedFor(key, true)}
+                            />
+                        </View>
+                    ) : null}
                     <View className={`px-6 ${widthClass}`}>
                         <DetailAttachments
                             attachments={attachments}
@@ -266,6 +366,9 @@ export function CardDetail({
                             projectId={projectId}
                             canEdit={canEditChildren}
                             isOwner={isOwner}
+                            isVisible={isSectionVisible('attachments')}
+                            isComposing={revealed.has('attachments')}
+                            onComposingChange={isOpen => setRevealedFor('attachments', isOpen)}
                         />
                     </View>
                     <View className={`px-6 ${widthClass}`}>
@@ -274,6 +377,9 @@ export function CardDetail({
                             cardId={card.id}
                             projectId={projectId}
                             canEdit={canEditChildren}
+                            isVisible={isSectionVisible('checklist')}
+                            isComposing={revealed.has('checklist')}
+                            onComposingChange={isOpen => setRevealedFor('checklist', isOpen)}
                         />
                     </View>
                     <View className={`px-6 ${widthClass}`}>
@@ -288,6 +394,9 @@ export function CardDetail({
                             projectCards={projectCards}
                             projectId={projectId}
                             canEdit={canEdit}
+                            isVisible={isSectionVisible('subtasks')}
+                            isComposing={revealed.has('subtasks')}
+                            onComposingChange={isOpen => setRevealedFor('subtasks', isOpen)}
                         />
                     </View>
                     <View className={`px-6 ${widthClass}`}>
@@ -298,20 +407,17 @@ export function CardDetail({
                             renders. */}
                         <DetailLinks
                             card={card}
+                            links={links}
+                            addLink={addLink}
+                            removeLink={removeLink}
+                            isAddingLink={isAddingLink}
                             cardsById={cardsById}
-                            // Always true here, by construction rather than by
-                            // luck: the peek renders nothing until it finds the
-                            // open card inside an already-built BoardProject,
-                            // and the full-page screen returns <LoadingState/>
-                            // while its query is in flight. Either way this
-                            // board's cards ARE loaded by the time we render,
-                            // so a far card still missing is genuinely
-                            // unreadable rather than late — the distinction the
-                            // redacted row depends on.
-                            isCardSetReady
                             pickerCards={projectCards}
                             projectId={projectId}
                             canEdit={canEdit}
+                            isVisible={isSectionVisible('links')}
+                            isComposing={revealed.has('links')}
+                            onComposingChange={isOpen => setRevealedFor('links', isOpen)}
                         />
                     </View>
                     <View className={`px-6 pb-6 ${widthClass}`}>

@@ -3,7 +3,6 @@ import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useRouter } from 'expo-router'
 import { Link2, Lock, X } from 'lucide-react-native'
 import { Pressable, Text, View } from 'react-native'
-import { useCardLinks } from '../../hooks/useCardLinks'
 import { type CardLinkView, groupLinks, type LinkType } from '../../lib/card-links'
 import { isClosedCategory } from '../../lib/list-category'
 import { useBoardsUIStore } from '../../stores/boards-ui-store'
@@ -13,18 +12,30 @@ import { LinkPicker } from './LinkPicker'
 interface DetailLinksProps {
     card: BoardCardView
     /**
+     * The card's links, and the mutations over them. Lifted to CardDetail so
+     * the link COUNT can decide whether this section renders at all — the hook
+     * used to run here, where the parent could not see it. Still one query.
+     */
+    links: CardLinkView[]
+    addLink: (targetCardId: string, type: LinkType) => void
+    removeLink: (linkId: string) => void
+    isAddingLink: boolean
+    /**
      * The OPEN BOARD's cards. A cross-board link's far card is not in here —
      * useCardLinks fetches those by id — so this is also how a far card is
      * told apart from a near one when deciding how to open it.
      */
     cardsById: Map<string, BoardCardView>
-    /** Whether the card set has settled — see lib/card-links.ts's three states. */
-    isCardSetReady: boolean
     /** Candidates the picker offers by default: the open board's cards. */
     pickerCards: BoardCardView[]
     /** The board the card is on, so the picker's board step defaults to it. */
     projectId: string
     canEdit: boolean
+    /** False while the section is collapsed behind its chip. */
+    isVisible: boolean
+    /** Picker open state — a reveal opens it, closing it un-reveals. */
+    isComposing: boolean
+    onComposingChange: (isOpen: boolean) => void
 }
 
 /**
@@ -47,19 +58,22 @@ interface DetailLinksProps {
  */
 export function DetailLinks({
     card,
+    links,
+    addLink,
+    removeLink,
+    isAddingLink,
     cardsById,
-    isCardSetReady,
     pickerCards,
     projectId,
     canEdit,
+    isVisible,
+    isComposing,
+    onComposingChange,
 }: DetailLinksProps) {
-    const { links, addLink, removeLink, isAdding } = useCardLinks(
-        card.id,
-        cardsById,
-        isCardSetReady
-    )
     const groups = groupLinks(links)
 
+    // Collapsed behind its chip — see lib/card-sections.ts.
+    if (!isVisible) return null
     // Like the checklist: the section owns its own composer, so with no
     // composer an empty list is a heading over nothing.
     if (!canEdit && links.length === 0) return null
@@ -67,7 +81,12 @@ export function DetailLinks({
     return (
         <View className="mb-6">
             <View className="flex-row items-center gap-2 mb-2.5">
-                <Text className="text-[13px] font-semibold text-foreground">Links</Text>
+                <Text
+                    testID="boards-section-heading-links"
+                    className="text-[13px] font-semibold text-foreground"
+                >
+                    Links
+                </Text>
                 {links.length > 0 ? (
                     <Text className="text-[12px] font-medium text-muted">{links.length}</Text>
                 ) : null}
@@ -91,7 +110,9 @@ export function DetailLinks({
                     cards={pickerCards}
                     subject={card}
                     projectId={projectId}
-                    isPending={isAdding}
+                    isPending={isAddingLink}
+                    isOpen={isComposing}
+                    onOpenChange={onComposingChange}
                     onSelect={(targetCardId: string, type: LinkType) => addLink(targetCardId, type)}
                 />
             ) : null}

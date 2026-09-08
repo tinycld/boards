@@ -86,7 +86,8 @@ On a computer the grip appears when you point at the row.
 ## Sub-tasks
 
 When a card is too big to be one job, break it into **sub-tasks**. Open the
-card and use **Add sub-task** to name each piece. Each one becomes a real card
+card, click **+ Sub-tasks** below the description, and name each piece — after
+the first one, **Add sub-task** is there on the card for the rest. Each one becomes a real card
 of its own, on the same board, in the same list as its parent — so it has its
 own key, assignee, due date and comments, and you can drag it wherever the
 work actually belongs.
@@ -184,7 +185,8 @@ immediately.
 ## Card details
 
 An open card shows its reporter, assignees, labels, and due date, followed by
-the description, attachments, checklist, and comments. A due date turns amber
+the description, then whichever of attachments, checklist, sub-tasks and links
+the card actually uses, and finally its history and comments. A due date turns amber
 when it's less than two days away and red once it has passed — the same colors
 the board shows on the card itself.
 
@@ -198,6 +200,22 @@ back into a plain day. Both dates appear in the card's history and in the
 [timeline view](help://boards:filtering-and-sorting).
 
 To add a file, see [Attaching files to cards](help://boards:attaching-files).
+
+## Adding a checklist, sub-tasks, files or links
+
+Most cards never need all four, so a card starts without them. Below the
+description you'll find a row of dashed buttons — **+ Attachments**,
+**+ Checklist**, **+ Sub-tasks** and **+ Links**. Click one and that section
+appears, ready for its first entry: the checklist opens with the cursor in a
+new item, sub-tasks and links open their pickers, and attachments opens your
+file browser straight away.
+
+If you change your mind and add nothing, the section tidies itself away again
+and its button comes back. Once a section holds something it stays on the card
+for good, and its button disappears from the row.
+
+Dropping a file onto a card always works, whether or not the attachments
+section is showing — the section appears to receive it.
 
 ## Card priority
 

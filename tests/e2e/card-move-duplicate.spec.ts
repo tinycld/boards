@@ -34,7 +34,19 @@ async function openCard(page: Page, title: string) {
 }
 
 async function addChecklistItems(page: Page, titles: string[]) {
-    await peek(page).getByRole('button', { name: 'Add checklist item' }).click()
+    // The section is opt-in: with no items yet it is collapsed behind its chip,
+    // and revealing it opens the composer in the same click. A card that already
+    // has an item keeps the section open, so the in-section button is the one to
+    // press.
+    const inSection = peek(page).getByRole('button', { name: 'Add checklist item' })
+    if (await inSection.isVisible().catch(() => false)) {
+        await inSection.click()
+    } else {
+        await peek(page)
+            .getByTestId('boards-section-chips')
+            .getByRole('button', { name: 'Checklist' })
+            .click()
+    }
     const input = peek(page).getByPlaceholder('Add an item')
     for (const title of titles) {
         await input.fill(title)

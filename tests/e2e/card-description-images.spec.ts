@@ -130,7 +130,13 @@ test.describe('Boards — images in descriptions', () => {
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
 
-        await attachViaChooser(page, page.getByTestId('boards-attach-file'), 'diagram.png')
+        // Attachments is opt-in and this card has none yet, so the chip is what
+        // opens the file chooser — revealing the section launches the picker.
+        await attachViaChooser(
+            page,
+            page.getByTestId('boards-section-chips').getByRole('button', { name: 'Attachments' }),
+            'diagram.png'
+        )
         await expect(page.getByText('diagram.png', { exact: true })).toBeVisible({
             timeout: 15_000,
         })

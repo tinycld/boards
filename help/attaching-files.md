@@ -7,11 +7,15 @@ order: 25
 
 ## Adding a file
 
-Open a card and find the **Attachments** section, under the description. Press
-**Attach file** to pick one or more files from your device.
+Open a card and click **+ Attachments** in the row of dashed buttons under the
+description — your file browser opens straight away, so one click is the whole
+gesture. Once a card has an attachment the section stays on it, and **Attach
+file** inside the section adds more.
 
 On a computer you can also drag files straight onto the open card — anywhere on
 it will do, and a dashed outline appears to confirm the card will take them.
+This works whether or not the attachments section is showing: the section
+appears to receive the file.
 
 You don't even have to open the card first: drop a file onto any card on the
 board and it attaches there. The card you are over highlights so you can see

@@ -17,6 +17,7 @@ import { AssigneePicker } from './AssigneePicker'
 import { DuePicker } from './DuePicker'
 import { EpicPicker } from './EpicPicker'
 import { EstimatePicker } from './EstimatePicker'
+import { GhostChip } from './GhostChip'
 import { LabelPicker } from './LabelPicker'
 import { PriorityPicker } from './PriorityPicker'
 import { ReporterPicker } from './ReporterPicker'
@@ -378,23 +379,6 @@ function PropertyRow({ name, children }: { name: string; children: ReactNode }) 
         </View>
     )
 }
-
-const GhostChip = forwardRef<View, { label: string; onPress?: () => void }>(function GhostChip(
-    { label, onPress },
-    ref
-) {
-    return (
-        <Pressable
-            ref={ref}
-            accessibilityRole="button"
-            accessibilityLabel={label}
-            onPress={onPress}
-            className="border border-dashed border-border rounded-full px-2.5 py-[3px] hover:border-muted web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
-        >
-            <Text className="text-[12px] font-medium text-muted">{label}</Text>
-        </Pressable>
-    )
-})
 
 /**
  * The reporter chip, and the ReporterPicker's trigger. See AssigneesValue for

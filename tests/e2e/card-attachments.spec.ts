@@ -40,7 +40,19 @@ async function attachFile(
     file: { name: string; mimeType: string; buffer: Buffer }
 ): Promise<void> {
     const chooserPromise = page.waitForEvent('filechooser')
-    await page.getByTestId('boards-attach-file').click()
+    // The section is opt-in: with nothing attached yet it is collapsed behind
+    // its chip, and revealing it launches the picker directly — the chip IS the
+    // "Attach file" click. Once the card has an attachment the section stays
+    // open and the in-section button is the one to press.
+    const chip = page
+        .getByTestId('boards-section-chips')
+        .getByRole('button', { name: 'Attachments' })
+    const inSection = page.getByTestId('boards-attach-file')
+    if (await inSection.isVisible().catch(() => false)) {
+        await inSection.click()
+    } else {
+        await chip.click()
+    }
     const chooser = await chooserPromise
     await page.evaluate(() => window.dispatchEvent(new Event('blur')))
     await page.evaluate(() => window.dispatchEvent(new Event('focus')))
@@ -82,9 +94,14 @@ test.describe('card attachments', () => {
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
 
-        await expect(page.getByText('Attachments', { exact: true })).toBeVisible()
+        // Collapsed to start with — the heading arrives with the content, which
+        // is the whole point of the opt-in section. Located by testID, since a
+        // chip's label is the heading's own text and getByText matches both.
+        await expect(page.getByTestId('boards-section-heading-attachments')).toHaveCount(0)
 
         await attachFile(page, textFile('notes.txt'))
+
+        await expect(page.getByTestId('boards-section-heading-attachments')).toBeVisible()
 
         // The settled row carries the CLEAN name — if the display name were
         // wired to the stored one this would read notes_a1b2c3d4e5.txt.

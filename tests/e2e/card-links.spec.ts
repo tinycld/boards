@@ -44,6 +44,26 @@ async function openCard(page: Page, title: string) {
  * `onBoard` left unset is the same-board case, which must stay two clicks —
  * the board row is there to be changed, not to be answered.
  */
+/**
+ * Open the link type menu, wherever the affordance currently lives.
+ *
+ * The section is opt-in: with no links yet it is collapsed behind its chip, and
+ * revealing it opens the type menu in the same click — the chip IS the "Add
+ * link" press. Once the card has a link the section stays open and the
+ * in-section button is the one to use.
+ */
+async function openLinkPicker(page: Page) {
+    const inSection = peek(page).getByTestId('boards-link-add')
+    if (await inSection.isVisible().catch(() => false)) {
+        await inSection.click()
+        return
+    }
+    await peek(page)
+        .getByTestId('boards-section-chips')
+        .getByRole('button', { name: 'Links' })
+        .click()
+}
+
 async function addLink(
     page: Page,
     fromTitle: string,
@@ -52,7 +72,7 @@ async function addLink(
     onBoard?: string
 ) {
     await openCard(page, fromTitle)
-    await peek(page).getByTestId('boards-link-add').click()
+    await openLinkPicker(page)
     await page.getByRole('menuitem', { name: typeLabel, exact: true }).click()
     if (onBoard) {
         await peek(page).getByTestId('boards-link-board-trigger').click()
@@ -150,7 +170,7 @@ test('the picker does not offer the card itself', async ({ page }) => {
     await addCard(page, 0, BLOCKED)
 
     await openCard(page, BLOCKER)
-    await peek(page).getByTestId('boards-link-add').click()
+    await openLinkPicker(page)
     await page.getByRole('menuitem', { name: 'Blocks', exact: true }).click()
 
     const candidates = peek(page).getByTestId('boards-link-candidate')
@@ -211,7 +231,7 @@ test('the picker defaults to the board you are on', async ({ page }) => {
     await addCard(page, 0, BLOCKED)
 
     await openCard(page, BLOCKER)
-    await peek(page).getByTestId('boards-link-add').click()
+    await openLinkPicker(page)
     await page.getByRole('menuitem', { name: 'Blocks', exact: true }).click()
 
     // The candidates are there immediately, without touching the board row.
