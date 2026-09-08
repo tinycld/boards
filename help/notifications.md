@@ -17,6 +17,9 @@ desktop if you have push turned on — when:
   [Mentioning people](help://boards:mentioning-people))
 - a card you **watch** gains a comment, moves to another list, is completed
   or canceled, or is archived
+- a card you watch has its details changed — the title, priority, estimate,
+  start or due date, labels, epic, sprint, parent card or reporter. However
+  many of those one edit changes, you hear about it once
 - a card you watch or are assigned is **due soon** (within two days) or
   becomes **overdue** — once each, per due date
 

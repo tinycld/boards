@@ -162,7 +162,6 @@ func cardTitle(app core.App, cardID string) string {
 	return "Untitled card"
 }
 
-
 // truncateRunes caps a notification body without splitting a rune.
 func truncateRunes(s string, limit int) string {
 	runes := []rune(s)
