@@ -1,6 +1,7 @@
 package boards
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/pocketbase/pocketbase/core"
@@ -269,4 +270,171 @@ func TestNotify_ReplyTellsTheParentAuthorOnce(t *testing.T) {
 	}
 	notifyNewComment(env.app, reply)
 	requireTypes(t, notificationTypes(t, env.app, env.editor.Id), notifyTypeReply)
+}
+
+// --- field-change summaries ---------------------------------------------
+
+// fieldsOf reads the changed-field list a boards_watched "updated" carries.
+func fieldsOf(t *testing.T, n *core.Record) []string {
+	t.Helper()
+	var meta map[string]any
+	if err := n.UnmarshalJSONField("metadata", &meta); err != nil {
+		t.Fatalf("metadata: %v", err)
+	}
+	raw, _ := meta["fields"].([]any)
+	out := []string{}
+	for _, v := range raw {
+		s, _ := v.(string)
+		out = append(out, s)
+	}
+	return out
+}
+
+func TestNotify_FieldEditSendsOneSummaryNamingEveryField(t *testing.T) {
+	env := setupNotifyEnv(t)
+	ensureWatcher(env.app, env.project.Id, env.card.Id, env.viewer.Id)
+
+	// The shape that motivated the summary: one detail-panel save touching
+	// three fields must be one notification, not three.
+	card := loaded(t, env.app, env.card.Id)
+	card.Set("priority", "high")
+	card.Set("estimate", 5)
+	card.Set("due", "2026-01-01 00:00:00.000Z")
+	notifyCardUpdate(env.app, card, env.owner.Id)
+
+	notes := notificationsFor(t, env.app, env.viewer.Id)
+	if len(notes) != 1 {
+		t.Fatalf("got %d notifications, want exactly one summary", len(notes))
+	}
+	if got := notes[0].GetString("type"); got != notifyTypeWatched {
+		t.Fatalf("type = %q, want %s", got, notifyTypeWatched)
+	}
+	if event := eventOf(t, notes[0]); event != "updated" {
+		t.Fatalf("event = %q, want updated", event)
+	}
+	if title := notes[0].GetString("title"); title != "Test User updated a card you watch" {
+		t.Fatalf("title = %q", title)
+	}
+	// Body names every changed field, in the declared order.
+	if body := notes[0].GetString("body"); !strings.Contains(body, "the priority, the estimate and the due date") {
+		t.Fatalf("body = %q, want it to name all three fields", body)
+	}
+	requireTypes(t, fieldsOf(t, notes[0]), "priority", "estimate", "due")
+
+	// The actor hears nothing about their own edit.
+	requireTypes(t, notificationTypes(t, env.app, env.owner.Id))
+}
+
+func TestNotify_MoveWithAFieldEditStaysOneNotification(t *testing.T) {
+	env := setupNotifyEnv(t)
+	ensureWatcher(env.app, env.project.Id, env.card.Id, env.viewer.Id)
+
+	card := loaded(t, env.app, env.card.Id)
+	card.Set("list", env.list2.Id)
+	card.Set("priority", "urgent")
+	notifyCardUpdate(env.app, card, env.owner.Id)
+
+	notes := notificationsFor(t, env.app, env.viewer.Id)
+	if len(notes) != 1 {
+		t.Fatalf("got %d notifications, want only the move", len(notes))
+	}
+	if event := eventOf(t, notes[0]); event != "moved" {
+		t.Fatalf("event = %q, want moved (the summary must not double up)", event)
+	}
+}
+
+func TestNotify_ArchiveWithAFieldEditStaysOneNotification(t *testing.T) {
+	env := setupNotifyEnv(t)
+	ensureWatcher(env.app, env.project.Id, env.card.Id, env.viewer.Id)
+
+	card := loaded(t, env.app, env.card.Id)
+	card.Set("archived", true)
+	card.Set("title", "renamed on the way out")
+	notifyCardUpdate(env.app, card, env.owner.Id)
+
+	notes := notificationsFor(t, env.app, env.viewer.Id)
+	if len(notes) != 1 {
+		t.Fatalf("got %d notifications, want only the archive", len(notes))
+	}
+	if event := eventOf(t, notes[0]); event != "archived" {
+		t.Fatalf("event = %q, want archived", event)
+	}
+}
+
+func TestNotify_AssignmentIsNotAlsoSummarized(t *testing.T) {
+	env := setupNotifyEnv(t)
+	ensureWatcher(env.app, env.project.Id, env.card.Id, env.viewer.Id)
+
+	card := loaded(t, env.app, env.card.Id)
+	card.Set("assignees", []string{env.editor.Id})
+	notifyCardUpdate(env.app, card, env.owner.Id)
+
+	// The new assignee is told once, as an assignment — not again as a field
+	// change. `assignees` is deliberately absent from the summary.
+	requireTypes(t, notificationTypes(t, env.app, env.editor.Id), notifyTypeAssigned)
+	requireTypes(t, notificationTypes(t, env.app, env.viewer.Id))
+}
+
+func TestNotify_UnwatchedFieldsTellNobody(t *testing.T) {
+	env := setupNotifyEnv(t)
+	ensureWatcher(env.app, env.project.Id, env.card.Id, env.viewer.Id)
+
+	// A reorder is not an event, and a description flush must not page: both
+	// are excluded from the summary.
+	reordered := loaded(t, env.app, env.card.Id)
+	reordered.Set("position", "b5")
+	notifyCardUpdate(env.app, reordered, env.owner.Id)
+
+	described := loaded(t, env.app, env.card.Id)
+	described.Set("description", "a much longer body typed over some seconds")
+	notifyCardUpdate(env.app, described, env.owner.Id)
+
+	requireTypes(t, notificationTypes(t, env.app, env.viewer.Id))
+}
+
+func TestNotify_ASaveChangingNothingNotifiableIsSilent(t *testing.T) {
+	env := setupNotifyEnv(t)
+	ensureWatcher(env.app, env.project.Id, env.card.Id, env.viewer.Id)
+
+	card := loaded(t, env.app, env.card.Id)
+	notifyCardUpdate(env.app, card, env.owner.Id)
+
+	requireTypes(t, notificationTypes(t, env.app, env.viewer.Id))
+}
+
+func TestNotify_SummaryReachesEveryWatcher(t *testing.T) {
+	env := setupNotifyEnv(t)
+	ensureWatcher(env.app, env.project.Id, env.card.Id, env.viewer.Id)
+	ensureWatcher(env.app, env.project.Id, env.card.Id, env.editor.Id)
+
+	card := loaded(t, env.app, env.card.Id)
+	card.Set("title", "a clearer title")
+	notifyCardUpdate(env.app, card, env.owner.Id)
+
+	for _, u := range []*core.Record{env.viewer, env.editor} {
+		notes := notificationsFor(t, env.app, u.Id)
+		if len(notes) != 1 || eventOf(t, notes[0]) != "updated" {
+			t.Fatalf("watcher %s got %v", u.Id, notificationTypes(t, env.app, u.Id))
+		}
+		if fields := fieldsOf(t, notes[0]); len(fields) != 1 || fields[0] != "title" {
+			t.Fatalf("fields = %v, want [title]", fields)
+		}
+	}
+}
+
+func TestNotify_AnAssignedWatcherHearsOnlyTheAssignment(t *testing.T) {
+	env := setupNotifyEnv(t)
+	// Already watching, and about to be assigned by the same save that also
+	// edits a field: the precedence rule gives them the assignment alone.
+	ensureWatcher(env.app, env.project.Id, env.card.Id, env.editor.Id)
+	ensureWatcher(env.app, env.project.Id, env.card.Id, env.viewer.Id)
+
+	card := loaded(t, env.app, env.card.Id)
+	card.Set("assignees", []string{env.editor.Id})
+	card.Set("priority", "urgent")
+	notifyCardUpdate(env.app, card, env.owner.Id)
+
+	requireTypes(t, notificationTypes(t, env.app, env.editor.Id), notifyTypeAssigned)
+	// A watcher who was not assigned still gets the field summary.
+	requireTypes(t, notificationTypes(t, env.app, env.viewer.Id), notifyTypeWatched)
 }
