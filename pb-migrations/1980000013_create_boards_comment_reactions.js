@@ -14,10 +14,18 @@
 // is the anti-desync pin that keeps the shortcut honest, and `card.project =
 // project` is the watchers' pin one hop further out.
 //
-// `emoji` is a SELECT over the palette rather than free text, for the reason
-// priority is (1980000006) and one more: the unique index compares bytes, and
-// "❤" and "❤️" are different byte strings for the same heart. A select makes
-// the palette the schema, so a variant sequence cannot slip past the index.
+// `emoji` is TEXT, and the two things a select used to give for free are now
+// explicit. The unique index compares bytes, and "❤" and "❤️" are different
+// byte strings for the same heart -- Unicode NFC neither adds nor removes the
+// variation selector, so normalization cannot be left to String.normalize.
+// And free text with no membership check would let the API store "not an
+// emoji" as a chip nobody can toggle off. Both are enforced by the hook in
+// server/reaction_emoji.go against the vocabulary in
+// @tinycld/core/lib/emoji/canonical-forms.ts: a value that is not already
+// canonical is refused, so exactly one byte string can ever reach the index.
+//
+// A select is not an option here: the picker offers ~1650 emoji, each with
+// five skin tones, and skin tones count as distinct reactions.
 //
 // Who may react: commentors and up (viaCommenter). A reaction is a
 // lightweight comment, and 1980000000's doctrine is that `viewer` is
@@ -71,10 +79,12 @@ migrate(
                 {
                     id: 'boards_reactions_emoji',
                     name: 'emoji',
-                    type: 'select',
+                    type: 'text',
                     required: true,
-                    maxSelect: 1,
-                    values: ['👍', '❤️', '😄', '🎉', '👀', '🚀'],
+                    // Longest sequence the picker can produce is a two-person
+                    // ZWJ emoji with tones; 32 leaves room without inviting
+                    // someone to store a sentence.
+                    max: 32,
                 },
                 {
                     id: 'boards_reactions_created',
