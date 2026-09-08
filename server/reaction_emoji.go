@@ -29,16 +29,20 @@ import (
 // because the collection has no update rule at all — a reaction is inserted
 // and deleted, never edited.
 func registerReactionEmojiGuard(app core.App) {
-	app.OnRecordCreate("boards_comment_reactions").BindFunc(func(e *core.RecordEvent) error {
-		raw := e.Record.GetString("emoji")
-		if !coreemoji.IsCanonical(raw) {
-			if normalized, ok := coreemoji.Normalize(raw); ok {
-				return fmt.Errorf(
-					"emoji %q is not in canonical form; write %q instead", raw, normalized,
-				)
+	// Both reactions tables, one rule. Comment reactions and card votes store
+	// the same column with the same index, so they need the same guarantee.
+	for _, collection := range []string{"boards_comment_reactions", "boards_card_reactions"} {
+		app.OnRecordCreate(collection).BindFunc(func(e *core.RecordEvent) error {
+			raw := e.Record.GetString("emoji")
+			if !coreemoji.IsCanonical(raw) {
+				if normalized, ok := coreemoji.Normalize(raw); ok {
+					return fmt.Errorf(
+						"emoji %q is not in canonical form; write %q instead", raw, normalized,
+					)
+				}
+				return fmt.Errorf("emoji %q is not an emoji this deployment stores", raw)
 			}
-			return fmt.Errorf("emoji %q is not an emoji this deployment stores", raw)
-		}
-		return e.Next()
-	})
+			return e.Next()
+		})
+	}
 }

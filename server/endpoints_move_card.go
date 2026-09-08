@@ -333,11 +333,13 @@ func handleMoveCard(app core.App, rt *boardRealtime, re *core.RequestEvent) erro
 		if err := moveFamily(tx, re.Auth.Id, children, body, cardID); err != nil {
 			return err
 		}
-		// boards_comment_reactions belongs in this list for the same reason the
+		// Both reactions tables belong in this list for the same reason the
 		// rest do — a reaction row carries `project`, and its read rule
 		// resolves membership through it, so a row left naming the source
 		// board becomes unreadable to everyone on the target.
-		for _, child := range []string{"boards_checklist_items", "boards_comments", "boards_attachments", "boards_comment_reactions", "boards_activity", "boards_card_watchers"} {
+		// boards_comment_reactions was once left out and shipped exactly that
+		// bug; boards_card_reactions is here from the start.
+		for _, child := range []string{"boards_checklist_items", "boards_comments", "boards_attachments", "boards_comment_reactions", "boards_card_reactions", "boards_activity", "boards_card_watchers"} {
 			rows, err := tx.FindRecordsByFilter(child, "card = {:card}", "", 0, 0, dbx.Params{"card": cardID})
 			if err != nil {
 				return err

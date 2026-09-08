@@ -1,97 +1,98 @@
 import { describe, expect, it } from 'vitest'
-import { groupReactions, reactionFromKey, reactionKey } from '../tinycld/boards/lib/reactions'
+import {
+    groupCardReactions,
+    groupCommentReactions,
+    reactionFromKey,
+    reactionKey,
+    reactorNameLookup,
+} from '../tinycld/boards/lib/reactions'
 
-function row(id: string, comment: string, user: string, emoji: string) {
-    return { id, comment, user, emoji }
-}
+// The fold itself — ordering, tie-breaking, own-row, skin tones — is core's
+// and is tested there (core/lib/reactions/__tests__/group.test.ts). What is
+// boards' own is which column each table is keyed by, and how a reactor id
+// becomes a name.
 
-describe('groupReactions', () => {
-    it('counts per comment and emoji, and finds the caller’s own row', () => {
-        const groups = groupReactions(
+const commentRow = (id: string, comment: string, user: string, emoji: string) => ({
+    id,
+    comment,
+    user,
+    emoji,
+})
+const cardRow = (id: string, card: string, user: string, emoji: string) => ({
+    id,
+    card,
+    user,
+    emoji,
+})
+
+describe('groupCommentReactions', () => {
+    it('keys by comment, so two comments never share a bar', () => {
+        const groups = groupCommentReactions(
             [
-                row('r1', 'c1', 'u2', '🚀'),
-                row('r2', 'c1', 'u1', '👍'),
-                row('r3', 'c1', 'u2', '👍'),
-                row('r4', 'c2', 'u1', '❤️'),
+                commentRow('r1', 'c1', 'u1', '👍'),
+                commentRow('r2', 'c1', 'u2', '👍'),
+                commentRow('r3', 'c2', 'u1', '👍'),
             ],
             'u1'
         )
-        expect(groups.get('c1')).toEqual([
-            { emoji: '👍', count: 2, ownId: 'r2' },
-            { emoji: '🚀', count: 1, ownId: null },
-        ])
-        expect(groups.get('c2')).toEqual([{ emoji: '❤️', count: 1, ownId: 'r4' }])
-        expect(groups.get('c3')).toBeUndefined()
+        expect(groups.get('c1')?.[0].count).toBe(2)
+        expect(groups.get('c2')?.[0].count).toBe(1)
     })
 
-    it('orders by count, not by arrival', () => {
-        // There is no palette order to fall back on any more.
-        const groups = groupReactions(
-            [
-                row('r1', 'c1', 'u1', '🐌'),
-                row('r2', 'c1', 'u2', '🚀'),
-                row('r3', 'c1', 'u3', '🚀'),
-                row('r4', 'c1', 'u4', '🚀'),
-                row('r5', 'c1', 'u5', '🎉'),
-                row('r6', 'c1', 'u6', '🎉'),
-            ],
-            ''
-        )
-        expect(groups.get('c1')?.map(g => g.emoji)).toEqual(['🚀', '🎉', '🐌'])
-    })
-
-    it('breaks ties on first appearance, so equal counts do not shuffle', () => {
-        const rows = [
-            row('r1', 'c1', 'u1', '👀'),
-            row('r2', 'c1', 'u2', '👍'),
-            row('r3', 'c1', 'u3', '🎉'),
-        ]
-        expect(
-            groupReactions(rows, '')
-                .get('c1')
-                ?.map(g => g.emoji)
-        ).toEqual(['👀', '👍', '🎉'])
-    })
-
-    it('accepts any emoji, because the server decides what is storable', () => {
-        // The old palette filter dropped anything outside the six. With an
-        // open vocabulary the guard in server/reaction_emoji.go is the only
-        // gate, so nothing is dropped here.
-        const groups = groupReactions(
-            [row('r1', 'c1', 'u1', '🦄'), row('r2', 'c1', 'u2', '🏳️‍🌈')],
+    it('carries the reactor ids the tooltip names', () => {
+        const groups = groupCommentReactions(
+            [commentRow('r1', 'c1', 'u1', '👍'), commentRow('r2', 'c1', 'u2', '👍')],
             'u1'
         )
-        expect(groups.get('c1')?.map(g => g.emoji)).toEqual(['🦄', '🏳️‍🌈'])
+        expect(groups.get('c1')?.[0].userIds).toEqual(['u1', 'u2'])
+        expect(groups.get('c1')?.[0].ownId).toBe('r1')
     })
+})
 
-    it('treats a skin tone as its own reaction', () => {
-        // The chosen semantics: 👍 and 👍🏽 count separately.
-        const groups = groupReactions(
-            [row('r1', 'c1', 'u1', '👍'), row('r2', 'c1', 'u2', '👍🏽')],
-            ''
+describe('groupCardReactions', () => {
+    it('keys by card', () => {
+        const groups = groupCardReactions(
+            [
+                cardRow('r1', 'card1', 'u1', '🚀'),
+                cardRow('r2', 'card1', 'u2', '🚀'),
+                cardRow('r3', 'card2', 'u1', '👍'),
+            ],
+            'u2'
         )
-        expect(groups.get('c1')).toHaveLength(2)
+        expect(groups.get('card1')?.[0]).toMatchObject({
+            emoji: '🚀',
+            count: 2,
+            ownId: 'r2',
+        })
+        expect(groups.get('card2')?.[0].ownId).toBeNull()
+    })
+})
+
+describe('reactorNameLookup', () => {
+    const members = new Map([
+        ['u1', { id: 'u1', firstName: 'Nathan', lastName: 'Stitt' }],
+        ['u2', { id: 'u2', firstName: 'Sam', lastName: '' }],
+    ])
+
+    it('names a member the caller can read', () => {
+        expect(reactorNameLookup(members)('u1')).toBe('Nathan Stitt')
     })
 
-    it('never claims a row for an anonymous reader', () => {
-        const groups = groupReactions([row('r1', 'c1', 'u1', '👍')], '')
-        expect(groups.get('c1')?.[0].ownId).toBeNull()
+    it('does not leave a trailing space on a one-word name', () => {
+        expect(reactorNameLookup(members)('u2')).toBe('Sam')
     })
 
-    it('returns nothing for no rows', () => {
-        expect(groupReactions([], 'u1').size).toBe(0)
+    it('falls back to the anonymous placeholder for an unreadable id', () => {
+        // A share-link visitor reads reactions but not the users behind them.
+        // Same placeholder assignees already use, so nothing new is disclosed.
+        expect(reactorNameLookup(members)('someone-else')).toBe('Board member')
     })
 })
 
 describe('reactionKey', () => {
     it('is the unified codepoints, so a selector never carries a raw glyph', () => {
         expect(reactionKey('👍')).toBe('1f44d')
-        expect(reactionKey('❤️')).toBe('2764-fe0f')
         expect(reactionKey('👍🏽')).toBe('1f44d-1f3fd')
-    })
-
-    it('distinguishes a toned emoji from its base', () => {
-        expect(reactionKey('👍')).not.toBe(reactionKey('👍🏽'))
     })
 
     it('round-trips through reactionFromKey', () => {

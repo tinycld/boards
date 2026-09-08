@@ -1,6 +1,7 @@
 import { LabelBadge } from '@tinycld/core/components/LabelBadge'
 import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
+import { ReactionBar } from '@tinycld/core/ui/reactions'
 import {
     CalendarDays,
     CircleCheck,
@@ -22,6 +23,7 @@ import { formatSchedule } from '../lib/due-time'
 import { formatEstimate } from '../lib/estimate'
 import { isClosedCategory, type ListCategory } from '../lib/list-category'
 import type { CardPriority } from '../lib/priority'
+import type { ReactionGroup } from '../lib/reactions'
 import { sprintLabel } from '../lib/sprint'
 import { subtasksComplete } from '../lib/subtasks'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
@@ -35,7 +37,19 @@ const MAX_LABELS = 3
 // two overflow markers on a card face behave the same way.
 const MAX_WATCHERS = 3
 
+// Chips a tile shows before collapsing the rest into a +N marker. Three, like
+// the watcher stack beside it: the footer is a scanning aid, not the place to
+// read every reaction.
+const MAX_TILE_REACTIONS = 3
+
+/** The tile's chips never toggle, so the callback is a stable no-op. */
+const NO_TOGGLE = () => {}
+
 interface BoardCardProps {
+    /** From the board-wide reactions query, resolved once per board. */
+    reactions: readonly ReactionGroup[]
+    reactorName: (userId: string) => string
+    currentUserId: string
     card: BoardCardView
     projectId: string
     /** The status of the card's list; done and canceled render the closed face. */
@@ -105,7 +119,16 @@ function cardSelectedClass(isSelected: boolean, aging: AgingLevel) {
     return 'bg-card'
 }
 
-export function BoardCard({ card, projectId, category, canDrag, agingDays }: BoardCardProps) {
+export function BoardCard({
+    card,
+    projectId,
+    category,
+    canDrag,
+    agingDays,
+    reactions,
+    reactorName,
+    currentUserId,
+}: BoardCardProps) {
     const { isOpen, isFocused, isSelected, onPress } = useCardPress(card.id)
     // canDrag doubles as the edit gate: both come from the same role check.
     const { isDropTarget, dropRef } = useCardFileDrop(card.id, projectId, canDrag)
@@ -159,7 +182,13 @@ export function BoardCard({ card, projectId, category, canDrag, agingDays }: Boa
             <FocusMarker isFocused={isFocused} cardId={card.id} />
             <SelectedMarker isSelected={isSelected} cardId={card.id} />
             <AgingMarker aging={aging} cardId={card.id} />
-            <CardFace card={card} isCompact={isCompact} />
+            <CardFace
+                card={card}
+                isCompact={isCompact}
+                reactions={reactions}
+                reactorName={reactorName}
+                currentUserId={currentUserId}
+            />
         </Pressable>
     )
 }
@@ -181,7 +210,19 @@ export function BoardCard({ card, projectId, category, canDrag, agingDays }: Boa
  * The done face is already this dense (a check and one line), so it is shared
  * across both densities rather than given a compact variant of its own.
  */
-function CardFace({ card, isCompact }: { card: BoardCardView; isCompact: boolean }) {
+function CardFace({
+    card,
+    isCompact,
+    reactions,
+    reactorName,
+    currentUserId,
+}: {
+    card: BoardCardView
+    isCompact: boolean
+    reactions: readonly ReactionGroup[]
+    reactorName: (userId: string) => string
+    currentUserId: string
+}) {
     if (isCompact) {
         return (
             <>
@@ -216,7 +257,12 @@ function CardFace({ card, isCompact }: { card: BoardCardView; isCompact: boolean
             >
                 {card.title}
             </Text>
-            <CardMeta card={card} />
+            <CardMeta
+                card={card}
+                reactions={reactions}
+                reactorName={reactorName}
+                currentUserId={currentUserId}
+            />
         </>
     )
 }
@@ -528,7 +574,19 @@ function CardLabels({ labels }: { labels: BoardLabel[] }) {
     )
 }
 
-function CardMeta({ card }: { card: BoardCardView }) {
+interface CardMetaProps {
+    card: BoardCardView
+    /**
+     * Passed in, NOT read here. Presence below is per-card on purpose, but
+     * reactions come from one board-wide query — a per-tile query would be one
+     * subscription per card on a board that can hold hundreds.
+     */
+    reactions: readonly ReactionGroup[]
+    reactorName: (userId: string) => string
+    currentUserId: string
+}
+
+function CardMeta({ card, reactions, reactorName, currentUserId }: CardMetaProps) {
     // Presence is read here rather than in BoardCard so it participates in the
     // same row as the other metadata. Per-card, so only the cards a peer moved
     // between re-render.
@@ -541,9 +599,10 @@ function CardMeta({ card }: { card: BoardCardView }) {
         card.commentCount > 0 ||
         card.attachmentCount > 0 ||
         card.estimate !== undefined
-    // Someone viewing this card is reason enough to render the row, even on a
-    // card that has no other metadata at all.
-    if (!hasPills && card.assignees.length === 0 && watchers.length === 0) return null
+    // Someone viewing this card, or a single vote on it, is reason enough to
+    // render the row — even on a card with no other metadata at all.
+    if (!hasPills && card.assignees.length === 0 && watchers.length === 0 && reactions.length === 0)
+        return null
 
     return (
         <View className="flex-row items-center gap-2.5 min-h-[20px]">
@@ -554,6 +613,21 @@ function CardMeta({ card }: { card: BoardCardView }) {
             <AttachmentsPill count={card.attachmentCount} />
             <EstimatePill estimate={card.estimate} />
             <View className="flex-1" />
+            {/* Display-only: a tile is for scanning, and adding a reaction
+                happens in the open card where there is room for the picker.
+                Capped like the watcher stack so a card with a dozen distinct
+                votes cannot blow out the tile. */}
+            <ReactionBar
+                groups={reactions}
+                targetId={card.id}
+                canReact={false}
+                readOnly
+                onToggle={NO_TOGGLE}
+                nameFor={reactorName}
+                currentUserId={currentUserId}
+                maxChips={MAX_TILE_REACTIONS}
+                testIDPrefix="boards-tile-reaction"
+            />
             <CardWatchers watchers={watchers} cardId={card.id} />
             <CardAssignees assignees={card.assignees} />
         </View>
