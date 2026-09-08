@@ -245,7 +245,12 @@ test.describe('Boards — drag and drop', () => {
         // tick after mount, so a blind `keyboard.type` races that focus and
         // silently drops the label (the same defect fixed in `addCard`). The
         // composer stays open after Enter, so the loop reuses one locator.
-        await page.getByText('Add item', { exact: true }).click()
+        // The Checklist section is opt-in — collapsed behind its chip until the
+        // card has an item — and revealing it opens the composer in one click.
+        await page
+            .getByTestId('boards-section-chips')
+            .getByRole('button', { name: 'Checklist' })
+            .click()
         const itemInput = page.getByPlaceholder('Add an item').first()
         await expect(itemInput).toBeVisible()
         for (const label of ['alpha', 'beta', 'gamma']) {

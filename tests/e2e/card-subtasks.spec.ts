@@ -34,7 +34,20 @@ async function openCard(page: Page, title: string) {
 
 async function addSubtask(page: Page, parentTitle: string, title: string) {
     await openCard(page, parentTitle)
-    await peek(page).getByRole('button', { name: 'Add sub-task' }).click()
+    // The section is opt-in: on a card with NO sub-tasks yet it is collapsed
+    // behind its chip, and revealing it opens the composer in the same click.
+    // A card that already has one keeps the section open, so the in-section
+    // composer button is the one to press — this helper files both the first
+    // sub-task and the second.
+    const inSection = peek(page).getByRole('button', { name: 'Add sub-task' })
+    if (await inSection.isVisible().catch(() => false)) {
+        await inSection.click()
+    } else {
+        await peek(page)
+            .getByTestId('boards-section-chips')
+            .getByRole('button', { name: 'Sub-tasks' })
+            .click()
+    }
     await peek(page).getByPlaceholder('What needs doing?').fill(title)
     await page.keyboard.press('Enter')
     // The row is what proves the card exists, not the composer clearing.
@@ -108,6 +121,11 @@ test('a sub-task cannot have sub-tasks of its own', async ({ page }) => {
 
     await openCard(page, CHILD)
     await expect(peek(page).getByRole('button', { name: 'Add sub-task' })).toHaveCount(0)
+    // Nor is the section merely collapsed — a card that cannot hold sub-tasks
+    // is not offered the chip that would reveal the composer.
+    await expect(
+        peek(page).getByTestId('boards-section-chips').getByRole('button', { name: 'Sub-tasks' })
+    ).toHaveCount(0)
 })
 
 // Deleting a parent must never destroy the work filed under it — the relation

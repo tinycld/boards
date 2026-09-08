@@ -16,7 +16,7 @@ import { ConfirmDialog } from '@tinycld/core/ui/ConfirmDialog'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
 import { Image } from 'expo-image'
 import { Paperclip, Pencil, Plus, Trash2, X } from 'lucide-react-native'
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Platform, Pressable, Text, View } from 'react-native'
 import { useAttachmentMutations } from '../../hooks/useAttachmentMutations'
 import { attachmentToSource } from '../../lib/attachment-source'
@@ -30,6 +30,18 @@ interface DetailAttachmentsProps {
     projectId: string
     canEdit: boolean
     isOwner: boolean
+    /** False while the section is collapsed behind its chip. */
+    isVisible: boolean
+    /**
+     * True for the render right after a reveal: the section has no text input
+     * to focus, so its equivalent of an open composer is the file picker.
+     */
+    isComposing: boolean
+    /**
+     * Called with false when the picker closes with nothing chosen, which
+     * un-reveals the section — the reader added nothing, so it is empty again.
+     */
+    onComposingChange: (isOpen: boolean) => void
 }
 
 export function DetailAttachments({
@@ -38,6 +50,9 @@ export function DetailAttachments({
     projectId,
     canEdit,
     isOwner,
+    isVisible,
+    isComposing,
+    onComposingChange,
 }: DetailAttachmentsProps) {
     // Read here rather than taken as a prop, matching DetailActivity — the
     // uploader-may-delete check is this section's own business.
@@ -61,6 +76,41 @@ export function DetailAttachments({
     // references no other package to get this.
     const previewActions = getPreviewActionFactories().map(factory => factory())
 
+    const attach = useCallback(async () => {
+        const picked = await pickFiles({ multiple: true })
+        // Every cancel path resolves empty — the web input's `cancel` event, the
+        // mobile chooser sheet dismissing, and `canceled` from documents, the
+        // photo library and the camera — so this one branch covers all of them.
+        // Reporting the close is what un-reveals a section revealed for a pick
+        // that never happened.
+        if (picked.length === 0) {
+            onComposingChange(false)
+            return
+        }
+        await uploadFiles(picked)
+        // The upload is registered by now, so the section has content and stays
+        // put on its own; the reveal has done its job.
+        onComposingChange(false)
+    }, [pickFiles, uploadFiles, onComposingChange])
+
+    // Revealing the section IS the request to attach something — the chip was
+    // the click, and making the reader press "Attach file" as well would be the
+    // two-step this replaces. The ref keeps it to one launch per reveal: the
+    // effect re-runs whenever `attach`'s dependencies change, and a second
+    // picker over the first is a dialog the reader did not ask for.
+    const hasLaunchedRef = useRef(false)
+    useEffect(() => {
+        if (!isComposing) {
+            hasLaunchedRef.current = false
+            return
+        }
+        if (hasLaunchedRef.current) return
+        hasLaunchedRef.current = true
+        attach()
+    }, [isComposing, attach])
+
+    // Collapsed behind its chip — see lib/card-sections.ts.
+    if (!isVisible) return null
     // Like the checklist, the section exists to hold its own composer — with
     // no composer and nothing attached there is only a heading over nothing.
     if (!canEdit && attachments.length === 0) return null
@@ -75,11 +125,6 @@ export function DetailAttachments({
     const settled = new Set(attachments.map(a => a.id))
     const inFlight = uploads.filter(u => !settled.has(u.id))
 
-    const attach = async () => {
-        const picked = await pickFiles({ multiple: true })
-        if (picked.length > 0) await uploadFiles(picked)
-    }
-
     const confirmDelete = () => {
         if (!pendingDelete) return
         deleteAttachment.mutate(pendingDelete.id, { onSuccess: () => setPendingDelete(null) })
@@ -88,7 +133,12 @@ export function DetailAttachments({
     return (
         <View className="mb-6">
             <View className="flex-row items-center gap-2 mb-2.5">
-                <Text className="text-[13px] font-semibold text-foreground">Attachments</Text>
+                <Text
+                    testID="boards-section-heading-attachments"
+                    className="text-[13px] font-semibold text-foreground"
+                >
+                    Attachments
+                </Text>
                 {attachments.length > 0 ? (
                     <Text className="text-[12px] font-medium text-muted">{attachments.length}</Text>
                 ) : null}

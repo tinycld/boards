@@ -1,7 +1,7 @@
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { Menu } from '@tinycld/core/ui/menu'
 import { Plus } from 'lucide-react-native'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useBoardContent, useMemberProjects } from '../../hooks/useActiveBoard'
 import { canLinkTo, LINK_LABELS, LINK_TYPES, type LinkType } from '../../lib/card-links'
@@ -14,6 +14,18 @@ interface LinkPickerProps {
     /** The board the subject is on, so the board step can default to it. */
     projectId: string
     isPending: boolean
+    /**
+     * Type-menu open state, when the section owns it — revealing the Links
+     * section opens the picker with no second click. Omit both and the picker
+     * stays self-contained.
+     */
+    isOpen?: boolean
+    /**
+     * Called as the picker opens and closes, INCLUDING the second stage: a
+     * reader who picks a type and then cancels the card list has still added
+     * nothing, so the section that revealed for this must hear about it.
+     */
+    onOpenChange?: (isOpen: boolean) => void
     onSelect: (targetCardId: string, type: LinkType) => void
 }
 
@@ -32,14 +44,44 @@ interface LinkPickerProps {
  * the common same-board case at two clicks — the board row is there to be
  * changed, not to be answered.
  */
-export function LinkPicker({ cards, subject, projectId, isPending, onSelect }: LinkPickerProps) {
+export function LinkPicker({
+    cards,
+    subject,
+    projectId,
+    isPending,
+    isOpen,
+    onOpenChange,
+    onSelect,
+}: LinkPickerProps) {
     const [pendingType, setPendingType] = useState<LinkType | null>(null)
     const [boardId, setBoardId] = useState(projectId)
     const mutedColor = useThemeColor('muted')
 
+    // Closing the type menu is not the end of the flow — stage two (the card
+    // list) replaces it — so only a close with NO type chosen is a real
+    // dismissal. Without this, choosing a type reports the picker closed and
+    // un-reveals the section out from under the card list.
+    //
+    // A ref, not `pendingType` itself: the menu reports its close in the same
+    // tick as the row's onSelect, before React commits the state, so the
+    // handler's closure still reads `null` and every pick looked like a
+    // dismissal. The ref is written synchronously by the row and is therefore
+    // already true by the time this runs.
+    const hasChosenTypeRef = useRef(false)
+    const handleTypeMenuOpenChange = (next: boolean) => {
+        if (next) {
+            hasChosenTypeRef.current = false
+            onOpenChange?.(next)
+            return
+        }
+        if (!hasChosenTypeRef.current) onOpenChange?.(false)
+    }
+
     const close = () => {
         setPendingType(null)
         setBoardId(projectId)
+        hasChosenTypeRef.current = false
+        onOpenChange?.(false)
     }
 
     if (pendingType) {
@@ -74,6 +116,8 @@ export function LinkPicker({ cards, subject, projectId, isPending, onSelect }: L
                     <Text className="text-[13px] font-medium text-muted">Add link</Text>
                 </Pressable>
             }
+            isOpen={isOpen}
+            onOpenChange={handleTypeMenuOpenChange}
             placement="bottom-start"
             title="Link type"
         >
@@ -81,7 +125,13 @@ export function LinkPicker({ cards, subject, projectId, isPending, onSelect }: L
                 <Menu.Item
                     key={type}
                     label={LINK_LABELS[type].fromSource}
-                    onSelect={() => setPendingType(type)}
+                    onSelect={() => {
+                        // Written before the menu reports its close, which is
+                        // what tells handleTypeMenuOpenChange this is a stage
+                        // change rather than a dismissal.
+                        hasChosenTypeRef.current = true
+                        setPendingType(type)
+                    }}
                 />
             ))}
         </Menu>
