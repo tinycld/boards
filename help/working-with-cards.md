@@ -364,11 +364,13 @@ A card's key appears on the card itself and at the top of the card panel, where
 you can select and copy it. The link button beside it copies a web address that
 opens the card on its board.
 
-You can also open a card straight from its key. Put it in the address bar after
-your board's web address — `{{server-host}}/boards/OTTER-1` — and the card
-opens, even if you were last looking at a different board. Opening a card this
-way does not switch the board you have open; use the back button to return to
-where you were.
+Every board has its own web address, made from its key —
+`{{server-host}}/a/boards/OTTER` — and so does every card. Open a card and the
+address bar reads `{{server-host}}/a/boards/OTTER-1`; give it the whole screen
+and it reads `{{server-host}}/a/boards/OTTER/1`. Any of these can be copied and
+sent to someone, bookmarked, or typed from memory (`otter-1` works as well as
+`OTTER-1`), and opens exactly that board or card, whatever you were looking at
+last.
 
 Numbers are never reused. If you delete `OTTER-7`, the next card you make is
 `OTTER-8` — so a key you wrote down last month never quietly comes to mean a

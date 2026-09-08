@@ -8,6 +8,9 @@ import { buildDueItems } from '../tinycld/boards/calendar-source'
 const orgHref = (path: string, extra?: Record<string, string>): Href =>
     ({ pathname: appHref(path), params: extra }) as Href
 
+// The board every terse row below sits on; the href shape is pinned once above.
+const onBoard = { number: 1, board: { id: 'p1', slug: 'PL' } }
+
 describe('buildDueItems', () => {
     it('maps a due card to a local all-day item with a card href', () => {
         const items = buildDueItems(
@@ -17,6 +20,8 @@ describe('buildDueItems', () => {
                     title: 'Ship the release',
                     due: '2026-08-04 00:00:00.000Z',
                     due_has_time: false,
+                    number: 7,
+                    board: { id: 'p1', slug: 'PL' },
                 },
             ],
             orgHref
@@ -26,10 +31,7 @@ describe('buildDueItems', () => {
         expect(item.id).toBe('r8f3k2m9x1p7q4w')
         expect(item.title).toBe('Ship the release')
         expect(item.allDay).toBe(true)
-        expect(item.href).toEqual({
-            pathname: '/a/boards/[cardId]',
-            params: { cardId: 'r8f3k2m9x1p7q4w' },
-        })
+        expect(item.href).toEqual({ pathname: '/a/boards/PL/7', params: undefined })
         // The stored value names a DAY; the item must span that day in the
         // runner's LOCAL frame regardless of timezone. This is the off-by-one
         // regression the due picker already shipped once (card-editing e2e):
@@ -46,11 +48,19 @@ describe('buildDueItems', () => {
         // The picker writes 'YYYY-MM-DD'; PocketBase normalizes it later. Both
         // spellings must land on the same local day.
         const [bare] = buildDueItems(
-            [{ id: 'a', title: 'T', due: '2026-08-04', due_has_time: false }],
+            [{ id: 'a', title: 'T', due: '2026-08-04', due_has_time: false, ...onBoard }],
             orgHref
         )
         const [normalized] = buildDueItems(
-            [{ id: 'a', title: 'T', due: '2026-08-04 00:00:00.000Z', due_has_time: false }],
+            [
+                {
+                    id: 'a',
+                    title: 'T',
+                    due: '2026-08-04 00:00:00.000Z',
+                    due_has_time: false,
+                    ...onBoard,
+                },
+            ],
             orgHref
         )
         expect(bare.start).toBe(normalized.start)
@@ -60,9 +70,9 @@ describe('buildDueItems', () => {
     it('drops rows with empty or unparseable due values', () => {
         const items = buildDueItems(
             [
-                { id: 'a', title: 'No due', due: '', due_has_time: false },
-                { id: 'b', title: 'Garbage', due: 'not-a-date', due_has_time: false },
-                { id: 'c', title: 'Real', due: '2026-08-04', due_has_time: false },
+                { id: 'a', title: 'No due', due: '', due_has_time: false, ...onBoard },
+                { id: 'b', title: 'Garbage', due: 'not-a-date', due_has_time: false, ...onBoard },
+                { id: 'c', title: 'Real', due: '2026-08-04', due_has_time: false, ...onBoard },
             ],
             orgHref
         )
@@ -72,7 +82,7 @@ describe('buildDueItems', () => {
     it('lands a timed due date at its instant as a short timed item', () => {
         const instant = new Date(2026, 7, 4, 14, 30)
         const [item] = buildDueItems(
-            [{ id: 'a', title: 'T', due: instant.toISOString(), due_has_time: true }],
+            [{ id: 'a', title: 'T', due: instant.toISOString(), due_has_time: true, ...onBoard }],
             orgHref
         )
         expect(item.allDay).toBe(false)
@@ -83,18 +93,54 @@ describe('buildDueItems', () => {
     it('keeps a timed due date near midnight on its local day', () => {
         const lateInstant = new Date(2026, 7, 4, 23, 30)
         const [item] = buildDueItems(
-            [{ id: 'a', title: 'T', due: lateInstant.toISOString(), due_has_time: true }],
+            [
+                {
+                    id: 'a',
+                    title: 'T',
+                    due: lateInstant.toISOString(),
+                    due_has_time: true,
+                    ...onBoard,
+                },
+            ],
             orgHref
         )
         const start = new Date(item.start)
         expect([start.getDate(), start.getHours(), start.getMinutes()]).toEqual([4, 23, 30])
     })
 
+    // A board with no slug is addressed by id; a card the server has not
+    // numbered has no page of its own and is linked peeked on its board.
+    it('spells the page by board id without a slug, and the peek without a number', () => {
+        const [noSlug, noNumber] = buildDueItems(
+            [
+                {
+                    id: 'a',
+                    title: 'T',
+                    due: '2026-08-04',
+                    due_has_time: false,
+                    number: 3,
+                    board: { id: 'p9', slug: '' },
+                },
+                {
+                    id: 'b',
+                    title: 'T',
+                    due: '2026-08-04',
+                    due_has_time: false,
+                    number: 0,
+                    board: { id: 'p1', slug: 'PL' },
+                },
+            ],
+            orgHref
+        )
+        expect(noSlug.href).toEqual({ pathname: '/a/boards/p9/3', params: undefined })
+        expect(noNumber.href).toEqual({ pathname: '/a/boards/PL', params: { focused: 'b' } })
+    })
+
     it('preserves row order', () => {
         const items = buildDueItems(
             [
-                { id: 'later', title: 'B', due: '2026-08-06', due_has_time: false },
-                { id: 'earlier', title: 'A', due: '2026-08-02', due_has_time: false },
+                { id: 'later', title: 'B', due: '2026-08-06', due_has_time: false, ...onBoard },
+                { id: 'earlier', title: 'A', due: '2026-08-02', due_has_time: false, ...onBoard },
             ],
             orgHref
         )

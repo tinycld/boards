@@ -2,22 +2,22 @@
 import { renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-const push = vi.fn()
-const replace = vi.fn()
-vi.mock('expo-router', () => ({ useRouter: () => ({ push, replace }) }))
+const navigate = vi.fn()
+vi.mock('expo-router', () => ({ useRouter: () => ({ navigate }) }))
 vi.mock('@tinycld/core/lib/org-routes', () => ({
-    useOrgHref: () => (path: string) => `/${path}`,
+    useOrgHref: () => (path: string, extra?: Record<string, string>) =>
+        extra ? { pathname: `/${path}`, params: extra } : `/${path}`,
 }))
 
-const h = vi.hoisted(() => ({ card: undefined as { id: string; project: string } | undefined }))
+const h = vi.hoisted(() => ({
+    card: undefined as { id: string; project: string; number: number } | undefined,
+    project: undefined as { id: string; slug: string } | undefined,
+}))
 vi.mock('@tinycld/core/lib/pocketbase', () => ({
-    useStore: () => [{ get: (id: string) => (h.card?.id === id ? h.card : undefined) }],
-}))
-
-const setActiveProject = vi.fn()
-const openCard = vi.fn()
-vi.mock('~/tinycld/boards/stores/boards-ui-store', () => ({
-    useBoardsUIStore: { getState: () => ({ setActiveProject, openCard }) },
+    useStore: () => [
+        { get: (id: string) => (h.card?.id === id ? h.card : undefined) },
+        { get: (id: string) => (h.project?.id === id ? h.project : undefined) },
+    ],
 }))
 
 const addToast = vi.fn()
@@ -36,6 +36,7 @@ import { useSearchActions } from '@tinycld/boards/search-adapter'
 describe('cards useSearchActions', () => {
     afterEach(() => {
         h.card = undefined
+        h.project = undefined
         vi.clearAllMocks()
     })
 
@@ -44,19 +45,28 @@ describe('cards useSearchActions', () => {
         const { result } = renderHook(() => useSearchActions())
         result.current.onSelect({ slug: 'boards', id: 'unsynced', title: 'Ship the budget' })
 
-        expect(replace).not.toHaveBeenCalled()
-        expect(setActiveProject).not.toHaveBeenCalled()
-        expect(openCard).not.toHaveBeenCalled()
+        expect(navigate).not.toHaveBeenCalled()
         expect(addToast).toHaveBeenCalledWith(expect.objectContaining({ variant: 'warning' }))
     })
 
-    it('opens the card once its project has synced', () => {
-        h.card = { id: 'c1', project: 'p1' }
+    // The board is in the URL, so opening a search hit is one navigation to
+    // the card peeked on its own board; the board screen opens it from there.
+    it('navigates to the card peeked on its board once its project has synced', () => {
+        h.card = { id: 'c1', project: 'p1', number: 3 }
+        h.project = { id: 'p1', slug: 'PL' }
         const { result } = renderHook(() => useSearchActions())
         result.current.onSelect({ slug: 'boards', id: 'c1', title: 'Ship the budget' })
 
-        expect(setActiveProject).toHaveBeenCalledWith('p1')
-        expect(openCard).toHaveBeenCalledWith('c1')
+        expect(navigate).toHaveBeenCalledWith('/boards/PL-3')
         expect(addToast).not.toHaveBeenCalled()
+    })
+
+    it('falls back to ?focused= for a card with no key', () => {
+        h.card = { id: 'c1', project: 'p1', number: 0 }
+        h.project = { id: 'p1', slug: '' }
+        const { result } = renderHook(() => useSearchActions())
+        result.current.onSelect({ slug: 'boards', id: 'c1', title: 'Ship the budget' })
+
+        expect(navigate).toHaveBeenCalledWith({ pathname: '/boards/p1', params: { focused: 'c1' } })
     })
 })

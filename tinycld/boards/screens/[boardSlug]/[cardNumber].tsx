@@ -9,21 +9,23 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ChevronLeft } from 'lucide-react-native'
 import { type RefObject, useMemo, useRef } from 'react'
 import { Pressable, Text, View } from 'react-native'
-import { BoardPresenceProvider } from '../components/BoardPresenceProvider'
-import { CardActionsMenu } from '../components/detail/CardActionsMenu'
-import { CardDetail } from '../components/detail/CardDetail'
-import { CardKeyBadge } from '../components/detail/CardKeyBadge'
-import type { EditableTextHandle } from '../components/detail/EditableText'
-import { ListStepper } from '../components/detail/ListStepper'
-import { WatchButton } from '../components/detail/WatchButton'
-import { ProjectWash } from '../components/ProjectWash'
-import { useCardRoute } from '../hooks/useCardRoute'
-import { useProjectRole } from '../hooks/useProjectRole'
-import { type CardEntry, findCardEntry, flattenCards, neighborCardId } from '../lib/board-cards'
-import type { BoardProject } from '../types'
+import { BoardPresenceProvider } from '../../components/BoardPresenceProvider'
+import { CardActionsMenu } from '../../components/detail/CardActionsMenu'
+import { CardDetail } from '../../components/detail/CardDetail'
+import { CardKeyBadge } from '../../components/detail/CardKeyBadge'
+import type { EditableTextHandle } from '../../components/detail/EditableText'
+import { ListStepper } from '../../components/detail/ListStepper'
+import { WatchButton } from '../../components/detail/WatchButton'
+import { ProjectWash } from '../../components/ProjectWash'
+import { useBoardRoute } from '../../hooks/useBoardRoute'
+import { useProjectRole } from '../../hooks/useProjectRole'
+import { type CardEntry, findCardEntry, flattenCards, neighborCardId } from '../../lib/board-cards'
+import { boardPath, cardPagePath, paramString } from '../../lib/board-route'
+import type { BoardProject } from '../../types'
 
 function usePageShortcuts(
     project: BoardProject,
+    segment: string,
     cardId: string,
     goBack: () => void,
     canEdit: boolean,
@@ -40,12 +42,11 @@ function usePageShortcuts(
     const shortcuts = useMemo<Shortcut[]>(() => {
         const step = (delta: number) => {
             const next = neighborCardId(project, cardId, delta)
-            if (!next) return
-            // Navigate by key when the neighbour has one, so stepping through a
-            // board with j/k leaves canonical URLs behind rather than switching
-            // the address bar to a record id halfway through.
-            const entry = findCardEntry(project, next)
-            router.replace(orgHref('boards/[cardId]', { cardId: entry?.card.key || next }))
+            const entry = next ? findCardEntry(project, next) : null
+            // A neighbour the server has not numbered yet has no URL of its
+            // own — skip rather than navigate somewhere that will not resolve.
+            if (!entry?.card.number) return
+            router.replace(orgHref(cardPagePath(segment, entry.card.number)))
         }
         // Mirrors the peek's binding at this scope, so `e` means the same thing
         // whichever surface the card is open on.
@@ -92,18 +93,35 @@ function usePageShortcuts(
                 run: () => step(-1),
             },
         ]
-    }, [project, cardId, goBack, router, orgHref, canEdit, titleRef])
+    }, [project, segment, cardId, goBack, router, orgHref, canEdit, titleRef])
     useRegisterShortcuts(shortcuts, scopeOwner)
 }
 
+/**
+ * A card, full page — `/a/boards/PL/12`.
+ *
+ * The board segment and the card number are separate route params here, unlike
+ * the peek's `/a/boards/PL-12` where one segment carries both. Both spellings
+ * resolve through useBoardRoute, so the two surfaces cannot disagree about what
+ * a URL names.
+ *
+ * The reader's filter is deliberately NOT applied (`isViewed: false`): this
+ * screen renders ONE card, and a filter that happened to exclude it would make
+ * a link the reader followed report the card missing.
+ */
 export default function CardDetailScreen() {
-    // The param is a record id OR a key like OTTER-123. It stays named `cardId`
-    // because the route file is [cardId].tsx and renaming it would change the
-    // URL; useCardRoute resolves either spelling to a record id.
-    const { cardId: routeParam = '' } = useLocalSearchParams<{ cardId: string }>()
+    const params = useLocalSearchParams<{ boardSlug?: string; cardNumber?: string }>()
+    const boardSlug = paramString(params.boardSlug)
+    const cardNumber = paramString(params.cardNumber)
     const orgHref = useOrgHref()
-    const navigateBack = useNavigateBack(() => orgHref('boards'))
-    const { project, cardId, isLoading } = useCardRoute(routeParam)
+    const { project, cardId, isLoading, segment } = useBoardRoute(boardSlug, cardNumber, {
+        isViewed: false,
+    })
+    // Back to THIS card's board, not the reader's last one. The board is in the
+    // URL, so the fallback can name it — a link followed in from a chat message
+    // lands on a card whose board the reader may never have opened, and the
+    // bare `/a/boards` would have sent them somewhere else entirely.
+    const navigateBack = useNavigateBack(() => orgHref(segment ? boardPath(segment) : 'boards'))
     const entry = project && cardId ? findCardEntry(project, cardId) : null
 
     // Loading is checked BEFORE the not-found branch. findCardEntry returns
@@ -123,22 +141,29 @@ export default function CardDetailScreen() {
     // the reader in the board's per-card watcher cluster.
     return (
         <BoardPresenceProvider projectId={project.id} openCardId={cardId}>
-            <CardPage project={project} entry={entry} cardId={cardId} navigateBack={navigateBack} />
+            <CardPage
+                project={project}
+                segment={segment}
+                entry={entry}
+                cardId={cardId}
+                navigateBack={navigateBack}
+            />
         </BoardPresenceProvider>
     )
 }
 
 interface CardPageProps {
     project: BoardProject
+    segment: string
     entry: CardEntry
     cardId: string
     navigateBack: () => void
 }
 
-function CardPage({ project, entry, cardId, navigateBack }: CardPageProps) {
+function CardPage({ project, segment, entry, cardId, navigateBack }: CardPageProps) {
     const { canEdit } = useProjectRole(project.id)
     const titleRef = useRef<EditableTextHandle>(null)
-    usePageShortcuts(project, cardId, navigateBack, canEdit, titleRef)
+    usePageShortcuts(project, segment, cardId, navigateBack, canEdit, titleRef)
     const insets = useDeviceInsets()
     // Board order — see CardPeek.
     const boardCards = useMemo(

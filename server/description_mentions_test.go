@@ -180,8 +180,8 @@ func TestDescriptionMentions_NotifiesNewlyMentionedMember(t *testing.T) {
 	if n.GetString("body") != "Ship the thing" {
 		t.Errorf("body = %q, want the card title", n.GetString("body"))
 	}
-	if want := "/boards?focused=" + env.card.Id; !containsSub(n.GetString("url"), want) {
-		t.Errorf("url = %q, want it to contain %q", n.GetString("url"), want)
+	if want := cardURL(env.app, env.card.Id); n.GetString("url") != want {
+		t.Errorf("url = %q, want %q", n.GetString("url"), want)
 	}
 }
 

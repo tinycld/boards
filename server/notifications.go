@@ -214,7 +214,7 @@ func notifySprintTransition(app core.App, sprint *core.Record, actor string) {
 			Package: "boards",
 			Title:   headline,
 			Body:    body,
-			URL:     boardURL(app),
+			URL:     sprintBoardURL(app, sprint),
 			Meta: map[string]any{
 				"targetCollection": "boards_sprints",
 				"targetRecord":     sprint.Id,
@@ -246,16 +246,6 @@ func lowerFirst(s string) string {
 	return string(runes)
 }
 
-// boardURL links a sprint notice to the boards package; there is no
-// per-sprint route to deep-link to.
-func boardURL(app core.App) string {
-	appURL := app.Settings().Meta.AppURL
-	for len(appURL) > 0 && appURL[len(appURL)-1] == '/' {
-		appURL = appURL[:len(appURL)-1]
-	}
-	return appURL + "/boards"
-}
-
 func deliver(app core.App, userID, kind, headline, body string, card *core.Record, event string) {
 	notify.NotifyUser(app, notify.NotifyParams{
 		UserID:  userID,
@@ -263,7 +253,7 @@ func deliver(app core.App, userID, kind, headline, body string, card *core.Recor
 		Package: "boards",
 		Title:   headline,
 		Body:    body,
-		URL:     descriptionMentionURL(app, card.Id),
+		URL:     cardURL(app, card.Id),
 		Meta: map[string]any{
 			"targetCollection": "boards_cards",
 			"targetRecord":     card.Id,

@@ -3,7 +3,8 @@ import { useStore } from '@tinycld/core/lib/pocketbase'
 import type { SearchRow } from '@tinycld/core/lib/search/types'
 import { useToastStore } from '@tinycld/core/lib/stores/toast-store'
 import { useRouter } from 'expo-router'
-import { useBoardsUIStore } from './stores/boards-ui-store'
+import { boardSegment, peekHref } from './lib/board-route'
+import { formatCardKey } from './lib/card-key'
 
 // Row shaping (title, subtitle, meta) is the server's job — see
 // boards/server/search.go. Normalizing there rather than here means the palette
@@ -21,7 +22,7 @@ import { useBoardsUIStore } from './stores/boards-ui-store'
 export function useSearchActions() {
     const router = useRouter()
     const orgHref = useOrgHref()
-    const [cardsCollection] = useStore('boards_cards')
+    const [cardsCollection, projectsCollection] = useStore('boards_cards', 'boards_projects')
 
     return {
         onSelect: (row: SearchRow) => {
@@ -46,18 +47,14 @@ export function useSearchActions() {
                 return
             }
 
-            const { setActiveProject, openCard } = useBoardsUIStore.getState()
-
-            // The [cardId] screen derives its card from the ROUTE PARAM, not
-            // from openCardId, so switching the project underneath it would
-            // leave a stale id in the URL rendering "card doesn't exist".
-            router.replace(orgHref('boards'))
-
-            // Order matters: setActiveProject deliberately clears openCardId,
-            // so opening the card first would immediately undo it. Both are
-            // synchronous Zustand set() calls batched into one render.
-            setActiveProject(projectId)
-            openCard(row.id)
+            // The board is in the URL, so opening a card anywhere is one
+            // navigation: the board screen reads the card back out of the
+            // route and opens the peek itself (usePeekUrl). `navigate` rather
+            // than `push` so a board already on screen is reused, not stacked.
+            const project = projectsCollection.get(projectId)
+            const segment = project ? boardSegment(project) : projectId
+            const key = formatCardKey(project?.slug ?? '', card.number)
+            router.navigate(peekHref(orgHref, segment, { key, id: card.id }))
         },
     }
 }

@@ -164,7 +164,7 @@ func notifyDue(app core.App, card *core.Record, event, headline string) {
 			Package: "boards",
 			Title:   headline,
 			Body:    truncateRunes(card.GetString("title"), 200),
-			URL:     descriptionMentionURL(app, card.Id),
+			URL:     cardURL(app, card.Id),
 			Meta: map[string]any{
 				"targetCollection": "boards_cards",
 				"targetRecord":     card.Id,

@@ -1,18 +1,9 @@
 import { eq } from '@tanstack/db'
-import { useAuth } from '@tinycld/core/lib/auth'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
 import { useMemo, useRef } from 'react'
 import { type BoardViewOptions, buildBoardProject } from '../lib/board-project'
-import {
-    type SprintScope,
-    selectBoardFilter,
-    selectBoardSort,
-    selectSprintScope,
-    selectViewMode,
-    useBoardsUIStore,
-    type ViewMode,
-} from '../stores/boards-ui-store'
+import type { SprintScope, ViewMode } from '../stores/boards-ui-store'
 import type { BoardProject } from '../types'
 import { useBoardLiveQuery } from './useBoardLiveQuery'
 
@@ -35,8 +26,8 @@ import { useBoardLiveQuery } from './useBoardLiveQuery'
  * its own hook. Calling `useActiveBoard` there instead would also run
  * `useBoardContent` — six queries over every card, label, epic, member and
  * user of the ACTIVE board — so every card edit re-rendered the sidebar's
- * whole board list, and the list is unbounded. `useCardRoute` documents the
- * same rule for the same reason.
+ * whole board list, and the list is unbounded. `useBoardRoute` takes the
+ * same care for the same reason.
  */
 export function useBoardList() {
     const [projectsCollection, membersCollection] = useStore(
@@ -96,18 +87,6 @@ export function resolveActiveProjectId(
 }
 
 /**
- * Everything the SIDEBAR renders: the board list, and which one is active.
- *
- * Deliberately not `useActiveBoard` — see `useBoardList`.
- */
-export function useSidebarBoards() {
-    const activeProjectId = useBoardsUIStore(s => s.activeProjectId)
-    const { projects, archivedProjects } = useBoardList()
-    const resolvedId = resolveActiveProjectId(activeProjectId, projects, archivedProjects)
-    return { projects, archivedProjects, activeProjectId: resolvedId }
-}
-
-/**
  * The scope a view may be narrowed by — every view but the backlog.
  *
  * The backlog IS the multi-sprint view: the active sprint, each planned sprint
@@ -126,59 +105,6 @@ export function scopeForView(
     storedScope: SprintScope
 ): SprintScope | undefined {
     return viewMode === 'backlog' ? undefined : storedScope
-}
-
-export function useActiveBoard() {
-    const activeProjectId = useBoardsUIStore(s => s.activeProjectId)
-    const { projects, archivedProjects, projectsLoading } = useBoardList()
-
-    // Resolve the active board DURING RENDER rather than syncing it back to the
-    // store with an effect. The persisted id may name a board that was deleted
-    // or that this user has been removed from, and on a cold start there is no
-    // id at all; both fall back to the first LIVE board — an archived one is
-    // only ever active by explicit choice. The store is never corrected — the
-    // next explicit setActiveProject overwrites it.
-    const projectId = resolveActiveProjectId(activeProjectId, projects, archivedProjects)
-
-    const isArchived = archivedProjects.some(p => p.id === projectId)
-
-    // The per-user view: filter + sort for THIS board, and who "me" is. The
-    // selectors return shared constants when nothing is set, so the memo
-    // below only rebuilds when a facet actually changes.
-    //
-    // All three keyed on the RESOLVED projectId. The scope used to read
-    // `activeProjectId ?? ''` — the STORED id — so on a cold start, or whenever
-    // the stored id named a board this user can no longer open, it looked its
-    // scope up under '' and silently answered 'active' for whichever board had
-    // actually been resolved.
-    const filter = useBoardsUIStore(s => selectBoardFilter(s, projectId))
-    const sort = useBoardsUIStore(s => selectBoardSort(s, projectId))
-    const { user } = useAuth({ throwIfAnon: false })
-    const userId = user?.id ?? ''
-    const storedScope = useBoardsUIStore(s => selectSprintScope(s, projectId))
-    // Whether the board plans in sprints, from the LIST rows — known before any
-    // content is built, which is what lets the view mode be resolved here
-    // rather than after the board exists.
-    const sprintsEnabled =
-        [...projects, ...archivedProjects].find(p => p.id === projectId)?.sprints_enabled ?? false
-    const viewMode = useBoardsUIStore(s => selectViewMode(s, projectId, sprintsEnabled))
-    const sprintScope = scopeForView(viewMode, storedScope)
-    const view = useMemo<BoardViewOptions>(
-        () => ({ filter, sort, userId, sprintScope }),
-        [filter, sort, userId, sprintScope]
-    )
-
-    const { project, cardCount, isLoading: contentLoading } = useBoardContent(projectId, view)
-
-    return {
-        projects,
-        archivedProjects,
-        project,
-        isArchived,
-        cardCount,
-        isLoading: projectsLoading || contentLoading,
-        hasProjects: projects.length > 0 || isArchived,
-    }
 }
 
 /**

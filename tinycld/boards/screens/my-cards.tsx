@@ -14,6 +14,7 @@ import { useMemo, useState } from 'react'
 import { Pressable, SectionList, Text, View } from 'react-native'
 import { CardRow } from '../components/table/CardRow'
 import { useBoardLiveQuery } from '../hooks/useBoardLiveQuery'
+import { cardHref } from '../lib/board-route'
 import {
     buildMyCardRows,
     groupMyCards,
@@ -133,8 +134,7 @@ export default function MyCardsScreen() {
         showClosed,
     ])
 
-    const openRow = (row: MyCardRow) =>
-        router.push(orgHref('boards/[cardId]', { cardId: row.card.key || row.card.id }))
+    const openRow = (row: MyCardRow) => router.push(cardHref(orgHref, row.board, row.card))
 
     useMyCardsShortcuts(() => router.push(orgHref('boards')))
 

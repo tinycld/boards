@@ -11,6 +11,7 @@ import type { Awareness } from 'y-protocols/awareness'
 import type * as Y from 'yjs'
 import type { PresenceUser } from '../../hooks/useBoardPresence'
 import { useEditorImageActions } from '../../hooks/useEditorImageActions'
+import { useFlushOnEditEnd } from '../../hooks/useFlushBoardRoom'
 import { useMentionTrigger } from '../../hooks/useMentionTrigger'
 import type { BoardAttachment } from '../../types'
 import { ImageAttachmentPicker } from './ImageAttachmentPicker'
@@ -162,6 +163,11 @@ export function useDescriptionEditor({
     // commenting standing — see useMentionTrigger.
     const mention = useMentionTrigger(projectId)
 
+    // Leaving hands the surface back to the read view, which renders the
+    // RECORD — see useFlushOnEditEnd for why that needs the server to catch up
+    // first, and why unmount is the event that catches every way of leaving.
+    const noteEditing = useFlushOnEditEnd(projectId)
+
     const slots = useLazyEditor({
         surfaceId: `description:${cardId}`,
         readView,
@@ -261,15 +267,19 @@ export function useDescriptionEditor({
         // well would blank the toolbar whenever the caret briefly left — most
         // visibly on an empty description, where the first focus event can
         // arrive after the swap.
-        renderHeader: ({ isEditing, slots: editorSlots }) => (
-            <DescriptionHeader
-                showToolbar={canEdit && isEditing}
-                slots={editorSlots}
-                onOpenImagePicker={() => setIsImagePickerOpen(true)}
-                onOpenLinkDialog={() => setIsLinkOpen(true)}
-                onClose={() => cancelRef.current()}
-            />
-        ),
+        renderHeader: ({ isEditing, slots: editorSlots }) => {
+            // A session is open, so the unmount above owes the room a flush.
+            if (isEditing) noteEditing()
+            return (
+                <DescriptionHeader
+                    showToolbar={canEdit && isEditing}
+                    slots={editorSlots}
+                    onOpenImagePicker={() => setIsImagePickerOpen(true)}
+                    onOpenLinkDialog={() => setIsLinkOpen(true)}
+                    onClose={() => cancelRef.current()}
+                />
+            )
+        },
         renderEditor: editorSlots => {
             // Published here rather than in an effect: the options above hold a
             // ref to it, and it must be current before the first keystroke.

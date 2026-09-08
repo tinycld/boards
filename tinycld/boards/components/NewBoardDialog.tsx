@@ -1,10 +1,14 @@
 import { handleMutationErrorsWithForm } from '@tinycld/core/lib/errors'
+import { useOrgHref } from '@tinycld/core/lib/org-routes'
+import { useStore } from '@tinycld/core/lib/pocketbase'
 import { COLOR_PALETTE, ColorPickerGrid } from '@tinycld/core/ui/color-picker'
 import { Dialog } from '@tinycld/core/ui/dialog'
 import { FormErrorSummary, TextInput, useForm, z, zodResolver } from '@tinycld/core/ui/form'
+import { useRouter } from 'expo-router'
 import { useRef, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useCreateProject } from '../hooks/useProjectMutations'
+import { boardPath, boardSegment } from '../lib/board-route'
 import { deriveSlug, MAX_SLUG_LENGTH } from '../lib/card-key'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
 import { ImportBoardForm } from './ImportBoardForm'
@@ -172,8 +176,16 @@ type BoardMode = 'create' | 'import'
 export function NewBoardDialog() {
     const isOpen = useBoardsUIStore(s => s.isNewBoardOpen)
     const closeNewBoard = useBoardsUIStore(s => s.closeNewBoard)
-    const setActiveProject = useBoardsUIStore(s => s.setActiveProject)
     const [mode, setMode] = useState<BoardMode>('create')
+    const router = useRouter()
+    const orgHref = useOrgHref()
+    const [projectsCollection] = useStore('boards_projects')
+    // Open the imported board: it is in the local store by the time the
+    // importer reports success, so its slug is there to put in the URL.
+    const openImported = (projectId: string) => {
+        const project = projectsCollection.get(projectId)
+        router.navigate(orgHref(boardPath(project ? boardSegment(project) : projectId)))
+    }
 
     return (
         <Dialog
@@ -185,10 +197,7 @@ export function NewBoardDialog() {
             {mode === 'create' ? (
                 <NewBoardForm onClose={closeNewBoard} />
             ) : (
-                <ImportBoardForm
-                    onClose={closeNewBoard}
-                    onImported={projectId => setActiveProject(projectId)}
-                />
+                <ImportBoardForm onClose={closeNewBoard} onImported={openImported} />
             )}
         </Dialog>
     )

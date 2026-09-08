@@ -9,7 +9,8 @@ import { openHelpPackage } from '@tinycld/core/lib/help/open-help'
 import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { usePathname, useRouter } from 'expo-router'
 import { Archive, HelpCircle, UserCheck } from 'lucide-react-native'
-import { useSidebarBoards } from './hooks/useActiveBoard'
+import { useBoardList } from './hooks/useActiveBoard'
+import { activeBoardIdFromPath, boardPath, boardSegment } from './lib/board-route'
 import { useBoardsUIStore } from './stores/boards-ui-store'
 import type { BoardsProjects } from './types'
 
@@ -17,24 +18,24 @@ export default function BoardsSidebar() {
     // NOT useActiveBoard: that also runs useBoardContent — six live queries
     // over every card, label, epic, member and user of the active board — so
     // every card edit re-rendered this whole list, and the list is unbounded.
-    const { projects, archivedProjects, activeProjectId: resolvedId } = useSidebarBoards()
-    const setActiveProject = useBoardsUIStore(s => s.setActiveProject)
+    const { projects, archivedProjects } = useBoardList()
     const openNewBoard = useBoardsUIStore(s => s.openNewBoard)
     const router = useRouter()
     const orgHref = useOrgHref()
-    // The screens under /boards other than the board itself. A board item
-    // pressed from one of them must also LEAVE it, or the sidebar highlights a
-    // board the screen is not showing.
-    const isOnMyCards = usePathname().endsWith('/boards/my-cards')
-    // The resolved id, not the stored one: a persisted id that no longer names
-    // a board falls back to the first, and the sidebar must highlight what is
-    // actually on screen — and nothing is, while My cards is up.
-    const activeProjectId = isOnMyCards ? null : resolvedId
+    const pathname = usePathname()
+    // The board is in the URL, so the highlight reads the URL: it cannot lag
+    // behind the screen or disagree with it, and My cards — which names no
+    // board — highlights nothing.
+    const isOnMyCards = pathname.endsWith('/boards/my-cards')
+    const activeProjectId = activeBoardIdFromPath(pathname, [...projects, ...archivedProjects])
 
-    const selectBoard = (projectId: string) => {
-        setActiveProject(projectId)
-        if (isOnMyCards) router.navigate(orgHref('boards'))
-    }
+    // `navigate`, not `push`: a board is a change of what the one board screen
+    // shows, so the screen is reused rather than stacked — pushing would keep
+    // every visited board mounted underneath, each with its live queries and
+    // its presence room. And not `replace`, which mints a new route key and
+    // remounts the screen.
+    const selectBoard = (project: BoardsProjects) =>
+        router.navigate(orgHref(boardPath(boardSegment(project))))
 
     return (
         <SidebarNav>
@@ -58,7 +59,7 @@ export default function BoardsSidebar() {
                     colorDot={item.color}
                     isActive={activeProjectId === item.id}
                     closesDrawer
-                    onPress={() => selectBoard(item.id)}
+                    onPress={() => selectBoard(item)}
                 />
             ))}
 
@@ -83,7 +84,7 @@ export default function BoardsSidebar() {
 interface ArchivedBoardsProps {
     projects: BoardsProjects[]
     activeProjectId: string | null
-    onSelect: (projectId: string) => void
+    onSelect: (project: BoardsProjects) => void
 }
 
 /**
@@ -112,7 +113,7 @@ function ArchivedBoards({ projects, activeProjectId, onSelect }: ArchivedBoardsP
                           colorDot={item.color}
                           isActive={activeProjectId === item.id}
                           closesDrawer
-                          onPress={() => onSelect(item.id)}
+                          onPress={() => onSelect(item)}
                       />
                   ))
                 : null}
