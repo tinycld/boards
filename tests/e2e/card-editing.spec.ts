@@ -396,7 +396,7 @@ test.describe('Boards — editing a card', () => {
     test('archives the card off the board', async ({ page }) => {
         await boardWithOpenCard(page, 'archive')
 
-        await peek(page).getByRole('button', { name: 'More actions' }).click()
+        await peek(page).getByRole('button', { name: 'Card actions' }).click()
         await page.getByText('Archive card', { exact: true }).click()
 
         // Archive is deliberately unconfirmed, and dismisses the view — a card
@@ -409,7 +409,7 @@ test.describe('Boards — editing a card', () => {
     test('deletes the card behind a confirmation', async ({ page }) => {
         await boardWithOpenCard(page, 'delete')
 
-        await peek(page).getByRole('button', { name: 'More actions' }).click()
+        await peek(page).getByRole('button', { name: 'Card actions' }).click()
         await page.getByText('Delete card', { exact: true }).click()
 
         // Delete IS confirmed — it cascades to checklist, comments and
@@ -429,7 +429,7 @@ test.describe('Boards — editing a card', () => {
         await page.getByText('Cancel', { exact: true }).click()
         await expect(peek(page).getByText('Description', { exact: true })).toBeVisible()
 
-        await peek(page).getByRole('button', { name: 'More actions' }).click()
+        await peek(page).getByRole('button', { name: 'Card actions' }).click()
         await page.getByText('Delete card', { exact: true }).click()
         await page.getByRole('button', { name: 'Delete', exact: true }).click()
 

@@ -1,7 +1,14 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, cardsInColumn, createBoard } from './helpers'
+import {
+    addCard,
+    boardCard,
+    cardsInColumn,
+    clickBulkAction,
+    createBoard,
+    openBulkPicker,
+} from './helpers'
 
 // Multi-select and the bulk bar end to end: the gestures that build a
 // selection, and each action reading back off the FACE rather than the bar —
@@ -55,7 +62,7 @@ test.describe('Boards — bulk operations', () => {
 
         // A new board has no labels, so the bar's picker offers its manager —
         // the same empty-state path the card detail takes.
-        await page.getByTestId('boards-bulk-label').click()
+        await openBulkPicker(page, 'boards-bulk-label', 'Labels')
         await page.getByText('Manage labels…', { exact: true }).click()
         await page.getByRole('button', { name: 'New label' }).click()
         await page.getByPlaceholder('Label name').fill('blocked')
@@ -66,7 +73,7 @@ test.describe('Boards — bulk operations', () => {
         // The selection survives the manager — it is the bar's own dialog, and
         // losing the selection to it would make labelling a range impossible.
         await expect(page.getByTestId('boards-bulk-count')).toHaveText('3 selected')
-        await page.getByTestId('boards-bulk-label').click()
+        await openBulkPicker(page, 'boards-bulk-label', 'Labels')
         await page.getByRole('menuitemcheckbox', { name: 'blocked' }).click()
 
         // Read the label back off each FACE. The bar clears on success, which
@@ -98,7 +105,7 @@ test.describe('Boards — bulk operations', () => {
 
         await boardCard(page, CARDS[0]).click({ modifiers: ['ControlOrMeta'] })
         await boardCard(page, CARDS[1]).click({ modifiers: ['Shift'] })
-        await page.getByTestId('boards-bulk-move').click()
+        await openBulkPicker(page, 'boards-bulk-move', 'Move to list')
         await page.getByRole('menuitem', { name: 'Doing', exact: true }).click()
 
         await expect(bar(page)).toHaveCount(0)
@@ -114,7 +121,7 @@ test.describe('Boards — bulk operations', () => {
 
         await boardCard(page, CARDS[0]).click({ modifiers: ['ControlOrMeta'] })
         await boardCard(page, CARDS[1]).click({ modifiers: ['Shift'] })
-        await page.getByTestId('boards-bulk-archive').click()
+        await clickBulkAction(page, 'boards-bulk-archive', 'Archive')
 
         await expect(bar(page)).toHaveCount(0)
         await expect(boardCard(page, CARDS[0])).toHaveCount(0)

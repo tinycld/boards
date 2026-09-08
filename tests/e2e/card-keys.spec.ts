@@ -55,7 +55,7 @@ test('numbers cards in creation order and never reuses a number', async ({ page 
     // Deleting the highest-numbered card must NOT free its number — the whole
     // reason numbering is a per-board counter rather than MAX(number)+1.
     await boardCard(page, 'Card two').click()
-    await page.getByRole('button', { name: 'More actions' }).click()
+    await page.getByRole('button', { name: 'Card actions' }).click()
     await page.getByText('Delete card', { exact: true }).click()
     await page.getByRole('button', { name: 'Delete', exact: true }).click()
     await expect(boardCard(page, 'Card two')).toHaveCount(0)

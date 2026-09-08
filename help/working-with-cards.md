@@ -381,15 +381,18 @@ quote.
 
 ## Duplicating a card
 
-To make a copy of a card on the same board, open it, click **More actions**,
+To make a copy of a card on the same board, open it, click **Card actions**,
 and choose **Duplicate card**. The copy lands right after the original with
 "Copy of" in front of its title, carrying the description, due date,
 priority, labels, assignees, reporter and checklist (with nothing ticked).
 Comments and attachments stay with the original.
 
+On a narrow screen the card's header folds its other controls — watch, copy
+link, open full page — into the same **Card actions** menu.
+
 ## Moving a card to another board
 
-Open the card, click **More actions**, and choose **Move to board…**. Pick any
+Open the card, click **Card actions**, and choose **Move to board…**. Pick any
 board you can edit, then the list it should land in. The card takes its
 checklist, comments, attachments and history with it. Because labels belong
 to a board, only labels with the same name on the new board are kept — the

@@ -22,6 +22,15 @@ interface EstimatePickerProps {
 export function EstimatePicker({ selected, onSelect, children }: EstimatePickerProps) {
     return (
         <Menu trigger={children} placement="bottom-start" title="Estimate">
+            <EstimatePickerRows selected={selected} onSelect={onSelect} />
+        </Menu>
+    )
+}
+
+/** The rows alone, for a menu that hosts them itself — a toolbar's More submenu. */
+export function EstimatePickerRows({ selected, onSelect }: Omit<EstimatePickerProps, 'children'>) {
+    return (
+        <>
             {ESTIMATE_PRESETS.map(points => (
                 <Menu.Item
                     key={points}
@@ -32,7 +41,7 @@ export function EstimatePicker({ selected, onSelect, children }: EstimatePickerP
                 />
             ))}
             <ClearItem isVisible={selected !== undefined} onPress={() => onSelect(0)} />
-        </Menu>
+        </>
     )
 }
 

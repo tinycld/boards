@@ -540,3 +540,56 @@ export async function dragCardToSection(page: Page, row: Locator, sectionTitle: 
     }
     throw lastError
 }
+
+/**
+ * Press a bulk action bar control that ACTS on one press (Archive), wherever
+ * it currently lives.
+ *
+ * The bar is a ResponsiveToolbar: it measures itself and folds controls into a
+ * More menu from the right as the row runs short of room. Which controls stay
+ * on the bar is therefore a function of the VIEWPORT and of how many controls
+ * the board contributes (a sprints board adds one), not something a spec can
+ * assume — Desktop Chrome's 1280px is already narrow enough to fold the
+ * rightmost ones, and Archive sits at that end.
+ *
+ * So resolve the control rather than asserting a position. Pinning a spec to
+ * either state makes it fail on the other, which is how the folded Archive
+ * slipped through: the bar-relative click passed locally and timed out on CI.
+ *
+ * `label` is the control's OVERFLOW label, which is not always its on-bar one
+ * (the bar labels a button "Move", the menu row "Move to list") — the bar has
+ * an icon and a word of room, the menu row a full phrase.
+ */
+export async function clickBulkAction(page: Page, testID: string, label: string) {
+    const onBar = page.getByTestId(testID)
+    if (await onBar.isVisible().catch(() => false)) {
+        await onBar.click()
+        return
+    }
+    await openBulkMore(page)
+    await page.getByRole('menuitem', { name: label, exact: true }).click()
+}
+
+/**
+ * Open a bulk action bar PICKER (Move, Labels, Assign, …) and leave its rows on
+ * screen for the caller to choose from.
+ *
+ * Same folding as clickBulkAction, but these controls are menus rather than
+ * one-press actions, so folded they become a SUBMENU of the More menu: hover
+ * the parent row to spring its rows, rather than selecting it. Either way the
+ * caller ends up looking at the same rows and picks by name.
+ */
+export async function openBulkPicker(page: Page, testID: string, label: string) {
+    const onBar = page.getByTestId(testID)
+    if (await onBar.isVisible().catch(() => false)) {
+        await onBar.click()
+        return
+    }
+    await openBulkMore(page)
+    await page.getByRole('menuitem', { name: label, exact: true }).hover()
+}
+
+/** The bulk bar's own overflow trigger, scoped so it never matches the header's. */
+async function openBulkMore(page: Page) {
+    await page.getByTestId('boards-bulk-bar').getByTestId('toolbar-more-button').click()
+}

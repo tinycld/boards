@@ -33,7 +33,6 @@ export function SprintScopePill({
     isVisible: boolean
 }) {
     const scope = useBoardsUIStore(s => selectSprintScope(s, project.id))
-    const setSprintScope = useBoardsUIStore(s => s.setSprintScope)
     const mutedColor = useThemeColor('muted')
     const foreground = useThemeColor('foreground')
     const { canEdit } = useProjectRole(project.id)
@@ -43,7 +42,6 @@ export function SprintScopePill({
     const active = activeSprint(project.sprints)
     const next = nextPlannedSprint(project.sprints)
     const label = scopeLabel(scope, project)
-    const pick = (next: SprintScope) => setSprintScope(project.id, next)
 
     return (
         <>
@@ -54,37 +52,7 @@ export function SprintScopePill({
                 placement="bottom-end"
                 title="Board scope"
             >
-                <Menu.Item
-                    label={
-                        active
-                            ? `Active sprint — ${sprintLabel(active)}`
-                            : 'Active sprint (none yet)'
-                    }
-                    isSelected={scope === 'active'}
-                    testID="boards-scope-active"
-                    onSelect={() => pick('active')}
-                />
-                <Menu.Item
-                    label="All cards"
-                    isSelected={scope === 'all'}
-                    testID="boards-scope-all"
-                    onSelect={() => pick('all')}
-                />
-                <Menu.Item
-                    label="Backlog"
-                    isSelected={scope === 'backlog'}
-                    testID="boards-scope-backlog"
-                    onSelect={() => pick('backlog')}
-                />
-                {plannedSprints(project.sprints).map(sprint => (
-                    <Menu.Item
-                        key={sprint.id}
-                        label={sprintLabel(sprint)}
-                        isSelected={typeof scope === 'object' && scope.sprintId === sprint.id}
-                        testID={`boards-scope-sprint-${sprint.number}`}
-                        onSelect={() => pick({ sprintId: sprint.id })}
-                    />
-                ))}
+                <SprintScopeRows project={project} />
                 <TransitionItem
                     isVisible={canEdit && !active && next !== undefined}
                     icon={Play}
@@ -105,6 +73,52 @@ export function SprintScopePill({
                 transition={transition}
                 onClose={() => setTransition(null)}
             />
+        </>
+    )
+}
+
+/**
+ * The scope choices alone — the header's More submenu hosts them once the pill
+ * folds. The start/complete transitions stay on the pill: their dialogs live
+ * there, and the backlog's section headers carry the same buttons.
+ */
+export function SprintScopeRows({ project }: { project: BoardProject }) {
+    const scope = useBoardsUIStore(s => selectSprintScope(s, project.id))
+    const setSprintScope = useBoardsUIStore(s => s.setSprintScope)
+    const active = activeSprint(project.sprints)
+    const pick = (next: SprintScope) => setSprintScope(project.id, next)
+
+    return (
+        <>
+            <Menu.Item
+                label={
+                    active ? `Active sprint — ${sprintLabel(active)}` : 'Active sprint (none yet)'
+                }
+                isSelected={scope === 'active'}
+                testID="boards-scope-active"
+                onSelect={() => pick('active')}
+            />
+            <Menu.Item
+                label="All cards"
+                isSelected={scope === 'all'}
+                testID="boards-scope-all"
+                onSelect={() => pick('all')}
+            />
+            <Menu.Item
+                label="Backlog"
+                isSelected={scope === 'backlog'}
+                testID="boards-scope-backlog"
+                onSelect={() => pick('backlog')}
+            />
+            {plannedSprints(project.sprints).map(sprint => (
+                <Menu.Item
+                    key={sprint.id}
+                    label={sprintLabel(sprint)}
+                    isSelected={typeof scope === 'object' && scope.sprintId === sprint.id}
+                    testID={`boards-scope-sprint-${sprint.number}`}
+                    onSelect={() => pick({ sprintId: sprint.id })}
+                />
+            ))}
         </>
     )
 }

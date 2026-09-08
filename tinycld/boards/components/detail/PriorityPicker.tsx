@@ -24,6 +24,18 @@ type PriorityPickerProps = {
 export function PriorityPicker({ selected, onSelect, ...anchor }: PriorityPickerProps) {
     return (
         <Menu {...anchorPropsFor(anchor)} placement="bottom-start" title="Priority">
+            <PriorityPickerRows selected={selected} onSelect={onSelect} />
+        </Menu>
+    )
+}
+
+/** The rows alone, for a menu that hosts them itself — a toolbar's More submenu. */
+export function PriorityPickerRows({
+    selected,
+    onSelect,
+}: Omit<PriorityPickerProps, keyof PickerAnchor>) {
+    return (
+        <>
             {PRIORITIES.map(priority => (
                 <Menu.Item
                     key={priority}
@@ -33,6 +45,6 @@ export function PriorityPicker({ selected, onSelect, ...anchor }: PriorityPicker
                     onSelect={() => onSelect(priority)}
                 />
             ))}
-        </Menu>
+        </>
     )
 }

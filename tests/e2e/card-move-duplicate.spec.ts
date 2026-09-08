@@ -73,7 +73,7 @@ test.describe('Boards — duplicate and move to board', () => {
         // per-card lock; see TestRecountCard_ConcurrentInsertsAreAllCounted.
         await expect(boardCard(page, CARD_TITLE)).toContainText('0/2')
 
-        await peek(page).getByRole('button', { name: 'More actions' }).click()
+        await peek(page).getByRole('button', { name: 'Card actions' }).click()
         await page.getByText('Duplicate card', { exact: true }).click()
 
         const copyTitle = `Copy of ${CARD_TITLE}`
@@ -94,7 +94,7 @@ test.describe('Boards — duplicate and move to board', () => {
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
 
-        await peek(page).getByRole('button', { name: 'More actions' }).click()
+        await peek(page).getByRole('button', { name: 'Card actions' }).click()
         await page.getByText('Move to board…', { exact: true }).click()
         const dialog = page.getByTestId('boards-move-board-dialog')
         await dialog.getByRole('radio', { name: target }).click()

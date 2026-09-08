@@ -26,11 +26,9 @@ const FIELDS: SortField[] = [
  */
 export function SortMenu({ projectId }: { projectId: string }) {
     const sort = useBoardsUIStore(s => selectBoardSort(s, projectId))
-    const setBoardSort = useBoardsUIStore(s => s.setBoardSort)
     const mutedColor = useThemeColor('muted')
     const activeColor = useThemeColor('primary')
     const isSorted = sort.field !== 'manual'
-    const DirectionIcon = sort.direction === 'asc' ? ArrowDownAZ : ArrowUpAZ
 
     return (
         <Menu
@@ -43,6 +41,20 @@ export function SortMenu({ projectId }: { projectId: string }) {
             placement="bottom-end"
             title="Sort cards"
         >
+            <SortRows projectId={projectId} />
+        </Menu>
+    )
+}
+
+/** The rows alone, for a menu that hosts them itself — the header's More submenu. */
+export function SortRows({ projectId }: { projectId: string }) {
+    const sort = useBoardsUIStore(s => selectBoardSort(s, projectId))
+    const setBoardSort = useBoardsUIStore(s => s.setBoardSort)
+    const isSorted = sort.field !== 'manual'
+    const DirectionIcon = sort.direction === 'asc' ? ArrowDownAZ : ArrowUpAZ
+
+    return (
+        <>
             {FIELDS.map(field => (
                 <Menu.Item
                     key={field}
@@ -65,7 +77,7 @@ export function SortMenu({ projectId }: { projectId: string }) {
                     }
                 />
             ) : null}
-        </Menu>
+        </>
     )
 }
 
