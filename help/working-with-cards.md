@@ -75,8 +75,9 @@ there.
 
 To fit more cards on screen, click the rows button in the board's top bar to
 **Hide card details**. Cards shrink to a single line, keeping the title, who
-it's assigned to, and its due date — labels stay as colored dots. Click the
-button again to bring the full cards back.
+it's assigned to, its due date, and any reactions — labels stay as colored
+dots. On this narrower card you can see reactions but not add them; use the
+full card or open it. Click the button again to bring the full cards back.
 
 ## Reordering a checklist
 
@@ -233,6 +234,26 @@ hide card details.
 Priority is also available to [board rules](help://boards:rules): a rule can
 react when a card's priority changes, and can set a card's priority as its
 action.
+
+## Reacting to a card
+
+To react to a card, click the smiley on it and pick an emoji. The reaction
+appears as a chip with a count, and you can react from the board itself or
+from the open card — either way it is the same reaction, and both places show
+it.
+
+Click a chip to add yours to it, and click it again to take yours back. Hover
+a chip to see who reacted. Reacting never opens the card, so you can work
+down a column without losing your place.
+
+A card with room for only a few chips shows the first few and a **+N** marker
+for the rest; open the card to see them all. Anyone who can comment on a board
+can react, and anyone who can see the card — including people reading a shared
+board by link — sees the reactions.
+
+Reactions on a card are counted separately from reactions on its individual
+comments — a rocket on the card and a rocket on a comment are two different
+things.
 
 ## Estimates
 

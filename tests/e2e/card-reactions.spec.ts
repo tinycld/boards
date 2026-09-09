@@ -1,12 +1,13 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard } from './helpers'
+import { addCard, boardCard, closeCardPeek, createBoard } from './helpers'
 
 // Votes on the card itself, as opposed to on a comment. What is asserted here
 // is the half comment reactions cannot cover: the chip reaching the BOARD TILE
 // from the open card, which goes through a different query (one per board
-// rather than one per open card), and the tooltip naming who voted.
+// rather than one per open card), the tooltip naming who voted, and voting
+// FROM the tile — which shares the open card's toggle but none of its query.
 //
 // Drives the UI only — no raw PB writes.
 
@@ -45,6 +46,15 @@ function tileChip(page: Page, unified: string) {
     return page.getByTestId(new RegExp(`^boards-tile-reaction-.*-${unified}$`))
 }
 
+/** Open the tile's picker and vote, without opening the card. */
+async function voteOnTile(page: Page, title: string, query: string, unified: string) {
+    await boardCard(page, title).getByTestId('boards-tile-reaction-add').click()
+    await page.getByTestId('emoji-search').fill(query)
+    const cell = page.getByTestId(`emoji-pick-${unified}`)
+    await cell.waitFor({ state: 'visible' })
+    await cell.click()
+}
+
 /**
  * Open the picker and vote.
  *
@@ -80,6 +90,89 @@ test.describe('Boards — card votes', () => {
         await cardChip(page, ROCKET).click()
         await expect(cardChip(page, ROCKET)).toHaveCount(0)
         await expect(tileChip(page, ROCKET)).toHaveCount(0)
+    })
+
+    test('a vote is added from the tile, without opening the card', async ({ page }) => {
+        await login(page)
+        await navigateToPackage(page, 'boards')
+        await createBoard(page, `vote-tile-${Date.now()}`)
+        await addCard(page, 0, CARD_TITLE)
+
+        await voteOnTile(page, CARD_TITLE, 'rocket', ROCKET)
+        await expect(tileChip(page, ROCKET)).toContainText('1')
+
+        // The picker press must not fall through to the card root, which would
+        // open the card behind it.
+        await expect(peek(page)).toHaveCount(0)
+
+        // Pressing your own chip on the tile takes the vote back, and likewise
+        // must not open the card.
+        await tileChip(page, ROCKET).click()
+        await expect(tileChip(page, ROCKET)).toHaveCount(0)
+        await expect(peek(page)).toHaveCount(0)
+    })
+
+    test('a tile vote is the same vote the open card shows', async ({ page }) => {
+        await login(page)
+        await navigateToPackage(page, 'boards')
+        await createBoard(page, `vote-tile-same-${Date.now()}`)
+        await addCard(page, 0, CARD_TITLE)
+
+        // Both surfaces write one row through one toggle, so the open card
+        // must show the tile's vote as the viewer's OWN, not a second one.
+        await voteOnTile(page, CARD_TITLE, 'rocket', ROCKET)
+        await openCard(page, CARD_TITLE)
+        await expect(cardChip(page, ROCKET)).toContainText('1')
+
+        await cardChip(page, ROCKET).click()
+        await expect(cardChip(page, ROCKET)).toHaveCount(0)
+
+        await closeCardPeek(page)
+        await expect(tileChip(page, ROCKET)).toHaveCount(0)
+    })
+
+    test('the compact face shows the vote but not the add button', async ({ page }) => {
+        await login(page)
+        await navigateToPackage(page, 'boards')
+        await createBoard(page, `vote-compact-${Date.now()}`)
+        await addCard(page, 0, CARD_TITLE)
+
+        await voteOnTile(page, CARD_TITLE, 'rocket', ROCKET)
+        await expect(tileChip(page, ROCKET)).toContainText('1')
+
+        // The dense row keeps what you SCAN by — an existing vote — and drops
+        // the action. The peek covers the header's right edge where the toggle
+        // lives, so nothing may be open when it is clicked.
+        await page.getByTestId('boards-density-toggle').click()
+        await expect(tileChip(page, ROCKET)).toBeVisible()
+        await expect(
+            boardCard(page, CARD_TITLE).getByTestId('boards-tile-reaction-add')
+        ).toHaveCount(0)
+    })
+
+    test('the tile bar nests no button inside the card button', async ({ page }) => {
+        // react-native-web renders accessibilityRole="button" as a real
+        // <button>, so giving the card root that role while it CONTAINS the
+        // reaction chips and their picker produced invalid HTML and a
+        // hydration warning. The card root is a plain pressable now; this is
+        // the regression guard.
+        const warnings: string[] = []
+        page.on('console', msg => {
+            if (/cannot be a descendant of|hydration/i.test(msg.text())) warnings.push(msg.text())
+        })
+
+        await login(page)
+        await navigateToPackage(page, 'boards')
+        await createBoard(page, `vote-nesting-${Date.now()}`)
+        await addCard(page, 0, CARD_TITLE)
+
+        // Gate on the button being there, or this asserts nothing.
+        await expect(
+            boardCard(page, CARD_TITLE).getByTestId('boards-tile-reaction-add')
+        ).toBeVisible()
+
+        expect(await page.locator('button button').count()).toBe(0)
+        expect(warnings, `console warned:\n${warnings.join('\n')}`).toEqual([])
     })
 
     test('the chip names who voted', async ({ page }) => {
