@@ -58,7 +58,18 @@ export function BoardCanvas({ project }: { project: BoardProject }) {
                     paddingTop: 10,
                     paddingBottom: 20,
                     gap: 12,
-                    alignItems: 'flex-start',
+                    // `stretch`, not `flex-start`: this container has a definite
+                    // height, and stretching is what passes that height down to
+                    // each column as a definite one. Under `flex-start` every
+                    // column shrink-wraps its card stack, and a column's own
+                    // `max-h-full` cannot recover the cap — the gesture-handler
+                    // wrapper between the two is `display: contents` on web, a
+                    // box erased from the layout tree, so it offers no height
+                    // for a percentage to resolve against. The columns then
+                    // overrun the viewport and their card lists never become
+                    // scroll regions. Columns cap themselves via maxHeight so
+                    // stretch does not also make a short column tall.
+                    alignItems: 'stretch',
                 }}
             >
                 {project.lists.map(list => (
