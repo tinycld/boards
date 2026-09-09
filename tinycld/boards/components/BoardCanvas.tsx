@@ -1,5 +1,5 @@
 import { useAuth } from '@tinycld/core/lib/auth'
-import { useEffect, useRef } from 'react'
+import { Fragment, useEffect, useRef } from 'react'
 import { ScrollView, View } from 'react-native'
 import { SortableBoardContainer } from 'react-native-drax'
 import { useBoardCardReactions } from '../hooks/useBoardCardReactions'
@@ -11,7 +11,7 @@ import { useSelectionOrder } from '../hooks/useSelectionOrder'
 import { useToggleCardReaction } from '../hooks/useToggleCardReaction'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
 import type { BoardProject } from '../types'
-import { AddListColumn } from './AddListColumn'
+import { AddListColumn, AddListSeam } from './AddListColumn'
 import { BoardColumn } from './BoardColumn'
 import { BulkActionBar } from './BulkActionBar'
 import { CanvasCardPicker } from './CanvasCardPicker'
@@ -72,20 +72,34 @@ export function BoardCanvas({ project }: { project: BoardProject }) {
                     alignItems: 'stretch',
                 }}
             >
-                {project.lists.map(list => (
-                    <BoardColumn
-                        key={list.id}
-                        list={list}
-                        projectId={project.id}
-                        listOrder={project.listOrder}
-                        registerMeasure={dnd.registerColumnMeasure}
-                        canEdit={canEdit}
-                        agingDays={project.agingDays}
-                        reactionsForCard={reactionsForCard}
-                        onToggleReaction={toggleReaction}
-                        reactorName={reactorName}
-                        currentUserId={currentUserId}
-                    />
+                {project.lists.map((list, index) => (
+                    <Fragment key={list.id}>
+                        {/* Every column gets one, the first included: its
+                            seam sits in the canvas's leading padding rather
+                            than a gap, but it still has to exist — the column
+                            menu's "Add list left" opens it, and without a
+                            mount the composer would have nowhere to appear. */}
+                        {canEdit ? (
+                            <AddListSeam
+                                projectId={project.id}
+                                listOrder={project.listOrder}
+                                beforeListId={list.id}
+                                isLeading={index === 0}
+                            />
+                        ) : null}
+                        <BoardColumn
+                            list={list}
+                            projectId={project.id}
+                            listOrder={project.listOrder}
+                            registerMeasure={dnd.registerColumnMeasure}
+                            canEdit={canEdit}
+                            agingDays={project.agingDays}
+                            reactionsForCard={reactionsForCard}
+                            onToggleReaction={toggleReaction}
+                            reactorName={reactorName}
+                            currentUserId={currentUserId}
+                        />
+                    </Fragment>
                 ))}
                 {canEdit ? (
                     <AddListColumn projectId={project.id} listOrder={project.listOrder} />

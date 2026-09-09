@@ -59,7 +59,7 @@ export function useBoardShortcuts(
     const focusCard = useBoardsUIStore(s => s.focusCard)
     const focusColumn = useBoardsUIStore(s => s.focusColumn)
     const openComposer = useBoardsUIStore(s => s.openComposer)
-    const setAddListOpen = useBoardsUIStore(s => s.setAddListOpen)
+    const setAddListSlot = useBoardsUIStore(s => s.setAddListSlot)
     const openCanvasPicker = useBoardsUIStore(s => s.openCanvasPicker)
     const selectMany = useBoardsUIStore(s => s.selectMany)
     const clearSelection = useBoardsUIStore(s => s.clearSelection)
@@ -367,7 +367,7 @@ export function useBoardShortcuts(
             // Shift+N is a no-op on an empty board, where BoardCanvas renders
             // EmptyBoard and mounts no AddListColumn to open.
             nav('boards.board.addList', 'Shift+N', 'Add list', () => {
-                if (project.lists.length > 0) setAddListOpen(true)
+                if (project.lists.length > 0) setAddListSlot('end')
             }),
         ]
     }, [
@@ -383,7 +383,7 @@ export function useBoardShortcuts(
         moveCard,
         archiveCard,
         openComposer,
-        setAddListOpen,
+        setAddListSlot,
         toggleColumnCollapsed,
         openCanvasPicker,
         setFilterPanelOpen,

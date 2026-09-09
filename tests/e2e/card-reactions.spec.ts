@@ -210,4 +210,52 @@ test.describe('Boards — card votes', () => {
 
         await expect(cardChip(page, ROCKET)).toContainText('1')
     })
+
+    test('a vote does not push the assignees off a loaded tile', async ({ page }) => {
+        // The meta row was one flat flex line of shrink-0 pills under
+        // `overflow-hidden`, so nothing on it could give. Adding a chip to a
+        // card that already carried a due date, a comment and an estimate
+        // pushed the row past the card edge and the clip silently ate its LAST
+        // children — the watcher and assignee stacks. Presence must never be
+        // what falls off; the row wraps now.
+        await login(page)
+        await navigateToPackage(page, 'boards')
+        await createBoard(page, `vote-loaded-${Date.now()}`)
+        await addCard(page, 0, CARD_TITLE)
+        await openCard(page, CARD_TITLE)
+
+        // Load the row up through the UI, the way the screenshot's card got
+        // there: a due date, an estimate, a comment count, and an assignee.
+        await peek(page).getByRole('button', { name: 'Set due date' }).click()
+        await page.getByRole('button', { name: 'Tomorrow' }).click()
+
+        await peek(page).getByRole('button', { name: 'Set estimate' }).click()
+        await page.getByRole('menuitem', { name: '3 pts', exact: true }).click()
+
+        await peek(page).getByRole('button', { name: 'Assign' }).click()
+        await page.getByRole('menuitemcheckbox').first().click()
+        await page.keyboard.press('Escape')
+
+        await postComment(page, 'a note')
+        await closeCardPeek(page)
+
+        const face = boardCard(page, CARD_TITLE)
+        const assignees = face.getByTestId('boards-card-assignees')
+        await expect(face.getByTestId('boards-estimate-pill')).toBeVisible()
+        await expect(assignees).toBeVisible()
+
+        // The regression: the vote lands and the assignee stack is still there.
+        await voteOnTile(page, CARD_TITLE, 'rocket', ROCKET)
+        await expect(tileChip(page, ROCKET)).toContainText('1')
+        await expect(assignees).toBeVisible()
+
+        // `toBeVisible` alone would pass on a clipped node, so assert the stack
+        // is really inside the card rather than hidden past its right edge.
+        const cardBox = await face.boundingBox()
+        const stackBox = await assignees.boundingBox()
+        expect(cardBox).not.toBeNull()
+        expect(stackBox).not.toBeNull()
+        if (!cardBox || !stackBox) return
+        expect(stackBox.x + stackBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width)
+    })
 })
