@@ -1,5 +1,5 @@
 import type { Browser, Page } from '@playwright/test'
-import { expect, test } from '@playwright/test'
+import { chromium, expect, test } from '@playwright/test'
 import { login, navigateToPackage, signInAsCollaborator } from '@tinycld/core/e2e-helpers'
 import { addCard, boardCard, createBoard } from './helpers'
 
@@ -54,6 +54,87 @@ async function mintShareLink(page: Page, boardName: string, role: string): Promi
     const text = (await url.textContent())?.trim()
     if (!text) throw new Error('the dialog rendered no share URL')
     return text
+}
+
+/**
+ * Mint an embeddable link and return the URL the dialog offers.
+ *
+ * Fills the same panel a person would: the domain field is what makes a link
+ * embeddable at all, and leaving it blank is how every ordinary link stays
+ * unframable.
+ */
+async function mintEmbeddableLink(page: Page, boardName: string, origin: string): Promise<string> {
+    await openShareDialog(page, boardName)
+
+    await expect(page.getByText('General access')).toBeVisible()
+    await page.getByLabel('Websites allowed to embed this board').fill(origin)
+    await page.getByRole('button', { name: 'Create share link' }).click()
+
+    const url = page.getByText(/\/p\/boards\//)
+    await expect(url).toBeVisible()
+    const text = (await url.textContent())?.trim()
+    if (!text) throw new Error('the dialog rendered no share URL')
+    return text
+}
+
+/**
+ * Open `boardUrl` inside a real iframe on a page served from `hostOrigin`, and
+ * report whether the browser allowed the frame.
+ *
+ * The whole point is that the BROWSER decides. `page.route` synthesizes the
+ * host page at an arbitrary origin, so the frame request is genuinely
+ * cross-origin and Chrome applies our `frame-ancestors` directive for real —
+ * which is the one thing loading the embed URL directly cannot exercise.
+ *
+ * WHY ITS OWN BROWSER, with Private Network Access checks off. A synthesized
+ * public origin framing `localhost` is blocked by Chrome BEFORE the request is
+ * sent (`ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS`), which would make the
+ * negative case pass without our header existing at all — a test green for the
+ * wrong reason, and worse than no test. With the checks off the request
+ * actually reaches the server and the refusal we observe is
+ * `ERR_BLOCKED_BY_RESPONSE`, i.e. our own CSP.
+ *
+ * Returns the frame's text when it rendered, or null when the browser refused
+ * it. Refusal is read from the failed REQUEST rather than a console message:
+ * CSP violation reporting varies across browsers, but the navigation failure is
+ * unambiguous and names its own reason.
+ */
+async function frameBoardAt(
+    hostOrigin: string,
+    boardUrl: string
+): Promise<{ text: string | null; failure: string | null }> {
+    const browser = await chromium.launch({
+        args: ['--disable-features=LocalNetworkAccessChecks,PrivateNetworkAccessChecks'],
+    })
+    try {
+        const page = await browser.newPage()
+        let failure: string | null = null
+        page.on('requestfailed', r => {
+            if (r.url().startsWith(boardUrl.split('?')[0])) {
+                failure = r.failure()?.errorText ?? 'unknown'
+            }
+        })
+
+        await page.route(`${hostOrigin}/**`, route =>
+            route.fulfill({
+                status: 200,
+                contentType: 'text/html',
+                body: `<!doctype html><title>Host</title>
+                       <iframe id="board" src="${boardUrl}" width="1200" height="800"></iframe>`,
+            })
+        )
+        await page.goto(`${hostOrigin}/host.html`)
+
+        const frame = page.frameLocator('#board')
+        try {
+            await frame.getByText(CARD_TITLE).waitFor({ state: 'visible', timeout: 15_000 })
+            return { text: await frame.locator('body').innerText(), failure }
+        } catch {
+            return { text: null, failure }
+        }
+    } finally {
+        await browser.close()
+    }
 }
 
 /**
@@ -266,5 +347,116 @@ test.describe('Boards — a board opened by share link', () => {
         await expect(after.getByText('This link is no longer available')).toBeVisible()
         await expect(boardCard(after, CARD_TITLE)).toHaveCount(0)
         await after.context().close()
+    })
+
+    test('an embedded board renders the canvas without our own chrome', async ({
+        page,
+        browser,
+    }) => {
+        await login(page)
+        await navigateToPackage(page, 'boards')
+        const board = `Embedded plan ${Date.now()}`
+        await createBoard(page, board)
+        await addCard(page, 0, CARD_TITLE)
+
+        const url = await mintEmbeddableLink(page, board, 'https://intranet.example.com')
+
+        // Loaded directly rather than framed: what this test owns is what the
+        // PAGE renders. The framing grant itself is exercised in a real iframe
+        // by the two tests at the end of this file.
+        const visitor = await visitAnonymously(browser, `${url}?embed=1`)
+
+        // The positive anchor first, as everywhere in this file: the board
+        // really rendered. Every absence below depends on it.
+        await expect(boardCard(visitor, CARD_TITLE)).toBeVisible()
+        await expect(visitor.getByText('To do').first()).toBeVisible()
+
+        // Our chrome is gone — the board is what was embedded, not our app.
+        await expect(visitor.getByText('Read only')).toHaveCount(0)
+        await expect(visitor.getByRole('button', { name: /^Sign in to/ })).toHaveCount(0)
+
+        // Still read-only, and for the same reason as any share link: the
+        // capabilities come from useProjectRole, which finds no membership.
+        // `?embed=1` is presentation, never permission.
+        await expect(visitor.getByRole('button', { name: /^Add card/ })).toHaveCount(0)
+        await expect(visitor.getByRole('button', { name: 'Add list' })).toHaveCount(0)
+
+        await visitor.context().close()
+    })
+
+    test('the same link without ?embed=1 still shows the full share page', async ({
+        page,
+        browser,
+    }) => {
+        await login(page)
+        await navigateToPackage(page, 'boards')
+        const board = `Embed opt-in ${Date.now()}`
+        await createBoard(page, board)
+        await addCard(page, 0, CARD_TITLE)
+
+        const url = await mintEmbeddableLink(page, board, 'https://intranet.example.com')
+
+        // An embeddable link is still an ordinary share link. The parameter is
+        // what strips the chrome, so without it the page is unchanged — which
+        // is also why the bare URL stays unframable server-side.
+        const visitor = await visitAnonymously(browser, url)
+
+        await expect(boardCard(visitor, CARD_TITLE)).toBeVisible()
+        await expect(visitor.getByText('Read only')).toBeVisible()
+
+        await visitor.context().close()
+    })
+
+    test('an owner is offered the embed code only once a link may be framed', async ({ page }) => {
+        await login(page)
+        await navigateToPackage(page, 'boards')
+        const board = `Embed code ${Date.now()}`
+        await createBoard(page, board)
+
+        // An ordinary link names no sites, so there is nothing to embed and no
+        // snippet to offer.
+        await mintShareLink(page, board, 'Viewer')
+        await expect(page.getByRole('button', { name: 'Copy embed code' })).toHaveCount(0)
+    })
+
+    test('a real iframe on an allowed site renders the board', async ({ page }) => {
+        await login(page)
+        await navigateToPackage(page, 'boards')
+        const board = `Framed allowed ${Date.now()}`
+        await createBoard(page, board)
+        await addCard(page, 0, CARD_TITLE)
+
+        // The origin the host page is served from has to be the one the link
+        // names, or this proves nothing about the allowlist.
+        const host = 'http://intranet.example.com'
+        const url = await mintEmbeddableLink(page, board, host)
+
+        const { text, failure } = await frameBoardAt(host, `${url}?embed=1`)
+
+        expect(failure).toBeNull()
+        expect(text ?? '').toContain(CARD_TITLE)
+    })
+
+    test('a real iframe on a site the link never named is blocked', async ({ page }) => {
+        await login(page)
+        await navigateToPackage(page, 'boards')
+        const board = `Framed refused ${Date.now()}`
+        await createBoard(page, board)
+        await addCard(page, 0, CARD_TITLE)
+
+        // Minted for one site and framed from another. This is the assertion
+        // the whole allowlist exists for, and the only one that can catch the
+        // header being dropped, malformed, or applied to the wrong request —
+        // failures the Go tests cannot see, because they assert the directive
+        // we MEANT to send rather than what a browser does with it.
+        const url = await mintEmbeddableLink(page, board, 'http://intranet.example.com')
+
+        const { text, failure } = await frameBoardAt('http://evil.example.com', `${url}?embed=1`)
+
+        // Asserted on the REASON, not merely on absence: a frame that failed to
+        // load for any other cause (a dead server, a network check) would
+        // otherwise make this pass while proving nothing about the allowlist.
+        expect(failure).toBe('net::ERR_BLOCKED_BY_RESPONSE')
+        expect(text ?? '').not.toContain(CARD_TITLE)
     })
 })
