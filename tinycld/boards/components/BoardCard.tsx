@@ -30,10 +30,24 @@ import { useCardPresence } from './BoardPresenceProvider'
 import { PriorityGlyph } from './PriorityGlyph'
 
 const MAX_LABELS = 3
+
+/**
+ * The companion to a `shrink` on a flex row child. A flex item's automatic
+ * minimum size refuses to go below its content's width, so `flexShrink` alone
+ * does nothing and the `numberOfLines={1}` beside it has no bounded width to
+ * ellipsize INTO — the same lesson ColumnDragHandle documents in BoardColumn.
+ */
+const MIN_WIDTH_ZERO = { minWidth: 0 } as const
 // Three watchers is already unusual company on one card; past that a count
 // says more than another sliver of avatar would. Matches MAX_LABELS so the
 // two overflow markers on a card face behave the same way.
 const MAX_WATCHERS = 3
+
+// The assignee stack collapses at the same count as the watcher stack it sits
+// beside, so the two avatar rows on a face overflow identically. Uncapped, a
+// card assigned to a whole team was the one item on the meta row that could
+// grow without bound and push the row past the card edge.
+const MAX_ASSIGNEES = 3
 
 interface BoardCardProps {
     card: BoardCardView
@@ -257,13 +271,17 @@ function CardTopRow({
         return null
     }
     return (
-        <View className="flex-row items-center gap-1">
+        <View className="flex-row items-center gap-1 overflow-hidden">
             <PriorityGlyph priority={priority} />
             <ParentChip parentKey={parentKey} />
             <EpicChip epic={epic} />
             <SprintChip sprint={sprint} />
             <CardLabels labels={labels} />
-            <View className="flex-1" />
+            {/* grow-only: as a flex-1 this spacer was the row's ONLY flexible
+                item, so it absorbed the entire overflow by collapsing to zero
+                and then let the chips run past the card edge. It may take up
+                slack; it may not be what yields. */}
+            <View className="grow shrink-0 basis-0" />
             <CardKey cardKey={cardKey} />
         </View>
     )
@@ -285,7 +303,7 @@ function ParentChip({ parentKey }: { parentKey: string }) {
     return (
         <Text
             testID="boards-parent-chip"
-            className="text-[10.5px] font-medium text-muted"
+            className="shrink-0 text-[10.5px] font-medium text-muted"
             numberOfLines={1}
         >
             ↳ {parentKey}
@@ -305,12 +323,20 @@ function ParentChip({ parentKey }: { parentKey: string }) {
 function EpicChip({ epic }: { epic: BoardEpic | null }) {
     if (!epic) return null
     return (
-        <View className="flex-row items-center gap-[3px]" testID="boards-epic-chip">
+        <View
+            className="shrink flex-row items-center gap-[3px]"
+            style={MIN_WIDTH_ZERO}
+            testID="boards-epic-chip"
+        >
             <View
-                className="w-[6px] h-[6px] rounded-full"
+                className="shrink-0 w-[6px] h-[6px] rounded-full"
                 style={{ backgroundColor: epic.color || undefined }}
             />
-            <Text className="text-[10.5px] font-medium text-muted" numberOfLines={1}>
+            <Text
+                className="shrink text-[10.5px] font-medium text-muted"
+                style={MIN_WIDTH_ZERO}
+                numberOfLines={1}
+            >
                 {epic.title}
             </Text>
         </View>
@@ -328,7 +354,8 @@ function SprintChip({ sprint }: { sprint: BoardSprint | null }) {
     return (
         <Text
             testID="boards-sprint-chip"
-            className="text-[10.5px] font-medium text-muted"
+            className="shrink text-[10.5px] font-medium text-muted"
+            style={MIN_WIDTH_ZERO}
             numberOfLines={1}
         >
             {sprintLabel(sprint)}
@@ -353,7 +380,7 @@ function CardKey({ cardKey }: { cardKey: string }) {
     if (!cardKey) return null
     return (
         <Text
-            className="text-[10.5px] font-medium tracking-wide text-muted"
+            className="shrink-0 text-[10.5px] font-medium tracking-wide text-muted"
             testID="boards-card-key"
         >
             {cardKey}
@@ -517,12 +544,12 @@ function CardLabels({ labels }: { labels: BoardLabel[] }) {
     const visible = labels.slice(0, MAX_LABELS)
     const overflow = labels.length - visible.length
     return (
-        <View className="flex-row flex-wrap items-center gap-1">
+        <View className="shrink flex-row items-center gap-1 overflow-hidden" style={MIN_WIDTH_ZERO}>
             {visible.map(label => (
                 <LabelBadge key={label.id} name={label.name} color={label.color} />
             ))}
             {overflow > 0 ? (
-                <Text className="text-[11px] font-medium text-muted">+{overflow}</Text>
+                <Text className="shrink-0 text-[11px] font-medium text-muted">+{overflow}</Text>
             ) : null}
         </View>
     )
@@ -546,14 +573,14 @@ function CardMeta({ card }: { card: BoardCardView }) {
     if (!hasPills && card.assignees.length === 0 && watchers.length === 0) return null
 
     return (
-        <View className="flex-row items-center gap-2.5 min-h-[20px]">
+        <View className="flex-row items-center gap-2.5 min-h-[20px] overflow-hidden">
             <SchedulePill start={card.start} due={card.due} dueHasTime={card.dueHasTime} />
             <ChecklistPill done={card.checklistDone} total={card.checklistTotal} />
             <SubtasksPill done={card.subtaskDone} total={card.subtaskTotal} />
             <CommentsPill count={card.commentCount} />
             <AttachmentsPill count={card.attachmentCount} />
             <EstimatePill estimate={card.estimate} />
-            <View className="flex-1" />
+            <View className="grow shrink-0 basis-0" />
             <CardWatchers watchers={watchers} cardId={card.id} />
             <CardAssignees assignees={card.assignees} />
         </View>
@@ -616,7 +643,7 @@ function SchedulePill({
     const label = formatSchedule(start, due, dueHasTime)
     if (state === 'upcoming') {
         return (
-            <View className="flex-row items-center gap-1">
+            <View className="shrink-0 flex-row items-center gap-1">
                 <CalendarDays size={11} color={mutedColor} strokeWidth={2.2} />
                 <Text className="text-[11px] font-medium text-muted">{label}</Text>
             </View>
@@ -628,7 +655,7 @@ function SchedulePill({
     const color = isOverdue ? dangerColor : warningColor
     return (
         <View
-            className={`flex-row items-center gap-1 rounded-[5px] px-1.5 py-0.5 -ml-1.5 ${isOverdue ? 'bg-danger/10' : 'bg-warning/10'}`}
+            className={`shrink-0 flex-row items-center gap-1 rounded-[5px] px-1.5 py-0.5 -ml-1.5 ${isOverdue ? 'bg-danger/10' : 'bg-warning/10'}`}
         >
             <Icon size={11} color={color} strokeWidth={2.2} />
             <Text
@@ -653,7 +680,7 @@ function ChecklistPill({ done, total }: { done: number; total: number }) {
     const isComplete = done === total
     const color = isComplete ? successColor : mutedColor
     return (
-        <View className="flex-row items-center gap-1">
+        <View className="shrink-0 flex-row items-center gap-1">
             <SquareCheck size={12} color={color} strokeWidth={2.2} />
             <Text
                 className={`text-[11px] font-medium ${isComplete ? 'text-success' : 'text-muted'}`}
@@ -685,7 +712,7 @@ function SubtasksPill({ done, total }: { done: number; total: number }) {
     const isComplete = subtasksComplete({ subtaskTotal: total, subtaskDone: done })
     const color = isComplete ? successColor : mutedColor
     return (
-        <View className="flex-row items-center gap-1" testID="boards-subtask-pill">
+        <View className="shrink-0 flex-row items-center gap-1" testID="boards-subtask-pill">
             <ListTree size={12} color={color} strokeWidth={2.2} />
             <Text
                 className={`text-[11px] font-medium ${isComplete ? 'text-success' : 'text-muted'}`}
@@ -701,7 +728,7 @@ function CommentsPill({ count }: { count: number }) {
     if (!count) return null
 
     return (
-        <View className="flex-row items-center gap-1">
+        <View className="shrink-0 flex-row items-center gap-1">
             <MessageSquare size={12} color={mutedColor} strokeWidth={2.2} />
             <Text className="text-[11px] font-medium text-muted">{count}</Text>
         </View>
@@ -713,7 +740,7 @@ function AttachmentsPill({ count }: { count: number }) {
     if (!count) return null
 
     return (
-        <View className="flex-row items-center gap-1">
+        <View className="shrink-0 flex-row items-center gap-1">
             <Paperclip size={12} color={mutedColor} strokeWidth={2.2} />
             <Text className="text-[11px] font-medium text-muted">{count}</Text>
         </View>
@@ -725,7 +752,7 @@ function EstimatePill({ estimate }: { estimate?: number }) {
     if (estimate === undefined) return null
 
     return (
-        <View testID="boards-estimate-pill" className="flex-row items-center gap-1">
+        <View testID="boards-estimate-pill" className="shrink-0 flex-row items-center gap-1">
             <Gauge size={12} color={mutedColor} strokeWidth={2.2} />
             <Text className="text-[11px] font-medium text-muted">{formatEstimate(estimate)}</Text>
         </View>
@@ -735,12 +762,14 @@ function EstimatePill({ estimate }: { estimate?: number }) {
 function CardAssignees({ assignees }: { assignees: BoardMember[] }) {
     if (assignees.length === 0) return null
 
+    const visible = assignees.slice(0, MAX_ASSIGNEES)
+    const overflow = assignees.length - visible.length
     // Named so a test can assert the face shows assignees without matching on
     // avatar INITIALS, which are one letter and collide with card titles and
     // keys. The watchers row beside it already carries its own testID.
     return (
-        <View className="flex-row" testID="boards-card-assignees">
-            {assignees.map((member, index) => (
+        <View className="shrink-0 flex-row items-center" testID="boards-card-assignees">
+            {visible.map((member, index) => (
                 <View
                     key={member.id}
                     className={`rounded-full border-2 border-card ${index > 0 ? '-ml-1.5' : ''}`}
@@ -753,6 +782,9 @@ function CardAssignees({ assignees }: { assignees: BoardMember[] }) {
                     />
                 </View>
             ))}
+            {overflow > 0 ? (
+                <Text className="text-[10px] font-medium text-muted ml-1">+{overflow}</Text>
+            ) : null}
         </View>
     )
 }
