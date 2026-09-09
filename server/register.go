@@ -90,6 +90,11 @@ func registerShared(app *pocketbase.PocketBase) {
 	// it until this runs; see oauth.Package for the shape.
 	oauth.RegisterPackage(oauthPackage())
 
+	// Which of our public pages a third-party site may frame. Same inversion
+	// as the scopes above: the answer lives on a boards_share_links row that
+	// only we can read, so core asks us rather than knowing our routes.
+	registerEmbedPolicy(app)
+
 	// A departing user's authored comments and uploaded attachments reassign
 	// rather than cascade — the board keeps its history. Every one of these
 	// relations is cascadeDelete:false in the migration, which is the shape

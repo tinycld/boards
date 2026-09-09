@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/pocketbase/dbx"
@@ -113,3 +115,106 @@ var shareLinkLimiter = ratelimit.New(60, time.Minute)
 // are what make the code safe; this bounds how fast someone can attack it from
 // one host, and in-memory state does not hold across instances.
 var otpLimiter = ratelimit.New(10, time.Minute)
+
+// maxEmbedDomains bounds how many origins one link may name. A closed bound,
+// like allowedExpiryDays: a board is framed on a handful of pages, and an
+// unbounded list would be written straight into a response header.
+const maxEmbedDomains = 10
+
+// parseEmbedDomains normalizes the origins a link may be framed at.
+//
+// Returns the canonical, space-separated form to store. An empty result means
+// NOT EMBEDDABLE, which is the default and the safe direction.
+//
+// What counts as an origin here is deliberately narrow — scheme + host +
+// optional port, nothing else — because the value's only destination is a
+// `frame-ancestors` directive, and CSP gives no quoting: a stray space, semi-
+// colon or newline in a stored value does not corrupt one origin, it changes
+// which directives the browser sees. Rejecting explicitly rather than
+// sanitizing is the same discipline validShareRole applies to roles; a value
+// that survives this function is safe to concatenate.
+//
+// No wildcards in this first cut. `*.example.com` is a meaningful and common
+// ask, but it is also the form that turns one compromised subdomain into a
+// framing grant, so it is a decision to take deliberately rather than inherit
+// from a permissive parser.
+func parseEmbedDomains(raw string) (string, error) {
+	fields := strings.Fields(raw)
+	if len(fields) == 0 {
+		return "", nil
+	}
+	if len(fields) > maxEmbedDomains {
+		return "", fmt.Errorf("at most %d embed domains", maxEmbedDomains)
+	}
+
+	out := make([]string, 0, len(fields))
+	seen := make(map[string]bool, len(fields))
+	for _, field := range fields {
+		origin, err := parseEmbedOrigin(field)
+		if err != nil {
+			return "", err
+		}
+		if seen[origin] {
+			continue
+		}
+		seen[origin] = true
+		out = append(out, origin)
+	}
+	return strings.Join(out, " "), nil
+}
+
+// parseEmbedOrigin validates one origin and returns its canonical form.
+func parseEmbedOrigin(raw string) (string, error) {
+	// A bare host is the mistake everyone makes, and it is ambiguous rather
+	// than wrong: `example.com` in frame-ancestors matches BOTH schemes. Say
+	// so instead of guessing which one the owner meant.
+	if !strings.Contains(raw, "://") {
+		return "", fmt.Errorf("%q must include a scheme, e.g. https://%s", raw, raw)
+	}
+
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("%q is not a valid origin", raw)
+	}
+	if u.Scheme != "https" && u.Scheme != "http" {
+		return "", fmt.Errorf("%q must use http or https", raw)
+	}
+	if u.Host == "" {
+		return "", fmt.Errorf("%q is missing a host", raw)
+	}
+	// Anything past the origin is silently ignored by the browser, so storing
+	// it would leave an owner believing they had scoped a grant to one page.
+	if (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" ||
+		u.User != nil {
+		return "", fmt.Errorf("%q must be an origin only, with no path or credentials", raw)
+	}
+	if strings.ContainsAny(u.Host, "*") {
+		return "", fmt.Errorf("%q may not use a wildcard", raw)
+	}
+	// Belt and braces over the checks above: these are the characters that
+	// would let a stored value forge a second CSP directive.
+	if strings.ContainsAny(raw, " \t\r\n;,'\"") {
+		return "", fmt.Errorf("%q contains an unsupported character", raw)
+	}
+
+	return u.Scheme + "://" + u.Host, nil
+}
+
+// embedDomainsFor returns the origins that may frame the link this token names,
+// or nil when the token is unknown, dead, or not embeddable.
+//
+// Reads through resolveLiveLink so revocation and expiry govern framing exactly
+// as they govern reading — a revoked link must stop being embeddable at the
+// same instant it stops being readable, and sharing the resolver is what stops
+// those two from drifting.
+func embedDomainsFor(app core.App, token string) []string {
+	link, _, _, _ := resolveLiveLink(app, token)
+	if link == nil {
+		return nil
+	}
+	domains := strings.Fields(link.GetString("embed_domains"))
+	if len(domains) == 0 {
+		return nil
+	}
+	return domains
+}
