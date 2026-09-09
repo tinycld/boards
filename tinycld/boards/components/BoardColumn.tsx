@@ -234,7 +234,14 @@ export const BoardColumn = memo(function BoardColumn({
                 className={`bg-foreground/[0.04] rounded-[14px] p-1.5 max-h-full border-2 ${
                     isReceiving ? 'border-ring' : 'border-transparent'
                 }`}
-                style={{ width: isCollapsed ? COLLAPSED_COLUMN_WIDTH : COLUMN_WIDTH }}
+                // minHeight:0 for the same reason as the card ScrollView below:
+                // this box is capped at the canvas height, and without it its
+                // own automatic minimum floors it at the card stack's height,
+                // so the cap never bites and nothing inside can shrink.
+                style={{
+                    width: isCollapsed ? COLLAPSED_COLUMN_WIDTH : COLUMN_WIDTH,
+                    minHeight: 0,
+                }}
             >
                 {!isCollapsed ? (
                     <View className="flex-row items-center gap-2 pl-3 pr-2.5 py-2">
@@ -867,6 +874,13 @@ const ColumnCards = memo(function ColumnCards({
             sortable={sortable}
             scrollRef={scrollRef}
             draxViewProps={{
+                // This DraxView is the link between the height-capped column
+                // box and the card ScrollView below. Unstyled it sizes to its
+                // content, so the ScrollView has nothing to shrink against and
+                // never becomes a scroll region: web silently clips at
+                // max-h-full and native spills past it, shoving the composer
+                // out. SortableContainer merges this into its own style.
+                style: { flex: 1, minHeight: 0 },
                 registration: registration =>
                     registerMeasure(list.id, registration ? () => registration.measure() : null),
                 onMonitorDragEnter: updateReceiving,
@@ -878,7 +892,11 @@ const ColumnCards = memo(function ColumnCards({
         >
             <ScrollView
                 ref={scrollRef}
-                className="shrink"
+                // minHeight:0 is the load-bearing half: a flex child's automatic
+                // minimum size floors it at its content height, so flexShrink
+                // alone can never take it below the card stack and no overflow
+                // — hence no scrolling — ever occurs.
+                style={{ flex: 1, minHeight: 0 }}
                 contentContainerClassName="gap-2 p-0.5"
                 // A finger-sized landing area when the column has no cards. No
                 // empty-state text: the composer below is the affordance, and
