@@ -46,6 +46,17 @@ export interface PublicBoardRouteInput {
     isTokenRejected: boolean
     /** Which refusal it was. Ignored unless `isTokenRejected`. */
     rejectionReason?: PublicBoardGoneReason
+    /**
+     * The board is being rendered inside a third-party page (`?embed=1`).
+     *
+     * Suppresses the redirect below, and nothing else. An embed must render the
+     * board it was pointed at, whoever happens to be looking: navigating the
+     * FRAME into the workspace would replace a widget on someone else's page
+     * with our signed-in app — visible only to members, so it is exactly the
+     * kind of bug that ships. The redirect is a courtesy for a person who
+     * followed a link, and an embed is not that.
+     */
+    isEmbed?: boolean
 }
 
 export function decidePublicBoardRoute(input: PublicBoardRouteInput): PublicBoardRoute {
@@ -74,7 +85,7 @@ export function decidePublicBoardRoute(input: PublicBoardRouteInput): PublicBoar
     // writable board at their granted role, with drag, shortcuts and everything
     // else. The read-only public view would be a strictly worse rendering of
     // something they fully own.
-    if (input.isSignedIn && input.isMember) {
+    if (input.isSignedIn && input.isMember && !input.isEmbed) {
         return { kind: 'redirect', href: appHref('boards') }
     }
 
