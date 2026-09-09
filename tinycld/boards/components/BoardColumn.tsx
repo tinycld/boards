@@ -86,6 +86,8 @@ interface BoardColumnProps {
      * of tiles, and a query each would be that many subscriptions.
      */
     reactionsForCard: (cardId: string) => readonly ReactionGroup[]
+    /** The board's ONE card-vote toggle, resolved in BoardCanvas. Stable. */
+    onToggleReaction: (cardId: string, emoji: string, groups: readonly ReactionGroup[]) => void
     reactorName: (userId: string) => string
     currentUserId: string
     /** Every column's rank, in render order — the menu's reorder and the
@@ -127,6 +129,7 @@ export const BoardColumn = memo(function BoardColumn({
     canEdit,
     agingDays,
     reactionsForCard,
+    onToggleReaction,
     reactorName,
     currentUserId,
 }: BoardColumnProps) {
@@ -293,6 +296,7 @@ export const BoardColumn = memo(function BoardColumn({
                         isSorted={isSorted}
                         agingDays={agingDays}
                         reactionsForCard={reactionsForCard}
+                        onToggleReaction={onToggleReaction}
                         reactorName={reactorName}
                         currentUserId={currentUserId}
                     />
@@ -752,6 +756,7 @@ interface ColumnCardsProps {
      * for drag correctness, so a fresh closure per render would defeat it.
      */
     reactionsForCard: (cardId: string) => readonly ReactionGroup[]
+    onToggleReaction: (cardId: string, emoji: string, groups: readonly ReactionGroup[]) => void
     reactorName: (userId: string) => string
     currentUserId: string
     list: BoardListView
@@ -793,6 +798,7 @@ const ColumnCards = memo(function ColumnCards({
     isSorted,
     agingDays,
     reactionsForCard,
+    onToggleReaction,
     reactorName,
     currentUserId,
 }: ColumnCardsProps) {
@@ -900,6 +906,7 @@ const ColumnCards = memo(function ColumnCards({
                                 canDrag={canEdit}
                                 agingDays={agingDays}
                                 reactions={reactionsForCard(card.id)}
+                                onToggleReaction={onToggleReaction}
                                 reactorName={reactorName}
                                 currentUserId={currentUserId}
                             />
