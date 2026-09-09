@@ -1,6 +1,7 @@
 import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
+import { usePopoverContext } from '@tinycld/core/ui/popover'
 import { Check } from 'lucide-react-native'
 import type { ReactNode } from 'react'
 import { Pressable, ScrollView, Text, View } from 'react-native'
@@ -49,6 +50,12 @@ const DUE_OPTIONS: { value: DueFilter; label: string }[] = [
  * need reopening for every label. The host decides what wraps this.
  */
 export function FilterPanel({ project, filter, onChange, onClear }: FilterPanelProps) {
+    // A sheet is as wide as the screen and scrolls its own body, so the panel
+    // drops both the popover's fixed width and its inner scroll cap: the width
+    // would leave the sheet mostly empty, and the cap would nest a ScrollView
+    // inside Sheet.Body's, which on native gives two competing scroll regions.
+    const { isSheet } = usePopoverContext()
+
     const toggleIn = (
         key: 'labelIds' | 'epicIds' | 'sprintIds' | 'assigneeIds' | 'reporterIds',
         id: string
@@ -79,7 +86,7 @@ export function FilterPanel({ project, filter, onChange, onClear }: FilterPanelP
         onChange({ estimate: filter.estimate === estimate ? null : estimate })
 
     return (
-        <View testID="boards-filter-panel" className="w-[280px]">
+        <View testID="boards-filter-panel" className={isSheet ? '' : 'w-[280px]'}>
             <View className="px-3 pt-3 pb-2">
                 <View className="border border-border rounded-md px-2.5 py-1.5">
                     <PlainInput
@@ -92,7 +99,7 @@ export function FilterPanel({ project, filter, onChange, onClear }: FilterPanelP
                     />
                 </View>
             </View>
-            <ScrollView style={{ maxHeight: 400 }}>
+            <ScrollView style={isSheet ? undefined : { maxHeight: 400 }}>
                 <Section title="Status">
                     {LIST_CATEGORIES.map(category => (
                         <OptionRow
