@@ -688,29 +688,45 @@ function CardMeta({
         !hasPills && card.assignees.length === 0 && watchers.length === 0 && reactions.length === 0
     if (isEmpty && !canReact) return null
 
+    // TWO children, not a flat list of pills. A flat row cannot express what
+    // this one needs, because the pills and the people want OPPOSITE things:
+    // the pills must stay a tight left cluster (their gaps are what let you
+    // scan a column of cards down its left edge — grow or justify them and the
+    // gap differs per card), while the people must sit right and, once the row
+    // wraps, fill the line they land on.
+    //
+    // Grouped, each gets its own rule. The pill group hugs; the people group
+    // `grow`s, which is per-LINE — alone on a wrapped line it fills the width,
+    // and inline it absorbs the slack a `grow` spacer used to. (A spacer cannot
+    // survive wrapping: it would eat line one and push the people to line two
+    // even when they fit.) The inner `justify-between` is what then holds the
+    // avatars against the right edge of that grown box, on either line.
     return (
-        <View className="flex-row items-center gap-2.5 min-h-[20px] overflow-hidden">
-            <SchedulePill start={card.start} due={card.due} dueHasTime={card.dueHasTime} />
-            <ChecklistPill done={card.checklistDone} total={card.checklistTotal} />
-            <SubtasksPill done={card.subtaskDone} total={card.subtaskTotal} />
-            <CommentsPill count={card.commentCount} />
-            <AttachmentsPill count={card.attachmentCount} />
-            <EstimatePill estimate={card.estimate} />
-            <View className="grow shrink-0 basis-0" />
-            {/* Capped like the watcher stack so a card with a dozen distinct
-                votes cannot blow out the tile — the open card shows them all. */}
-            <ReactionBar
-                groups={reactions}
-                targetId={card.id}
-                canReact={canReact}
-                onToggle={emoji => onToggleReaction(card.id, emoji, reactions)}
-                nameFor={reactorName}
-                currentUserId={currentUserId}
-                maxChips={MAX_TILE_REACTIONS}
-                testIDPrefix="boards-tile-reaction"
-            />
-            <CardWatchers watchers={watchers} cardId={card.id} />
-            <CardAssignees assignees={card.assignees} />
+        <View className="flex-row flex-wrap items-center gap-x-2.5 gap-y-1.5 min-h-[20px]">
+            <View className="shrink flex-row items-center gap-2.5" style={MIN_WIDTH_ZERO}>
+                <SchedulePill start={card.start} due={card.due} dueHasTime={card.dueHasTime} />
+                <ChecklistPill done={card.checklistDone} total={card.checklistTotal} />
+                <SubtasksPill done={card.subtaskDone} total={card.subtaskTotal} />
+                <CommentsPill count={card.commentCount} />
+                <AttachmentsPill count={card.attachmentCount} />
+                <EstimatePill estimate={card.estimate} />
+            </View>
+            <View className="grow flex-row items-center justify-between gap-2.5">
+                {/* Capped like the watcher stack so a card with a dozen distinct
+                    votes cannot blow out the tile — the open card shows them all. */}
+                <ReactionBar
+                    groups={reactions}
+                    targetId={card.id}
+                    canReact={canReact}
+                    onToggle={emoji => onToggleReaction(card.id, emoji, reactions)}
+                    nameFor={reactorName}
+                    currentUserId={currentUserId}
+                    maxChips={MAX_TILE_REACTIONS}
+                    testIDPrefix="boards-tile-reaction"
+                />
+                <CardWatchers watchers={watchers} cardId={card.id} />
+                <CardAssignees assignees={card.assignees} />
+            </View>
         </View>
     )
 }
