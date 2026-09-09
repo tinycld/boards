@@ -74,7 +74,11 @@ export function CardComposer({
                 accessibilityRole="button"
                 accessibilityLabel={label}
                 onPress={() => setIsOpen(true)}
-                className="flex-row items-center gap-2 px-2.5 py-2 rounded-[10px] hover:bg-foreground/5 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+                // shrink-0: the composer is the column's footer, and the card
+                // scroll area above it is what must yield when the stack is
+                // taller than the column. Without this the flex algorithm
+                // squeezes the composer out past the column's clip instead.
+                className="shrink-0 flex-row items-center gap-2 px-2.5 py-2 rounded-[10px] hover:bg-foreground/5 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
             >
                 <Plus size={14} color={mutedColor} strokeWidth={2.2} />
                 <Text className="text-[13px] font-medium text-muted">{label}</Text>
@@ -83,7 +87,7 @@ export function CardComposer({
     }
 
     return (
-        <View className="p-0.5">
+        <View className="shrink-0 p-0.5">
             <View className="bg-background rounded-[10px] px-2.5 py-2 border border-foreground/10">
                 <PlainInput
                     ref={inputRef}
