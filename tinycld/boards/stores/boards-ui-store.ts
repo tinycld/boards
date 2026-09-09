@@ -2,6 +2,24 @@ import { asyncStorage, create, persist } from '@tinycld/core/lib/store'
 import { type BoardFilter, EMPTY_FILTER } from '../lib/board-filter'
 import { type BoardSort, MANUAL_SORT } from '../lib/board-sort'
 
+/**
+ * Where a new list is being composed: `'end'` for the trailing rail, or
+ * `before:<listId>` for the gap in front of that column.
+ *
+ * A STRING, not `{ beforeListId }` — every seam subscribes with
+ * `s => s.addListSlot === mySlot`, and zustand compares selector output by
+ * identity, so an object would re-render every seam on every store write.
+ * Naming the neighbour rather than an index also survives a realtime reorder:
+ * an index would silently point at a different gap once someone else moves a
+ * column.
+ */
+export type AddListSlot = 'end' | `before:${string}`
+
+/** The slot for the gap in front of `listId`. */
+export function slotBefore(listId: string): AddListSlot {
+    return `before:${listId}`
+}
+
 interface BoardsUIState {
     activeProjectId: string | null
     setActiveProject: (projectId: string) => void
@@ -133,9 +151,18 @@ interface BoardsUIState {
      */
     composerOpenListId: string | null
     openComposer: (listId: string | null) => void
-    /** The board's single "add list" composer — same idea, one instance. */
-    isAddListOpen: boolean
-    setAddListOpen: (isOpen: boolean) => void
+    /**
+     * Where the "add list" composer is open, or null when it is closed.
+     *
+     * A SLOT rather than a boolean because a list can be added anywhere on the
+     * board, not only after the last column: `'end'` is the trailing rail, and
+     * a list id means "in the gap before that column". One value for the whole
+     * board keeps the invariant the card composer has — only one open at a
+     * time — and every seam reads it as `s.addListSlot === mySlot`, so opening
+     * one re-renders only the two seams involved.
+     */
+    addListSlot: AddListSlot | null
+    setAddListSlot: (slot: AddListSlot | null) => void
     /**
      * The picker a keyboard shortcut opened on the CANVAS, where the card's
      * properties are not on screen — `d`/`l`/`a`/`p` open one against the
@@ -402,8 +429,8 @@ export const useBoardsUIStore = create<BoardsUIState>()(
                 toggleCompactCards: () => set(s => ({ isCompactCards: !s.isCompactCards })),
                 composerOpenListId: null,
                 openComposer: listId => set({ composerOpenListId: listId }),
-                isAddListOpen: false,
-                setAddListOpen: isOpen => set({ isAddListOpen: isOpen }),
+                addListSlot: null,
+                setAddListSlot: slot => set({ addListSlot: slot }),
                 openPickerFor: null,
                 openCanvasPicker: picker => set({ openPickerFor: picker }),
                 isArchivedPanelOpen: false,

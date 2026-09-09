@@ -8,6 +8,7 @@ import {
     Gauge,
     MoreHorizontal,
     Pencil,
+    Plus,
     Trash2,
 } from 'lucide-react-native'
 import { useState } from 'react'
@@ -15,7 +16,7 @@ import { Pressable } from 'react-native'
 import { useDeleteList, useUpdateList } from '../hooks/useListMutations'
 import { categoryLabel, LIST_CATEGORIES, type ListCategory } from '../lib/list-category'
 import { rankForReorder } from '../lib/move'
-import { useBoardsUIStore } from '../stores/boards-ui-store'
+import { slotBefore, useBoardsUIStore } from '../stores/boards-ui-store'
 import type { BoardListRank, BoardListView } from '../types'
 import { CategoryGlyph } from './CategoryGlyph'
 import { WipLimitDialog } from './WipLimitDialog'
@@ -40,9 +41,10 @@ export function ColumnMenu({ list, listOrder, onRename }: ColumnMenuProps) {
     const mutedColor = useThemeColor('muted')
     const updateList = useUpdateList()
     const deleteList = useDeleteList()
-    // Only the setter — this menu renders only while the column is expanded,
-    // so it never needs to read the flag it writes.
+    // Only the setters — this menu renders only while the column is expanded,
+    // so it never needs to read the flags it writes.
     const toggleCollapsed = useBoardsUIStore(s => s.toggleColumnCollapsed)
+    const setAddListSlot = useBoardsUIStore(s => s.setAddListSlot)
 
     const index = listOrder.findIndex(candidate => candidate.id === list.id)
     const canMoveLeft = index > 0
@@ -93,6 +95,26 @@ export function ColumnMenu({ list, listOrder, onRename }: ColumnMenuProps) {
                     icon={ArrowRight}
                     onSelect={() => move(1)}
                     isDisabled={!canMoveRight}
+                />
+                {/* Positioned inserts, next to the positioned moves — the two
+                    answer the same question about where a column sits. This is
+                    also the keyboard and screen-reader path to what the hover
+                    seams offer a pointer. */}
+                <Menu.Item
+                    label="Add list left"
+                    icon={Plus}
+                    onSelect={() => setAddListSlot(slotBefore(list.id))}
+                />
+                <Menu.Item
+                    label="Add list right"
+                    icon={Plus}
+                    onSelect={() => {
+                        const next = listOrder[index + 1]
+                        // Past the last column there is no neighbour to sit
+                        // before, so the trailing rail's append is the same
+                        // insertion.
+                        setAddListSlot(next ? slotBefore(next.id) : 'end')
+                    }}
                 />
                 <StatusSubmenu
                     selected={list.category}
