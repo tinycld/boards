@@ -226,20 +226,30 @@ export const BoardColumn = memo(function BoardColumn({
             // are the backstop that clears the bar.
             onMonitorDragEnd={() => setColumnDropSide(null)}
             onMonitorDragDrop={() => setColumnDropSide(null)}
-            style={{ maxHeight: '100%' }}
+            // `stretch` on the canvas gives this view the full canvas height,
+            // which is exactly what the inner box needs to resolve its own
+            // height against. The box below keeps the column visually only as
+            // tall as its cards.
+            style={{ minHeight: 0 }}
         >
             <View
                 // The border is always present (transparent at rest) so the
                 // receiving highlight never shifts layout.
-                className={`bg-foreground/[0.04] rounded-[14px] p-1.5 max-h-full border-2 ${
+                className={`bg-foreground/[0.04] rounded-[14px] p-1.5 border-2 ${
                     isReceiving ? 'border-ring' : 'border-transparent'
                 }`}
-                // minHeight:0 for the same reason as the card ScrollView below:
-                // this box is capped at the canvas height, and without it its
-                // own automatic minimum floors it at the card stack's height,
-                // so the cap never bites and nothing inside can shrink.
+                // maxHeight:100% now RESOLVES: the canvas stretches this box's
+                // parent to the canvas height, so the percentage has a definite
+                // height to read. alignSelf:flex-start keeps a short column
+                // sized to its own cards instead of stretching to full height.
+                // minHeight:0 for the same reason as the card ScrollView below
+                // — without it this box's automatic minimum floors it at the
+                // card stack's height, so the cap never bites and nothing
+                // inside can shrink.
                 style={{
                     width: isCollapsed ? COLLAPSED_COLUMN_WIDTH : COLUMN_WIDTH,
+                    maxHeight: '100%',
+                    alignSelf: 'flex-start',
                     minHeight: 0,
                 }}
             >
