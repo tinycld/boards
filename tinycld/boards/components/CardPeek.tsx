@@ -3,9 +3,12 @@ import { type Shortcut, useRegisterShortcuts, useShortcutScope } from '@tinycld/
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useDeviceInsets } from '@tinycld/core/lib/use-safe-area'
 import { useOverlayLayer } from '@tinycld/core/ui/overlay'
+import { useSwipeToDismiss } from '@tinycld/core/ui/swipe-dismiss'
 import { useFocusEffect, useRouter } from 'expo-router'
 import { type RefObject, useCallback, useMemo, useRef, useState } from 'react'
-import { Platform, Pressable, StyleSheet, View } from 'react-native'
+import { Platform, Pressable, StyleSheet, type View } from 'react-native'
+import { GestureDetector } from 'react-native-gesture-handler'
+import Animated from 'react-native-reanimated'
 import { useProjectRole } from '../hooks/useProjectRole'
 import { type CardEntry, findCardEntry, flattenCards, neighborCardId } from '../lib/board-cards'
 import { cardHref } from '../lib/board-route'
@@ -104,6 +107,17 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
     const { canEdit } = useProjectRole(project.id)
     const insets = useDeviceInsets()
     const titleRef = useRef<EditableTextHandle>(null)
+    // Swipe the panel toward its own edge to dismiss it — the touch gesture that
+    // replaces the ✕ and Escape a phone reader does not have. Native only; the
+    // hook is inert on web, where the board behind must stay operable and a live
+    // detector risks the pointer-event interceptions this surface has already
+    // paid for once. The panel's full travel is a known constant here, unlike a
+    // shared Drawer's percentage width.
+    const { gesture, animatedStyle } = useSwipeToDismiss({
+        anchor: 'right',
+        onClose: closeCard,
+        distance: PEEK_WIDTH + insets.right,
+    })
     // The panel's own node, so the layer stack knows what counts as INSIDE the
     // peek — a press in here must not dismiss it.
     const panelRef = useRef<View>(null)
@@ -120,57 +134,62 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
     return (
         <>
             <PeekBackdrop onPress={closeCard} panelRef={panelRef} />
-            <View
-                ref={panelRef}
-                // Scopes assertions to the open card. Several values render
-                // BOTH here and on the board face behind it (the title, the due
-                // chip, the checklist ratio), so an unscoped query matches two
-                // elements and fails strict mode.
-                testID="boards-card-peek"
-                // The workspace pane insets its content on the housing side in
-                // landscape, so a right-anchored panel stops short of the
-                // physical edge with a band of app background beside it. Extend
-                // the panel under the housing and pad its CONTENT clear; the
-                // wash below is absolute, so it ignores the padding and paints
-                // to the true edge.
-                className="absolute top-0 bottom-0 max-w-[94%] bg-card border-l border-border shadow-xl"
-                style={{
-                    zIndex: 20,
-                    right: -insets.right,
-                    width: PEEK_WIDTH + insets.right,
-                    paddingRight: insets.right,
-                }}
-            >
-                <ProjectWash color={project.color} height={180} />
-                <CardHeaderToolbar
-                    project={project}
-                    entry={entry}
-                    canEdit={canEdit}
-                    onDismiss={closeCard}
-                    onExpand={expandCard}
-                    onClose={closeCard}
-                />
-                <CardDetail
-                    // Remounts on card switch. The description editor binds to
-                    // ONE Yjs fragment for its lifetime, so switching cards has
-                    // to tear it down and rebind. Keying here rather than on the
-                    // editor is what lets CardDetail own the editor hook, which
-                    // stickyHeaderIndices needs in order to place the toolbar as
-                    // a direct child of the ScrollView.
-                    key={entry.card.id}
-                    card={entry.card}
-                    variant="peek"
-                    projectId={project.id}
-                    projectLabels={project.labels}
-                    projectEpics={project.epics}
-                    projectSprints={project.sprints}
-                    sprintsEnabled={project.sprintsEnabled}
-                    projectMembers={project.members}
-                    projectLists={project.lists}
-                    projectCards={boardCards}
-                    titleRef={titleRef}
-                />
-            </View>
+            <GestureDetector gesture={gesture}>
+                <Animated.View
+                    ref={panelRef}
+                    // Scopes assertions to the open card. Several values render
+                    // BOTH here and on the board face behind it (the title, the due
+                    // chip, the checklist ratio), so an unscoped query matches two
+                    // elements and fails strict mode.
+                    testID="boards-card-peek"
+                    // The workspace pane insets its content on the housing side in
+                    // landscape, so a right-anchored panel stops short of the
+                    // physical edge with a band of app background beside it. Extend
+                    // the panel under the housing and pad its CONTENT clear; the
+                    // wash below is absolute, so it ignores the padding and paints
+                    // to the true edge.
+                    className="absolute top-0 bottom-0 max-w-[94%] bg-card border-l border-border shadow-xl"
+                    style={[
+                        {
+                            zIndex: 20,
+                            right: -insets.right,
+                            width: PEEK_WIDTH + insets.right,
+                            paddingRight: insets.right,
+                        },
+                        animatedStyle,
+                    ]}
+                >
+                    <ProjectWash color={project.color} height={180} />
+                    <CardHeaderToolbar
+                        project={project}
+                        entry={entry}
+                        canEdit={canEdit}
+                        onDismiss={closeCard}
+                        onExpand={expandCard}
+                        onClose={closeCard}
+                    />
+                    <CardDetail
+                        // Remounts on card switch. The description editor binds to
+                        // ONE Yjs fragment for its lifetime, so switching cards has
+                        // to tear it down and rebind. Keying here rather than on the
+                        // editor is what lets CardDetail own the editor hook, which
+                        // stickyHeaderIndices needs in order to place the toolbar as
+                        // a direct child of the ScrollView.
+                        key={entry.card.id}
+                        card={entry.card}
+                        variant="peek"
+                        projectId={project.id}
+                        projectLabels={project.labels}
+                        projectEpics={project.epics}
+                        projectSprints={project.sprints}
+                        sprintsEnabled={project.sprintsEnabled}
+                        projectMembers={project.members}
+                        projectLists={project.lists}
+                        projectCards={boardCards}
+                        titleRef={titleRef}
+                    />
+                </Animated.View>
+            </GestureDetector>
         </>
     )
 }
