@@ -258,4 +258,35 @@ test.describe('Boards — card votes', () => {
         if (!cardBox || !stackBox) return
         expect(stackBox.x + stackBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width)
     })
+
+    test('the chips sit right on a card with no people on it', async ({ page }) => {
+        // The right half of the row was held in place by `justify-between`,
+        // which needs TWO children to have anything to spread. The watcher and
+        // assignee stacks each render nothing when empty, so a card with a vote
+        // but nobody on it was left with one child and the chips collapsed to
+        // the left — putting the reaction column in a different place depending
+        // on whether anyone happened to be assigned. A leading spacer holds it
+        // steady whether or not anything precedes the chips.
+        await login(page)
+        await navigateToPackage(page, 'boards')
+        await createBoard(page, `vote-nobody-${Date.now()}`)
+        await addCard(page, 0, CARD_TITLE)
+
+        // Deliberately NOT assigned: an empty people stack is the whole point.
+        await voteOnTile(page, CARD_TITLE, 'rocket', ROCKET)
+        await expect(tileChip(page, ROCKET)).toContainText('1')
+
+        const face = boardCard(page, CARD_TITLE)
+        await expect(face.getByTestId('boards-card-assignees')).toHaveCount(0)
+
+        // The add button trails the chips, so it is the row's right edge. It
+        // should sit near the card's, not way off left beside the title.
+        const cardBox = await face.boundingBox()
+        const addBox = await face.getByTestId('boards-tile-reaction-add').boundingBox()
+        expect(cardBox).not.toBeNull()
+        expect(addBox).not.toBeNull()
+        if (!cardBox || !addBox) return
+        const gap = cardBox.x + cardBox.width - (addBox.x + addBox.width)
+        expect(gap).toBeLessThan(24)
+    })
 })
