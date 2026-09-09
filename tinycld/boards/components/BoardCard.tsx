@@ -698,9 +698,16 @@ function CardMeta({
     // Grouped, each gets its own rule. The pill group hugs; the people group
     // `grow`s, which is per-LINE — alone on a wrapped line it fills the width,
     // and inline it absorbs the slack a `grow` spacer used to. (A spacer cannot
-    // survive wrapping: it would eat line one and push the people to line two
-    // even when they fit.) The inner `justify-between` is what then holds the
-    // avatars against the right edge of that grown box, on either line.
+    // survive wrapping at the ROW level: it would eat line one and push the
+    // people to line two even when they fit.) Inside the grown box the spacer
+    // comes FIRST, which pins everything after it to the right edge.
+    //
+    // A leading spacer rather than `justify-between` or a spacer between the
+    // two, because the watcher and assignee stacks each render nothing when
+    // empty: with either of those, a card carrying a vote but nobody on it
+    // would fall back to left-aligned chips, so the reaction column would
+    // land in a different place depending on whether anyone happened to be
+    // assigned. One spacer in front holds that column steady on every card.
     return (
         <View className="flex-row flex-wrap items-center gap-x-2.5 gap-y-1.5 min-h-[20px]">
             <View className="shrink flex-row items-center gap-2.5" style={MIN_WIDTH_ZERO}>
@@ -711,7 +718,10 @@ function CardMeta({
                 <AttachmentsPill count={card.attachmentCount} />
                 <EstimatePill estimate={card.estimate} />
             </View>
-            <View className="grow flex-row items-center justify-between gap-2.5">
+            <View className="grow flex-row items-center gap-2.5">
+                <View className="grow shrink basis-0" style={MIN_WIDTH_ZERO} />
+                <CardWatchers watchers={watchers} cardId={card.id} />
+                <CardAssignees assignees={card.assignees} />
                 {/* Capped like the watcher stack so a card with a dozen distinct
                     votes cannot blow out the tile — the open card shows them all. */}
                 <ReactionBar
@@ -724,8 +734,6 @@ function CardMeta({
                     maxChips={MAX_TILE_REACTIONS}
                     testIDPrefix="boards-tile-reaction"
                 />
-                <CardWatchers watchers={watchers} cardId={card.id} />
-                <CardAssignees assignees={card.assignees} />
             </View>
         </View>
     )
