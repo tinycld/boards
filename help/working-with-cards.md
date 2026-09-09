@@ -75,8 +75,9 @@ there.
 
 To fit more cards on screen, click the rows button in the board's top bar to
 **Hide card details**. Cards shrink to a single line, keeping the title, who
-it's assigned to, and its due date — labels stay as colored dots. Click the
-button again to bring the full cards back.
+it's assigned to, its due date, and any reactions — labels stay as colored
+dots. On this narrower card you can see reactions but not add them; use the
+full card or open it. Click the button again to bring the full cards back.
 
 ## Reordering a checklist
 
@@ -234,6 +235,26 @@ Priority is also available to [board rules](help://boards:rules): a rule can
 react when a card's priority changes, and can set a card's priority as its
 action.
 
+## Reacting to a card
+
+To react to a card, click the smiley on it and pick an emoji. The reaction
+appears as a chip with a count, and you can react from the board itself or
+from the open card — either way it is the same reaction, and both places show
+it.
+
+Click a chip to add yours to it, and click it again to take yours back. Hover
+a chip to see who reacted. Reacting never opens the card, so you can work
+down a column without losing your place.
+
+A card with room for only a few chips shows the first few and a **+N** marker
+for the rest; open the card to see them all. Anyone who can comment on a board
+can react, and anyone who can see the card — including people reading a shared
+board by link — sees the reactions.
+
+Reactions on a card are counted separately from reactions on its individual
+comments — a rocket on the card and a rocket on a comment are two different
+things.
+
 ## Estimates
 
 An estimate says how big a card is, in points. To set one, open the card and
@@ -344,10 +365,19 @@ longer comment does not send itself half-written. Reply to a comment to keep a
 thread together.
 
 To react to a comment without writing one, click the smiley under it and pick
-an emoji — a thumbs up, a heart, a laugh, a party, eyes, or a rocket. The
-reaction appears as a chip with a count; click a chip to add yours to it or
-take yours back. Anyone who can comment can react, and anyone who can see the
-card, including people reading a shared board by link, sees the reactions.
+an emoji. The picker opens on the emoji you use most, and you can jump to a
+category with the icons along the top or type in the search box to find one by
+name — "party", "rocket", "thinking". Set a skin tone with the hand beside the
+search box and it is remembered for next time, on every device you sign in on.
+
+The reaction appears as a chip with a count; click a chip to add yours to it
+or take yours back. An emoji picked in a skin tone counts on its own, so a
+thumbs up and a thumbs up in a different tone sit side by side rather than
+merging. Anyone who can comment can react, and anyone who can see the card,
+including people reading a shared board by link, sees the reactions.
+
+Country flags are not in the picker. A reaction set from somewhere else still
+shows on the card, but the picker will not find one to add.
 
 To fix or expand one of your own comments, click it — it opens for editing
 with the same formatting buttons. Save (⌘↩, or clicking elsewhere) keeps the

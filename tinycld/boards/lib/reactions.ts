@@ -1,81 +1,49 @@
-// Comment reactions: the palette, and how a card's reaction rows fold into
-// the per-comment bar.
+// Reactions: the boards-specific half.
 //
-// The schema (pb-migrations/1980000013) fixes the six emoji; this module
-// fixes their order and their names, so the bar renders in one stable order
-// however the rows arrive and every chip has an accessible name.
+// The fold, the chip model and the UI are core's
+// (@tinycld/core/lib/reactions/group, @tinycld/core/ui/reactions) — none of
+// it is specific to a board. What lives here is how THIS package keys its two
+// reactions tables, and how it turns a user id into a name.
 
-import type { BoardsCommentReactions } from '../types'
+import { parseNativeEmoji } from '@tinycld/core/lib/emoji/parse'
+import { groupReactions, type ReactionGroup } from '@tinycld/core/lib/reactions/group'
+import type { BoardMember, BoardsCardReactions, BoardsCommentReactions } from '../types'
+import { anonymousMember } from './board-project'
 
-export const REACTION_PALETTE = ['👍', '❤️', '😄', '🎉', '👀', '🚀'] as const
+export { reactionKey } from '@tinycld/core/lib/reactions/group'
+export type { ReactionGroup }
 
-export type ReactionEmoji = (typeof REACTION_PALETTE)[number]
-
-/** Stable, ASCII names — for accessibility labels and test ids. */
-export const REACTION_KEYS: Record<ReactionEmoji, string> = {
-    '👍': 'thumbs_up',
-    '❤️': 'heart',
-    '😄': 'laugh',
-    '🎉': 'party',
-    '👀': 'eyes',
-    '🚀': 'rocket',
+/** The inverse of reactionKey, for turning a stored key back into a glyph. */
+export function reactionFromKey(key: string): string {
+    return parseNativeEmoji(key)
 }
 
-export const REACTION_LABELS: Record<ReactionEmoji, string> = {
-    '👍': 'Thumbs up',
-    '❤️': 'Heart',
-    '😄': 'Laugh',
-    '🎉': 'Party',
-    '👀': 'Eyes',
-    '🚀': 'Rocket',
+type CommentReactionRow = Pick<BoardsCommentReactions, 'id' | 'comment' | 'user' | 'emoji'>
+type CardReactionRow = Pick<BoardsCardReactions, 'id' | 'card' | 'user' | 'emoji'>
+
+/** Comment reactions, folded per comment. */
+export function groupCommentReactions(rows: readonly CommentReactionRow[], userId: string) {
+    return groupReactions(rows, userId, row => row.comment)
 }
 
-export function isReactionEmoji(raw: string): raw is ReactionEmoji {
-    return REACTION_PALETTE.includes(raw as ReactionEmoji)
+/** Card votes, folded per card. */
+export function groupCardReactions(rows: readonly CardReactionRow[], userId: string) {
+    return groupReactions(rows, userId, row => row.card)
 }
-
-export interface ReactionGroup {
-    emoji: ReactionEmoji
-    count: number
-    /** The caller's own row for this emoji, so a toggle can delete without a lookup. */
-    ownId: string | null
-}
-
-type ReactionRow = Pick<BoardsCommentReactions, 'id' | 'comment' | 'user' | 'emoji'>
 
 /**
- * Rows → one group per (comment, emoji), in palette order. A comment with no
- * reactions has no entry. An emoji outside the palette can only arrive
- * through a schema edit and is dropped rather than rendered nameless.
+ * A name lookup for the chip tooltip.
+ *
+ * Falls back to anonymousMember for an id the caller cannot resolve — a
+ * share-link visitor can read reactions but not the `users` rows behind them,
+ * and this is the same "Board member" placeholder assignees already use, so
+ * the tooltip discloses nothing new.
  */
-export function groupReactions(
-    rows: readonly ReactionRow[],
-    userId: string
-): Map<string, ReactionGroup[]> {
-    const byComment = new Map<string, Map<ReactionEmoji, ReactionGroup>>()
-    for (const row of rows) {
-        if (!isReactionEmoji(row.emoji)) continue
-        let groups = byComment.get(row.comment)
-        if (!groups) {
-            groups = new Map()
-            byComment.set(row.comment, groups)
-        }
-        let group = groups.get(row.emoji)
-        if (!group) {
-            group = { emoji: row.emoji, count: 0, ownId: null }
-            groups.set(row.emoji, group)
-        }
-        group.count += 1
-        if (userId !== '' && row.user === userId) group.ownId = row.id
+export function reactorNameLookup(
+    membersById: ReadonlyMap<string, BoardMember>
+): (userId: string) => string {
+    return userId => {
+        const member = membersById.get(userId) ?? anonymousMember(userId)
+        return `${member.firstName} ${member.lastName}`.trim()
     }
-
-    const out = new Map<string, ReactionGroup[]>()
-    for (const [commentId, groups] of byComment) {
-        const ordered = REACTION_PALETTE.flatMap(emoji => {
-            const group = groups.get(emoji)
-            return group ? [group] : []
-        })
-        out.set(commentId, ordered)
-    }
-    return out
 }

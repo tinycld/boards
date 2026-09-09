@@ -181,9 +181,14 @@ tinycld boards card react <comment-id> thumbs_up    # or the emoji itself
 tinycld boards card unreact <comment-id> thumbs_up
 ```
 
-The six reactions are `thumbs_up`, `heart`, `laugh`, `party`, `eyes` and
-`rocket`. You can paste the emoji instead if you have it to hand; the name is
-easier to type in a terminal.
+Any emoji the board accepts can be used — paste it directly, or use one of
+these shorthands, which are easier to type in a terminal:
+
+`thumbs_up`, `thumbs_down`, `heart`, `laugh`, `party`, `eyes`, `rocket`,
+`fire`, `clap`, `thinking`, `check`, `cross`.
+
+Skin tones work too, if you paste one: a toned emoji counts as its own
+reaction rather than joining the untoned one. Country flags are not accepted.
 
 Comment ids come from `card view --json`. `card view` shows the counts under
 each comment. `unreact` removes only your own reaction — no one can take back

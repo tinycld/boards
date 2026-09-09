@@ -2,15 +2,18 @@ import { DropZone } from '@tinycld/core/components/DropZone'
 import { MARKDOWN_TRAILING_SPACE } from '@tinycld/core/components/help/MarkdownRenderer'
 import { useUploadsForScope } from '@tinycld/core/file-viewer/upload-store'
 import { useAuth } from '@tinycld/core/lib/auth'
+import { ReactionBar } from '@tinycld/core/ui/reactions'
 import { type RefObject, useMemo, useRef, useState } from 'react'
 import { ScrollView, Text, View } from 'react-native'
 import { useAttachmentMutations } from '../../hooks/useAttachmentMutations'
 import { useCardDetail } from '../../hooks/useCardDetail'
 import { useCardLinks } from '../../hooks/useCardLinks'
 import { useUpdateCard } from '../../hooks/useCardMutations'
+import { useCardReactions } from '../../hooks/useCardReactions'
 import { useCommentMutations } from '../../hooks/useCommentMutations'
 import { useCommentReactions } from '../../hooks/useCommentReactions'
 import { useProjectRole } from '../../hooks/useProjectRole'
+import { useReactorNames } from '../../hooks/useReactorNames'
 import { type SectionKey, visibleSections } from '../../lib/card-sections'
 import { type DescriptionMode, descriptionMode } from '../../lib/description-mode'
 import { childrenOf } from '../../lib/subtasks'
@@ -46,13 +49,14 @@ type DetailVariant = 'peek' | 'page'
 
 /**
  * Which ScrollView child the description header is, counting from zero:
- * title, properties, HEADER (label / toolbar), editor, attachments, checklist,
- * sub-tasks, activity.
+ * title, properties, REACTIONS, HEADER (label / toolbar), editor, attachments,
+ * checklist, sub-tasks, activity.
  *
  * Keep in step with the JSX below. React Native pins by index, so a section
- * inserted above it silently pins the wrong thing rather than failing.
+ * inserted above it silently pins the wrong thing rather than failing — which
+ * is why adding the reaction row moved this from 2 to 3.
  */
-const TOOLBAR_INDEX = 2
+const TOOLBAR_INDEX = 3
 
 interface CardDetailProps {
     card: BoardCardView
@@ -139,6 +143,11 @@ export function CardDetail({
     )
     // Resolved here for the same reason — both containers share the gates.
     const { canEdit, canComment, isOwner } = useProjectRole(projectId)
+    const { reactions: cardReactions, toggleReaction: toggleCardReaction } = useCardReactions(
+        projectId,
+        card.id
+    )
+    const reactorName = useReactorNames()
     // The card's CHILDREN are not editable until the detail query has SETTLED,
     // and this is a correctness gate rather than a cosmetic one: before it
     // settles, an empty result is indistinguishable from a card that genuinely
@@ -160,6 +169,7 @@ export function CardDetail({
     // the default useAuth() turns that screen into an error boundary. Every
     // read below already tolerates a null user.
     const { user } = useAuth({ throwIfAnon: false })
+    const currentUserId = user?.id ?? ''
     const { uploadFiles } = useAttachmentMutations(card.id, projectId, user?.id ?? '')
     const { createComment, updateComment, deleteComment } = useCommentMutations(card.id, projectId)
     // Its own query, not a fifth join in useCardDetail — see the hook.
@@ -332,6 +342,20 @@ export function CardDetail({
                             projectMembers={projectMembers}
                             onManageLabels={() => setIsManagingLabels(true)}
                             canEdit={canEdit}
+                        />
+                    </View>
+                    {/* Votes on the card itself, directly above the
+                    description. Counted separately from the reactions on
+                    individual comments further down — this is the card. */}
+                    <View className={`px-6 pb-3 ${widthClass}`}>
+                        <ReactionBar
+                            groups={cardReactions}
+                            targetId={card.id}
+                            canReact={canComment}
+                            onToggle={toggleCardReaction}
+                            nameFor={reactorName}
+                            currentUserId={currentUserId}
+                            testIDPrefix="boards-card-reaction"
                         />
                     </View>
                     {/* Index TOOLBAR_INDEX — the sticky one. Always rendered, at a

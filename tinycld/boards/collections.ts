@@ -176,10 +176,19 @@ export function registerCollections(
     // Emoji on comments. On-demand like the comments they hang off; read
     // for the open card in one query keyed by `card` (see the migration for
     // why the row carries it). No expand: `user` resolves against the eager
-    // `users` store, and the bar only counts.
+    // `users` store, which the chip tooltip joins to name who reacted.
     const boards_comment_reactions = newCollection('boards_comment_reactions', {
         omitOnInsert: ['created'] as const,
         syncMode: 'on-demand' as const,
+        collectionOptions: indexed,
+    })
+
+    // Votes on cards themselves. EAGER, unlike the comment reactions above:
+    // the board face shows every card's chips, so the rows are read per
+    // BOARD rather than per open card, and an on-demand fetch would arrive
+    // after the tiles have already painted.
+    const boards_card_reactions = newCollection('boards_card_reactions', {
+        omitOnInsert: ['created'] as const,
         collectionOptions: indexed,
     })
 
@@ -204,6 +213,7 @@ export function registerCollections(
         boards_card_links,
         boards_card_watchers,
         boards_comment_reactions,
+        boards_card_reactions,
         boards_projects,
         boards_project_members,
         boards_share_links,

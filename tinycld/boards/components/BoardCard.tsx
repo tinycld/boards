@@ -1,6 +1,7 @@
 import { LabelBadge } from '@tinycld/core/components/LabelBadge'
 import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
+import { ReactionBar } from '@tinycld/core/ui/reactions'
 import {
     CalendarDays,
     CircleCheck,
@@ -22,6 +23,7 @@ import { formatSchedule } from '../lib/due-time'
 import { formatEstimate } from '../lib/estimate'
 import { isClosedCategory, type ListCategory } from '../lib/list-category'
 import type { CardPriority } from '../lib/priority'
+import type { ReactionGroup } from '../lib/reactions'
 import { sprintLabel } from '../lib/sprint'
 import { subtasksComplete } from '../lib/subtasks'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
@@ -43,6 +45,17 @@ const MIN_WIDTH_ZERO = { minWidth: 0 } as const
 // two overflow markers on a card face behave the same way.
 const MAX_WATCHERS = 3
 
+// Chips a tile shows before collapsing the rest into a +N marker. Three, like
+// the watcher stack beside it: the footer is a scanning aid, not the place to
+// read every reaction.
+const MAX_TILE_REACTIONS = 3
+
+/** Tighter on the dense face: one row, and the title needs the width. */
+const MAX_COMPACT_REACTIONS = 2
+
+/** The compact face's chips never toggle, so the callback is a stable no-op. */
+const NO_TOGGLE = () => {}
+
 // The assignee stack collapses at the same count as the watcher stack it sits
 // beside, so the two avatar rows on a face overflow identically. Uncapped, a
 // card assigned to a whole team was the one item on the meta row that could
@@ -50,6 +63,15 @@ const MAX_WATCHERS = 3
 const MAX_ASSIGNEES = 3
 
 interface BoardCardProps {
+    /** From the board-wide reactions query, resolved once per board. */
+    reactions: readonly ReactionGroup[]
+    /**
+     * The board's ONE toggle, resolved in BoardCanvas. Takes the groups it
+     * needs rather than reading them, so a tile never subscribes per card.
+     */
+    onToggleReaction: (cardId: string, emoji: string, groups: readonly ReactionGroup[]) => void
+    reactorName: (userId: string) => string
+    currentUserId: string
     card: BoardCardView
     projectId: string
     /** The status of the card's list; done and canceled render the closed face. */
@@ -119,7 +141,17 @@ function cardSelectedClass(isSelected: boolean, aging: AgingLevel) {
     return 'bg-card'
 }
 
-export function BoardCard({ card, projectId, category, canDrag, agingDays }: BoardCardProps) {
+export function BoardCard({
+    card,
+    projectId,
+    category,
+    canDrag,
+    agingDays,
+    reactions,
+    onToggleReaction,
+    reactorName,
+    currentUserId,
+}: BoardCardProps) {
     const { isOpen, isFocused, isSelected, onPress } = useCardPress(card.id)
     // canDrag doubles as the edit gate: both come from the same role check.
     const { isDropTarget, dropRef } = useCardFileDrop(card.id, projectId, canDrag)
@@ -155,10 +187,18 @@ export function BoardCard({ card, projectId, category, canDrag, agingDays }: Boa
     // detaches mid-transfer and an in-flight OS drop is lost. Same element type
     // + same hook order = the toggle is a re-render, not a remount.
     const layout = isCompact ? 'px-3 py-1.5 flex-row items-center gap-2' : 'px-3 py-2.5 gap-1.5'
+    // NOT accessibilityRole="button": the card CONTAINS buttons (the reaction
+    // chips and their picker), and react-native-web renders that role as a real
+    // <button> — nesting one inside another is invalid HTML and warns as a
+    // hydration error. Mail's EmailRow is the same shape and does the same
+    // thing: the row is a plain pressable, the controls inside it are buttons.
+    // Keyboard users reach a card through useBoardShortcuts (arrow keys, Enter
+    // to open), not native tab order, so the role was never what made this
+    // operable — the label below is what a screen reader announces.
     return (
         <Pressable
             ref={dropRef}
-            accessibilityRole="button"
+            accessibilityLabel={card.title}
             testID={`board-card-${card.id}`}
             onPress={onPress}
             className={`${cardSelectedClass(isSelected, aging)} border rounded-[10px] shadow-sm ${layout} ${canDrag ? 'web:cursor-grab' : ''} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${cardRingClass(
@@ -173,7 +213,15 @@ export function BoardCard({ card, projectId, category, canDrag, agingDays }: Boa
             <FocusMarker isFocused={isFocused} cardId={card.id} />
             <SelectedMarker isSelected={isSelected} cardId={card.id} />
             <AgingMarker aging={aging} cardId={card.id} />
-            <CardFace card={card} isCompact={isCompact} />
+            <CardFace
+                card={card}
+                isCompact={isCompact}
+                reactions={reactions}
+                onToggleReaction={onToggleReaction}
+                canReact={canDrag}
+                reactorName={reactorName}
+                currentUserId={currentUserId}
+            />
         </Pressable>
     )
 }
@@ -195,7 +243,23 @@ export function BoardCard({ card, projectId, category, canDrag, agingDays }: Boa
  * The done face is already this dense (a check and one line), so it is shared
  * across both densities rather than given a compact variant of its own.
  */
-function CardFace({ card, isCompact }: { card: BoardCardView; isCompact: boolean }) {
+function CardFace({
+    card,
+    isCompact,
+    reactions,
+    onToggleReaction,
+    canReact,
+    reactorName,
+    currentUserId,
+}: {
+    card: BoardCardView
+    isCompact: boolean
+    reactions: readonly ReactionGroup[]
+    onToggleReaction: (cardId: string, emoji: string, groups: readonly ReactionGroup[]) => void
+    canReact: boolean
+    reactorName: (userId: string) => string
+    currentUserId: string
+}) {
     if (isCompact) {
         return (
             <>
@@ -209,6 +273,24 @@ function CardFace({ card, isCompact }: { card: BoardCardView; isCompact: boolean
                     {card.title}
                 </Text>
                 <CompactDueIcon due={card.due} dueHasTime={card.dueHasTime} />
+                {/* Read-only here, unlike the standard face. The dense row's
+                    contract above is that it keeps what you SCAN a board by and
+                    drops the rest — an existing vote is a scanning cue, but the
+                    add button is an action, and this row has no width to spend
+                    on one. Adding still happens on the standard face or in the
+                    open card. Capped tighter than the standard face for the
+                    same reason. */}
+                <ReactionBar
+                    groups={reactions}
+                    targetId={card.id}
+                    canReact={false}
+                    readOnly
+                    onToggle={NO_TOGGLE}
+                    nameFor={reactorName}
+                    currentUserId={currentUserId}
+                    maxChips={MAX_COMPACT_REACTIONS}
+                    testIDPrefix="boards-tile-reaction"
+                />
                 <CardAssignees assignees={card.assignees} />
             </>
         )
@@ -230,7 +312,14 @@ function CardFace({ card, isCompact }: { card: BoardCardView; isCompact: boolean
             >
                 {card.title}
             </Text>
-            <CardMeta card={card} />
+            <CardMeta
+                card={card}
+                reactions={reactions}
+                onToggleReaction={onToggleReaction}
+                canReact={canReact}
+                reactorName={reactorName}
+                currentUserId={currentUserId}
+            />
         </>
     )
 }
@@ -555,7 +644,29 @@ function CardLabels({ labels }: { labels: BoardLabel[] }) {
     )
 }
 
-function CardMeta({ card }: { card: BoardCardView }) {
+interface CardMetaProps {
+    card: BoardCardView
+    /**
+     * Passed in, NOT read here. Presence below is per-card on purpose, but
+     * reactions come from one board-wide query — a per-tile query would be one
+     * subscription per card on a board that can hold hundreds.
+     */
+    reactions: readonly ReactionGroup[]
+    onToggleReaction: (cardId: string, emoji: string, groups: readonly ReactionGroup[]) => void
+    /** Reacting is an edit — same role gate as dragging. */
+    canReact: boolean
+    reactorName: (userId: string) => string
+    currentUserId: string
+}
+
+function CardMeta({
+    card,
+    reactions,
+    onToggleReaction,
+    canReact,
+    reactorName,
+    currentUserId,
+}: CardMetaProps) {
     // Presence is read here rather than in BoardCard so it participates in the
     // same row as the other metadata. Per-card, so only the cards a peer moved
     // between re-render.
@@ -568,9 +679,14 @@ function CardMeta({ card }: { card: BoardCardView }) {
         card.commentCount > 0 ||
         card.attachmentCount > 0 ||
         card.estimate !== undefined
-    // Someone viewing this card is reason enough to render the row, even on a
-    // card that has no other metadata at all.
-    if (!hasPills && card.assignees.length === 0 && watchers.length === 0) return null
+    // Someone viewing this card, or a single vote on it, is reason enough to
+    // render the row — even on a card with no other metadata at all. So is
+    // being ABLE to vote: the row carries the add-reaction button, which is
+    // how a card with no reactions yet gets its first one. Without that last
+    // clause a fresh card has no way to be reacted to from the board at all.
+    const isEmpty =
+        !hasPills && card.assignees.length === 0 && watchers.length === 0 && reactions.length === 0
+    if (isEmpty && !canReact) return null
 
     return (
         <View className="flex-row items-center gap-2.5 min-h-[20px] overflow-hidden">
@@ -581,6 +697,18 @@ function CardMeta({ card }: { card: BoardCardView }) {
             <AttachmentsPill count={card.attachmentCount} />
             <EstimatePill estimate={card.estimate} />
             <View className="grow shrink-0 basis-0" />
+            {/* Capped like the watcher stack so a card with a dozen distinct
+                votes cannot blow out the tile — the open card shows them all. */}
+            <ReactionBar
+                groups={reactions}
+                targetId={card.id}
+                canReact={canReact}
+                onToggle={emoji => onToggleReaction(card.id, emoji, reactions)}
+                nameFor={reactorName}
+                currentUserId={currentUserId}
+                maxChips={MAX_TILE_REACTIONS}
+                testIDPrefix="boards-tile-reaction"
+            />
             <CardWatchers watchers={watchers} cardId={card.id} />
             <CardAssignees assignees={card.assignees} />
         </View>

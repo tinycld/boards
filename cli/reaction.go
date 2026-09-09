@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/spf13/cobra"
 
@@ -15,12 +16,14 @@ import (
 // Comment reactions on the command line: react, unreact, and the counts shown
 // beside each comment in `card view`.
 //
-// The palette is FIXED by the schema (pb-migrations/1980000013), which stores
-// `emoji` as a select rather than free text — partly for the reason priority
-// is, and partly because the unique index compares BYTES, so two spellings of
-// the same emoji (with and without the variation selector) would defeat it.
-// This file mirrors lib/reactions.ts, which owns the same palette and order
-// for the app; the two must agree.
+// Any emoji the deployment stores is allowed — the app's picker offers ~1650.
+// This file does NOT carry that vocabulary: it belongs to
+// @tinycld/core/lib/emoji, the server enforces it (server/reaction_emoji.go),
+// and a second copy here would be one more thing to drift. The CLI sends what
+// the caller typed and reports what the server says.
+//
+// What IS here is a short list of ASCII names, because a terminal is exactly
+// where pasting an emoji is awkward. It is a convenience, not the vocabulary.
 //
 // A row is (comment, user, emoji) and is toggled by insert and delete, never
 // edited — so `unreact` deletes rather than patching, and re-reacting the same
@@ -38,45 +41,67 @@ type reaction struct {
 	Emoji   string `json:"emoji"`
 }
 
-// reactionPalette is the stored vocabulary, in the order the bar renders.
-// Mirrors REACTION_PALETTE in lib/reactions.ts.
-var reactionPalette = []string{"👍", "❤️", "😄", "🎉", "👀", "🚀"}
-
-// reactionNames are the ASCII names a terminal caller types, so the commands
-// work without pasting an emoji into a shell. Mirrors REACTION_KEYS.
+// reactionNames are typeable shorthands for the emoji people reach for most.
+// The six that used to be the whole palette are kept verbatim so existing
+// muscle memory and scripts keep working; the rest are the obvious additions.
+// Anything not listed can still be used by pasting the emoji itself.
 var reactionNames = map[string]string{
-	"thumbs_up": "👍",
-	"heart":     "❤️",
-	"laugh":     "😄",
-	"party":     "🎉",
-	"eyes":      "👀",
-	"rocket":    "🚀",
+	"thumbs_up":   "👍",
+	"thumbs_down": "👎",
+	"heart":       "❤️",
+	"laugh":       "😄",
+	"party":       "🎉",
+	"eyes":        "👀",
+	"rocket":      "🚀",
+	"fire":        "🔥",
+	"clap":        "👏",
+	"thinking":    "🤔",
+	"check":       "✅",
+	"cross":       "❌",
 }
 
-// resolveEmoji accepts either the emoji itself or its ASCII name.
+// shorthandList renders the names in a stable order for help and error text.
+func shorthandList() string {
+	names := make([]string, 0, len(reactionNames))
+	for name := range reactionNames {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return strings.Join(names, ", ")
+}
+
+// resolveEmoji expands a shorthand, or passes an emoji through untouched.
 //
-// Both, because a terminal is exactly where pasting an emoji is awkward — but
-// someone copying from the app will paste one, and refusing that would be
-// gratuitous. An unknown value lists the palette rather than saying only "no":
-// the set is closed and short, so showing it is the whole answer.
+// It does NOT validate: the server owns the vocabulary, and listing ~1650
+// emoji is not an error message. A shorthand that is not in the map is
+// therefore assumed to BE an emoji and sent as-is — if it is not one, the
+// server says so, which is the honest place for that answer. The one thing
+// worth catching here is plain ASCII, which is never an emoji and is almost
+// certainly a misremembered shorthand.
 func resolveEmoji(raw string) (string, error) {
 	if emoji, ok := reactionNames[strings.ToLower(raw)]; ok {
 		return emoji, nil
 	}
-	for _, emoji := range reactionPalette {
-		if raw == emoji {
-			return emoji, nil
+	if isPlainASCII(raw) {
+		return "", fmt.Errorf(
+			"unknown reaction %q; use an emoji, or one of: %s", raw, shorthandList())
+	}
+	return raw, nil
+}
+
+// isPlainASCII reports whether s is entirely printable ASCII — a word, not an
+// emoji. Used only to give a better error than the server's.
+func isPlainASCII(s string) bool {
+	for _, r := range s {
+		if r > unicode.MaxASCII {
+			return false
 		}
 	}
-	names := make([]string, 0, len(reactionPalette))
-	for _, emoji := range reactionPalette {
-		names = append(names, fmt.Sprintf("%s %s", emoji, emojiName(emoji)))
-	}
-	return "", fmt.Errorf("unknown reaction %q; choose one of: %s",
-		raw, strings.Join(names, ", "))
+	return true
 }
 
 // emojiName is the reverse of reactionNames, for error text and rendering.
+// An emoji with no shorthand renders as itself.
 func emojiName(emoji string) string {
 	for name, e := range reactionNames {
 		if e == emoji {
@@ -91,9 +116,8 @@ func newCommentReactCmd(c *client.Client) *cobra.Command {
 		Use:   "react <comment-id> <emoji>",
 		Short: "React to a comment",
 		Long: "React to a comment.\n\n" +
-			"<emoji> is one of the six the board allows, given either as the\n" +
-			"emoji itself or by name: thumbs_up, heart, laugh, party, eyes,\n" +
-			"rocket.\n\n" +
+			"<emoji> is the emoji itself, or one of these shorthands:\n" +
+			shorthandList() + ".\n\n" +
 			"Comment ids come from `tinycld boards card view --json`.",
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -202,9 +226,11 @@ func cardReactions(ctx context.Context, c *client.Client, cardID string) ([]reac
 
 // reactionSummary renders one comment's reactions as "👍 2  🎉 1".
 //
-// Palette order, not arrival order, so the same set always reads the same way
-// — the reason lib/reactions.ts fixes an order at all. A comment with none
-// yields "", and the caller omits the cell rather than printing an empty one.
+// Count descending, then the emoji itself for ties — the same rule
+// groupReactions uses for the bar in the app, so the CLI and the UI order a
+// given set identically. There is no palette order to use any more, and
+// map iteration order would differ between runs. A comment with none yields
+// "", and the caller omits the cell rather than printing an empty one.
 func reactionSummary(rows []reaction, commentID string) string {
 	counts := map[string]int{}
 	for _, row := range rows {
@@ -215,21 +241,21 @@ func reactionSummary(rows []reaction, commentID string) string {
 	if len(counts) == 0 {
 		return ""
 	}
-	parts := []string{}
-	for _, emoji := range reactionPalette {
-		if n := counts[emoji]; n > 0 {
-			parts = append(parts, fmt.Sprintf("%s %d", emoji, n))
-			delete(counts, emoji)
+
+	emojis := make([]string, 0, len(counts))
+	for emoji := range counts {
+		emojis = append(emojis, emoji)
+	}
+	sort.Slice(emojis, func(i, j int) bool {
+		if counts[emojis[i]] != counts[emojis[j]] {
+			return counts[emojis[i]] > counts[emojis[j]]
 		}
+		return emojis[i] < emojis[j]
+	})
+
+	parts := make([]string, 0, len(emojis))
+	for _, emoji := range emojis {
+		parts = append(parts, fmt.Sprintf("%s %d", emoji, counts[emoji]))
 	}
-	// Anything left is outside the palette, which a schema edit is the only
-	// way to produce. Rendered rather than dropped — a count that vanishes is
-	// worse than one that looks unfamiliar — after the known ones and sorted,
-	// so the output stays stable across runs.
-	rest := []string{}
-	for emoji, n := range counts {
-		rest = append(rest, fmt.Sprintf("%s %d", emoji, n))
-	}
-	sort.Strings(rest)
-	return strings.Join(append(parts, rest...), "  ")
+	return strings.Join(parts, "  ")
 }

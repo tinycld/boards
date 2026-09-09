@@ -3,16 +3,17 @@ import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useAuth } from '@tinycld/core/lib/auth'
 import { formatRelativeDate } from '@tinycld/core/lib/format-utils'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
+import { ReactionBar } from '@tinycld/core/ui/reactions'
 import { History } from 'lucide-react-native'
 import { useMemo } from 'react'
 import { Pressable, Text, View } from 'react-native'
+import { useReactorNames } from '../../hooks/useReactorNames'
 import { type ActivityContext, buildActivityFeed, describeActivity } from '../../lib/activity-feed'
 import { buildCommentThreads } from '../../lib/comment-threads'
-import type { ReactionEmoji, ReactionGroup } from '../../lib/reactions'
+import type { ReactionGroup } from '../../lib/reactions'
 import type { BoardActivity, BoardAttachment, BoardComment } from '../../types'
 import { COMMENT_HEADER_HEIGHT, InlineCommentEditor } from './CommentEditor'
 import { MarkdownText } from './MarkdownText'
-import { ReactionBar } from './ReactionBar'
 
 interface DetailActivityProps {
     comments: BoardComment[]
@@ -26,7 +27,7 @@ interface DetailActivityProps {
     canModerate: boolean
     /** The reaction groups for a comment — a stable empty array when none. */
     reactionsFor: (commentId: string) => ReactionGroup[]
-    onToggleReaction: (commentId: string, emoji: ReactionEmoji) => void
+    onToggleReaction: (commentId: string, emoji: string) => void
     /** For the inline editor's image inserts — they become card attachments. */
     cardId: string
     projectId: string
@@ -66,11 +67,18 @@ export function DetailActivity({
     const threads = useMemo(() => buildCommentThreads(comments), [comments])
     const feed = useMemo(() => buildActivityFeed(threads, activity), [threads, activity])
 
+    // Resolved ONCE here, not per row: CommentRow renders for every comment,
+    // and a users query each would be one subscription per comment.
+    const reactorName = useReactorNames()
+    const { user } = useAuth({ throwIfAnon: false })
+
     const rowProps = {
         canComment,
         canModerate,
         reactionsFor,
         onToggleReaction,
+        reactorName,
+        currentUserId: user?.id ?? '',
         cardId,
         projectId,
         attachments,
@@ -166,7 +174,7 @@ interface CommentRowProps {
     canComment: boolean
     canModerate: boolean
     reactionsFor: (commentId: string) => ReactionGroup[]
-    onToggleReaction: (commentId: string, emoji: ReactionEmoji) => void
+    onToggleReaction: (commentId: string, emoji: string) => void
     cardId: string
     projectId: string
     attachments: BoardAttachment[]
@@ -179,6 +187,9 @@ interface CommentRowProps {
     onSaveEdit: (commentId: string, body: string) => void
     onReply: (comment: BoardComment) => void
     onDelete: (commentId: string) => void
+    /** Resolved once by the parent: one users query for the whole list. */
+    reactorName: (userId: string) => string
+    currentUserId: string
 }
 
 function CommentRow({
@@ -187,6 +198,8 @@ function CommentRow({
     canModerate,
     reactionsFor,
     onToggleReaction,
+    reactorName,
+    currentUserId,
     cardId,
     projectId,
     attachments,
@@ -307,12 +320,17 @@ function CommentRow({
                 {/* OUTSIDE the edit swap above and the fixed-height header:
                     the same element in both branches, so opening an edit
                     neither hides the bar nor moves it. */}
-                <ReactionBar
-                    commentId={comment.id}
-                    groups={reactionsFor(comment.id)}
-                    canReact={canComment}
-                    onToggle={emoji => onToggleReaction(comment.id, emoji)}
-                />
+                <View className="mt-1.5">
+                    <ReactionBar
+                        targetId={comment.id}
+                        groups={reactionsFor(comment.id)}
+                        canReact={canComment}
+                        onToggle={emoji => onToggleReaction(comment.id, emoji)}
+                        nameFor={reactorName}
+                        currentUserId={currentUserId}
+                        testIDPrefix="boards-reaction"
+                    />
+                </View>
             </View>
         </View>
     )

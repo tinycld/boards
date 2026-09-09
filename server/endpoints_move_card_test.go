@@ -642,3 +642,42 @@ func TestMoveCard_MovedChildrenLeaveTheSprint(t *testing.T) {
 		after:   requireCardSprint(child.Id, ""),
 	}.run(t, env.cardsEnv)
 }
+
+// The same trap one level up. Card votes carry `project` for the same reason
+// and would be unreadable on the target the same way; this collection was in
+// the re-projection list from the start, and this is what keeps it there.
+func TestMoveCard_CarriesCardReactions(t *testing.T) {
+	env := setupMoveEnv(t)
+
+	col, err := env.app.FindCollectionByNameOrId("boards_card_reactions")
+	if err != nil {
+		t.Fatalf("find card reactions: %v", err)
+	}
+	reaction := core.NewRecord(col)
+	reaction.Set("project", env.project.Id)
+	reaction.Set("card", env.card.Id)
+	reaction.Set("user", env.editor.Id)
+	reaction.Set("emoji", "🚀")
+	if err := env.app.Save(reaction); err != nil {
+		t.Fatalf("seed card reaction: %v", err)
+	}
+
+	req{
+		method:  http.MethodPost,
+		url:     "/api/boards/cards/" + env.card.Id + "/move",
+		token:   env.editorToken,
+		body:    moveBody(env),
+		want:    http.StatusOK,
+		content: []string{`"previous_key"`},
+		before:  mountCardRoutes,
+		after: func(t testing.TB, app *tests.TestApp) {
+			row, err := app.FindRecordById("boards_card_reactions", reaction.Id)
+			if err != nil {
+				t.Fatalf("reload card reaction: %v", err)
+			}
+			if row.GetString("project") != env.target.Id {
+				t.Fatal("the vote still names the source project, so the target cannot read it")
+			}
+		},
+	}.run(t, env.cardsEnv)
+}

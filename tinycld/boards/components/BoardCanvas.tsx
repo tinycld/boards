@@ -1,10 +1,14 @@
+import { useAuth } from '@tinycld/core/lib/auth'
 import { useEffect, useRef } from 'react'
 import { ScrollView, View } from 'react-native'
 import { SortableBoardContainer } from 'react-native-drax'
+import { useBoardCardReactions } from '../hooks/useBoardCardReactions'
 import { useBoardDnd } from '../hooks/useBoardDnd'
 import { useBoardShortcuts } from '../hooks/useBoardShortcuts'
 import { useProjectRole } from '../hooks/useProjectRole'
+import { useReactorNames } from '../hooks/useReactorNames'
 import { useSelectionOrder } from '../hooks/useSelectionOrder'
+import { useToggleCardReaction } from '../hooks/useToggleCardReaction'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
 import type { BoardProject } from '../types'
 import { AddListColumn } from './AddListColumn'
@@ -14,6 +18,17 @@ import { CanvasCardPicker } from './CanvasCardPicker'
 import { EmptyBoard } from './EmptyBoard'
 
 export function BoardCanvas({ project }: { project: BoardProject }) {
+    // ONE reactions query for the whole board, resolved here and threaded
+    // down: a per-tile query would be one subscription per card.
+    const { reactionsForCard } = useBoardCardReactions(project.id)
+    const reactorName = useReactorNames()
+    const { user } = useAuth({ throwIfAnon: false })
+    const currentUserId = user?.id ?? ''
+    // Resolved here for the same reason: the toggle needs the folded groups to
+    // decide delete-vs-insert, and this is where they already are. The tiles
+    // get a stable callback, not a query.
+    const toggleReaction = useToggleCardReaction(project.id, currentUserId)
+
     const { canEdit } = useProjectRole(project.id)
     const dnd = useBoardDnd(project, canEdit)
     useBoardShortcuts(project, canEdit)
@@ -55,6 +70,10 @@ export function BoardCanvas({ project }: { project: BoardProject }) {
                         registerMeasure={dnd.registerColumnMeasure}
                         canEdit={canEdit}
                         agingDays={project.agingDays}
+                        reactionsForCard={reactionsForCard}
+                        onToggleReaction={toggleReaction}
+                        reactorName={reactorName}
+                        currentUserId={currentUserId}
                     />
                 ))}
                 {canEdit ? (

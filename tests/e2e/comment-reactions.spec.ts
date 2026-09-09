@@ -60,14 +60,38 @@ async function unreadCount(page: Page): Promise<number> {
     return match ? Number(match[1]) : 0
 }
 
+/**
+ * Chips and picker cells are keyed by UNIFIED CODEPOINTS now, not by an ASCII
+ * name — with ~1650 emoji there is no name map to key from, and a raw glyph in
+ * a selector is painful to type and ambiguous for a ZWJ sequence.
+ */
+const THUMBS_UP = '1f44d'
+
 /** The thumbs-up chip under whichever comment carries one. */
 function thumbsUp(page: Page) {
-    return peek(page).locator('[data-testid^="boards-reaction-"][data-testid$="-thumbs_up"]')
+    return peek(page).locator(`[data-testid^="boards-reaction-"][data-testid$="-${THUMBS_UP}"]`)
 }
 
-async function react(page: Page, key: string) {
+/**
+ * Open the picker and pick `unified`.
+ *
+ * The picker loads its ~99KB table on first open, so the cell is awaited
+ * rather than assumed present — on a cold chunk it appears a beat late.
+ */
+async function react(page: Page, unified: string) {
     await peek(page).getByTestId('boards-reaction-add').first().click()
-    await page.getByTestId(`boards-reaction-pick-${key}`).click()
+    const cell = page.getByTestId(`emoji-pick-${unified}`)
+    await cell.waitFor({ state: 'visible' })
+    await cell.click()
+}
+
+/** Type into the picker's search field, then pick the first result. */
+async function reactViaSearch(page: Page, query: string, unified: string) {
+    await peek(page).getByTestId('boards-reaction-add').first().click()
+    await page.getByTestId('emoji-search').fill(query)
+    const cell = page.getByTestId(`emoji-pick-${unified}`)
+    await cell.waitFor({ state: 'visible' })
+    await cell.click()
 }
 
 test.describe('Boards — comment reactions', () => {
@@ -81,7 +105,7 @@ test.describe('Boards — comment reactions', () => {
 
         // Nothing to show yet: only the smiley.
         await expect(thumbsUp(page)).toHaveCount(0)
-        await react(page, 'thumbs_up')
+        await react(page, THUMBS_UP)
         await expect(thumbsUp(page)).toHaveCount(1)
         await expect(thumbsUp(page)).toContainText('1')
 
@@ -99,6 +123,55 @@ test.describe('Boards — comment reactions', () => {
         await expect(thumbsUp(page)).toHaveCount(0)
     })
 
+    // What the six-emoji palette could not do.
+    test('any emoji can be found by search and used', async ({ page }) => {
+        await login(page)
+        await navigateToPackage(page, 'boards')
+        await createBoard(page, `react-search-${Date.now()}`)
+        await addCard(page, 0, CARD_TITLE)
+        await openCard(page, CARD_TITLE)
+        await postComment(page, COMMENT)
+
+        // A unicorn was outside the old palette entirely.
+        const UNICORN = '1f984'
+        await reactViaSearch(page, 'unicorn', UNICORN)
+
+        const chip = peek(page).locator(
+            `[data-testid^="boards-reaction-"][data-testid$="-${UNICORN}"]`
+        )
+        await expect(chip).toHaveCount(1)
+        await expect(chip).toContainText('1')
+    })
+
+    test('a skin tone counts as its own reaction', async ({ page }) => {
+        await login(page)
+        await navigateToPackage(page, 'boards')
+        await createBoard(page, `react-tone-${Date.now()}`)
+        await addCard(page, 0, CARD_TITLE)
+        await openCard(page, CARD_TITLE)
+        await postComment(page, COMMENT)
+
+        // Plain thumbs up first.
+        await react(page, THUMBS_UP)
+        await expect(thumbsUp(page)).toHaveCount(1)
+
+        // Then the same emoji in a tone: a separate chip, not a second count,
+        // which is the semantics this deployment chose.
+        await peek(page).getByTestId('boards-reaction-add').first().click()
+        await page.getByTestId('emoji-tone-toggle').click()
+        await page.getByTestId('emoji-tone-1f3fd').click()
+        const tonedCell = page.getByTestId(`emoji-pick-${THUMBS_UP}`)
+        await tonedCell.waitFor({ state: 'visible' })
+        await tonedCell.click()
+
+        const toned = peek(page).locator(
+            '[data-testid^="boards-reaction-"][data-testid$="-1f44d-1f3fd"]'
+        )
+        await expect(toned).toHaveCount(1)
+        await expect(thumbsUp(page)).toHaveCount(1)
+        await expect(thumbsUp(page)).toContainText('1')
+    })
+
     // Two tests where there was one: each needs its own collaborator session
     // on top of the owner's, and three sign-ins plus the share dialog in one
     // 30-second budget overran on CI without any single step being slow.
@@ -111,7 +184,7 @@ test.describe('Boards — comment reactions', () => {
         await addMemberToBoard(page, boardName, TEST_COLLABORATOR_EMAIL, 'Commentor')
         await openCard(page, CARD_TITLE)
         await postComment(page, COMMENT)
-        await react(page, 'thumbs_up')
+        await react(page, THUMBS_UP)
         await expect(thumbsUp(page)).toContainText('1')
         // Reacting to your own comment tells nobody, so this is the baseline.
         const before = await unreadCount(page)
@@ -144,7 +217,7 @@ test.describe('Boards — comment reactions', () => {
         await addMemberToBoard(page, boardName, TEST_COLLABORATOR_EMAIL, 'Viewer')
         await openCard(page, CARD_TITLE)
         await postComment(page, COMMENT)
-        await react(page, 'thumbs_up')
+        await react(page, THUMBS_UP)
         await expect(thumbsUp(page)).toContainText('1')
 
         // The chip is there to read; the smiley to add one is not.

@@ -131,6 +131,7 @@ func registerShared(app *pocketbase.PocketBase) {
 	// rule in 1980000015 cannot express, because a rule sees one row and
 	// cannot walk a chain. Fails the write, like registerCardNumbers.
 	registerCardParentGuard(app)
+	registerReactionEmojiGuard(app)
 	// Self-links and contradictory blocks-both-ways pairs: what the unique
 	// index and the rules cannot say. See card_links.go.
 	registerCardLinkGuard(app)

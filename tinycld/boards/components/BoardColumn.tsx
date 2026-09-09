@@ -19,6 +19,7 @@ import {
 } from '../lib/dnd'
 import { formatEstimate, sumEstimates } from '../lib/estimate'
 import { rankForAppend, rankForReorder } from '../lib/move'
+import type { ReactionGroup } from '../lib/reactions'
 import { formatWipCount, type WipState, wipState } from '../lib/wip'
 import { selectBoardSort, useBoardsUIStore } from '../stores/boards-ui-store'
 import type { BoardCardView, BoardListRank, BoardListView } from '../types'
@@ -79,6 +80,16 @@ const CARD_HOVER_STYLE = {
 interface BoardColumnProps {
     list: BoardListView
     projectId: string
+    /**
+     * From the board's ONE reactions query, resolved in BoardCanvas. Passed
+     * down rather than read per column or per card: a board can hold hundreds
+     * of tiles, and a query each would be that many subscriptions.
+     */
+    reactionsForCard: (cardId: string) => readonly ReactionGroup[]
+    /** The board's ONE card-vote toggle, resolved in BoardCanvas. Stable. */
+    onToggleReaction: (cardId: string, emoji: string, groups: readonly ReactionGroup[]) => void
+    reactorName: (userId: string) => string
+    currentUserId: string
     /** Every column's rank, in render order — the menu's reorder and the
      *  header-drag drop index need siblings, but only their {id, position}.
      *  Identity-stable across card-level changes (see BoardProject.listOrder),
@@ -117,6 +128,10 @@ export const BoardColumn = memo(function BoardColumn({
     registerMeasure,
     canEdit,
     agingDays,
+    reactionsForCard,
+    onToggleReaction,
+    reactorName,
+    currentUserId,
 }: BoardColumnProps) {
     const [isRenaming, setIsRenaming] = useState(false)
     const [isReceiving, setIsReceiving] = useState(false)
@@ -287,6 +302,10 @@ export const BoardColumn = memo(function BoardColumn({
                         canEdit={canEdit}
                         isSorted={isSorted}
                         agingDays={agingDays}
+                        reactionsForCard={reactionsForCard}
+                        onToggleReaction={onToggleReaction}
+                        reactorName={reactorName}
+                        currentUserId={currentUserId}
                     />
                 )}
                 {canEdit && !isCollapsed ? (
@@ -739,6 +758,14 @@ const STACK_GAP = 8
 const PHANTOM_SLOT_HEIGHT = 40
 
 interface ColumnCardsProps {
+    /**
+     * Stable identities from useBoardCardReactions — this subtree is memoized
+     * for drag correctness, so a fresh closure per render would defeat it.
+     */
+    reactionsForCard: (cardId: string) => readonly ReactionGroup[]
+    onToggleReaction: (cardId: string, emoji: string, groups: readonly ReactionGroup[]) => void
+    reactorName: (userId: string) => string
+    currentUserId: string
     list: BoardListView
     projectId: string
     registerMeasure: (listId: string, measure: (() => void) | null) => void
@@ -777,6 +804,10 @@ const ColumnCards = memo(function ColumnCards({
     canEdit,
     isSorted,
     agingDays,
+    reactionsForCard,
+    onToggleReaction,
+    reactorName,
+    currentUserId,
 }: ColumnCardsProps) {
     const scrollRef = useRef<ScrollView>(null)
     const moveCard = useMoveCard()
@@ -892,6 +923,10 @@ const ColumnCards = memo(function ColumnCards({
                                 category={list.category}
                                 canDrag={canEdit}
                                 agingDays={agingDays}
+                                reactions={reactionsForCard(card.id)}
+                                onToggleReaction={onToggleReaction}
+                                reactorName={reactorName}
+                                currentUserId={currentUserId}
                             />
                         </NoNativeDrag>
                     </SortableItem>

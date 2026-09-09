@@ -47,6 +47,7 @@ func oauthPackage() oauth.Package {
 			// the far card's id and nothing else.
 			"boards_card_links":        rw,
 			"boards_comment_reactions": rw,
+			"boards_card_reactions":    rw,
 			"boards_card_watchers":     rw,
 
 			// The planning collections — board content in every sense above.

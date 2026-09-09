@@ -54,17 +54,66 @@ func TestReactionsRLS_CannotReactAsAnother(t *testing.T) {
 	}.run(t, env)
 }
 
-// The palette is the schema: an emoji outside it is refused by the select.
-func TestReactionsRLS_EmojiMustBeInThePalette(t *testing.T) {
-	env := setupCardsEnv(t)
-	comment := cardsComment(t, env.app, env.project, env.card, env.editor, "hello")
-	req{
-		method: http.MethodPost,
-		url:    "/api/collections/boards_comment_reactions/records",
-		token:  env.editorToken,
-		body:   reactionBody(env, comment.Id, env.editor.Id, "🦄"),
-		want:   http.StatusBadRequest,
-	}.run(t, env)
+// The emoji column is free text, so what may be stored is enforced by the
+// guard in reaction_emoji.go rather than by a select. The RLS harness applies
+// migrations only and never calls Register, so the guard is bound per case,
+// the card_number_test.go pattern — and a fresh env each time, because
+// req.run stands up the route table and reusing one double-registers it.
+//
+// Without the BindFunc every one of these writes succeeds, which is what
+// makes them worth asserting.
+func TestReactionsRLS_EmojiMustBeStorable(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		emoji string
+	}{
+		{"not an emoji at all", "not an emoji"},
+		{"a bare digit, which carries the Unicode Emoji property", "5"},
+		{"a country flag, which this deployment does not ship", "🇺🇦"},
+		{"a tone on an emoji that does not take one", "🎉🏽"},
+		{"a bare heart: a real emoji, but not the form we store", "❤"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := setupCardsEnv(t)
+			registerReactionEmojiGuard(env.app)
+			comment := cardsComment(t, env.app, env.project, env.card, env.editor, "hello")
+			req{
+				method: http.MethodPost,
+				url:    "/api/collections/boards_comment_reactions/records",
+				token:  env.editorToken,
+				body:   reactionBody(env, comment.Id, env.editor.Id, tc.emoji),
+				want:   http.StatusBadRequest,
+			}.run(t, env)
+		})
+	}
+}
+
+// The picker's whole range, not just the old six.
+func TestReactionsRLS_AnyStorableEmojiIsAccepted(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		emoji string
+	}{
+		{"one of the six the palette used to hold", "👍"},
+		{"one it did not", "🦄"},
+		{"a skin tone, which counts as its own reaction", "👍🏽"},
+		{"a canonical heart", "❤️"},
+		{"a flag we do ship", "🏳️‍🌈"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := setupCardsEnv(t)
+			registerReactionEmojiGuard(env.app)
+			comment := cardsComment(t, env.app, env.project, env.card, env.editor, "hello")
+			req{
+				method:  http.MethodPost,
+				url:     "/api/collections/boards_comment_reactions/records",
+				token:   env.editorToken,
+				body:    reactionBody(env, comment.Id, env.editor.Id, tc.emoji),
+				want:    http.StatusOK,
+				content: []string{`"emoji":"` + tc.emoji + `"`},
+			}.run(t, env)
+		})
+	}
 }
 
 // The anti-desync pins: the comment must be on the named card, and the card on
