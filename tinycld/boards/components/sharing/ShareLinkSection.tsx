@@ -2,9 +2,9 @@ import { PB_SERVER_ADDR } from '@tinycld/core/lib/pocketbase'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { Menu } from '@tinycld/core/ui/menu'
 import * as Clipboard from 'expo-clipboard'
-import { Check, ChevronDown, Copy, Globe, Lock } from 'lucide-react-native'
+import { Check, ChevronDown, Code, Copy, Globe, Lock } from 'lucide-react-native'
 import { useState } from 'react'
-import { Platform, Pressable, Text, View } from 'react-native'
+import { Platform, Pressable, Switch, Text, TextInput, View } from 'react-native'
 import { useCopiedFlag } from '../../hooks/useCopiedFlag'
 import {
     DEFAULT_SHARE_LINK_EXPIRY_DAYS,
@@ -37,7 +37,10 @@ export function ShareLinkSection({ projectId, isVisible }: ShareLinkSectionProps
     const { activeLink } = useShareLinks(projectId)
     const [role, setRole] = useState<BoardsShareLinkRole>('viewer')
     const [expiry, setExpiry] = useState<ShareLinkExpiryDays>(DEFAULT_SHARE_LINK_EXPIRY_DAYS)
+    const [embedDomains, setEmbedDomains] = useState('')
+    const [embedLive, setEmbedLive] = useState(false)
     const [copied, markCopied] = useCopiedFlag()
+    const [embedCopied, markEmbedCopied] = useCopiedFlag()
     const [error, setError] = useState<string | null>(null)
 
     const createLink = useCreateShareLink(projectId)
@@ -49,7 +52,7 @@ export function ShareLinkSection({ projectId, isVisible }: ShareLinkSectionProps
     const onCreate = () => {
         setError(null)
         createLink.mutate(
-            { role, expiresInDays: expiry },
+            { role, expiresInDays: expiry, embedDomains, embedLive },
             { onError: err => setError(err.message) }
         )
     }
@@ -66,6 +69,12 @@ export function ShareLinkSection({ projectId, isVisible }: ShareLinkSectionProps
         markCopied()
     }
 
+    const onCopyEmbed = async () => {
+        if (!activeLink) return
+        await Clipboard.setStringAsync(embedSnippet(activeLink.token))
+        markEmbedCopied()
+    }
+
     return (
         <View className="mt-4 rounded-xl border border-border overflow-hidden">
             <View className="px-3 py-2 border-b border-border">
@@ -80,6 +89,8 @@ export function ShareLinkSection({ projectId, isVisible }: ShareLinkSectionProps
                         link={activeLink}
                         copied={copied}
                         onCopy={onCopy}
+                        embedCopied={embedCopied}
+                        onCopyEmbed={onCopyEmbed}
                         onRevoke={onRevoke}
                         isRevoking={revokeLink.isPending}
                     />
@@ -89,6 +100,10 @@ export function ShareLinkSection({ projectId, isVisible }: ShareLinkSectionProps
                         expiry={expiry}
                         onRoleChange={setRole}
                         onExpiryChange={setExpiry}
+                        embedDomains={embedDomains}
+                        onEmbedDomainsChange={setEmbedDomains}
+                        embedLive={embedLive}
+                        onEmbedLiveChange={setEmbedLive}
                         onCreate={onCreate}
                         isCreating={createLink.isPending}
                         mutedColor={mutedColor}
@@ -130,12 +145,16 @@ function LiveLink({
     link,
     copied,
     onCopy,
+    embedCopied,
+    onCopyEmbed,
     onRevoke,
     isRevoking,
 }: {
     link: ShareLinkRow
     copied: boolean
     onCopy: () => void
+    embedCopied: boolean
+    onCopyEmbed: () => void
     onRevoke: () => void
     isRevoking: boolean
 }) {
@@ -188,6 +207,13 @@ function LiveLink({
                 </Pressable>
             </View>
 
+            <EmbedSnippetRow
+                isVisible={!!link.embedDomains}
+                link={link}
+                copied={embedCopied}
+                onCopy={onCopyEmbed}
+            />
+
             {/* Revoking means two different things depending on when it
                 happens, and the difference surprises people. */}
             <Text className="text-[11px] text-muted">
@@ -203,6 +229,10 @@ function MintControls({
     expiry,
     onRoleChange,
     onExpiryChange,
+    embedDomains,
+    onEmbedDomainsChange,
+    embedLive,
+    onEmbedLiveChange,
     onCreate,
     isCreating,
     mutedColor,
@@ -211,6 +241,10 @@ function MintControls({
     expiry: ShareLinkExpiryDays
     onRoleChange: (role: BoardsShareLinkRole) => void
     onExpiryChange: (days: ShareLinkExpiryDays) => void
+    embedDomains: string
+    onEmbedDomainsChange: (value: string) => void
+    embedLive: boolean
+    onEmbedLiveChange: (value: boolean) => void
     onCreate: () => void
     isCreating: boolean
     mutedColor: string
@@ -266,6 +300,115 @@ function MintControls({
             </View>
 
             <EditorWarning isVisible={role === 'editor'} />
+
+            <EmbedControls
+                domains={embedDomains}
+                onDomainsChange={onEmbedDomainsChange}
+                isLive={embedLive}
+                onLiveChange={onEmbedLiveChange}
+            />
+        </View>
+    )
+}
+
+/**
+ * Whether this link may be framed by another site, and by whom.
+ *
+ * The domain list is the grant: empty means not embeddable, so a link is
+ * private to frame unless its owner names somewhere. That is the opposite of
+ * how the copyable URL works — anyone may OPEN it — and deliberately so: a
+ * board that renders inside a page the owner never named is a surprise, and
+ * `frame-ancestors` is the one control that can prevent it.
+ *
+ * Web-only. A phone has nowhere to paste an iframe, and the field would be a
+ * control that does nothing on the platform showing it.
+ */
+function EmbedControls({
+    domains,
+    onDomainsChange,
+    isLive,
+    onLiveChange,
+}: {
+    domains: string
+    onDomainsChange: (value: string) => void
+    isLive: boolean
+    onLiveChange: (value: boolean) => void
+}) {
+    if (Platform.OS !== 'web') return null
+
+    return (
+        <View className="gap-2 pt-2 border-t border-border">
+            <Text className="text-[12px] font-medium text-foreground">Embed on a website</Text>
+
+            <TextInput
+                accessibilityLabel="Websites allowed to embed this board"
+                value={domains}
+                onChangeText={onDomainsChange}
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="https://example.com"
+                placeholderTextColor="#9ca3af"
+                className="px-2.5 py-1.5 rounded-md border border-border bg-background text-[12px] text-foreground web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+            />
+
+            <Text className="text-[11px] text-muted">
+                Leave empty to stop this board being embedded anywhere. Include the scheme, and
+                separate several sites with a space.
+            </Text>
+
+            <View className="flex-row items-center gap-2">
+                <Switch
+                    accessibilityLabel="Keep an embedded board up to date"
+                    value={isLive}
+                    onValueChange={onLiveChange}
+                />
+                <Text className="flex-1 text-[11px] text-muted">
+                    Keep an embedded board up to date as the board changes. This holds a connection
+                    open for every visitor to the page it is embedded on and will be unstable if
+                    used on high-traffic sites.
+                </Text>
+            </View>
+        </View>
+    )
+}
+
+/** The iframe to paste, offered once a link may actually be framed. */
+function EmbedSnippetRow({
+    isVisible,
+    link,
+    copied,
+    onCopy,
+}: {
+    isVisible: boolean
+    link: ShareLinkRow
+    copied: boolean
+    onCopy: () => void
+}) {
+    const mutedColor = useThemeColor('muted')
+
+    if (!isVisible || Platform.OS !== 'web') return null
+
+    return (
+        <View className="flex-row items-center gap-2">
+            <Text numberOfLines={1} className="flex-1 text-[11px] text-muted">
+                Embeddable on {link.embedDomains.split(' ').join(', ')}
+                {link.embedLive ? ' · live' : ''}
+            </Text>
+            <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Copy embed code"
+                onPress={onCopy}
+                className="shrink-0 flex-row items-center gap-1 px-2.5 py-1 rounded-md border border-border bg-background"
+            >
+                {copied ? (
+                    <Check size={14} color={mutedColor} strokeWidth={2.2} />
+                ) : (
+                    <Code size={14} color={mutedColor} strokeWidth={2.2} />
+                )}
+                <Text className="text-[12px] font-medium text-foreground">
+                    {copied ? 'Copied' : 'Embed code'}
+                </Text>
+            </Pressable>
         </View>
     )
 }
@@ -342,6 +485,18 @@ export function shareLinkURL(token: string): string {
         return `${window.location.origin}${path}`
     }
     return `${PB_SERVER_ADDR}${path}`
+}
+
+/**
+ * The iframe to paste into another page.
+ *
+ * `?embed=1` is what drops our chrome AND what the server matches when it
+ * decides the framing header — a bare share URL stays unframable, so the
+ * parameter has to be here for the embed to work at all.
+ */
+export function embedSnippet(token: string): string {
+    const url = `${shareLinkURL(token)}?embed=1`
+    return `<iframe src="${url}" width="100%" height="600" style="border:0" title="Board"></iframe>`
 }
 
 function roleOptionLabel(role: BoardsShareLinkRole): string {

@@ -29,6 +29,16 @@ export interface ShareLinkRow {
     expiresAt: string
     isActive: boolean
     created: string
+    /**
+     * Origins allowed to frame this link, space-separated. Empty means the
+     * link is not embeddable — which is every link by default.
+     *
+     * Owner-facing only: it comes back from mint/list/revoke, all three of
+     * which are owner-gated. The public metadata endpoint never returns it.
+     */
+    embedDomains: string
+    /** Whether an embed of this link holds a realtime subscription. */
+    embedLive: boolean
 }
 
 interface ShareLinkPayload {
@@ -38,6 +48,8 @@ interface ShareLinkPayload {
     expires_at: string
     is_active: boolean
     created: string
+    embed_domains?: string
+    embed_live?: boolean
 }
 
 /** Durations the mint endpoint accepts. 0 is "never". */
@@ -82,6 +94,8 @@ export function useShareLinks(projectId: string) {
             expiresAt: link.expires_at ?? '',
             isActive: !!link.is_active,
             created: link.created ?? '',
+            embedDomains: link.embed_domains ?? '',
+            embedLive: !!link.embed_live,
         }))
         return rows.sort((a, b) => b.created.localeCompare(a.created))
     }, [data])
@@ -107,6 +121,17 @@ export function isExpired(expiresAt: string): boolean {
 export interface CreateShareLinkInput {
     role: BoardsShareLinkRole
     expiresInDays: ShareLinkExpiryDays
+    /**
+     * Origins allowed to frame the link, space or newline separated. Left
+     * empty the link is not embeddable, which is the default everywhere.
+     *
+     * Sent as typed and validated by the SERVER (parseEmbedDomains), not here:
+     * the value ends up in a CSP directive, which has no escaping, so the
+     * check belongs on the side that cannot be bypassed. The error it returns
+     * is what the panel shows.
+     */
+    embedDomains?: string
+    embedLive?: boolean
 }
 
 export function useCreateShareLink(projectId: string) {
@@ -114,7 +139,12 @@ export function useCreateShareLink(projectId: string) {
 
     return useMutation<ShareLinkRow, Error, CreateShareLinkInput>({
         mutationKey: ['boards', 'share-link', 'create', projectId],
-        mutationFn: async ({ role, expiresInDays }: CreateShareLinkInput) => {
+        mutationFn: async ({
+            role,
+            expiresInDays,
+            embedDomains,
+            embedLive,
+        }: CreateShareLinkInput) => {
             try {
                 const payload = await pb.send<ShareLinkPayload>('/api/boards/share-link', {
                     method: 'POST',
@@ -122,6 +152,8 @@ export function useCreateShareLink(projectId: string) {
                         project_id: projectId,
                         role,
                         expires_in_days: expiresInDays,
+                        embed_domains: embedDomains ?? '',
+                        embed_live: embedLive ?? false,
                     },
                 })
                 return toShareLinkRow(payload)
@@ -162,5 +194,7 @@ function toShareLinkRow(payload: ShareLinkPayload): ShareLinkRow {
         expiresAt: payload.expires_at ?? '',
         isActive: !!payload.is_active,
         created: payload.created ?? '',
+        embedDomains: payload.embed_domains ?? '',
+        embedLive: !!payload.embed_live,
     }
 }
