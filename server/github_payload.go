@@ -22,6 +22,15 @@ import (
 const (
 	minSlugLength = 2
 	maxSlugLen    = 10
+
+	// A card number is a small positive integer — PocketBase's own counter
+	// column won't produce more than a handful of digits in this app's
+	// lifetime. Capping the digit run here means a garbage token like
+	// "OTTER-999999999999999999999" next to a key-shaped prefix is rejected
+	// outright instead of overflowing strconv.Atoi (Go) / silently rounding
+	// through Number.parseInt (TS) — the twins would otherwise disagree on
+	// what such an input returns. Mirror this bound in the TS twin.
+	maxCardNumberDigits = 9
 )
 
 type scannedKey struct {
@@ -43,19 +52,24 @@ type prEvent struct {
 	Author      string
 	URL         string
 	Number      int
-	Merged      bool
 	State       string
 	ReviewState string
 }
 
+// The first slug character is required to be a LETTER ([A-Za-z]), narrower
+// than cli/key.go's parseCardKey ([A-Za-z0-9]+). That's deliberate: a
+// digit-led token in free text (branch names, PR bodies) is more often a
+// version string than a card key, and this scanner would rather miss a key
+// than mislink one. Mirrors the same narrowing in the TS twin
+// (tinycld/boards/lib/pr-key-scan.ts) — keep both in step if this changes.
 var keyInText = regexp.MustCompile(
-	fmt.Sprintf(`(?:^|[^A-Za-z0-9])([A-Za-z][A-Za-z0-9]{%d,%d})-([1-9][0-9]*)([^A-Za-z0-9]|$)`,
-		minSlugLength-1, maxSlugLen-1),
+	fmt.Sprintf(`(?:^|[^A-Za-z0-9])([A-Za-z][A-Za-z0-9]{%d,%d})-([1-9][0-9]{0,%d})([^A-Za-z0-9]|$)`,
+		minSlugLength-1, maxSlugLen-1, maxCardNumberDigits-1),
 )
 
 var skipInText = regexp.MustCompile(
-	fmt.Sprintf(`(?i)\b(?:skip|ignore)\s+([A-Za-z][A-Za-z0-9]{%d,%d})-([1-9][0-9]*)([^A-Za-z0-9]|$)`,
-		minSlugLength-1, maxSlugLen-1),
+	fmt.Sprintf(`(?i)\b(?:skip|ignore)\s+([A-Za-z][A-Za-z0-9]{%d,%d})-([1-9][0-9]{0,%d})([^A-Za-z0-9]|$)`,
+		minSlugLength-1, maxSlugLen-1, maxCardNumberDigits-1),
 )
 
 // scanCardKeys returns every distinct key in text, in first-seen order.
@@ -176,7 +190,6 @@ func decodePREvent(event string, body []byte) (prEvent, bool, error) {
 		Author: payload.PullRequest.User.Login,
 		URL:    payload.PullRequest.HTMLURL,
 		Number: payload.PullRequest.Number,
-		Merged: payload.PullRequest.Merged,
 	}
 
 	// GitHub reports a merge as closed+merged. Collapse it here so nothing

@@ -22,9 +22,23 @@ func TestScanCardKeys_MirrorsTheTSTable(t *testing.T) {
 		{"leading zeros rejected", "OTTER-007", nil},
 		{"slug too long", "PLATFORMENGINEERING-1", nil},
 		{"slug too short", "A-1", nil},
+		// Leading-boundary property in isolation: a longer leading token is
+		// its own valid slug, not a sub-match of the shorter key inside it.
+		{"longer leading token is its own key", "NOTOTTER-1", []scannedKey{{"NOTOTTER", 1}}},
+		// Trailing-boundary property in isolation: a trailing alphanumeric
+		// right after the number is rejected outright.
+		{"trailing alphanumeric rejected", "OTTER-1x", nil},
+		// Both boundary properties at once.
 		{"embedded in a word", "NOTOTTER-1x", nil},
 		{"no key", "just a normal branch name", nil},
 		{"empty", "", nil},
+		// A digit run this long is never a real card number — it's a guard
+		// against the two twins disagreeing (TS's Number.parseInt silently
+		// overflows to 1e+21; Go's strconv.Atoi would error). Capping the
+		// digit run in the regex itself keeps both scanners rejecting this
+		// identically, rather than relying on each runtime's own overflow
+		// behavior.
+		{"digit run too long to be a real card number", "OTTER-999999999999999999999", nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := scanCardKeys(tc.text)

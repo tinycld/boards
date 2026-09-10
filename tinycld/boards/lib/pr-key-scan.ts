@@ -35,17 +35,27 @@ export interface ScannedKey {
  * free text — a digit-led token (`1ABC-1`) is more often a version string
  * than a card key — even though parseCardKey would accept it as a slug.
  *
- * `[1-9][0-9]*` rejects leading zeros for card-key.ts's reason: OTTER-007 is a
- * typo, and accepting it would give one card two spellings.
+ * `[1-9][0-9]{0,MAX_CARD_NUMBER_DIGITS - 1}` rejects leading zeros for
+ * card-key.ts's reason: OTTER-007 is a typo, and accepting it would give one
+ * card two spellings. The digit-count cap is a separate guard: a card number
+ * is a small positive integer, so a run of 20+ digits next to a key-shaped
+ * prefix is not a card reference. Without the cap, `Number.parseInt` silently
+ * rounds a huge digit run (`OTTER-999999999999999999999` -> `1e+21`) while
+ * the Go twin's `strconv.Atoi` would error and drop the match — the same
+ * input would return different things from the two implementations. Capping
+ * the digit run keeps both scanners rejecting it identically. Mirror this
+ * bound in server/github_payload.go if it changes.
  */
+const MAX_CARD_NUMBER_DIGITS = 9
+
 const KEY_IN_TEXT = new RegExp(
-    `(?:^|[^A-Za-z0-9])([A-Za-z][A-Za-z0-9]{${MIN_SLUG_LENGTH - 1},${MAX_SLUG_LENGTH - 1}})-([1-9][0-9]*)(?![A-Za-z0-9])`,
+    `(?:^|[^A-Za-z0-9])([A-Za-z][A-Za-z0-9]{${MIN_SLUG_LENGTH - 1},${MAX_SLUG_LENGTH - 1}})-([1-9][0-9]{0,${MAX_CARD_NUMBER_DIGITS - 1}})(?![A-Za-z0-9])`,
     'g'
 )
 
 /** `skip OTTER-1` / `ignore OTTER-1` — the durable opt-out. */
 const SKIP_IN_TEXT = new RegExp(
-    `\\b(?:skip|ignore)\\s+([A-Za-z][A-Za-z0-9]{${MIN_SLUG_LENGTH - 1},${MAX_SLUG_LENGTH - 1}})-([1-9][0-9]*)(?![A-Za-z0-9])`,
+    `\\b(?:skip|ignore)\\s+([A-Za-z][A-Za-z0-9]{${MIN_SLUG_LENGTH - 1},${MAX_SLUG_LENGTH - 1}})-([1-9][0-9]{0,${MAX_CARD_NUMBER_DIGITS - 1}})(?![A-Za-z0-9])`,
     'gi'
 )
 

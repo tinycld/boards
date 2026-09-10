@@ -49,6 +49,16 @@ describe('scanCardKeys', () => {
         expect(scanCardKeys('just a normal branch name')).toEqual([])
         expect(scanCardKeys('')).toEqual([])
     })
+
+    it('rejects a digit run too long to be a real card number, matching the Go twin', () => {
+        // A card number is a small positive integer. Without a digit-count
+        // cap, Number.parseInt silently overflows a huge digit run
+        // (-> 1e+21) instead of rejecting it, while the Go twin's
+        // strconv.Atoi errors and drops the match — the two implementations
+        // would disagree on this input. The regex-level cap keeps them
+        // agreeing: both reject it.
+        expect(scanCardKeys('OTTER-999999999999999999999')).toEqual([])
+    })
 })
 
 describe('scanSkipDirectives', () => {
