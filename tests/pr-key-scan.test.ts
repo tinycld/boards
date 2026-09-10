@@ -33,7 +33,15 @@ describe('scanCardKeys', () => {
         expect(scanCardKeys('A-1')).toEqual([])
     })
 
-    it('ignores a key embedded in a longer word', () => {
+    it('treats a longer leading token as its own key, never a sub-match of the shorter one inside it', () => {
+        expect(scanCardKeys('NOTOTTER-1')).toEqual([{ slug: 'NOTOTTER', number: 1 }])
+    })
+
+    it('rejects a trailing alphanumeric right after the number', () => {
+        expect(scanCardKeys('OTTER-1x')).toEqual([])
+    })
+
+    it('ignores a key embedded in a longer word (both boundaries at once)', () => {
         expect(scanCardKeys('NOTOTTER-1x')).toEqual([])
     })
 

@@ -22,8 +22,18 @@ export interface ScannedKey {
  *
  * The boundaries are the whole point. `(^|[^A-Za-z0-9])` before and
  * `(?![A-Za-z0-9])` after mean OTTER-1 matches in `nas/OTTER-1-fix` and in
- * `Closes OTTER-1.` but NOT inside `NOTOTTER-1` or `OTTER-1x` — an
- * over-matching scan links the wrong card, which is worse than missing one.
+ * `Closes OTTER-1.`. The guarantee is narrower than "rejects NOTOTTER-1": a
+ * key is never extracted as a SUB-MATCH from inside a longer alphanumeric
+ * token, so `OTTER-1` is never returned for input `NOTOTTER-1` — but
+ * `NOTOTTER` is itself a legitimate slug, so `NOTOTTER-1` DOES match, as
+ * `{ slug: 'NOTOTTER', number: 1 }`. Only a trailing alphanumeric (as in
+ * `OTTER-1x`) is rejected outright. An over-matching scan links the wrong
+ * card, which is worse than missing one.
+ *
+ * The first slug character must be a letter: `[A-Za-z]` rather than
+ * card-key.ts's `[A-Za-z0-9]+`. That's a deliberate narrowing for scanning
+ * free text — a digit-led token (`1ABC-1`) is more often a version string
+ * than a card key — even though parseCardKey would accept it as a slug.
  *
  * `[1-9][0-9]*` rejects leading zeros for card-key.ts's reason: OTTER-007 is a
  * typo, and accepting it would give one card two spellings.
