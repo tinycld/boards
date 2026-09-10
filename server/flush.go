@@ -13,10 +13,15 @@ import (
 	"tinycld.org/core/yjsdoc"
 )
 
-// descriptionRuneLimit mirrors the max on boards_cards.description. The client
-// stops typing before this; the server clamps as a last resort so an oversize
-// document cannot make a board's flush fail forever.
-const descriptionRuneLimit = 5000
+// descriptionRuneLimit mirrors the max on boards_cards.description (Jira's
+// 32767). The client stops typing before this; the server clamps as a last
+// resort so an oversize document cannot make a board's flush fail forever.
+//
+// MUST equal the migration's max and the editor's DESCRIPTION_LIMIT. Set lower
+// than the column, this silently truncates what the user typed and the DB
+// would have accepted; set higher, the flush fails validation and retries
+// forever.
+const descriptionRuneLimit = 32767
 
 // makeFlush returns the SaveCoordinator hook that writes a board's live
 // document back to its boards' description fields.
