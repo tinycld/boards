@@ -333,6 +333,7 @@ function BoardNameInput({ project, onDone }: { project: BoardProject; onDone: ()
 
     return (
         <PlainInput
+            testID="boards-name-input"
             value={draft}
             onChangeText={setDraft}
             autoFocus

@@ -118,7 +118,12 @@ export function BoardMenuRows({ actions }: { actions: BoardActions }) {
     const { project } = actions
     return (
         <>
-            <Menu.Item label="Rename board" icon={Pencil} onSelect={actions.rename} />
+            <Menu.Item
+                label="Rename board"
+                icon={Pencil}
+                testID="boards-rename"
+                onSelect={actions.rename}
+            />
             <Menu.Item
                 label="Change color"
                 icon={Palette}
