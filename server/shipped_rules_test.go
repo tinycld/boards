@@ -23,6 +23,7 @@ var allCardsCollections = []string{
 	"boards_labels", "boards_lists", "boards_cards",
 	"boards_checklist_items", "boards_comments", "boards_attachments",
 	"boards_card_links", "boards_epics", "boards_sprints",
+	"boards_pr_links", "boards_project_repos",
 }
 
 // The server-written collections: readable by members, no write rule at all.
@@ -111,6 +112,34 @@ func TestCardsShippedRules_CarryTheirGuards(t *testing.T) {
 		// --- the bootstrap branch ---
 		{"boards_project_members", "create", `project.boards_project_members_via_project.id = ""`,
 			`PocketBase's empty-back-relation idiom, and the reason a fresh project can get its first owner without a privileged Go hook. This is the ONE intentional bare "=" in the file (see the ?!= sweep below, which deliberately does not generalize to bare =)`},
+
+		// --- boards_pr_links (1980000021) ---
+		//
+		// Server-written except for the manual link/unlink path: the webhook
+		// runs as a superuser and never touches these rules. What they govern
+		// is a member linking a PR by URL and unlinking one.
+		{"boards_pr_links", "create",
+			`(@collection.boards_project_members.role ?= "owner" || @collection.boards_project_members.role ?= "editor")`,
+			"the write surface is owner|editor, matching boards_cards' own updateRule — a commentor or viewer must not be able to attach a PR to a card"},
+		{"boards_pr_links", "create", `card.project = project`,
+			"the anti-desync pin on create: without it a writer on project A could file a link naming a card on A while stamping project as B, and the row would resolve as B's for every rule that reads it while its card stays unreadable to B's members (1980000021's header)"},
+		{"boards_pr_links", "update",
+			`(@request.body.card:isset = false || @request.body.card.project = project)`,
+			"the update-path form of the same pin — a bare field name resolves against the STORED row here (1980000000's trap 2), so the pin must read @request.body.card.project instead of card.project, which would compare stored-vs-stored and constrain nothing"},
+		{"boards_pr_links", "update",
+			`(@request.body.project:isset = false || @request.body.project = project)`,
+			"the other half of the update pin: without it a writer could PATCH project onto a foreign board and repoint the link's visibility away from the card it names"},
+
+		// --- boards_project_repos (1980000021) ---
+		//
+		// Any member reads — the card UI shows PR chips to anyone who can see
+		// the card — but only an owner attaches or detaches a repo, since doing
+		// so hands the board's PR chips to a webhook installation.
+		{"boards_project_repos", "create", `@collection.boards_project_members.role ?= "owner"`,
+			"attaching a repo is a standing decision about which webhook installation feeds the board, not day-to-day card work — an editor must not be able to make it unilaterally"},
+		{"boards_project_repos", "update",
+			`(@request.body.project:isset = false || @request.body.project = project)`,
+			`1980000000's trap 2, restated for this collection: viaOwner evaluates against the STORED project, so without this pin an owner of project A could PATCH a repo row they own with {"project": B} and repoint it at a board they may not even belong to, leaking repo/installation_id into B's card UI`},
 	} {
 		t.Run(c.collection+"."+c.kind+" "+c.clause, func(t *testing.T) {
 			rlstest.RequireRuleContains(t, env.app, c.collection, c.kind, c.clause)
@@ -132,6 +161,7 @@ func TestCardsShippedRules_EveryUpdateRuleIsPinned(t *testing.T) {
 		"boards_project_members", "boards_share_links", "boards_labels",
 		"boards_lists", "boards_cards", "boards_checklist_items",
 		"boards_comments", "boards_attachments", "boards_epics", "boards_sprints",
+		"boards_project_repos",
 	} {
 		t.Run(collection+".update pinProject", func(t *testing.T) {
 			rlstest.RequireRuleContains(t, env.app, collection, "update", pinProject)

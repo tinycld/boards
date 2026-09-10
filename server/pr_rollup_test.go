@@ -2,6 +2,46 @@ package boards
 
 import "testing"
 
+// TestRecountCardPRs_TombstoneIsExcludedFromTheRollup is the regression a
+// reviewer's throwaway probe stood in for during task 4: recountCardPRs must
+// read `unlinked != true`, not just `card = {:card}`.
+//
+// The tombstoned link is deliberately "open" and the live one "merged" — the
+// reverse of the ordinary case — because derivePRStateFromStates' own
+// precedence makes "any open link means open" (see pr_rollup_test.go's table
+// above). If the tombstoned row leaked into the derivation, the card would
+// read "open" even though its one live link is merged; only the `unlinked`
+// filter keeps the rollup honest here. Calling recountCardPRs directly,
+// rather than through applyPREvent, isolates the filter itself from the
+// branch-name matching github_links_test.go already covers.
+func TestRecountCardPRs_TombstoneIsExcludedFromTheRollup(t *testing.T) {
+	env := setupCardsEnv(t)
+	_, cardID := seedBoardWithCard(t, env, "ROLLUP", 1)
+
+	live := seedPRLink(t, env, cardID, env.project.Id, "o/r", 101)
+	live.Set("state", "merged")
+	if err := env.app.Save(live); err != nil {
+		t.Fatalf("save live link: %v", err)
+	}
+
+	tombstoned := seedPRLink(t, env, cardID, env.project.Id, "o/r", 102)
+	tombstoned.Set("state", "open")
+	tombstoned.Set("unlinked", true)
+	if err := env.app.Save(tombstoned); err != nil {
+		t.Fatalf("save tombstoned link: %v", err)
+	}
+
+	recountCardPRs(env.app, cardID)
+
+	card, err := env.app.FindRecordById("boards_cards", cardID)
+	if err != nil {
+		t.Fatalf("reload card: %v", err)
+	}
+	if got := card.GetString("pr_state"); got != "merged" {
+		t.Errorf("pr_state = %q, want %q — the tombstoned open link was counted", got, "merged")
+	}
+}
+
 func TestDerivePRState_AllMergedIsTheEvent(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
