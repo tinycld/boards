@@ -1,6 +1,6 @@
 {
     "name": "@tinycld/boards",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "private": true,
     "type": "module",
     "description": "Kanban boards for tracking work across lists.",
@@ -13,6 +13,7 @@
         "./seed": "./tinycld/boards/seed.ts",
         "./screens/*": "./tinycld/boards/screens/*.tsx",
         "./public-screens/*": "./tinycld/boards/public-screens/*.tsx",
+        "./settings/*": "./tinycld/boards/settings/*.tsx",
         "./sidebar": "./tinycld/boards/sidebar.tsx",
         "./provider": "./tinycld/boards/provider.tsx",
         "./hooks/*": "./tinycld/boards/hooks/*.ts",

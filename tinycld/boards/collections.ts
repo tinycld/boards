@@ -37,6 +37,16 @@ export function registerCollections(
         collectionOptions: indexed,
     })
 
+    // Which repositories a board watches. Eager, like boards_project_members:
+    // the GitHub settings screen (settings/github.tsx) lists every attached
+    // repo across every board the user belongs to in one screen, not one
+    // board's cards at a time, so on-demand sync tied to an open card would
+    // never fire for it. Rows are owner-managed and few per board.
+    const boards_project_repos = newCollection('boards_project_repos', {
+        omitOnInsert: ['created', 'updated'] as const,
+        collectionOptions: indexed,
+    })
+
     // Owner-only by rule, so this syncs a handful of rows at most.
     const boards_share_links = newCollection('boards_share_links', {
         omitOnInsert: ['created', 'updated'] as const,
@@ -239,6 +249,7 @@ export function registerCollections(
         boards_card_reactions,
         boards_projects,
         boards_project_members,
+        boards_project_repos,
         boards_share_links,
         boards_labels,
         boards_epics,
