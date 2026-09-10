@@ -214,9 +214,21 @@ export function registerCollections(
         collectionOptions: indexed,
     })
 
+    // A card's linked pull requests. On-demand like the links above: read for
+    // the open card only. `created`/`updated` are the standard PB stamps; the
+    // rest (`state`, `review_state`, `title`, `author`…) are server-written by
+    // the GitHub webhook (server/github_links.go) even for a manually-added
+    // link, so nothing else is omitted on insert.
+    const boards_pr_links = newCollection('boards_pr_links', {
+        omitOnInsert: ['created', 'updated'] as const,
+        syncMode: 'on-demand' as const,
+        collectionOptions: indexed,
+    })
+
     return {
         boards_activity,
         boards_card_links,
+        boards_pr_links,
         boards_card_watchers,
         boards_comment_reactions,
         boards_card_reactions,

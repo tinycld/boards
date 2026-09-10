@@ -88,6 +88,20 @@ migrate(
                     required: false,
                     max: 40,
                 },
+                {
+                    id: 'boards_project_repos_created',
+                    name: 'created',
+                    type: 'autodate',
+                    onCreate: true,
+                    onUpdate: false,
+                },
+                {
+                    id: 'boards_project_repos_updated',
+                    name: 'updated',
+                    type: 'autodate',
+                    onCreate: true,
+                    onUpdate: true,
+                },
             ],
             indexes: [
                 'CREATE UNIQUE INDEX idx_boards_project_repos_unique ' +
@@ -212,6 +226,20 @@ migrate(
                     name: 'unlinked',
                     type: 'bool',
                     required: false,
+                },
+                {
+                    id: 'boards_pr_links_created',
+                    name: 'created',
+                    type: 'autodate',
+                    onCreate: true,
+                    onUpdate: false,
+                },
+                {
+                    id: 'boards_pr_links_updated',
+                    name: 'updated',
+                    type: 'autodate',
+                    onCreate: true,
+                    onUpdate: true,
                 },
             ],
             indexes: [

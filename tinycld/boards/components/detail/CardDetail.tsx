@@ -12,6 +12,7 @@ import { useUpdateCard } from '../../hooks/useCardMutations'
 import { useCardReactions } from '../../hooks/useCardReactions'
 import { useCommentMutations } from '../../hooks/useCommentMutations'
 import { useCommentReactions } from '../../hooks/useCommentReactions'
+import { usePrLinks } from '../../hooks/usePrLinks'
 import { useProjectRole } from '../../hooks/useProjectRole'
 import { useReactorNames } from '../../hooks/useReactorNames'
 import { type SectionKey, visibleSections } from '../../lib/card-sections'
@@ -27,6 +28,7 @@ import type {
 } from '../../types'
 import { useBoardPresenceContext } from '../BoardPresenceProvider'
 import { LabelManagerDialog } from '../LabelManagerDialog'
+import { PrLinkList } from '../PrLinkChip'
 import { CommentComposer } from './CommentComposer'
 import {
     DESCRIPTION_BODY_PADDING,
@@ -256,6 +258,11 @@ export function CardDetail({
         isReady: areLinksReady,
     } = useCardLinks(card.id, cardsById, true)
 
+    // Server-derived from GitHub, not composed by the reader, so it sits
+    // outside the reveal/chip machinery below: there is no "add a PR" action
+    // on this card, only a row that shows up once the webhook links one.
+    const { data: prLinks } = usePrLinks(card.id)
+
     // Derived every render, never sampled at mount: useCardDetail is on-demand,
     // so before it settles an empty result is indistinguishable from a card that
     // genuinely has nothing — and a teammate's realtime insert has to open the
@@ -422,6 +429,12 @@ export function CardDetail({
                             isComposing={revealed.has('subtasks')}
                             onComposingChange={isOpen => setRevealedFor('subtasks', isOpen)}
                         />
+                    </View>
+                    <View className={`px-6 ${widthClass}`}>
+                        {/* Below TOOLBAR_INDEX, so the sticky header keeps its
+                            position. Server-derived and read-only here, unlike
+                            the sections above — see the usePrLinks call. */}
+                        <PrLinkList links={prLinks ?? []} isVisible={(prLinks ?? []).length > 0} />
                     </View>
                     <View className={`px-6 ${widthClass}`}>
                         {/* Below TOOLBAR_INDEX, so the sticky header keeps its
