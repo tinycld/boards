@@ -16,15 +16,15 @@ import "testing"
 // branch-name matching github_links_test.go already covers.
 func TestRecountCardPRs_TombstoneIsExcludedFromTheRollup(t *testing.T) {
 	env := setupCardsEnv(t)
-	_, cardID := seedBoardWithCard(t, env, "ROLLUP", 1)
+	projectID, cardID := seedBoardWithCard(t, env, "ROLLUP", 1)
 
-	live := seedPRLink(t, env, cardID, env.project.Id, "o/r", 101)
+	live := seedPRLink(t, env, cardID, projectID, "o/r", 101)
 	live.Set("state", "merged")
 	if err := env.app.Save(live); err != nil {
 		t.Fatalf("save live link: %v", err)
 	}
 
-	tombstoned := seedPRLink(t, env, cardID, env.project.Id, "o/r", 102)
+	tombstoned := seedPRLink(t, env, cardID, projectID, "o/r", 102)
 	tombstoned.Set("state", "open")
 	tombstoned.Set("unlinked", true)
 	if err := env.app.Save(tombstoned); err != nil {

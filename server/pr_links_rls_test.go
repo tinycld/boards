@@ -108,6 +108,7 @@ func TestPRLinksRLS_NonMemberCannotUpdate(t *testing.T) {
 		token:  env.outsiderToken,
 		body:   `{"state":"merged"}`,
 		want:   http.StatusNotFound,
+		after:  requirePRLinkState(link.Id, "open"),
 	}.run(t, env)
 }
 
@@ -120,6 +121,7 @@ func TestPRLinksRLS_NonMemberCannotDelete(t *testing.T) {
 		url:    "/api/collections/boards_pr_links/records/" + link.Id,
 		token:  env.outsiderToken,
 		want:   http.StatusNotFound,
+		after:  requirePRLinkExists(link.Id),
 	}.run(t, env)
 }
 
