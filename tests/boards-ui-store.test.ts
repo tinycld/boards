@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { EMPTY_FILTER } from '../tinycld/boards/lib/board-filter'
+import { PEEK_MIN_WIDTH } from '../tinycld/boards/lib/peek-width'
 import {
     persistedSprintScopes,
     selectSprintScope,
@@ -18,7 +19,12 @@ import {
  */
 describe('boards-ui-store view preferences', () => {
     beforeEach(() => {
-        useBoardsUIStore.setState({ collapsedColumnIds: {}, isCompactCards: false })
+        useBoardsUIStore.setState({
+            collapsedColumnIds: {},
+            isCompactCards: false,
+            cardDisplayMode: 'peek',
+            peekWidth: PEEK_MIN_WIDTH,
+        })
     })
 
     describe('toggleColumnCollapsed', () => {
@@ -282,6 +288,35 @@ describe('boards-ui-store view preferences', () => {
         })
     })
 
+    describe('the card display mode', () => {
+        it('opens cards in the peek until the user says otherwise', () => {
+            expect(useBoardsUIStore.getState().cardDisplayMode).toBe('peek')
+        })
+
+        it('round-trips between the two modes', () => {
+            const { setCardDisplayMode } = useBoardsUIStore.getState()
+
+            setCardDisplayMode('modal')
+            expect(useBoardsUIStore.getState().cardDisplayMode).toBe('modal')
+
+            setCardDisplayMode('peek')
+            expect(useBoardsUIStore.getState().cardDisplayMode).toBe('peek')
+        })
+    })
+
+    describe('the peek width', () => {
+        it("starts at the minimum, so nobody's peek is narrower than it was", () => {
+            expect(useBoardsUIStore.getState().peekWidth).toBe(PEEK_MIN_WIDTH)
+        })
+
+        // Stored RAW: the viewport clamp belongs to the render path, so a
+        // width set on a large monitor survives a trip through a laptop.
+        it('stores the width it is given without clamping it', () => {
+            useBoardsUIStore.getState().setPeekWidth(4000)
+            expect(useBoardsUIStore.getState().peekWidth).toBe(4000)
+        })
+    })
+
     describe('persistence', () => {
         /**
          * Reads what the persist middleware ACTUALLY wrote, rather than
@@ -304,6 +339,8 @@ describe('boards-ui-store view preferences', () => {
                 viewModeByProject: { proj_1: 'list' },
                 sprintScopeByProject: { proj_1: 'all' },
                 isMyCardsShowingClosed: true,
+                cardDisplayMode: 'modal',
+                peekWidth: 820,
             })
 
             expect(await persisted()).toEqual({
@@ -314,6 +351,11 @@ describe('boards-ui-store view preferences', () => {
                 viewModeByProject: { proj_1: 'list' },
                 sprintScopeByProject: { proj_1: 'all' },
                 isMyCardsShowingClosed: true,
+                // How a card opens and how wide the peek is are the two
+                // settings someone adjusts once and expects to keep. Neither
+                // has a referent that can go stale.
+                cardDisplayMode: 'modal',
+                peekWidth: 820,
             })
         })
 
@@ -342,10 +384,12 @@ describe('boards-ui-store view preferences', () => {
             // bulk archive against rows the user cannot see.
             expect(Object.keys(await persisted()).sort()).toEqual([
                 'activeProjectId',
+                'cardDisplayMode',
                 'collapsedColumnIds',
                 'collapsedSprintIds',
                 'isCompactCards',
                 'isMyCardsShowingClosed',
+                'peekWidth',
                 'sprintScopeByProject',
                 'viewModeByProject',
             ])

@@ -7,15 +7,33 @@ order: 20
 
 ## Opening a card
 
-Click any card on the board to open it in a panel on the right. The board stays
-visible behind the panel.
+Click any card on the board to open it. A card opens one of two ways, and you
+choose which:
 
-To close the card, click anywhere on the board behind it, press **Esc**, or use
-the ✕ in the panel's corner. To move to the next or previous card without
+- **In a panel** on the right, with the board still visible beside it. This is
+  how a card opens until you say otherwise.
+- **In a window** centered over the board, with the board dimmed behind it.
+  A window is roomier, which suits a card with a long description or a lot of
+  comments.
+
+To switch, use the button next to the expand arrows at the top of an open card,
+or press **]**. Whichever you pick is how every card opens from then on, on
+this device — you set it once.
+
+The two behave the same except in one way: while a card is open **in a panel**,
+the board behind it still works, so clicking another card swaps the open card
+straight over. A **window** dims the board, so close the card first.
+
+To close a card, press **Esc** or use the ✕ in its corner; with a panel you can
+also click the board behind it. To move to the next or previous card without
 closing, press **j** or **k**.
 
-To give a card the whole screen, click the expand button (the arrows in the
-panel's top corner). Your browser's back button returns you to the board.
+To give a card the whole screen, click the expand button (the arrows in the top
+corner). That works from either the panel or the window, and your browser's
+back button returns you to the board.
+
+To make the panel wider, drag its left edge. It remembers the width you set, and
+it will not go narrower than its normal size.
 
 ## Moving cards by drag and drop
 
@@ -522,6 +540,7 @@ With a card open:
 - **J** — next card
 - **K** — previous card
 - **E** — edit the title
+- **]** — switch between opening cards in a panel and in a window
 - **Esc** — close the card (or return to the board from the full-screen view)
 
 Press **⇧?** anywhere to see every shortcut the app knows, including the ones

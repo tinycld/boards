@@ -43,28 +43,45 @@ export async function openBoard(page: Page, name: string, cardTitle: string) {
     await expect(boardCard(page, cardTitle)).toBeVisible()
 }
 
-/** Open a card's peek and wait for its body — the click alone proves nothing
+/**
+ * The surface an open card is presented on. `peek` is the default and what
+ * every spec that does not say otherwise gets.
+ */
+export type CardSurfaceMode = 'peek' | 'modal'
+
+const CARD_SURFACE_TESTID: Record<CardSurfaceMode, string> = {
+    peek: 'boards-card-peek',
+    modal: 'boards-card-modal',
+}
+
+/** The open card's container, whichever surface it opened on. */
+export function cardSurface(page: Page, mode: CardSurfaceMode = 'peek'): Locator {
+    return page.getByTestId(CARD_SURFACE_TESTID[mode])
+}
+
+/** Open a card and wait for its body — the click alone proves nothing
  *  about the detail having mounted. */
-export async function openCard(page: Page, title: string) {
+export async function openCard(page: Page, title: string, mode: CardSurfaceMode = 'peek') {
     await boardCard(page, title).click()
+    await expect(cardSurface(page, mode)).toBeVisible()
     await expect(page.getByText('Description', { exact: true })).toBeVisible()
 }
 
 /**
- * Close the card peek and WAIT for it to be gone.
+ * Close the open card and WAIT for its surface to be gone.
  *
  * Clicks the Close button rather than pressing Escape. Escape is registered as
  * a `scope: 'modal'` shortcut, so while any ProseMirror surface in the peek
  * holds focus (description, comment composer) the editor consumes it and the
- * panel stays open — covering the board header and the Share button behind it.
- * The button does not depend on where focus happens to be.
+ * surface stays open — covering the board header and the Share button behind
+ * it. The button does not depend on where focus happens to be.
  *
  * Closing matters beyond navigation: it ends the collaborative editing session
  * and flushes the description to the stored field.
  */
-export async function closeCardPeek(page: Page) {
+export async function closeCardPeek(page: Page, mode: CardSurfaceMode = 'peek') {
     await page.getByRole('button', { name: 'Close' }).click()
-    await expect(page.getByTestId('boards-card-peek')).toHaveCount(0)
+    await expect(cardSurface(page, mode)).toHaveCount(0)
 }
 
 /**

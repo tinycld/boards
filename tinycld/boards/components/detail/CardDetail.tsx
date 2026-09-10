@@ -45,7 +45,7 @@ import { DetailSubtasks } from './DetailSubtasks'
 import { EditableText, type EditableTextHandle } from './EditableText'
 import { MarkdownText } from './MarkdownText'
 
-type DetailVariant = 'peek' | 'page'
+type DetailVariant = 'peek' | 'modal' | 'page'
 
 /**
  * Which ScrollView child the description header is, counting from zero:
@@ -99,8 +99,16 @@ interface CardDetailProps {
     titleRef?: RefObject<EditableTextHandle | null>
 }
 
+/** How wide the content column runs on each surface — see `widthClass`. */
+const WIDTH_CLASS: Record<DetailVariant, string> = {
+    peek: '',
+    modal: 'w-full max-w-[1100px] self-center',
+    page: 'w-full max-w-[1200px] self-center',
+}
+
 /**
- * The card detail content, shared by the side peek and the full-page screen.
+ * The card detail content, shared by the side peek, the modal and the
+ * full-page screen.
  * The containers own their top bars (stepper, expand/close vs. back); this
  * component owns everything below: title, properties, description, checklist,
  * activity, and the comment composer.
@@ -119,7 +127,11 @@ export function CardDetail({
     titleRef,
 }: CardDetailProps) {
     const [isManagingLabels, setIsManagingLabels] = useState(false)
-    const widthClass = variant === 'page' ? 'w-full max-w-[1200px] self-center' : ''
+    // The peek is already as narrow as its panel, so it needs no cap; the
+    // page and the modal are both wide surfaces whose text would otherwise run
+    // the full width. The modal's own frame caps at 1400px, so its measure is
+    // set a little narrower than the page's.
+    const widthClass = WIDTH_CLASS[variant]
     // Fetched here rather than threaded in as props, so the peek and the page
     // both get it without either container knowing about on-demand collections.
     const { checklist, comments, attachments, activity, isReady } = useCardDetail(card.id)
