@@ -54,10 +54,43 @@ function bell(page: Page) {
     return page.getByLabel(/^Notifications/)
 }
 
-async function unreadCount(page: Page): Promise<number> {
-    const label = (await bell(page).getAttribute('aria-label')) ?? ''
-    const match = label.match(/\((\d+) unread\)/)
-    return match ? Number(match[1]) : 0
+/**
+ * The notification rows announcing a reaction to a comment on ONE card.
+ *
+ * Matched on the server's own wording — notifyReaction files
+ * "<who> reacted <emoji> to your comment" as the title and the card's title as
+ * the body — so the assertion names the notification it means rather than a
+ * position in a list.
+ *
+ * Both filters are load-bearing, and the card title is the one that matters:
+ * the bell is ACCOUNT-WIDE and every spec shares one fixture account, so the
+ * drawer also holds reaction notifications left by the earlier tests in this
+ * file and by whatever is running on the other worker. Narrowing to this run's
+ * card is what makes a count of these rows mean "this reaction", and it is
+ * strictly stronger than watching a tally move: it proves the right
+ * notification arrived, for the right card.
+ */
+function reactionNotifications(page: Page, cardTitle: string) {
+    return page
+        .locator('[tabindex]')
+        .filter({ hasText: /reacted .* to your comment/ })
+        .filter({ hasText: cardTitle })
+}
+
+/**
+ * Open the notification drawer and WAIT for it, then run `check` against it.
+ *
+ * Gated on the drawer's own Close control, which exists only while it is open.
+ * Without that gate a count taken against a drawer that had not rendered yet
+ * would read zero and be believed — the assertion would pass for the wrong
+ * reason, which is worse than failing.
+ */
+async function withNotifications(page: Page, check: () => Promise<void>) {
+    await bell(page).click()
+    await expect(page.getByLabel('Close notifications')).toBeVisible()
+    await check()
+    await bell(page).click()
+    await expect(page.getByLabel('Close notifications')).toHaveCount(0)
 }
 
 /**
@@ -179,28 +212,53 @@ test.describe('Boards — comment reactions', () => {
         await login(page)
         await navigateToPackage(page, 'boards')
         const boardName = `react-two-${Date.now()}`
+        // A card title unique to this RUN. The notification body carries the
+        // card's title, and that is what makes this test's notification
+        // identifiable among the reaction notifications the earlier tests in
+        // this file leave on the shared fixture account.
+        const cardTitle = `${CARD_TITLE} ${Date.now()}`
         await createBoard(page, boardName)
-        await addCard(page, 0, CARD_TITLE)
+        await addCard(page, 0, cardTitle)
         await addMemberToBoard(page, boardName, TEST_COLLABORATOR_EMAIL, 'Commentor')
-        await openCard(page, CARD_TITLE)
+        await openCard(page, cardTitle)
         await postComment(page, COMMENT)
         await react(page, THUMBS_UP)
         await expect(thumbsUp(page)).toContainText('1')
-        // Reacting to your own comment tells nobody, so this is the baseline.
-        const before = await unreadCount(page)
+        // No baseline visit to the drawer is needed, and none is wanted: the
+        // card title is unique to this run, so NO notification of this shape
+        // can pre-exist, and opening the drawer here would dismiss the peek
+        // this test still has to react in.
 
         const { page: bobPage, close } = await signInAsCollaborator(page)
         try {
             await navigateToPackage(bobPage, 'boards')
-            await openBoard(bobPage, boardName, CARD_TITLE)
-            await openCard(bobPage, CARD_TITLE)
+            await openBoard(bobPage, boardName, cardTitle)
+            await openCard(bobPage, cardTitle)
             await expect(thumbsUp(bobPage)).toContainText('1')
             // A commentor may react: pressing the existing chip adds theirs.
             await thumbsUp(bobPage).click()
             await expect(thumbsUp(bobPage)).toContainText('2')
             await expect(thumbsUp(page)).toContainText('2')
-            // The comment's author hears about it, once.
-            await expect.poll(() => unreadCount(page)).toBe(before + 1)
+            // The comment's author hears about it, ONCE. Asserted on the
+            // reaction's own notification rather than on the bell's tally, so
+            // "once" still means once when another spec's notification lands
+            // on this shared account mid-test.
+            //
+            // Polled: the notify path is a goroutine off the write, so the row
+            // arrives a moment after the chip count does.
+            await expect
+                .poll(
+                    async () => {
+                        let seen = 0
+                        await withNotifications(page, async () => {
+                            seen = await reactionNotifications(page, cardTitle).count()
+                        })
+                        return seen
+                    },
+                    { timeout: 20_000 }
+                )
+                .toBe(1)
+
             await thumbsUp(bobPage).click()
             await expect(thumbsUp(bobPage)).toContainText('1')
         } finally {
