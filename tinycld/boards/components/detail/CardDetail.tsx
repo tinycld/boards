@@ -434,7 +434,11 @@ export function CardDetail({
                         {/* Below TOOLBAR_INDEX, so the sticky header keeps its
                             position. Server-derived and read-only here, unlike
                             the sections above — see the usePrLinks call. */}
-                        <PrLinkList links={prLinks ?? []} isVisible={(prLinks ?? []).length > 0} />
+                        <PrLinkList
+                            links={prLinks ?? []}
+                            canEdit={canEdit}
+                            isVisible={(prLinks ?? []).length > 0}
+                        />
                     </View>
                     <View className={`px-6 ${widthClass}`}>
                         {/* Below TOOLBAR_INDEX, so the sticky header keeps its

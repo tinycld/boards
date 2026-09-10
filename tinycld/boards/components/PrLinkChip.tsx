@@ -1,10 +1,14 @@
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
+import { X } from 'lucide-react-native'
 import { Linking, Pressable, Text, View } from 'react-native'
+import { useUnlinkPr } from '../hooks/usePrLinkMutations'
 import { prLinkStatus } from '../lib/pr-link-status'
 import type { BoardsPrLinks } from '../types'
 
 interface PrLinkChipProps {
     link: BoardsPrLinks
+    /** Whether the unlink affordance shows — a reader has nothing to remove. */
+    canEdit: boolean
 }
 
 /**
@@ -15,28 +19,68 @@ interface PrLinkChipProps {
  *
  * Opens the PR on GitHub. That is the one thing a PR link is for: this UI
  * never edits or reviews the PR itself, only shows where the card stands.
+ *
+ * The unlink button does not distinguish manual from derived links in this
+ * component — `useUnlinkPr` reads the row's own `link_source` and decides
+ * delete vs. tombstone itself, so a derived link removed here can still come
+ * back on the next webhook delivery, by design.
  */
-export function PrLinkChip({ link }: PrLinkChipProps) {
+export function PrLinkChip({ link, canEdit }: PrLinkChipProps) {
     const mutedColor = useThemeColor('muted')
     const status = prLinkStatus(link.state, link.review_state)
     const Icon = status.icon
+    const unlinkPr = useUnlinkPr()
 
     return (
-        <Pressable
-            accessibilityRole="link"
-            accessibilityLabel={`${link.repo} #${link.number}, ${status.accessibilityLabel}`}
+        <View
             testID="boards-pr-link-chip"
-            onPress={() => Linking.openURL(link.url)}
-            className="flex-row items-center gap-1.5 rounded-md border border-border px-2 py-1 hover:bg-foreground/[0.04]"
+            className="flex-row items-center gap-1.5 rounded-md border border-border px-2 py-1"
         >
-            <Icon size={13} color={mutedColor} strokeWidth={2.2} />
-            <Text className="text-[12px] font-medium text-foreground">
-                {link.repo} #{link.number}
-            </Text>
-            <Text className="flex-1 text-[12px] text-muted" numberOfLines={1}>
-                {link.title}
-            </Text>
-            <PrReviewBadge reviewBadge={status.reviewBadge} />
+            <Pressable
+                accessibilityRole="link"
+                accessibilityLabel={`${link.repo} #${link.number}, ${status.accessibilityLabel}`}
+                onPress={() => Linking.openURL(link.url)}
+                className="flex-1 flex-row items-center gap-1.5 hover:bg-foreground/[0.04]"
+            >
+                <Icon size={13} color={mutedColor} strokeWidth={2.2} />
+                <Text className="text-[12px] font-medium text-foreground">
+                    {link.repo} #{link.number}
+                </Text>
+                <Text className="flex-1 text-[12px] text-muted" numberOfLines={1}>
+                    {link.title}
+                </Text>
+                <PrReviewBadge reviewBadge={status.reviewBadge} />
+            </Pressable>
+            <UnlinkButton
+                isVisible={canEdit}
+                isPending={unlinkPr.isPending}
+                onPress={() => unlinkPr.mutate({ id: link.id, link_source: link.link_source })}
+            />
+        </View>
+    )
+}
+
+function UnlinkButton({
+    isVisible,
+    isPending,
+    onPress,
+}: {
+    isVisible: boolean
+    isPending: boolean
+    onPress: () => void
+}) {
+    const mutedColor = useThemeColor('muted')
+    if (!isVisible) return null
+    return (
+        <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Unlink pull request"
+            testID="boards-pr-link-unlink"
+            onPress={onPress}
+            disabled={isPending}
+            className="p-1 rounded hover:bg-foreground/5"
+        >
+            <X size={13} color={mutedColor} strokeWidth={2.2} />
         </Pressable>
     )
 }
@@ -55,7 +99,15 @@ function PrReviewBadge({ reviewBadge }: { reviewBadge: { label: string } | null 
  * decides visibility with `isVisible`, the package's standard for an optional
  * section (never `{cond && <List/>}`).
  */
-export function PrLinkList({ links, isVisible }: { links: BoardsPrLinks[]; isVisible: boolean }) {
+export function PrLinkList({
+    links,
+    canEdit,
+    isVisible,
+}: {
+    links: BoardsPrLinks[]
+    canEdit: boolean
+    isVisible: boolean
+}) {
     if (!isVisible) return null
 
     return (
@@ -67,7 +119,7 @@ export function PrLinkList({ links, isVisible }: { links: BoardsPrLinks[]; isVis
                 Pull requests
             </Text>
             {links.map(link => (
-                <PrLinkChip key={link.id} link={link} />
+                <PrLinkChip key={link.id} link={link} canEdit={canEdit} />
             ))}
         </View>
     )
