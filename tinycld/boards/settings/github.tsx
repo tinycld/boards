@@ -1,8 +1,9 @@
 import { eq } from '@tanstack/db'
 import { HelpIcon } from '@tinycld/core/components/help/HelpIcon'
-import { handleMutationErrorsWithForm } from '@tinycld/core/lib/errors'
+import { errorToString, handleMutationErrorsWithForm } from '@tinycld/core/lib/errors'
 import { mutation, useMutation } from '@tinycld/core/lib/mutations'
 import { PB_SERVER_ADDR, useStore } from '@tinycld/core/lib/pocketbase'
+import { useToastStore } from '@tinycld/core/lib/stores/toast-store'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
 import {
@@ -19,8 +20,7 @@ import { Check, Copy, GitPullRequest, Trash2 } from 'lucide-react-native'
 import { newRecordId } from 'pbtsdb/core'
 import { Pressable, ScrollView, Text, View } from 'react-native'
 import { useCopiedFlag } from '../hooks/useCopiedFlag'
-
-const WEBHOOK_URL = `${PB_SERVER_ADDR}/api/webhooks/github`
+import { canRemoveRepo } from '../lib/repo-permissions'
 
 const repoSchema = z.object({
     project: z.string().min(1, 'Choose a board'),
@@ -84,6 +84,7 @@ function useGitHubSettingsData() {
         }
     }
     ownedProjects.sort((a, b) => a.name.localeCompare(b.name))
+    const ownedProjectIds = new Set(ownedProjects.map(p => p.id))
 
     const repos: RepoRow[] = (repoRows ?? [])
         .filter(repo => projectNames.has(repo.project))
@@ -95,12 +96,12 @@ function useGitHubSettingsData() {
         }))
         .sort((a, b) => a.projectName.localeCompare(b.projectName) || a.repo.localeCompare(b.repo))
 
-    return { repos, ownedProjects }
+    return { repos, ownedProjects, ownedProjectIds }
 }
 
 export default function GitHubSettings() {
     const primaryColor = useThemeColor('primary')
-    const { repos, ownedProjects } = useGitHubSettingsData()
+    const { repos, ownedProjects, ownedProjectIds } = useGitHubSettingsData()
     const canWrite = ownedProjects.length > 0
 
     return (
@@ -108,7 +109,7 @@ export default function GitHubSettings() {
             <View className="flex-1 gap-5 p-5" style={{ maxWidth: 600 }}>
                 <Header primaryColor={primaryColor} />
                 <WebhookURLBlock />
-                <RepoList repos={repos} canWrite={canWrite} />
+                <RepoList repos={repos} ownedProjectIds={ownedProjectIds} />
                 <AddRepoSection ownedProjects={ownedProjects} isVisible={canWrite} />
                 <ReadOnlyNote isVisible={!canWrite} />
             </View>
@@ -141,9 +142,14 @@ function WebhookURLBlock() {
     const borderColor = useThemeColor('border')
     const surfaceColor = useThemeColor('surface')
     const [copied, markCopied] = useCopiedFlag()
+    // Read at render time, not module scope: PB_SERVER_ADDR is a Proxy that
+    // throws until the server address resolves, and every other consumer
+    // (anon-identity.ts, use-cli-downloads.ts, use-release-manifest.ts)
+    // interpolates it inside a function body for exactly that reason.
+    const webhookURL = `${PB_SERVER_ADDR}/api/webhooks/github`
 
     const onCopy = async () => {
-        await Clipboard.setStringAsync(WEBHOOK_URL)
+        await Clipboard.setStringAsync(webhookURL)
         markCopied()
     }
 
@@ -169,7 +175,7 @@ function WebhookURLBlock() {
                         flex: 1,
                     }}
                 >
-                    {WEBHOOK_URL}
+                    {webhookURL}
                 </Text>
                 <Pressable
                     accessibilityRole="button"
@@ -188,7 +194,13 @@ function WebhookURLBlock() {
     )
 }
 
-function RepoList({ repos, canWrite }: { repos: RepoRow[]; canWrite: boolean }) {
+function RepoList({
+    repos,
+    ownedProjectIds,
+}: {
+    repos: RepoRow[]
+    ownedProjectIds: ReadonlySet<string>
+}) {
     return (
         <View className="gap-3">
             <Text className="text-foreground" style={{ fontSize: 18, fontWeight: 'bold' }}>
@@ -196,7 +208,13 @@ function RepoList({ repos, canWrite }: { repos: RepoRow[]; canWrite: boolean }) 
             </Text>
             <EmptyReposNote isVisible={repos.length === 0} />
             {repos.map(repo => (
-                <RepoRowItem key={repo.id} repo={repo} canRemove={canWrite} />
+                <RepoRowItem
+                    key={repo.id}
+                    repo={repo}
+                    // Per-row, not screen-wide: owning board A must not grant
+                    // Remove on board B's repo — see lib/repo-permissions.ts.
+                    canRemove={canRemoveRepo(ownedProjectIds, repo.project)}
+                />
             ))}
         </View>
     )
@@ -219,6 +237,17 @@ function RepoRowItem({ repo, canRemove }: { repo: RepoRow; canRemove: boolean })
         mutationFn: mutation(function* () {
             yield reposCollection.delete(repo.id)
         }),
+        // A rejected delete (a race, a revoked role, a rule this UI didn't
+        // anticipate) must not just quietly revert the optimistic removal —
+        // useMutation's own default would already toast a generic message,
+        // but naming the repo here is clearer than that fallback.
+        onError: error =>
+            useToastStore.getState().addToast({
+                title: `Couldn't remove ${repo.repo}`,
+                body: errorToString(error),
+                variant: 'error',
+                duration: 5000,
+            }),
     })
 
     return (
