@@ -40,6 +40,10 @@ func registerAutomation() {
 		"boards:card-sprint-changed",
 		"boards:sprint-started",
 		"boards:sprint-completed",
+		"boards:pr-opened",
+		"boards:pr-merged",
+		"boards:pr-review-requested",
+		"boards:pr-approved",
 	} {
 		automation.RegisterOwnerResolver(ref, cardOwnerResolver)
 	}
@@ -60,6 +64,11 @@ func registerAutomation() {
 	// (registerDueNotices). Only the set is the event.
 	automation.RegisterTriggerFilter("boards:card-overdue", cardBecameOverdue)
 	automation.RegisterTriggerFilter("boards:card-due-soon", cardBecameDueSoon)
+
+	automation.RegisterTriggerFilter("boards:pr-opened", cardPROpened)
+	automation.RegisterTriggerFilter("boards:pr-merged", cardPRMerged)
+	automation.RegisterTriggerFilter("boards:pr-review-requested", cardPRReviewRequested)
+	automation.RegisterTriggerFilter("boards:pr-approved", cardPRApproved)
 
 	// move-card declares a relation param, and the engine refuses to run an
 	// action whose relation param has no registered authorizer — without this
@@ -552,6 +561,45 @@ func sprintEntered(record *core.Record, state string) bool {
 	}
 	original := record.Original()
 	return original.GetString("project") != "" && original.GetString("state") != state
+}
+
+// The PR triggers, sprintEntered's shape one collection over.
+//
+// pr_state moves in BOTH directions — a reopened PR goes merged → open — so
+// every filter checks Original(): "the column now reads X and did not before
+// this save". Without that, a same-state re-save fires the trigger again, and
+// a card edited for any other reason re-fires whichever state it is sitting in.
+//
+// ALL-MERGED lives in the rollup, not here. By the time pr_state reads
+// `merged`, pr_rollup.go has already established that no link remains open, so
+// this filter is a plain transition check and the semantic is stated in exactly
+// one place.
+
+func cardPREntered(record *core.Record, column, state string) bool {
+	if record == nil || record.GetString(column) != state {
+		return false
+	}
+	original := record.Original()
+	if original == nil {
+		return false
+	}
+	return original.GetString(column) != state
+}
+
+func cardPROpened(_ core.App, record *core.Record) bool {
+	return cardPREntered(record, "pr_state", "open")
+}
+
+func cardPRMerged(_ core.App, record *core.Record) bool {
+	return cardPREntered(record, "pr_state", "merged")
+}
+
+func cardPRReviewRequested(_ core.App, record *core.Record) bool {
+	return cardPREntered(record, "pr_review_state", "in_review")
+}
+
+func cardPRApproved(_ core.App, record *core.Record) bool {
+	return cardPREntered(record, "pr_review_state", "approved")
 }
 
 // checkBoardWrite reports whether a user may write this board's cards. The

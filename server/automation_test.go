@@ -637,3 +637,67 @@ func TestAddLabel_AlreadyPresentIsANoOp(t *testing.T) {
 		t.Errorf("a redundant label wrote the record %d time(s), want 0", updates)
 	}
 }
+
+func TestCardPRStateFilters_FireOnlyOnTheTransition(t *testing.T) {
+	env := setupCardsEnv(t)
+	_, card := seedBoardWithCard(t, env, "OTTER", 20)
+
+	record, err := env.app.FindRecordById("boards_cards", card)
+	if err != nil {
+		t.Fatalf("loading the card: %v", err)
+	}
+
+	// none → open fires pr-opened.
+	record.Set("pr_state", "open")
+	if !cardPROpened(env.app, record) {
+		t.Error("pr-opened did not fire on none → open")
+	}
+	if cardPRMerged(env.app, record) {
+		t.Error("pr-merged fired on none → open")
+	}
+
+	// Persist so Original() reads `open` on the next change.
+	if err := env.app.Save(record); err != nil {
+		t.Fatalf("saving: %v", err)
+	}
+	record, _ = env.app.FindRecordById("boards_cards", card)
+
+	// A same-state re-save must fire nothing.
+	record.Set("pr_state", "open")
+	if cardPROpened(env.app, record) {
+		t.Error("pr-opened fired on a same-state re-save")
+	}
+
+	// open → merged fires pr-merged only.
+	record.Set("pr_state", "merged")
+	if !cardPRMerged(env.app, record) {
+		t.Error("pr-merged did not fire on open → merged")
+	}
+	if cardPROpened(env.app, record) {
+		t.Error("pr-opened fired on open → merged")
+	}
+}
+
+func TestCardPRReviewFilters(t *testing.T) {
+	env := setupCardsEnv(t)
+	_, card := seedBoardWithCard(t, env, "OTTER", 21)
+	record, _ := env.app.FindRecordById("boards_cards", card)
+
+	record.Set("pr_review_state", "in_review")
+	if !cardPRReviewRequested(env.app, record) {
+		t.Error("pr-review-requested did not fire on → in_review")
+	}
+	if cardPRApproved(env.app, record) {
+		t.Error("pr-approved fired on → in_review")
+	}
+
+	if err := env.app.Save(record); err != nil {
+		t.Fatalf("saving: %v", err)
+	}
+	record, _ = env.app.FindRecordById("boards_cards", card)
+
+	record.Set("pr_review_state", "approved")
+	if !cardPRApproved(env.app, record) {
+		t.Error("pr-approved did not fire on in_review → approved")
+	}
+}

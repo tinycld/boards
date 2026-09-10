@@ -303,6 +303,71 @@ const automation = {
                 { key: 'project', label: 'Board' },
             ],
         },
+        {
+            // The PR triggers all watch a DERIVED column that pr_rollup.go
+            // owns, not the link rows themselves. Two reasons: a card with
+            // three linked PRs would otherwise fire three times for one
+            // logical event, and all-merged semantics cannot be expressed by
+            // watching a single row at all — the rollup is where "no link
+            // remains open" is decided.
+            id: 'pr-opened',
+            label: 'A linked pull request opens',
+            collection: 'boards_cards',
+            on: 'update',
+            watch: ['pr_state'],
+            fields: [
+                'title',
+                { key: 'list', label: 'List' },
+                { key: 'project', label: 'Board' },
+                { key: 'assignees', label: 'Assignees' },
+                'priority',
+                'estimate',
+            ],
+        },
+        {
+            // Fires when the LAST open PR merges, which is the whole point of
+            // the derived column: a card spanning core and a package is not
+            // done when only one of its PRs lands.
+            id: 'pr-merged',
+            label: 'All linked pull requests merge',
+            collection: 'boards_cards',
+            on: 'update',
+            watch: ['pr_state'],
+            fields: [
+                'title',
+                { key: 'list', label: 'List' },
+                { key: 'project', label: 'Board' },
+                { key: 'assignees', label: 'Assignees' },
+                'priority',
+                'estimate',
+            ],
+        },
+        {
+            id: 'pr-review-requested',
+            label: 'A linked pull request is up for review',
+            collection: 'boards_cards',
+            on: 'update',
+            watch: ['pr_review_state'],
+            fields: [
+                'title',
+                { key: 'list', label: 'List' },
+                { key: 'project', label: 'Board' },
+                { key: 'assignees', label: 'Assignees' },
+            ],
+        },
+        {
+            id: 'pr-approved',
+            label: 'A linked pull request is approved',
+            collection: 'boards_cards',
+            on: 'update',
+            watch: ['pr_review_state'],
+            fields: [
+                'title',
+                { key: 'list', label: 'List' },
+                { key: 'project', label: 'Board' },
+                { key: 'assignees', label: 'Assignees' },
+            ],
+        },
     ],
     actions: [
         {
