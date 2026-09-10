@@ -44,6 +44,8 @@ type fakeCards struct {
 	links     map[string]*cardLink
 	reactions map[string]*reaction
 	sprints   map[string]*sprint
+	repos     map[string]*projectRepo
+	prLinks   map[string]*prLink
 
 	seq int
 
@@ -74,6 +76,9 @@ type fakeCards struct {
 	deletedLists       []string
 	deletedProjects    []string
 	patchCount         int
+	lastPrLinkCreate   map[string]any
+	lastPrLinkPatch    map[string]any
+	deletedPrLinks     []string
 
 	// cardListCount counts LIST reads of boards_cards, so a test can prove the
 	// board view stays one request rather than one per column.
@@ -99,6 +104,8 @@ func newFakeCards(t *testing.T) *fakeCards {
 		links:     map[string]*cardLink{},
 		reactions: map[string]*reaction{},
 		sprints:   map[string]*sprint{},
+		repos:     map[string]*projectRepo{},
+		prLinks:   map[string]*prLink{},
 	}
 }
 
@@ -131,6 +138,12 @@ func (f *fakeCards) addCard(id, projectID, listID, title, position string) *card
 	return c
 }
 
+func (f *fakeCards) addRepo(id, projectID, repo string) *projectRepo {
+	r := &projectRepo{ID: id, Project: projectID, Repo: repo}
+	f.repos[id] = r
+	return r
+}
+
 var (
 	reProjectEq  = regexp.MustCompile(`^project = "((?:[^"\\]|\\.)*)"$`)
 	reListEq     = regexp.MustCompile(`^list = "((?:[^"\\]|\\.)*)"$`)
@@ -158,6 +171,10 @@ var (
 	reLinkBetween = regexp.MustCompile(
 		`^\(source = "((?:[^"\\]|\\.)*)" && target = "((?:[^"\\]|\\.)*)"\) \|\| ` +
 			`\(source = "((?:[^"\\]|\\.)*)" && target = "((?:[^"\\]|\\.)*)"\)$`)
+	// `card unlink-pr` looks up the row link-pr created, by the same
+	// (card, repo, number) shape the unique index enforces.
+	rePrLinkLookup = regexp.MustCompile(
+		`^card = "((?:[^"\\]|\\.)*)" && repo = "((?:[^"\\]|\\.)*)" && number = (\d+)$`)
 	reUnquote = strings.NewReplacer(`\"`, `"`, `\\`, `\`)
 )
 
@@ -781,6 +798,90 @@ func (f *fakeCards) serve() (*httptest.Server, *client.Client) {
 		}
 		delete(f.links, id)
 		f.deletedLinks = append(f.deletedLinks, id)
+		w.WriteHeader(http.StatusNoContent)
+	})
+	// boards_project_repos — LIST only. It is registered READ-ONLY for OAuth
+	// callers (server/oauth_scopes.go), so unlike every other collection
+	// above, this fake deliberately serves no create/update/delete handler:
+	// a `github attach` command built against a fake that permitted one would
+	// pass here and 403 for real.
+	mux.HandleFunc("GET /api/collections/boards_project_repos/records", func(w http.ResponseWriter, r *http.Request) {
+		m := reProjectEq.FindStringSubmatch(r.URL.Query().Get("filter"))
+		if m == nil {
+			f.t.Errorf("unsupported boards_project_repos filter: %q", r.URL.Query().Get("filter"))
+			listResponse(w, []projectRepo{})
+			return
+		}
+		var out []projectRepo
+		for _, repo := range f.repos {
+			if repo.Project == unquote(m[1]) {
+				out = append(out, *repo)
+			}
+		}
+		sort.Slice(out, func(i, j int) bool { return out[i].Repo < out[j].Repo })
+		listResponse(w, out)
+	})
+	// boards_pr_links — GET for `card unlink-pr`'s lookup, POST for
+	// `card link-pr`, PATCH for the tombstone a derived link's unlink applies,
+	// DELETE for the removal a manual link's unlink applies.
+	mux.HandleFunc("GET /api/collections/boards_pr_links/records", func(w http.ResponseWriter, r *http.Request) {
+		filter := r.URL.Query().Get("filter")
+		m := rePrLinkLookup.FindStringSubmatch(filter)
+		if m == nil {
+			f.t.Errorf("unsupported boards_pr_links filter: %q", filter)
+			listResponse(w, []prLink{})
+			return
+		}
+		cardID, repo, number := unquote(m[1]), unquote(m[2]), m[3]
+		var out []prLink
+		for _, link := range f.prLinks {
+			if link.Card == cardID && link.Repo == repo && strconv.Itoa(link.Number) == number {
+				out = append(out, *link)
+			}
+		}
+		sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+		listResponse(w, out)
+	})
+	mux.HandleFunc("POST /api/collections/boards_pr_links/records", func(w http.ResponseWriter, r *http.Request) {
+		body := decodeBody(r)
+		f.lastPrLinkCreate = body
+		l := &prLink{
+			ID:         f.nextID("prl"),
+			Card:       str(body["card"]),
+			Project:    str(body["project"]),
+			Repo:       str(body["repo"]),
+			Number:     num(body["number"]),
+			URL:        str(body["url"]),
+			Title:      str(body["title"]),
+			Author:     str(body["author"]),
+			State:      str(body["state"]),
+			LinkSource: str(body["link_source"]),
+			Unlinked:   body["unlinked"] == true,
+		}
+		f.prLinks[l.ID] = l
+		json.NewEncoder(w).Encode(l)
+	})
+	mux.HandleFunc("PATCH /api/collections/boards_pr_links/records/{id}", func(w http.ResponseWriter, r *http.Request) {
+		l, ok := f.prLinks[r.PathValue("id")]
+		if !ok {
+			notFound(w)
+			return
+		}
+		body := decodeBody(r)
+		f.lastPrLinkPatch = body
+		if v, ok := body["unlinked"].(bool); ok {
+			l.Unlinked = v
+		}
+		json.NewEncoder(w).Encode(l)
+	})
+	mux.HandleFunc("DELETE /api/collections/boards_pr_links/records/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		if _, ok := f.prLinks[id]; !ok {
+			notFound(w)
+			return
+		}
+		delete(f.prLinks, id)
+		f.deletedPrLinks = append(f.deletedPrLinks, id)
 		w.WriteHeader(http.StatusNoContent)
 	})
 	// boards_comment_reactions — GET for `card view` and `card unreact`,

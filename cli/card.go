@@ -30,6 +30,8 @@ func newCardCmd(c *client.Client) *cobra.Command {
 		newCardRemoveCmd(c),
 		newCardLinkCmd(c),
 		newCardUnlinkCmd(c),
+		newCardLinkPrCmd(c),
+		newCardUnlinkPrCmd(c),
 		newCommentReactCmd(c),
 		newCommentUnreactCmd(c),
 	)

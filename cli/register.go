@@ -24,6 +24,7 @@ func Register(root *cobra.Command, c *client.Client) {
 		newColumnCmd(c),
 		newCardCmd(c),
 		newSprintCmd(c),
+		newGitHubCmd(c),
 	)
 	root.AddCommand(boards)
 }
