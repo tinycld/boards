@@ -81,7 +81,7 @@ func Register(app *pocketbase.PocketBase) {
 	// Boards binds no listener and mounts no protocol server, so this single
 	// entry point serves the single-org app and a multi-org tenant
 	// identically. If hosted behavior must ever differ, detect it with
-	// coreserver.GetTenantContext — never fork registerShared.
+	// coreserver.GetEmbeddedContext — never fork registerShared.
 }
 
 // registerShared is the single source of truth for what BOTH compositions run.
