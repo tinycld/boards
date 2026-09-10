@@ -42,10 +42,18 @@ export const DESCRIPTION_MIN_BODY_HEIGHT = 72
  */
 export const DESCRIPTION_BODY_PADDING = 8
 
-/** Mirrors the max on boards_cards.description; the server clamps at the same. */
-const DESCRIPTION_LIMIT = 5000
-/** Where the remaining-characters counter starts being useful rather than noise. */
-const COUNTER_VISIBLE_FROM = 4500
+/**
+ * Mirrors the max on boards_cards.description; the server clamps at the same.
+ * 32767 is Jira's description cap — MUST stay equal to the migration's max, or
+ * the editor lets people type past what the server will store.
+ */
+const DESCRIPTION_LIMIT = 32767
+/**
+ * Where the remaining-characters counter starts being useful rather than noise:
+ * the last 500 characters, derived so it tracks the limit instead of drifting
+ * when the cap moves.
+ */
+const COUNTER_VISIBLE_FROM = DESCRIPTION_LIMIT - 500
 
 interface DescriptionEditorProps {
     cardId: string

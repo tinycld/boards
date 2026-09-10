@@ -455,13 +455,16 @@ migrate(
                     min: 1,
                     max: 500,
                 },
-                // Markdown source.
+                // Markdown source. 32767 matches Jira's description cap — the
+                // 5000 this started at truncated any real spec or writeup
+                // pasted into a card, which is the common case for the
+                // description field rather than an edge one.
                 {
                     id: 'boards_cards_description',
                     name: 'description',
                     type: 'text',
                     required: false,
-                    max: 5000,
+                    max: 32767,
                 },
                 {
                     id: 'boards_cards_due',
