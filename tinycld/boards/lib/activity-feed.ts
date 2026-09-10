@@ -215,6 +215,19 @@ export function describeActivity(item: BoardActivity, ctx: ActivityContext): Act
         case 'attachment_added':
             text = `attached ${item.to || 'a file'}`
             break
+        // `to` carries the PR's "repo#number title" text, written by the
+        // webhook (server/github_links.go) — there is no local PR collection
+        // to resolve a name from here, so unlike cardName/memberName above
+        // the row already holds the display string.
+        case 'pr_linked':
+            text = `linked pull request ${item.to}`
+            break
+        case 'pr_unlinked':
+            text = `unlinked pull request ${item.to}`
+            break
+        case 'pr_merged':
+            text = `merged pull request ${item.to}`
+            break
     }
     return { actor: item.actor, text }
 }

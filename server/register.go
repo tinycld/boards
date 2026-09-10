@@ -115,6 +115,10 @@ func registerShared(app *pocketbase.PocketBase) {
 	// colleague moving your card would never fire your rule.
 	registerAutomation()
 
+	// The GitHub webhook source. Core owns the transport (signature, replay,
+	// rate limit) and names no package; this supplies the interpretation.
+	registerGitHubWebhook()
+
 	registerBoardCounters(app)
 	// The sub-task rollup is a counter in the sense above — recompute, never
 	// delta, never fail the write — but it recounts the card's PARENT rather
@@ -124,6 +128,10 @@ func registerShared(app *pocketbase.PocketBase) {
 	// card's EPIC, and a re-file recounts two — but it sums POINTS rather than
 	// counting rows, with an unestimated card worth 1. See epic_rollup.go.
 	registerEpicRollup(app)
+	// The PR rollup, the epic shape again: it derives pr_state from the card's
+	// link rows so the card face and the automation triggers read ONE value.
+	// All-merged is the semantic — a card moves when its LAST open PR merges.
+	registerPRRollup(app)
 	// The sprint rollup, the epic shape again but with a count beside the
 	// points and no floor. See sprint_rollup.go.
 	registerSprintRollup(app)

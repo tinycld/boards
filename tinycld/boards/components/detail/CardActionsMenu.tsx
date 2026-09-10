@@ -1,13 +1,14 @@
 import { notify } from '@tinycld/core/lib/notify'
 import { ConfirmDialog } from '@tinycld/core/ui/ConfirmDialog'
 import { Menu } from '@tinycld/core/ui/menu'
-import { Archive, ArrowRightLeft, Copy, Trash2 } from 'lucide-react-native'
+import { Archive, ArrowRightLeft, Copy, GitPullRequest, Trash2 } from 'lucide-react-native'
 import { useState } from 'react'
 import { useWritableProjects } from '../../hooks/useActiveBoard'
 import { useArchiveCard, useDeleteCard, useDuplicateCard } from '../../hooks/useCardMutations'
 import { rankForInsert } from '../../lib/move'
 import { useBoardsUIStore } from '../../stores/boards-ui-store'
 import type { BoardCardView, BoardListView } from '../../types'
+import { LinkPrDialog } from './LinkPrDialog'
 import { MoveToBoardDialog } from './MoveToBoardDialog'
 
 interface CardActionsInput {
@@ -39,6 +40,7 @@ interface CardActionsInput {
 export function useCardActions({ card, list, projectId, onDismiss }: CardActionsInput) {
     const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
     const [isMoving, setIsMoving] = useState(false)
+    const [isLinkingPr, setIsLinkingPr] = useState(false)
     const archiveCard = useArchiveCard()
     const deleteCard = useDeleteCard()
     const duplicateCard = useDuplicateCard(projectId)
@@ -85,6 +87,9 @@ export function useCardActions({ card, list, projectId, onDismiss }: CardActions
         closeDelete: () => setIsConfirmingDelete(false),
         confirmDelete,
         isDeleting: deleteCard.isPending,
+        requestLinkPr: () => setIsLinkingPr(true),
+        isLinkingPr,
+        closeLinkPr: () => setIsLinkingPr(false),
     }
 }
 
@@ -100,6 +105,11 @@ export function CardActionRows({ actions }: { actions: CardActions }) {
                 icon={ArrowRightLeft}
                 isDisabled={!actions.hasOtherBoards}
                 onSelect={actions.requestMove}
+            />
+            <Menu.Item
+                label="Link pull request…"
+                icon={GitPullRequest}
+                onSelect={actions.requestLinkPr}
             />
             <Menu.Item label="Archive card" icon={Archive} onSelect={actions.archive} />
             <Menu.Item
@@ -138,6 +148,13 @@ export function CardActionDialogs({
                     })
                     actions.onDismiss()
                 }}
+            />
+
+            <LinkPrDialog
+                cardId={card.id}
+                projectId={actions.projectId}
+                isOpen={actions.isLinkingPr}
+                onClose={actions.closeLinkPr}
             />
 
             <ConfirmDialog

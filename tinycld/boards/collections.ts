@@ -37,6 +37,16 @@ export function registerCollections(
         collectionOptions: indexed,
     })
 
+    // Which repositories a board watches. Eager, like boards_project_members:
+    // the GitHub settings screen (settings/github.tsx) lists every attached
+    // repo across every board the user belongs to in one screen, not one
+    // board's cards at a time, so on-demand sync tied to an open card would
+    // never fire for it. Rows are owner-managed and few per board.
+    const boards_project_repos = newCollection('boards_project_repos', {
+        omitOnInsert: ['created', 'updated'] as const,
+        collectionOptions: indexed,
+    })
+
     // Owner-only by rule, so this syncs a handful of rows at most.
     const boards_share_links = newCollection('boards_share_links', {
         omitOnInsert: ['created', 'updated'] as const,
@@ -124,6 +134,12 @@ export function registerCollections(
             'due_soon_notified_at',
             'overdue_notified_at',
             'list_changed_at',
+            // Server-owned like number/archived_at above: the GitHub webhook
+            // (server/github_links.go) computes these from the card's linked
+            // PRs, and neither has a "none" value to write explicitly — a new
+            // card simply has no rows to roll up yet.
+            'pr_state',
+            'pr_review_state',
         ] as const,
         collectionOptions: indexed,
     })
@@ -208,14 +224,32 @@ export function registerCollections(
         collectionOptions: indexed,
     })
 
+    // A card's linked pull requests. On-demand like the links above: read for
+    // the open card only. `created`/`updated` are the standard PB stamps.
+    // `state`, `title`, `author` are server-written by the GitHub webhook
+    // (server/github_links.go) even for a manually-added link, but they are
+    // plain text/select fields with a writable `''` zero-value, so a client
+    // insert still supplies it explicitly rather than omitting the column —
+    // the `priority: 'none'` convention `boards_cards` follows.
+    // `review_state` is the exception: like `boards_cards.pr_review_state`
+    // above, its migration declares only `['in_review', 'approved']` — there
+    // is no "none" value to write — so it is omitted here instead of cast.
+    const boards_pr_links = newCollection('boards_pr_links', {
+        omitOnInsert: ['created', 'updated', 'review_state'] as const,
+        syncMode: 'on-demand' as const,
+        collectionOptions: indexed,
+    })
+
     return {
         boards_activity,
         boards_card_links,
+        boards_pr_links,
         boards_card_watchers,
         boards_comment_reactions,
         boards_card_reactions,
         boards_projects,
         boards_project_members,
+        boards_project_repos,
         boards_share_links,
         boards_labels,
         boards_epics,

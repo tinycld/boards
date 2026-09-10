@@ -681,3 +681,58 @@ func TestMoveCard_CarriesCardReactions(t *testing.T) {
 		},
 	}.run(t, env.cardsEnv)
 }
+
+// boards_pr_links carries the same denormalized `project` as the reactions
+// tables above, and one of the two re-stamp lists has already shipped this
+// exact bug once (boards_comment_reactions, line ~340). This is what keeps
+// boards_pr_links from repeating it.
+func TestMoveCard_RestampsPRLinkProject(t *testing.T) {
+	env := setupMoveEnv(t)
+	// applyPREvent resolves a branch to a card by key (slug-number), and
+	// setupCardsEnv leaves both slugless/unnumbered — stamp them so the
+	// branch below actually resolves to env.card.
+	env.project.Set("slug", "OTTER")
+	if err := env.app.Save(env.project); err != nil {
+		t.Fatalf("set slug: %v", err)
+	}
+	env.card.Set("number", 30)
+	if err := env.app.Save(env.card); err != nil {
+		t.Fatalf("set number: %v", err)
+	}
+	attachRepo(t, env.cardsEnv, env.project.Id, "o/r")
+
+	if err := applyPREvent(env.app, prEvent{
+		Repo: "o/r", Number: 70, Branch: "OTTER-30-fix", State: "open",
+		URL: "https://github.com/o/r/pull/70",
+	}); err != nil {
+		t.Fatalf("linking: %v", err)
+	}
+
+	req{
+		method:  http.MethodPost,
+		url:     "/api/boards/cards/" + env.card.Id + "/move",
+		token:   env.editorToken,
+		body:    moveBody(env),
+		want:    http.StatusOK,
+		content: []string{`"previous_key"`},
+		before:  mountCardRoutes,
+		after: func(t testing.TB, app *tests.TestApp) {
+			links, err := app.FindRecordsByFilter(
+				"boards_pr_links", "card = {:card}", "", 0, 0,
+				map[string]any{"card": env.card.Id},
+			)
+			if err != nil {
+				t.Fatalf("finding links: %v", err)
+			}
+			if len(links) == 0 {
+				t.Fatal("no PR links found — the fixture linked nothing")
+			}
+			for _, link := range links {
+				if link.GetString("project") != env.target.Id {
+					t.Errorf("link project = %q, want the target board %q",
+						link.GetString("project"), env.target.Id)
+				}
+			}
+		},
+	}.run(t, env.cardsEnv)
+}

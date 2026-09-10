@@ -16,6 +16,7 @@ go 1.26.3
 // gitignored go.work.sum, which `go mod download` regenerates. Verified by
 // deleting it and running the CI sequence from clean.
 require (
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/pocketbase/dbx v1.12.0
 	github.com/pocketbase/pocketbase v0.39.8
 	roci.dev/fracdex v0.0.0-20241211175510-82d7df79e312

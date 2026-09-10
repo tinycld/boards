@@ -1,7 +1,7 @@
 const manifest = {
     name: 'Boards',
     slug: 'boards',
-    version: '0.2.0',
+    version: '0.3.0',
     description: 'Kanban boards for tracking work across lists.',
     routes: { directory: 'screens' },
     // Share links open at /p/boards/<token>, outside the workspace shell
@@ -17,6 +17,7 @@ const manifest = {
         shortcut: 'b',
     },
     sidebar: { component: 'sidebar' },
+    settings: [{ slug: 'github', label: 'GitHub', component: 'settings/github' }],
     // Mounted at the app root: watches this user's own membership rows and
     // re-pulls the eager cards collections when a grant or revocation changes
     // what the rules let them read — no realtime event exists for that (the

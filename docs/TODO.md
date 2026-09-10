@@ -392,6 +392,36 @@ Both older specs are untouched since the rename, so the note stands as written.
     an ordinary re-file wrote no `epic` history row, and neither the move
     dialog nor the CLI sent `epic` to the move endpoint.
 
+24. **Git integration** — landed on `feat/github-integration`, hosted in
+    `boards` itself (the entry's original "host in `org-github`" instruction
+    was wrong — that is the GitHub org profile repo, not a package). The
+    webhook writes a `boards_pr_links` row and a server-owned rollup
+    (`pr_rollup.go`) derives `pr_state` / `pr_review_state` on the card from
+    its links; four triggers (`cardPROpened`, `cardPRMerged`,
+    `cardPRReviewRequested`, `cardPRApproved`) watch those columns for the
+    rules engine, and `move-card` needed no changes at all — the rollup and
+    triggers reach everything else through machinery that already existed.
+    **All-merged, not first-merged**: a card moves when its LAST open PR
+    merges, so a card spanning two repos is not marked done when only one
+    side lands — the rollup computes this once, so the card face and the
+    triggers can never disagree about it. Linkage is by card key, matched in
+    the branch name, the PR title or the PR body, plus a manual "Link pull
+    request…" dialog on the card for anything no automatic rule catches.
+    `skip`/`ignore` (e.g. `skip OTTER-123` in the PR body) is the durable
+    opt-out. Branch-name linkage RE-DERIVES on every delivery, so removing a
+    derived link is a tombstone (`unlinked`) rather than a delete — deleting
+    it would only bring it back on the next push; a manual link, which
+    nothing re-derives, is a plain delete instead. Repository attachment
+    (`boards_project_repos`) is deliberately APP-ONLY: it is read-only for
+    OAuth callers (`server/oauth_scopes.go`), so there is no CLI or API path
+    to attach a repo, only the board settings UI. Not covered by the package's
+    own e2e suite: the webhook delivery path, since forging an HMAC-signed
+    GitHub delivery needs either a raw PocketBase write or a test-only
+    endpoint and both are against this package's testing rules — it is
+    covered instead by `server/github_webhook_test.go` and
+    `server/github_links_test.go`. The manual link/unlink path IS covered
+    end-to-end in `tests/e2e/pr-links.spec.ts`.
+
 ### Open
 
 17. **Card covers.** First image attachment as the cover, via core's
@@ -417,8 +447,6 @@ Both older specs are untouched since the rename, so the note stands as written.
     Items with due dates could feed the calendar source.
 23. **Webhooks and a documented API.** Core's `core:webhook` is deferred on
     SSRF guards (lift them from `calendar/server/subscription.go`).
-24. **Git integration.** Branch names from keys, PR links on cards, auto-move
-    on merge; host in `org-github`, coupled through the package registry only.
 25. **Create a card from an email.** The unbuilt M4 milestone; blocked on mail
     growing a thread-action extension point.
 26. **Custom fields.** Priority and estimates cover the two everyone adds;

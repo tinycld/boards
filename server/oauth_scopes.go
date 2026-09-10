@@ -54,6 +54,10 @@ func oauthPackage() oauth.Package {
 			"boards_epics":   rw,
 			"boards_sprints": rw,
 
+			// PR links are board content: a caller who may edit a card may
+			// associate a pull request with it.
+			"boards_pr_links": rw,
+
 			// READ-ONLY because that is the schema, not a policy choice:
 			// boards_activity and boards_sprint_snapshots are server-written
 			// history with nil create/update/delete rules (pb-migrations
@@ -78,6 +82,15 @@ func oauthPackage() oauth.Package {
 			// revoke a capability integrations had built on, so start closed.
 			"boards_project_members": ro,
 			"boards_share_links":     ro,
+
+			// READ-ONLY, and for the reason directly above rather than a
+			// weaker one. A row here names a repository this deployment holds
+			// a GitHub credential for; writing one points that credential at
+			// new source code. "boards:write" reads on a consent screen as
+			// "change my cards", not "connect my repositories" — so start
+			// closed. Relaxing this later is one line; the reverse would
+			// silently revoke a capability integrations had built on.
+			"boards_project_repos": ro,
 		},
 		Endpoints: map[string][]string{
 			"GET /api/boards/search": {scopeRead},
