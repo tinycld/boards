@@ -109,9 +109,20 @@ async function frameBoardAt(
     try {
         const page = await browser.newPage()
         let failure: string | null = null
+        // Resolved the moment the frame's request is refused, so the blocked
+        // case does not have to sit out the visibility timeout below to learn
+        // what it already knows. That wait is the RIGHT budget for "the board
+        // is still loading" and the WRONG one for "the browser already
+        // refused it" — spending it anyway pushed this test to ~20s of its 30s
+        // budget, which is how it began timing out under a parallel run.
+        let markFailed: () => void = () => {}
+        const refused = new Promise<void>(resolve => {
+            markFailed = resolve
+        })
         page.on('requestfailed', r => {
             if (r.url().startsWith(boardUrl.split('?')[0])) {
                 failure = r.failure()?.errorText ?? 'unknown'
+                markFailed()
             }
         })
 
@@ -126,12 +137,16 @@ async function frameBoardAt(
         await page.goto(`${hostOrigin}/host.html`)
 
         const frame = page.frameLocator('#board')
-        try {
-            await frame.getByText(CARD_TITLE).waitFor({ state: 'visible', timeout: 15_000 })
-            return { text: await frame.locator('body').innerText(), failure }
-        } catch {
-            return { text: null, failure }
-        }
+        // Whichever comes first: the board painting, or the request being
+        // refused. `visible` still owns the allowed case's budget.
+        const shown = frame
+            .getByText(CARD_TITLE)
+            .waitFor({ state: 'visible', timeout: 15_000 })
+            .then(() => true)
+            .catch(() => false)
+        const rendered = await Promise.race([shown, refused.then(() => false)])
+        if (!rendered) return { text: null, failure }
+        return { text: await frame.locator('body').innerText(), failure }
     } finally {
         await browser.close()
     }

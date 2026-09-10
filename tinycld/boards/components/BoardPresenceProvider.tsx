@@ -7,7 +7,7 @@ import {
     useBoardPresence,
 } from '../hooks/useBoardPresence'
 
-interface BoardPresenceValue {
+export interface BoardPresenceValue {
     awareness: Awareness | null
     peers: RemoteCardsPresence[]
     /**
@@ -68,6 +68,29 @@ export function BoardPresenceProvider({
         () => ({ awareness, peers, doc, isReady, isConnected, canEditDoc, identity }),
         [awareness, peers, doc, isReady, isConnected, canEditDoc, identity]
     )
+    return <BoardPresenceContext.Provider value={value}>{children}</BoardPresenceContext.Provider>
+}
+
+/**
+ * Re-publishes an already-open room's value further down the tree.
+ *
+ * For a surface that renders through a PORTAL. On web a portal keeps the
+ * consumer's contexts, but on native `OverlayPortal` hands the element to a
+ * host to render, so the board's provider is not an ancestor any more and a
+ * card detail in there would silently read the empty default — no co-editing,
+ * no caret, no error. Core states the rule outright: "a layer's content must
+ * be self-contained".
+ *
+ * Takes the VALUE rather than opening a room of its own: a second
+ * `BoardPresenceProvider` would mean a second socket for the same board.
+ */
+export function BoardPresenceBridge({
+    value,
+    children,
+}: {
+    value: BoardPresenceValue
+    children: ReactNode
+}) {
     return <BoardPresenceContext.Provider value={value}>{children}</BoardPresenceContext.Provider>
 }
 

@@ -1,17 +1,20 @@
+import { useDragGesture } from '@tinycld/core/lib/gestures'
 import { useOrgHref } from '@tinycld/core/lib/org-routes'
-import { type Shortcut, useRegisterShortcuts, useShortcutScope } from '@tinycld/core/lib/shortcuts'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useDeviceInsets } from '@tinycld/core/lib/use-safe-area'
 import { useOverlayLayer } from '@tinycld/core/ui/overlay'
 import { useSwipeToDismiss } from '@tinycld/core/ui/swipe-dismiss'
-import { useFocusEffect, useRouter } from 'expo-router'
-import { type RefObject, useCallback, useMemo, useRef, useState } from 'react'
-import { Platform, Pressable, StyleSheet, type View } from 'react-native'
+import { useRouter } from 'expo-router'
+import { type RefObject, useMemo, useRef, useState } from 'react'
+import { Platform, Pressable, StyleSheet, useWindowDimensions, type View } from 'react-native'
 import { GestureDetector } from 'react-native-gesture-handler'
 import Animated from 'react-native-reanimated'
+import { useCardSurfaceShortcuts } from '../hooks/useCardSurfaceShortcuts'
+import { useIsRouteFocused } from '../hooks/useIsRouteFocused'
 import { useProjectRole } from '../hooks/useProjectRole'
-import { type CardEntry, findCardEntry, flattenCards, neighborCardId } from '../lib/board-cards'
+import { type CardEntry, findCardEntry, flattenCards } from '../lib/board-cards'
 import { cardHref } from '../lib/board-route'
+import { clampPeekWidth } from '../lib/peek-width'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
 import type { BoardProject } from '../types'
 import { CardDetail } from './detail/CardDetail'
@@ -37,91 +40,41 @@ export function CardPeek({ project }: CardPeekProps) {
     return <CardPeekPanel project={project} entry={entry} />
 }
 
-function usePeekShortcuts(
-    project: BoardProject,
-    cardId: string,
-    canEdit: boolean,
-    titleRef: RefObject<EditableTextHandle | null>
-) {
-    const openCard = useBoardsUIStore(s => s.openCard)
-    const closeCard = useBoardsUIStore(s => s.closeCard)
-    // Pushed ABOVE the registration below, and in the same component as it, so
-    // every shortcut is stamped with this instance — see core's withScopeId.
-    const scopeOwner = useShortcutScope('modal')
-
-    const shortcuts = useMemo<Shortcut[]>(() => {
-        const step = (delta: number) => {
-            const next = neighborCardId(project, cardId, delta)
-            if (next) openCard(next)
-        }
-        const editTitle: Shortcut[] = canEdit
-            ? [
-                  {
-                      id: 'boards.peek.editTitle',
-                      keys: 'e',
-                      scope: 'modal',
-                      group: 'Boards',
-                      description: 'Edit card title',
-                      run: () => titleRef.current?.beginEdit(),
-                  },
-              ]
-            : []
-        return [
-            ...editTitle,
-            {
-                id: 'boards.peek.close',
-                keys: 'Escape',
-                scope: 'modal',
-                group: 'Boards',
-                description: 'Close card',
-                run: closeCard,
-            },
-            {
-                id: 'boards.peek.next',
-                keys: 'j',
-                scope: 'modal',
-                group: 'Boards',
-                description: 'Next card',
-                run: () => step(1),
-            },
-            {
-                id: 'boards.peek.prev',
-                keys: 'k',
-                scope: 'modal',
-                group: 'Boards',
-                description: 'Previous card',
-                run: () => step(-1),
-            },
-        ]
-    }, [project, cardId, openCard, closeCard, canEdit, titleRef])
-    useRegisterShortcuts(shortcuts, scopeOwner)
-}
-
-/** Base panel width, before any safe-area extension. */
-const PEEK_WIDTH = 500
+/**
+ * The grab strip: how wide it reads, and how much wider it CATCHES. A 4px
+ * target is a frustrating one to hit, so the strip straddles the panel's edge
+ * and takes a few pixels of the board with it — few enough that it does not
+ * shadow anything a reader would aim at.
+ */
+const HANDLE_VISUAL_WIDTH = 4
+const HANDLE_HIT_SLOP = 8
 
 function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardEntry }) {
     const router = useRouter()
     const orgHref = useOrgHref()
     const closeCard = useBoardsUIStore(s => s.closeCard)
+    const setCardDisplayMode = useBoardsUIStore(s => s.setCardDisplayMode)
     const { canEdit } = useProjectRole(project.id)
     const insets = useDeviceInsets()
     const titleRef = useRef<EditableTextHandle>(null)
+    const { width, handlers: resizeHandlers } = usePeekResize()
     // Swipe the panel toward its own edge to dismiss it — the touch gesture that
     // replaces the ✕ and Escape a phone reader does not have. Native only; the
     // hook is inert on web, where the board behind must stay operable and a live
     // detector risks the pointer-event interceptions this surface has already
-    // paid for once. The panel's full travel is a known constant here, unlike a
-    // shared Drawer's percentage width.
+    // paid for once.
+    //
+    // The travel is the panel's LIVE width, not a constant: a resized panel
+    // given the old 500px would stop short of the edge and spring back.
     const { gesture, animatedStyle } = useSwipeToDismiss({
         anchor: 'right',
         onClose: closeCard,
-        distance: PEEK_WIDTH + insets.right,
+        distance: width + insets.right,
     })
     // The panel's own node, so the layer stack knows what counts as INSIDE the
     // peek — a press in here must not dismiss it.
     const panelRef = useRef<View>(null)
-    usePeekShortcuts(project, entry.card.id, canEdit, titleRef)
+    useCardSurfaceShortcuts(project, entry.card.id, canEdit, titleRef)
     // Board order, so the sub-task section and the parent picker list cards in
     // the order the board shows them.
     const boardCards = useMemo(
@@ -153,12 +106,13 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
                         {
                             zIndex: 20,
                             right: -insets.right,
-                            width: PEEK_WIDTH + insets.right,
+                            width: width + insets.right,
                             paddingRight: insets.right,
                         },
                         animatedStyle,
                     ]}
                 >
+                    <PeekResizeHandle handlers={resizeHandlers} />
                     <ProjectWash color={project.color} height={180} />
                     <CardHeaderToolbar
                         project={project}
@@ -167,6 +121,8 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
                         onDismiss={closeCard}
                         onExpand={expandCard}
                         onClose={closeCard}
+                        displayMode="peek"
+                        onToggleDisplayMode={() => setCardDisplayMode('modal')}
                     />
                     <CardDetail
                         // Remounts on card switch. The description editor binds to
@@ -191,6 +147,89 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
                 </Animated.View>
             </GestureDetector>
         </>
+    )
+}
+
+/**
+ * The panel's live width, and the drag that sets it.
+ *
+ * DRAFT THEN COMMIT, the shape calc's column resize uses: the in-flight width
+ * lives in local state and the store is written ONCE on release, so a persisted
+ * AsyncStorage write does not run on every pointer move.
+ *
+ * The drag clamps against the window the user is dragging on, which is what
+ * makes the raw stored value safe (lib/peek-width.ts): a deliberate resize on a
+ * laptop commits a laptop-sized width, while merely VIEWING a too-wide stored
+ * width there clamps for display and never rewrites what was stored.
+ */
+function usePeekResize() {
+    const storedWidth = useBoardsUIStore(s => s.peekWidth)
+    const setPeekWidth = useBoardsUIStore(s => s.setPeekWidth)
+    const { width: windowWidth } = useWindowDimensions()
+    // Null except during a drag, so the panel follows the store the rest of the
+    // time — including when another tab's persisted write lands.
+    const [draftWidth, setDraftWidth] = useState<number | null>(null)
+    const startWidthRef = useRef(storedWidth)
+    // Read in onDragEnd, whose listener closed over this component's props at
+    // drag START — reading `draftWidth` there would be a render behind the
+    // last move. Seeded on start as well as on move, so a drag that engages
+    // and then releases without moving commits its own width rather than the
+    // one the previous drag left behind.
+    const latestWidthRef = useRef(storedWidth)
+
+    const { handlers } = useDragGesture({
+        onDragStart: () => {
+            const from = clampPeekWidth(storedWidth, windowWidth)
+            startWidthRef.current = from
+            latestWidthRef.current = from
+            return true
+        },
+        onDragMove: ({ deltaX }) => {
+            // MINUS deltaX: the panel is anchored to the right edge, so
+            // dragging left (a negative delta) makes it wider.
+            const next = clampPeekWidth(startWidthRef.current - deltaX, windowWidth)
+            latestWidthRef.current = next
+            setDraftWidth(next)
+        },
+        onDragEnd: () => {
+            setPeekWidth(latestWidthRef.current)
+            setDraftWidth(null)
+        },
+        // The delta is the whole input; the handle's own rect is never read.
+        measureTarget: false,
+    })
+
+    return { width: draftWidth ?? clampPeekWidth(storedWidth, windowWidth), handlers }
+}
+
+/**
+ * The grab strip on the panel's left edge.
+ *
+ * WEB ONLY, and that is a gesture decision rather than a platform gap: the
+ * swipe-to-dismiss above starts from this same edge on native, so a handle
+ * here would have to arbitrate with it on every touch. A phone opens the peek
+ * at nearly the full width anyway, and a tablet can still dismiss by swipe —
+ * so declining the gesture costs a touch reader nothing.
+ */
+function PeekResizeHandle({ handlers }: { handlers: Record<string, unknown> }) {
+    if (Platform.OS !== 'web') return null
+    return (
+        <Pressable
+            {...handlers}
+            accessibilityLabel="Resize card panel"
+            testID="boards-peek-resize"
+            // Above the wash and the content, and pinned to the edge the panel
+            // grows from.
+            style={{
+                position: 'absolute',
+                left: -HANDLE_HIT_SLOP / 2,
+                top: 0,
+                bottom: 0,
+                width: HANDLE_VISUAL_WIDTH + HANDLE_HIT_SLOP,
+                zIndex: 30,
+            }}
+            className="web:cursor-col-resize hover:bg-primary/30"
+        />
     )
 }
 
@@ -282,26 +321,6 @@ function PeekBackdrop({
             style={[StyleSheet.absoluteFill, { zIndex: 10, backgroundColor: overlayColor }]}
         />
     )
-}
-
-/**
- * Is the route this peek belongs to the one on screen?
- *
- * `useFocusEffect` fires on route focus and its cleanup runs on blur, which is
- * exactly the window the peek may own the top layer. A plain mount check cannot
- * see this: expo-router leaves a covered screen mounted (on web `freezeOnBlur`
- * only sets `display: none`), so the board and its peek stay alive underneath
- * the full-page card route.
- */
-function useIsRouteFocused(): boolean {
-    const [isFocused, setIsFocused] = useState(false)
-    useFocusEffect(
-        useCallback(() => {
-            setIsFocused(true)
-            return () => setIsFocused(false)
-        }, [])
-    )
-    return isFocused
 }
 
 /**

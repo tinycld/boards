@@ -1,6 +1,7 @@
 import { asyncStorage, create, persist } from '@tinycld/core/lib/store'
 import { type BoardFilter, EMPTY_FILTER } from '../lib/board-filter'
 import { type BoardSort, MANUAL_SORT } from '../lib/board-sort'
+import { PEEK_MIN_WIDTH } from '../lib/peek-width'
 
 /**
  * Where a new list is being composed: `'end'` for the trailing rail, or
@@ -230,6 +231,32 @@ interface BoardsUIState {
     sprintScopeByProject: Record<string, SprintScope>
     setSprintScope: (projectId: string, scope: SprintScope) => void
     /**
+     * How a card opens on the board: the side peek, or a modal centered over a
+     * dimmed board. One global preference, not per board — it is a habit, not
+     * a property of any one board.
+     *
+     * PERSISTED, on the store's own stated grounds: a display mode has no
+     * referent that can go stale, exactly like `isCompactCards`, and it is
+     * precisely the kind of thing someone sets once and expects to keep.
+     *
+     * Per DEVICE rather than per account (this store, not PocketBase) because
+     * it is per-device by nature — a desktop and a tablet want different
+     * answers — and a PocketBase-backed toggle costs an override-ref dance to
+     * avoid a visible lag on every click (see drive's useDrive).
+     */
+    cardDisplayMode: CardDisplayMode
+    setCardDisplayMode: (mode: CardDisplayMode) => void
+    /**
+     * The side peek's dragged width, in px, BEFORE the viewport clamp. Stored
+     * raw so a width set on a large monitor is not permanently shrunk by an
+     * afternoon on a laptop — see lib/peek-width.ts.
+     *
+     * PERSISTED on the same grounds as the display mode: a stale width is
+     * inert, and it is set once and expected to survive a reload.
+     */
+    peekWidth: number
+    setPeekWidth: (width: number) => void
+    /**
      * Whether My cards lists cards in done or canceled lists. PERSISTED, and
      * off by default: it is a preference with no referent to go stale, and
      * someone who wants to see finished work there wants it every time.
@@ -239,6 +266,21 @@ interface BoardsUIState {
 }
 
 export type ViewMode = 'board' | 'list' | 'timeline' | 'backlog'
+
+export type CardDisplayMode = 'peek' | 'modal'
+
+/**
+ * How a card should open right now.
+ *
+ * Mobile always gets the peek, and this is the ONE place that override lives:
+ * on a narrow screen the peek is already effectively full-width
+ * (`max-w-[94%]`), so a windowed modal there would be a worse version of what
+ * the reader already has. The stored preference is left untouched, so it is
+ * still there when the same account is back on a wide screen.
+ */
+export function selectCardDisplayMode(state: BoardsUIState, isMobile: boolean): CardDisplayMode {
+    return isMobile ? 'peek' : state.cardDisplayMode
+}
 
 export type SprintScope = 'active' | 'all' | 'backlog' | { sprintId: string }
 
@@ -490,6 +532,10 @@ export const useBoardsUIStore = create<BoardsUIState>()(
                         selectedCardIds: new Set<string>(),
                         lastSelectedId: null,
                     })),
+                cardDisplayMode: 'peek',
+                setCardDisplayMode: mode => set({ cardDisplayMode: mode }),
+                peekWidth: PEEK_MIN_WIDTH,
+                setPeekWidth: width => set({ peekWidth: width }),
                 isMyCardsShowingClosed: false,
                 toggleMyCardsShowClosed: () =>
                     set(s => ({ isMyCardsShowingClosed: !s.isMyCardsShowingClosed })),
@@ -531,6 +577,8 @@ export const useBoardsUIStore = create<BoardsUIState>()(
                 viewModeByProject: s.viewModeByProject,
                 sprintScopeByProject: persistedSprintScopes(s.sprintScopeByProject),
                 isMyCardsShowingClosed: s.isMyCardsShowingClosed,
+                cardDisplayMode: s.cardDisplayMode,
+                peekWidth: s.peekWidth,
             }),
         }
     )
