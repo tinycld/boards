@@ -676,6 +676,23 @@ func TestCardPRStateFilters_FireOnlyOnTheTransition(t *testing.T) {
 	if cardPROpened(env.app, record) {
 		t.Error("pr-opened fired on open → merged")
 	}
+
+	// Persist so Original() reads `merged` on the next change.
+	if err := env.app.Save(record); err != nil {
+		t.Fatalf("saving: %v", err)
+	}
+	record, _ = env.app.FindRecordById("boards_cards", card)
+
+	// merged → open (a reopened PR) fires pr-opened only. This is the
+	// direction Original() exists to catch: without it, a future refactor
+	// that special-cased "merged" as terminal would go unnoticed.
+	record.Set("pr_state", "open")
+	if !cardPROpened(env.app, record) {
+		t.Error("pr-opened did not fire on merged → open")
+	}
+	if cardPRMerged(env.app, record) {
+		t.Error("pr-merged fired on merged → open")
+	}
 }
 
 func TestCardPRReviewFilters(t *testing.T) {

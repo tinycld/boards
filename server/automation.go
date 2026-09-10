@@ -580,6 +580,12 @@ func cardPREntered(record *core.Record, column, state string) bool {
 		return false
 	}
 	original := record.Original()
+	// Original() never actually returns nil in this PocketBase version — an
+	// unsaved record yields a blank one instead — so this branch is dead in
+	// practice. Kept anyway: it is what "fail closed on a nil record or a
+	// blank Original()" means if a future PocketBase version changes that
+	// contract, and it is the form to copy if this idiom moves somewhere the
+	// guarantee does not hold. Do not simplify it away.
 	if original == nil {
 		return false
 	}
