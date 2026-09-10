@@ -218,6 +218,24 @@ about whether the work can go ahead.
 `unlink` does not care which order you name the two cards, and removes every
 link between them.
 
+## GitHub pull requests
+
+```
+tinycld boards github list "Product launch"
+tinycld boards card link-pr OTTER-12 https://github.com/owner/repo/pull/42
+tinycld boards card unlink-pr OTTER-12 https://github.com/owner/repo/pull/42
+```
+
+`github list` shows the repositories a board watches. `link-pr` and
+`unlink-pr` take a card and a pull request URL — the same way you'd link one
+by hand in the app.
+
+There is no command to attach or remove a repository. That stays in the app
+on purpose: attaching a repository points a credential at source code, a
+bigger grant than editing cards, so it's kept in Board settings where it's
+visible rather than handed to a token. See
+[GitHub pull requests](help://boards:github).
+
 ## Archiving and deleting
 
 ```
