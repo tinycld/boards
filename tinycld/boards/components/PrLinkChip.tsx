@@ -1,3 +1,4 @@
+import { useToastStore } from '@tinycld/core/lib/stores/toast-store'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { X } from 'lucide-react-native'
 import { Linking, Pressable, Text, View } from 'react-native'
@@ -23,13 +24,21 @@ interface PrLinkChipProps {
  * The unlink button does not distinguish manual from derived links in this
  * component — `useUnlinkPr` reads the row's own `link_source` and decides
  * delete vs. tombstone itself, so a derived link removed here can still come
- * back on the next webhook delivery, by design.
+ * back on the next webhook delivery, by design. What the two outcomes have
+ * in common is invisible from a vanished chip alone, so the success toast
+ * says which one happened — see `unlinkToast`.
  */
 export function PrLinkChip({ link, canEdit }: PrLinkChipProps) {
     const mutedColor = useThemeColor('muted')
     const status = prLinkStatus(link.state, link.review_state)
     const Icon = status.icon
     const unlinkPr = useUnlinkPr()
+
+    const unlink = () =>
+        unlinkPr.mutate(
+            { id: link.id, link_source: link.link_source },
+            { onSuccess: () => useToastStore.getState().addToast(unlinkToast(link.link_source)) }
+        )
 
     return (
         <View
@@ -51,13 +60,29 @@ export function PrLinkChip({ link, canEdit }: PrLinkChipProps) {
                 </Text>
                 <PrReviewBadge reviewBadge={status.reviewBadge} />
             </Pressable>
-            <UnlinkButton
-                isVisible={canEdit}
-                isPending={unlinkPr.isPending}
-                onPress={() => unlinkPr.mutate({ id: link.id, link_source: link.link_source })}
-            />
+            <UnlinkButton isVisible={canEdit} isPending={unlinkPr.isPending} onPress={unlink} />
         </View>
     )
+}
+
+/**
+ * What the unlink toast says, branched on `link_source` — the same field
+ * `useUnlinkPr` branches delete-vs-tombstone on. A vanished chip looks the
+ * same either way, but the outcomes do not: a manual link is simply gone,
+ * while a derived one is tombstoned and will NOT come back from the branch
+ * name it was found by, which is worth saying so nobody re-pushes expecting
+ * the old chip to return.
+ */
+function unlinkToast(linkSource: BoardsPrLinks['link_source']) {
+    if (linkSource === 'manual') {
+        return { title: 'Pull request unlinked', variant: 'success' as const, duration: 4000 }
+    }
+    return {
+        title: 'Pull request unlinked',
+        body: "Won't re-link from the branch name, title or description.",
+        variant: 'success' as const,
+        duration: 4000,
+    }
 }
 
 function UnlinkButton({

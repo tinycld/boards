@@ -215,12 +215,17 @@ export function registerCollections(
     })
 
     // A card's linked pull requests. On-demand like the links above: read for
-    // the open card only. `created`/`updated` are the standard PB stamps; the
-    // rest (`state`, `review_state`, `title`, `author`…) are server-written by
-    // the GitHub webhook (server/github_links.go) even for a manually-added
-    // link, so nothing else is omitted on insert.
+    // the open card only. `created`/`updated` are the standard PB stamps.
+    // `state`, `title`, `author` are server-written by the GitHub webhook
+    // (server/github_links.go) even for a manually-added link, but they are
+    // plain text/select fields with a writable `''` zero-value, so a client
+    // insert still supplies it explicitly rather than omitting the column —
+    // the `priority: 'none'` convention `boards_cards` follows.
+    // `review_state` is the exception: like `boards_cards.pr_review_state`
+    // above, its migration declares only `['in_review', 'approved']` — there
+    // is no "none" value to write — so it is omitted here instead of cast.
     const boards_pr_links = newCollection('boards_pr_links', {
-        omitOnInsert: ['created', 'updated'] as const,
+        omitOnInsert: ['created', 'updated', 'review_state'] as const,
         syncMode: 'on-demand' as const,
         collectionOptions: indexed,
     })

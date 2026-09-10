@@ -1,6 +1,5 @@
 import { mutation, useMutation } from '@tinycld/core/lib/mutations'
 import { useStore } from '@tinycld/core/lib/pocketbase'
-import type { BoardsPrLinks } from '@tinycld/core/types/pbSchema'
 import { newRecordId } from 'pbtsdb/core'
 
 export interface LinkPrInput {
@@ -31,14 +30,13 @@ export function useLinkPr(cardId: string, projectId: string) {
                 number: input.number,
                 url: input.url,
                 // Unknown until the next webhook delivery resolves them from
-                // GitHub — same "empty means not yet known" convention
-                // review_state already follows (see lib/pr-link-status.ts).
-                // review_state's generated type omits '' because the field is
-                // not required rather than because '' is invalid — the same
-                // gap useCreateCard's `priority` comment notes for selects.
+                // GitHub. `title`/`author` are plain text, so their zero
+                // value is written explicitly (the `priority: 'none'`
+                // convention). `review_state` has no zero value to write —
+                // see collections.ts — so it is omitted here rather than
+                // supplied at all.
                 title: '',
                 author: '',
-                review_state: '' as BoardsPrLinks['review_state'],
                 state: 'open',
                 link_source: 'manual',
                 unlinked: false,
