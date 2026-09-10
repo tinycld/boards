@@ -44,19 +44,29 @@ migrate(
             '@collection.boards_project_members.user ?= @request.auth.id && ' +
             '@collection.boards_project_members.role ?= "owner"'
 
+        // 1980000000's trap 2: `viaOwner` evaluates against the STORED
+        // `project`, so without a pin an owner of project A could PATCH a
+        // repo row they own with {"project": B} and repoint it at a board
+        // they may not even belong to — the row's `repo`/`installation_id`
+        // would then leak into B's card UI. `project` is the only relation
+        // here, so the pin only needs the one clause; `:isset = false` still
+        // lets an ordinary PATCH that echoes the row back through unchanged.
+        const pinProjectOnUpdate =
+            '(@request.body.project:isset = false || @request.body.project = project)'
+
         const repos = new Collection({
-            id: 'pbc_boards_project_repos',
+            id: 'pbc_boards_project_repos_01',
             name: 'boards_project_repos',
             type: 'base',
             system: false,
             listRule: `${enabled} && ${viaMember}`,
             viewRule: `${enabled} && ${viaMember}`,
             createRule: `${enabled} && ${viaOwner}`,
-            updateRule: `${enabled} && ${viaOwner}`,
+            updateRule: `${enabled} && ${viaOwner} && ${pinProjectOnUpdate}`,
             deleteRule: `${enabled} && ${viaOwner}`,
             fields: [
                 {
-                    id: 'bpr_project',
+                    id: 'boards_project_repos_project',
                     name: 'project',
                     type: 'relation',
                     required: true,
@@ -64,9 +74,15 @@ migrate(
                     cascadeDelete: true,
                     maxSelect: 1,
                 },
-                { id: 'bpr_repo', name: 'repo', type: 'text', required: true, max: 140 },
                 {
-                    id: 'bpr_installation',
+                    id: 'boards_project_repos_repo',
+                    name: 'repo',
+                    type: 'text',
+                    required: true,
+                    max: 140,
+                },
+                {
+                    id: 'boards_project_repos_installation',
                     name: 'installation_id',
                     type: 'text',
                     required: false,
@@ -86,7 +102,23 @@ migrate(
         // SERVER-WRITTEN except for the manual link. The webhook runs as a
         // superuser and bypasses these rules; what they govern is the client
         // path — a member linking a PR by URL, and unlinking one.
+        //
+        // Create and update need DIFFERENT pins even though both guard the
+        // same invariant, because a bare field name resolves differently in
+        // each: on CREATE there is no stored row yet, so `card`/`project`
+        // read the incoming body directly, and `card.project = project` is
+        // enough. On UPDATE a bare field name resolves against the STORED
+        // row — 1980000000's trap 2 — so that same clause would compare
+        // stored-vs-stored and constrain nothing about the write. A writer of
+        // project A could then PATCH a link row they control with
+        // {"project": B, "card": <a B card>}: the rule evaluates against A,
+        // passes, and the write lands on B, a board they may not belong to.
+        // The update pin therefore reads `@request.body.*` on both relations
+        // this row carries, the 1980000015/1980000017 shape.
         const pinCardProject = 'card.project = project'
+        const pinCardProjectOnUpdate =
+            '(@request.body.card:isset = false || @request.body.card.project = project)' +
+            ' && (@request.body.project:isset = false || @request.body.project = project)'
         const viaWriter =
             '@collection.boards_project_members.project ?= project && ' +
             '@collection.boards_project_members.user ?= @request.auth.id && ' +
@@ -94,18 +126,18 @@ migrate(
             '@collection.boards_project_members.role ?= "editor")'
 
         const links = new Collection({
-            id: 'pbc_boards_pr_links',
+            id: 'pbc_boards_pr_links_01',
             name: 'boards_pr_links',
             type: 'base',
             system: false,
             listRule: `${enabled} && ${viaMember}`,
             viewRule: `${enabled} && ${viaMember}`,
             createRule: `${enabled} && ${viaWriter} && ${pinCardProject}`,
-            updateRule: `${enabled} && ${viaWriter} && ${pinCardProject}`,
+            updateRule: `${enabled} && ${viaWriter} && ${pinCardProjectOnUpdate}`,
             deleteRule: `${enabled} && ${viaWriter}`,
             fields: [
                 {
-                    id: 'bpl_card',
+                    id: 'boards_pr_links_card',
                     name: 'card',
                     type: 'relation',
                     required: true,
@@ -114,7 +146,7 @@ migrate(
                     maxSelect: 1,
                 },
                 {
-                    id: 'bpl_project',
+                    id: 'boards_pr_links_project',
                     name: 'project',
                     type: 'relation',
                     required: true,
@@ -122,13 +154,37 @@ migrate(
                     cascadeDelete: true,
                     maxSelect: 1,
                 },
-                { id: 'bpl_repo', name: 'repo', type: 'text', required: true, max: 140 },
-                { id: 'bpl_number', name: 'number', type: 'number', required: true, min: 1 },
-                { id: 'bpl_url', name: 'url', type: 'url', required: false },
-                { id: 'bpl_title', name: 'title', type: 'text', required: false, max: 300 },
-                { id: 'bpl_author', name: 'author', type: 'text', required: false, max: 100 },
                 {
-                    id: 'bpl_state',
+                    id: 'boards_pr_links_repo',
+                    name: 'repo',
+                    type: 'text',
+                    required: true,
+                    max: 140,
+                },
+                {
+                    id: 'boards_pr_links_number',
+                    name: 'number',
+                    type: 'number',
+                    required: true,
+                    min: 1,
+                },
+                { id: 'boards_pr_links_url', name: 'url', type: 'url', required: false },
+                {
+                    id: 'boards_pr_links_title',
+                    name: 'title',
+                    type: 'text',
+                    required: false,
+                    max: 300,
+                },
+                {
+                    id: 'boards_pr_links_author',
+                    name: 'author',
+                    type: 'text',
+                    required: false,
+                    max: 100,
+                },
+                {
+                    id: 'boards_pr_links_state',
                     name: 'state',
                     type: 'select',
                     required: true,
@@ -136,7 +192,7 @@ migrate(
                     values: ['open', 'merged', 'closed'],
                 },
                 {
-                    id: 'bpl_review_state',
+                    id: 'boards_pr_links_review_state',
                     name: 'review_state',
                     type: 'select',
                     required: false,
@@ -144,14 +200,19 @@ migrate(
                     values: ['in_review', 'approved'],
                 },
                 {
-                    id: 'bpl_link_source',
+                    id: 'boards_pr_links_link_source',
                     name: 'link_source',
                     type: 'select',
                     required: true,
                     maxSelect: 1,
                     values: ['branch', 'title', 'body', 'manual'],
                 },
-                { id: 'bpl_unlinked', name: 'unlinked', type: 'bool', required: false },
+                {
+                    id: 'boards_pr_links_unlinked',
+                    name: 'unlinked',
+                    type: 'bool',
+                    required: false,
+                },
             ],
             indexes: [
                 'CREATE UNIQUE INDEX idx_boards_pr_links_unique ' +
@@ -171,7 +232,7 @@ migrate(
         // its automation fires on the first merge.)
         cards.fields.add(
             new SelectField({
-                id: 'bc_pr_state',
+                id: 'boards_cards_pr_state',
                 name: 'pr_state',
                 required: false,
                 maxSelect: 1,
@@ -180,7 +241,7 @@ migrate(
         )
         cards.fields.add(
             new SelectField({
-                id: 'bc_pr_review_state',
+                id: 'boards_cards_pr_review_state',
                 name: 'pr_review_state',
                 required: false,
                 maxSelect: 1,
@@ -204,8 +265,8 @@ migrate(
         app.save(activity)
 
         const cards = app.findCollectionByNameOrId('boards_cards')
-        cards.fields.removeById('bc_pr_state')
-        cards.fields.removeById('bc_pr_review_state')
+        cards.fields.removeById('boards_cards_pr_state')
+        cards.fields.removeById('boards_cards_pr_review_state')
         app.save(cards)
 
         app.delete(app.findCollectionByNameOrId('boards_pr_links'))
