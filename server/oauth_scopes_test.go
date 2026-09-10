@@ -146,3 +146,30 @@ func TestSearchSourceScopesAreRegistered(t *testing.T) {
 		}
 	}
 }
+
+// boards_epics shipped with no entry and was default-denied for the life of
+// the feature. Pinning both new collections here is what keeps the PR
+// integration from repeating that.
+func TestOAuthPackage_CoversThePRCollections(t *testing.T) {
+	pkg := oauthPackage()
+
+	// boards_pr_links is board CONTENT: a token that may edit cards may link
+	// a PR to one.
+	links, ok := pkg.Collections["boards_pr_links"]
+	if !ok {
+		t.Fatal("boards_pr_links has no scope entry — it is default-denied for every OAuth caller")
+	}
+	if len(links.Write) == 0 {
+		t.Error("boards_pr_links is read-only; linking a PR is a card edit")
+	}
+
+	// boards_project_repos is the CONNECTION surface: it names a repository
+	// this deployment holds a credential for, so a token must not reshape it.
+	repos, ok := pkg.Collections["boards_project_repos"]
+	if !ok {
+		t.Fatal("boards_project_repos has no scope entry — it is default-denied")
+	}
+	if len(repos.Write) != 0 {
+		t.Error("boards_project_repos must be read-only for OAuth callers")
+	}
+}
