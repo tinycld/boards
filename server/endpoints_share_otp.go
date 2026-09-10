@@ -138,6 +138,14 @@ func handleShareLinkMetadata(app core.App, re *core.RequestEvent) error {
 		"project_id":   project.Id,
 		"project_name": project.GetString("name"),
 		"needs_signin": needsSignIn(link.GetString("role")),
+		// Whether an embed of this link subscribes to realtime. The visitor's
+		// client needs it — it is what decides whether to open a socket at all.
+		//
+		// embed_domains is deliberately NOT here. The browser is what enforces
+		// framing, from the header core writes, so the client has no use for
+		// the list; returning it would only tell whoever holds the token which
+		// other sites this board is embedded on.
+		"embed_live": link.GetBool("embed_live"),
 	})
 }
 

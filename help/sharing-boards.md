@@ -67,6 +67,9 @@ Signing in asks for an email address and sends back a six-digit code — there's
 no password to create. Once the code is accepted, that person joins the board
 at the link's role and it opens normally, with everything that role can do.
 
+To show the board inside another website rather than sending someone a link,
+see [Embedding a board in a website](help://boards:embedding-a-board).
+
 ## What someone who joins by link can see
 
 They see the board: its lists, cards, descriptions, comments, labels and

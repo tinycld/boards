@@ -18,7 +18,7 @@ import type { PublicBoardGoneReason } from '../lib/public-board-routing'
  * other link.
  *
  * `GET /api/boards/share-link/<token>` answers:
- *   200 — live link: `{ role, project_id, project_name, needs_signin }`
+ *   200 — live link: `{ role, project_id, project_name, needs_signin, embed_live }`
  *   410 — `is_active = false` (revoked) or past `expires_at` (expired)
  *   404 — no such token, or the board it named is gone
  */
@@ -40,6 +40,16 @@ export interface ShareLinkMeta {
      * on them differently, so the endpoint's 410 body is not flattened here.
      */
     rejectionReason: PublicBoardGoneReason
+    /**
+     * Whether an embed of this link subscribes to realtime. False by default,
+     * and false for every link that is not embeddable at all.
+     *
+     * The endpoint never returns the embeddable ORIGINS, and nothing here needs
+     * them: framing is enforced by the browser from the header the server
+     * writes. This flag exists only because the client is what decides whether
+     * to open a socket.
+     */
+    embedLive: boolean
     /** The fetch has settled, one way or the other. */
     isResolved: boolean
 }
@@ -49,6 +59,7 @@ export interface ShareLinkMetaPayload {
     project_id?: string
     project_name?: string
     needs_signin?: boolean
+    embed_live?: boolean
 }
 
 /** The shapes the endpoint can settle into. `null` means the fetch failed. */
@@ -111,6 +122,7 @@ export function useShareLinkMeta(token: string): ShareLinkMeta {
         projectId: payload.project_id ?? '',
         projectName: payload.project_name ?? '',
         signInRole: toSignInRole(payload),
+        embedLive: payload.embed_live === true,
         isRejected: false,
         rejectionReason: 'missing',
         isResolved: true,
@@ -133,6 +145,8 @@ function emptyMeta(overrides: Partial<ShareLinkMeta>): ShareLinkMeta {
         projectId: '',
         projectName: '',
         signInRole: null,
+        // Defaults to false so an unresolved or dead link never opens a socket.
+        embedLive: false,
         isRejected: false,
         rejectionReason: 'missing',
         isResolved: false,

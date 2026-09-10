@@ -110,4 +110,29 @@ describe('decidePublicBoardRoute', () => {
             decidePublicBoardRoute(input({ isAuthLoading: true, isBoardResolved: false }))
         ).toEqual({ kind: 'wait' })
     })
+
+    it('keeps an EMBED on the board even for a signed-in member', () => {
+        // The redirect is a courtesy for a person who followed a link. In a
+        // frame it would replace a widget on someone else's page with our
+        // signed-in workspace — and only for members, so it is exactly the
+        // kind of bug that ships unnoticed.
+        expect(
+            decidePublicBoardRoute(input({ isSignedIn: true, isMember: true, isEmbed: true }))
+        ).toEqual({ kind: 'public' })
+    })
+
+    it('still redirects a member who followed the link outside a frame', () => {
+        expect(
+            decidePublicBoardRoute(input({ isSignedIn: true, isMember: true, isEmbed: false }))
+        ).toEqual({ kind: 'redirect', href: expect.any(String) })
+    })
+
+    it('tells an embed the link is dead rather than rendering an empty frame', () => {
+        // A dead link is terminal in a frame too: a blank widget is worse than
+        // a page saying the link lapsed, because nobody can tell it is broken.
+        expect(decidePublicBoardRoute(input({ isEmbed: true, isTokenRejected: true }))).toEqual({
+            kind: 'gone',
+            reason: 'revoked',
+        })
+    })
 })

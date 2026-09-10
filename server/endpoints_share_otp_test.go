@@ -575,3 +575,44 @@ func requestCode(t *testing.T, env *otpEnv, token, email string) string {
 	_ = project
 	return otp.Id
 }
+
+// An embed's client needs `embed_live` — it is what decides whether to open a
+// socket. It must NOT learn the origins: the browser enforces framing from the
+// header, so the list would buy the client nothing and would tell whoever holds
+// the token which other sites embed this board.
+func TestShareLinkMetadata_TellsAnEmbedWhetherToGoLiveButNotWhere(t *testing.T) {
+	env := setupOTPEnv(t)
+	tok := shareLink(t, env.cardsEnv, env.project.Id, tok64("metaembed"), "viewer", true, "")
+
+	link, err := env.app.FindFirstRecordByFilter("boards_share_links",
+		"token = {:t}", map[string]any{"t": tok})
+	if err != nil || link == nil {
+		t.Fatalf("find link: %v", err)
+	}
+	link.Set("embed_domains", "https://intranet.example.com")
+	link.Set("embed_live", true)
+	if err := env.app.Save(link); err != nil {
+		t.Fatalf("save link: %v", err)
+	}
+
+	mintReq{
+		method:     http.MethodGet,
+		url:        "/api/boards/share-link/" + tok,
+		want:       http.StatusOK,
+		content:    []string{`"embed_live":true`},
+		notContent: []string{"embed_domains", "intranet.example.com"},
+	}.run(t, env.cardsEnv)
+}
+
+// The default a visitor's client sees on an ordinary link: no socket.
+func TestShareLinkMetadata_DefaultsEmbedLiveToFalse(t *testing.T) {
+	env := setupOTPEnv(t)
+	tok := shareLink(t, env.cardsEnv, env.project.Id, tok64("metanolive"), "viewer", true, "")
+
+	mintReq{
+		method:  http.MethodGet,
+		url:     "/api/boards/share-link/" + tok,
+		want:    http.StatusOK,
+		content: []string{`"embed_live":false`},
+	}.run(t, env.cardsEnv)
+}

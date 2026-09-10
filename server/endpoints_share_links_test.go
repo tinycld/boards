@@ -483,3 +483,125 @@ func TestShareLinks_ResponseCarriesTheToken(t *testing.T) {
 		},
 	}.run(t, env)
 }
+
+// --------------------------------------------------------------------------
+// Embedding.
+
+func embedMintBody(projectID, role string, days int, domains string, live bool) string {
+	return fmt.Sprintf(
+		`{"project_id":%q,"role":%q,"expires_in_days":%d,"embed_domains":%q,"embed_live":%t}`,
+		projectID, role, days, domains, live)
+}
+
+func TestShareLinks_OwnerMintsAnEmbeddableLink(t *testing.T) {
+	env := setupCardsEnv(t)
+
+	mintReq{
+		method: http.MethodPost,
+		url:    "/api/boards/share-link",
+		token:  env.ownerToken,
+		body: embedMintBody(env.project.Id, "viewer", 7,
+			"https://intranet.example.com  https://wiki.example.com", true),
+		want:    http.StatusOK,
+		content: []string{`"embed_live":true`},
+		after: func(t testing.TB, app *tests.TestApp) {
+			links, err := app.FindRecordsByFilter("boards_share_links",
+				"project = {:p}", "", 0, 0, dbx.Params{"p": env.project.Id})
+			if err != nil || len(links) != 1 {
+				t.Fatalf("expected one link, got %d (err %v)", len(links), err)
+			}
+			// Stored normalized, so the value can go straight into the header.
+			want := "https://intranet.example.com https://wiki.example.com"
+			if got := links[0].GetString("embed_domains"); got != want {
+				t.Fatalf("embed_domains = %q, want %q", got, want)
+			}
+			if !links[0].GetBool("embed_live") {
+				t.Fatal("embed_live was requested and not stored")
+			}
+		},
+	}.run(t, env)
+}
+
+// The default, and the whole reason existing links stay safe: a mint that says
+// nothing about embedding produces a link nobody may frame.
+func TestShareLinks_AnOrdinaryLinkIsNotEmbeddable(t *testing.T) {
+	env := setupCardsEnv(t)
+
+	mintReq{
+		method:  http.MethodPost,
+		url:     "/api/boards/share-link",
+		token:   env.ownerToken,
+		body:    mintBody(env.project.Id, "viewer", 7),
+		want:    http.StatusOK,
+		content: []string{`"embed_domains":""`, `"embed_live":false`},
+		after: func(t testing.TB, app *tests.TestApp) {
+			links, err := app.FindRecordsByFilter("boards_share_links",
+				"project = {:p}", "", 0, 0, dbx.Params{"p": env.project.Id})
+			if err != nil || len(links) != 1 {
+				t.Fatalf("expected one link, got %d (err %v)", len(links), err)
+			}
+			if got := links[0].GetString("embed_domains"); got != "" {
+				t.Fatalf("embed_domains = %q, want empty", got)
+			}
+			if links[0].GetBool("embed_live") {
+				t.Fatal("embed_live defaulted to true")
+			}
+		},
+	}.run(t, env)
+}
+
+// Liveness on a link nobody may frame is meaningless, and storing it would
+// leave a stale true behind if domains were later added.
+func TestShareLinks_EmbedLiveWithoutDomainsIsNotStored(t *testing.T) {
+	env := setupCardsEnv(t)
+
+	mintReq{
+		method:  http.MethodPost,
+		url:     "/api/boards/share-link",
+		token:   env.ownerToken,
+		body:    embedMintBody(env.project.Id, "viewer", 7, "", true),
+		want:    http.StatusOK,
+		content: []string{`"embed_live":false`},
+		after: func(t testing.TB, app *tests.TestApp) {
+			links, err := app.FindRecordsByFilter("boards_share_links",
+				"project = {:p}", "", 0, 0, dbx.Params{"p": env.project.Id})
+			if err != nil || len(links) != 1 {
+				t.Fatalf("expected one link, got %d (err %v)", len(links), err)
+			}
+			if links[0].GetBool("embed_live") {
+				t.Fatal("embed_live stored true on a link that may not be framed")
+			}
+		},
+	}.run(t, env)
+}
+
+// A malformed origin is refused rather than sanitized, and nothing is written.
+// The value's destination is a CSP directive, which has no escaping.
+func TestShareLinks_MalformedEmbedDomainIsRefused(t *testing.T) {
+	env := setupCardsEnv(t)
+
+	mintReq{
+		method: http.MethodPost,
+		url:    "/api/boards/share-link",
+		token:  env.ownerToken,
+		body: embedMintBody(env.project.Id, "viewer", 7,
+			"https://example.com;frame-ancestors *", false),
+		want:  http.StatusBadRequest,
+		after: requireNoLinks(env.project.Id),
+	}.run(t, env)
+}
+
+// Only an owner may widen access, and framing is widening: it decides where a
+// board can be made to appear.
+func TestShareLinks_EditorCannotMintAnEmbeddableLink(t *testing.T) {
+	env := setupCardsEnv(t)
+
+	mintReq{
+		method: http.MethodPost,
+		url:    "/api/boards/share-link",
+		token:  env.editorToken,
+		body:   embedMintBody(env.project.Id, "viewer", 7, "https://example.com", true),
+		want:   http.StatusForbidden,
+		after:  requireNoLinks(env.project.Id),
+	}.run(t, env)
+}

@@ -29,6 +29,13 @@ type createShareLinkRequest struct {
 	// 7/30/90 are accepted. A client-supplied absolute date would be
 	// clock-skew dependent and forgeable into the far future.
 	ExpiresInDays int `json:"expires_in_days"`
+	// EmbedDomains is a space-separated list of origins allowed to frame this
+	// link (see parseEmbedDomains). Empty — the default — means the link is
+	// not embeddable at all.
+	EmbedDomains string `json:"embed_domains"`
+	// EmbedLive opts an embed into realtime. Off by default: a framed board
+	// otherwise holds a socket open per viewer on someone else's page.
+	EmbedLive bool `json:"embed_live"`
 }
 
 type shareLinkResponse struct {
@@ -38,6 +45,12 @@ type shareLinkResponse struct {
 	ExpiresAt string `json:"expires_at"`
 	IsActive  bool   `json:"is_active"`
 	Created   string `json:"created"`
+	// Both are OWNER-facing only. This struct is returned by mint, list and
+	// revoke, every one of which is behind requireAuth + isProjectOwner. The
+	// public metadata endpoint builds its own body and deliberately omits
+	// EmbedDomains — see handleShareLinkMetadata.
+	EmbedDomains string `json:"embed_domains"`
+	EmbedLive    bool   `json:"embed_live"`
 }
 
 type shareLinkListResponse struct {
@@ -56,6 +69,9 @@ func toShareLinkResponse(r *core.Record) shareLinkResponse {
 		ExpiresAt: r.GetString("expires_at"),
 		IsActive:  r.GetBool("is_active"),
 		Created:   r.GetString("created"),
+
+		EmbedDomains: r.GetString("embed_domains"),
+		EmbedLive:    r.GetBool("embed_live"),
 	}
 }
 
@@ -77,6 +93,14 @@ func handleCreateShareLink(app core.App, re *core.RequestEvent) error {
 		return re.BadRequestError("role must be viewer, commentor or editor", nil)
 	}
 	expiresAt, err := resolveExpiry(body.ExpiresInDays)
+	if err != nil {
+		return re.BadRequestError(err.Error(), nil)
+	}
+	// Validated HERE, at the point the value is stored, rather than where it is
+	// written into a header: CSP has no escaping, so a malformed origin cannot
+	// be made safe downstream, and this is the only place the error can reach
+	// the person who typed it.
+	embedDomains, err := parseEmbedDomains(body.EmbedDomains)
 	if err != nil {
 		return re.BadRequestError(err.Error(), nil)
 	}
@@ -103,6 +127,10 @@ func handleCreateShareLink(app core.App, re *core.RequestEvent) error {
 	link.Set("created_by", re.Auth.Id)
 	link.Set("is_active", true)
 	link.Set("expires_at", expiresAt)
+	link.Set("embed_domains", embedDomains)
+	// Liveness is meaningless on a link nobody may frame, and storing it anyway
+	// would leave a stale true behind if the domains were later cleared.
+	link.Set("embed_live", embedDomains != "" && body.EmbedLive)
 	if err := app.Save(link); err != nil {
 		return re.InternalServerError("failed to create share link", err)
 	}
