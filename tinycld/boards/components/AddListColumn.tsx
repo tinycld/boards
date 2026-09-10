@@ -45,11 +45,6 @@ const SEAM_INSET = (SEAM_WIDTH + CANVAS_GAP * 2 - CANVAS_GAP) / 2
  *  column's own p-1.5 plus the header's py-2, less half the cap. */
 const SEAM_TOP = 12
 
-/** How far the rule runs below the cap. Deliberately short: long enough to
- *  read as an insertion bar rather than a lone button, short enough that it
- *  never competes with the columns it sits between. */
-const SEAM_RULE_HEIGHT = 34
-
 interface AddListSeamProps {
     projectId: string
     /** The board's existing column ranks — the new list slots in among them. */
@@ -105,12 +100,13 @@ export function AddListSeam({
             className="group items-center self-stretch web:outline-none"
             style={{ width: SEAM_WIDTH, marginHorizontal: -SEAM_INSET }}
         >
-            {/* Top-aligned and short, NOT stretched down the canvas. The mark
-                sits beside the column headers because that is where the eye
-                already is when deciding a column belongs here, and a rule run
-                the full height of the board stops reading as a hint and starts
-                reading as a permanent divider between the two columns. */}
-            <View className={`items-center ${SEAM_REVEAL}`} style={{ paddingTop: SEAM_TOP }}>
+            {/* Runs the full height of the canvas, so the rule reads as a
+                continuous seam between the two columns rather than a stub
+                hanging off the header. It resolves against the canvas (the
+                Pressable above is self-stretch), which means every gap draws
+                the same rule regardless of how tall its neighbours happen to
+                be — consistent by construction, and no measuring. */}
+            <View className={`flex-1 items-center ${SEAM_REVEAL}`} style={{ paddingTop: SEAM_TOP }}>
                 {/* Cap and rule are one mark: the pill sits ON the rule's top
                     end (hence the negative margin closing the gap), echoing the
                     bar a column drag draws to say "it lands here"
@@ -122,8 +118,8 @@ export function AddListSeam({
                     <SeamPlus />
                 </View>
                 <View
-                    className="w-[3px] rounded-full bg-foreground/20"
-                    style={{ height: SEAM_RULE_HEIGHT, marginTop: -2 }}
+                    className="flex-1 w-[3px] rounded-full bg-foreground/20"
+                    style={{ marginTop: -2 }}
                 />
             </View>
         </Pressable>
