@@ -35,6 +35,17 @@ back button returns you to the board.
 To make the panel wider, drag its left edge. It remembers the width you set, and
 it will not go narrower than its normal size.
 
+## When the window is narrow
+
+The board's top bar keeps the board's name and the filter button on screen and
+folds the rest — the view switch, sort, the sprint scope pill, share, archived
+cards and card density — into the board menu (the **⋯** beside the board name)
+as the window narrows. The [bulk-action bar](help://boards:selecting-multiple-cards)
+does the same: when its buttons no longer fit, the pickers move into a **More**
+menu at its right end, each as a submenu. Anything this help says to click in
+the top bar or the bulk bar may be under one of those menus on a phone or a
+narrow window.
+
 ## Moving cards by drag and drop
 
 To move a card, drag it anywhere you like — within its list to reorder, or
@@ -330,6 +341,10 @@ There is no save button: every change is kept as you type. Esc leaves the
 description without discarding anything, and plain Enter starts a new line,
 since a description is prose.
 
+A description can hold up to 32,767 characters. A counter of what is left
+appears as you approach the limit, and once it is reached the editor accepts
+no more — a longer paste is cut to fit rather than saved short on the server.
+
 Clicking away closes the editor and shows the finished description again.
 Nothing is lost when it closes — the text was already saved as you wrote it.
 
@@ -468,8 +483,9 @@ stops working.
 
 ## Archived cards
 
-A card you archived is not gone: the archive icon in the board's top bar opens
-the list of archived cards, where it can be restored or deleted for good. See
+A card you archived is not gone: the archive icon in the board's top bar (or
+**Archived cards** in the board menu on a narrow window) opens the list of
+archived cards, where it can be restored or deleted for good. See
 [Archiving and deleting](help://boards:archiving-and-deleting).
 
 ## Finding a card

@@ -1,12 +1,13 @@
 ---
 title: Board rules
-summary: React automatically when cards are created, moved, completed, canceled, assigned, estimated, rescheduled, archived, parented, reacted to, or when a deadline passes
+summary: React automatically when cards are created, moved, completed, canceled, assigned, estimated, rescheduled, archived, parented, reacted to, when a deadline passes, or when a linked pull request changes
 tags: [rules, automation, workflow, boards]
 order: 50
 ---
 
-Boards take part in [automation rules](help://core:rules) through thirteen
-triggers and eight actions.
+Boards take part in [automation rules](help://core:rules) with its own set of
+triggers and actions. The trigger and action pickers in the rule editor list
+every one; the tables below describe them.
 
 ## What starts a rule
 
@@ -25,10 +26,19 @@ triggers and eight actions.
 | **Someone reacts to a comment** | an emoji reaction is added to a comment on a card |
 | **A card is due soon** | a card is within two days of its due date |
 | **A card becomes overdue** | a card passes its due date |
+| **A linked pull request opens** | the card gains an open pull request when it had none — its first is linked, or a merged one is reopened |
+| **All linked pull requests merge** | the last open pull request linked to the card merges — not the first |
+| **A linked pull request is up for review** | a review is requested on a linked pull request and nothing on the card was under review before |
+| **A linked pull request is approved** | a linked pull request is approved and the card was not already approved |
 
-All thirteen cover every card on a board you belong to, not only cards you
+Every trigger covers every card on a board you belong to, not only cards you
 created — so a rule fires when a colleague moves your card, which is usually
 the point.
+
+The four pull-request triggers need a repository attached to the board — see
+[GitHub pull requests](help://boards:github). They fire once per card, however
+many pull requests it carries: a card whose work spans two repositories is not
+done when only one of them lands.
 
 **Completed and canceled are their own events.** You could imagine expressing
 either as "moved, if the destination is the Done list", but you can't: a

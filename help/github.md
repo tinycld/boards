@@ -2,7 +2,7 @@
 title: GitHub pull requests
 summary: Attaching a repository so pull requests show up on cards
 tags: [github, pull request, pr, integration, repository, webhook]
-order: 40
+order: 42
 ---
 
 ## Attaching a repository
