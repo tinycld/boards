@@ -115,6 +115,10 @@ func registerShared(app *pocketbase.PocketBase) {
 	// colleague moving your card would never fire your rule.
 	registerAutomation()
 
+	// The GitHub webhook source. Core owns the transport (signature, replay,
+	// rate limit) and names no package; this supplies the interpretation.
+	registerGitHubWebhook()
+
 	registerBoardCounters(app)
 	// The sub-task rollup is a counter in the sense above — recompute, never
 	// delta, never fail the write — but it recounts the card's PARENT rather
