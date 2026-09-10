@@ -213,6 +213,10 @@ export function useDuplicateCard(projectId: string) {
                 // The copy joins the same sprint — a duplicate is more of the
                 // same planned work, not a fresh idea for the backlog.
                 sprint: card.sprint?.id ?? '',
+                // pr_state / pr_review_state are omitted (collections.ts), so
+                // PR links are NOT copied: a duplicate is a new card with no
+                // pull request of its own, the same reasoning that excludes
+                // attachments and comments above.
             })
 
             const items = itemsCollection.toArray

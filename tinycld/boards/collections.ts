@@ -124,6 +124,12 @@ export function registerCollections(
             'due_soon_notified_at',
             'overdue_notified_at',
             'list_changed_at',
+            // Server-owned like number/archived_at above: the GitHub webhook
+            // (server/github_links.go) computes these from the card's linked
+            // PRs, and neither has a "none" value to write explicitly — a new
+            // card simply has no rows to roll up yet.
+            'pr_state',
+            'pr_review_state',
         ] as const,
         collectionOptions: indexed,
     })
