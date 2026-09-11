@@ -1,4 +1,4 @@
-import { NameAvatar } from '@tinycld/core/components/NameAvatar'
+import { Avatar } from '@tinycld/core/components/Avatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { X } from 'lucide-react-native'
 import type { ReactNode } from 'react'
@@ -183,9 +183,8 @@ function personAvatar(id: string, membersById: Map<string, BoardMember>): ReactN
     const member = membersById.get(id)
     if (!member) return null
     return (
-        <NameAvatar
-            firstName={member.firstName}
-            lastName={member.lastName}
+        <Avatar
+            name={`${member.firstName} ${member.lastName ?? ''}`.trim()}
             size={14}
             colorKey={member.id}
         />

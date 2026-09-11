@@ -1,4 +1,4 @@
-import { NameAvatar } from '@tinycld/core/components/NameAvatar'
+import { Avatar } from '@tinycld/core/components/Avatar'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
@@ -228,9 +228,8 @@ function CandidateRow({
 
     return (
         <View className="flex-row items-center gap-3 px-4 py-2.5">
-            <NameAvatar
-                firstName={avatar.firstName}
-                lastName={avatar.lastName}
+            <Avatar
+                name={`${avatar.firstName} ${avatar.lastName ?? ''}`.trim()}
                 size={30}
                 colorKey={candidate.userId}
             />

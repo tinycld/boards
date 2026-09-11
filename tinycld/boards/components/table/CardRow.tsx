@@ -1,5 +1,5 @@
+import { Avatar } from '@tinycld/core/components/Avatar'
 import { LabelBadge } from '@tinycld/core/components/LabelBadge'
-import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { CalendarDays, Clock, Gauge } from 'lucide-react-native'
 import { type GestureResponderEvent, Pressable, Text, View } from 'react-native'
@@ -206,9 +206,8 @@ function Assignees({ assignees }: { assignees: BoardMember[] }) {
                     key={member.id}
                     className={`rounded-full border-2 border-background ${index > 0 ? '-ml-1.5' : ''}`}
                 >
-                    <NameAvatar
-                        firstName={member.firstName}
-                        lastName={member.lastName}
+                    <Avatar
+                        name={`${member.firstName} ${member.lastName ?? ''}`.trim()}
                         size={20}
                         colorKey={member.id}
                     />

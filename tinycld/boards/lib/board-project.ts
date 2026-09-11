@@ -36,7 +36,7 @@ import { normalizeWipLimit } from './wip'
 type UserLike = Pick<Users, 'id' | 'name' | 'email'>
 
 /**
- * Split a user into the first/last pair NameAvatar wants.
+ * Split a user into a first/last pair.
  *
  * `name` is a single free-text field, so this is a display heuristic, not a
  * parse: everything after the first space is the surname. Falls back to the

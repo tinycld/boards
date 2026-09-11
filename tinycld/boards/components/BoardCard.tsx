@@ -1,5 +1,6 @@
+import { Avatar } from '@tinycld/core/components/Avatar'
+import { AvatarStack } from '@tinycld/core/components/AvatarStack'
 import { LabelBadge } from '@tinycld/core/components/LabelBadge'
-import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { ReactionBar } from '@tinycld/core/ui/reactions'
 import {
@@ -742,34 +743,25 @@ function CardMeta({
 /**
  * Who is looking at this card right now.
  *
- * Rendered as coloured initials rather than reusing NameAvatar: a watcher is
- * transient and must not read as an assignee, so it carries the peer's own
- * presence colour (stable per user id) and a ring that sets it apart from the
- * assignee stack it sits beside.
+ * Passes `color` explicitly rather than letting Avatar hash an identity color:
+ * a watcher is transient and must not read as an assignee, so it carries the
+ * peer's own presence colour (stable per user id) and a ring that sets it
+ * apart from the assignee stack it sits beside.
  */
 function CardWatchers({ watchers, cardId }: { watchers: RemoteCardsPresence[]; cardId: string }) {
-    if (watchers.length === 0) return null
-
-    const visible = watchers.slice(0, MAX_WATCHERS)
-    const overflow = watchers.length - visible.length
     return (
-        <View testID={`boards-watchers-${cardId}`} className="flex-row items-center">
-            {visible.map((watcher, index) => (
-                <View
-                    key={watcher.clientID}
-                    accessibilityLabel={`${watcher.user.name} is viewing this card`}
-                    className={`w-[18px] h-[18px] rounded-full items-center justify-center border-2 border-card ${index > 0 ? '-ml-1.5' : ''}`}
-                    style={{ backgroundColor: watcher.user.color }}
-                >
-                    <Text className="text-[9px] font-semibold text-white">
-                        {watcher.user.name.charAt(0).toUpperCase() || '?'}
-                    </Text>
-                </View>
-            ))}
-            {overflow > 0 ? (
-                <Text className="text-[10px] font-medium text-muted ml-1">+{overflow}</Text>
-            ) : null}
-        </View>
+        <AvatarStack
+            testID={`boards-watchers-${cardId}`}
+            items={watchers.map(watcher => ({
+                key: String(watcher.clientID),
+                name: watcher.user.name,
+                color: watcher.user.color,
+                colorKey: watcher.user.id,
+            }))}
+            max={MAX_WATCHERS}
+            size={18}
+            ring="card"
+        />
     )
 }
 
@@ -926,9 +918,8 @@ function CardAssignees({ assignees }: { assignees: BoardMember[] }) {
                     key={member.id}
                     className={`rounded-full border-2 border-card ${index > 0 ? '-ml-1.5' : ''}`}
                 >
-                    <NameAvatar
-                        firstName={member.firstName}
-                        lastName={member.lastName}
+                    <Avatar
+                        name={`${member.firstName} ${member.lastName ?? ''}`.trim()}
                         size={20}
                         colorKey={member.id}
                     />

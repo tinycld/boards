@@ -1,5 +1,5 @@
+import { Avatar } from '@tinycld/core/components/Avatar'
 import { pressPoint } from '@tinycld/core/components/editor/LazyEditor'
-import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useAuth } from '@tinycld/core/lib/auth'
 import { formatRelativeDate } from '@tinycld/core/lib/format-utils'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
@@ -146,9 +146,8 @@ function ActivityRow({ item, context }: { item: BoardActivity; context: Activity
         <View testID={`boards-activity-${item.kind}`} className="flex-row items-center gap-2.5">
             <View className="w-[26px] items-center">
                 {actor ? (
-                    <NameAvatar
-                        firstName={actor.firstName}
-                        lastName={actor.lastName}
+                    <Avatar
+                        name={`${actor.firstName} ${actor.lastName ?? ''}`.trim()}
                         size={20}
                         colorKey={actor.id}
                     />
@@ -253,9 +252,8 @@ function CommentRow({
 
     return (
         <View className="flex-row gap-2.5 group">
-            <NameAvatar
-                firstName={comment.author.firstName}
-                lastName={comment.author.lastName}
+            <Avatar
+                name={`${comment.author.firstName} ${comment.author.lastName ?? ''}`.trim()}
                 size={26}
                 colorKey={comment.author.id}
             />

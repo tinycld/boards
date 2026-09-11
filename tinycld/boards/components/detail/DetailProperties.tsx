@@ -1,5 +1,5 @@
+import { Avatar } from '@tinycld/core/components/Avatar'
 import { LabelBadge } from '@tinycld/core/components/LabelBadge'
-import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { CalendarDays, Clock, Gauge, Layers, Timer } from 'lucide-react-native'
 import { forwardRef, type ReactElement, type ReactNode } from 'react'
@@ -461,9 +461,8 @@ const AssigneesValue = forwardRef<View, { card: BoardCardView; onPress?: () => v
 function MemberChip({ member }: { member: BoardMember }) {
     return (
         <View className="flex-row items-center gap-1.5 bg-foreground/[0.06] rounded-full pl-[3px] pr-2.5 py-[2px]">
-            <NameAvatar
-                firstName={member.firstName}
-                lastName={member.lastName}
+            <Avatar
+                name={`${member.firstName} ${member.lastName ?? ''}`.trim()}
                 size={20}
                 colorKey={member.id}
             />

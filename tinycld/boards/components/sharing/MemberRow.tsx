@@ -1,4 +1,4 @@
-import { NameAvatar } from '@tinycld/core/components/NameAvatar'
+import { Avatar } from '@tinycld/core/components/Avatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { Menu } from '@tinycld/core/ui/menu'
 import { ChevronDown, X } from 'lucide-react-native'
@@ -21,7 +21,7 @@ interface MemberRowProps {
 
 /**
  * One roster row: avatar, identity, role control, trailing action. Calendar's
- * MemberRow, with boards' NameAvatar and a "Leave" action on the caller's own
+ * MemberRow, with boards' avatar and a "Leave" action on the caller's own
  * row — the member delete rule allows self-removal, and a capability with no
  * affordance is dead.
  */
@@ -33,9 +33,8 @@ export function MemberRow({ member, actions, onRoleChange, onRemove, onLeave }: 
             testID={`boards-member-row-${member.userId}`}
             className="flex-row items-center gap-3 py-2.5 px-3"
         >
-            <NameAvatar
-                firstName={avatar.firstName}
-                lastName={avatar.lastName}
+            <Avatar
+                name={`${avatar.firstName} ${avatar.lastName ?? ''}`.trim()}
                 size={32}
                 colorKey={member.userId}
             />
