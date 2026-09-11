@@ -1,6 +1,6 @@
 ---
 title: My cards
-summary: Every card assigned to you or reported by you, across all your boards
+summary: Every card assigned to you, reported by you or watched by you, across all your boards
 tags: [my cards, assigned, search, boards]
 order: 36
 ---
@@ -10,9 +10,10 @@ across every board you belong to — no need to visit each board in turn.
 
 ## Choosing what counts as yours
 
-Three tabs at the top decide: **Assigned to me**, **Reported by me** (cards
-you filed or that name you as the person to ask), and **All cards**, which
-lists everything on every board you can see.
+Four tabs at the top decide: **Assigned to me**, **Reported by me** (cards
+you filed or that name you as the person to ask), **Watching** (every card you
+follow — see [Notifications and watching cards](help://boards:notifications)),
+and **All cards**, which lists everything on every board you can see.
 
 Cards in a **Done** or **Canceled** list are left out, so the list stays a
 to-do list. Click **Show closed** to include them; they sort after everything

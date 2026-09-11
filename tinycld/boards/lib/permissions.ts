@@ -4,7 +4,7 @@ import type { BoardsMemberRole } from '../types'
  * The client half of the access rules — the ONLY place a role is interpreted.
  *
  * Each capability mirrors one rule fragment from
- * pb-migrations/1980000000_create_cards_collections.js (~L804-813); review the
+ * pb-migrations/1980000000_create_boards_collections.js (~L804-813); review the
  * two lists together whenever either changes:
  *
  *   canEdit    ← viaWriter    (owner | editor)

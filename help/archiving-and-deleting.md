@@ -14,7 +14,8 @@ press `x`. Nothing asks for confirmation, because nothing is destroyed.
 
 ## Finding and restoring archived cards
 
-Click the archive icon in the board's top bar to open **Archived cards**. The
+Click the archive icon in the board's top bar — or **Archived cards** in the
+board menu, where it lives on a narrow window — to open **Archived cards**. The
 list shows every archived card on the board, newest first, with its key, the
 list it came from, and when it was archived. Anyone on the board can look;
 editors and owners can act.

@@ -36,7 +36,8 @@ the cards nobody has filed under one yet.
 
 ## Sorting a list
 
-The sort icon next to the filter orders every list by **priority**, **due
+The sort icon next to the filter (**Sort cards** in the board menu on a narrow
+window) orders every list by **priority**, **due
 date**, **start date**, **estimate**, **created**, **title** or **key**,
 ascending or descending. Cards without a date or an estimate always sort
 last. **Manual order** is the default: the
@@ -48,7 +49,8 @@ it takes its sorted place. Clearing the sort brings back your arrangement.
 
 ## Other views
 
-The view toggle beside the filter switches between the board's views: the
+The view toggle beside the filter (**View** in the board menu on a narrow
+window) switches between the board's views: the
 columns you start on, a **list**, a **timeline**, and — on a board that plans
 in [sprints](help://boards:sprints) — a **backlog**. The same filter applies in
 all of them, and the choice is remembered per board.

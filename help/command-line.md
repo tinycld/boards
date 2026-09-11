@@ -24,6 +24,11 @@ Names are matched ignoring case. If two boards share a name, the command stops
 and shows you both ids rather than guessing which one you meant — pass the id
 in that case.
 
+`--board` can be written `-b`, `--list` as `-l`, and `--all` as `-a`. The
+`column` and `card` groups answer to `columns` and `cards` as well, and the
+common verbs have short forms: `show` for `view`, `ls` for `list`, and `rm` or
+`delete` for `remove` (a sprint's `delete` also answers to `rm` and `remove`).
+
 A **card** is named by its key — `OTTER-12` — or by its id. Both appear in
 every listing, in the `KEY` and `ID` columns. The key is the one you can read
 off a card in the app and type here.
@@ -148,7 +153,7 @@ command says so.
 ## Sprints
 
 ```
-tinycld boards sprint list "Product launch"
+tinycld boards sprint list "Product launch"              # the board is the argument here
 tinycld boards sprint view active --board "Product launch"
 tinycld boards sprint create --board "Product launch" --name "Hardening" \
     --goal "Close the open bugs" --start 2026-10-01 --end 2026-10-14
@@ -165,13 +170,16 @@ tinycld boards view "Product launch" --sprint backlog
 
 A sprint is named by its **number** within a board (`--board X 4`), by
 `active` or `next`, or by its id — never by its name, which the team can
-change. `create` lets the server number it; `start` with no dates runs from
-today for the board's sprint length.
+change. `sprint list` is the one command that takes the board as its argument
+rather than as `--board`, since it has no sprint to name. `create` lets the
+server number it; `start` with no dates runs from today for the board's sprint
+length.
 
 `complete` needs `--unfinished` whenever the sprint has cards outside a Done or
 Canceled list — `next` moves them to the next planned sprint (`--next 5` picks
-another), `new` plans a following sprint for them, `backlog` unfiles them.
-There is no default: the command refuses rather than guessing where work goes.
+another, and is only accepted together with `--unfinished next`), `new` plans
+a following sprint for them, `backlog` unfiles them. There is no default: the
+command refuses rather than guessing where work goes.
 `--sprint` on `view` narrows a board to one sprint, or to the `backlog`.
 
 ## Reacting to comments
@@ -266,8 +274,8 @@ tinycld boards column wip Doing 5 --board "Product launch"
 get no reminders. `column done` is shorthand for `category done`; add `--unset`
 to make it an ordinary `todo` column again.
 
-`column wip` sets a work-in-progress limit; `0` clears it. The limit only
-warns — the column header turns amber at the limit and red past it, and
+`column wip` sets a work-in-progress limit, from `1` to `999`; `0` clears it.
+The limit only warns — the column header turns amber at the limit and red past it, and
 nothing refuses a card. See [WIP limits and card
 aging](help://boards:wip-limits-and-aging).
 
@@ -292,8 +300,10 @@ tinycld boards import trello-export.json --name "Product launch"
 CSV is one row per card, for a spreadsheet. JSON carries the whole board —
 checklists, comments and links a CSV row cannot hold — and is what an import
 reads back. Both include archived cards, flagged, because an export doubles as
-a backup. `import` accepts a Trello export or a board exported here, and always
-creates a NEW board. See [Importing and exporting](help://boards:importing-and-exporting).
+a backup. Leave off `--out` to write to standard output; when `--out` names a
+file that already exists, `export` asks before overwriting it (`--yes` skips
+the question). `import` accepts a Trello export or a board exported here, and
+always creates a NEW board. See [Importing and exporting](help://boards:importing-and-exporting).
 
 ## Sharing stays in the app
 
@@ -314,11 +324,14 @@ tinycld boards view "Product launch" --json | jq '.[].cards[].title'
 ```
 
 `--output csv` is there too, for a spreadsheet or `cut`. Commands that change
-something print the row they wrote, so you can capture a new card's id:
+something say what they did on the error stream and, in the default table
+format, print nothing else. Ask for `--json` or `--output csv` and they print
+the row they wrote instead, which is how a script captures a new card's id:
 
 ```
 tinycld boards list --output csv > boards.csv
 tinycld boards card add "Ship it" --board "Product launch" --list "To do" --output csv
+tinycld boards card add "Ship it" --board "Product launch" --list "To do" --json | jq -r .id
 ```
 
 Positions count from zero and are never negative — a negative index is refused

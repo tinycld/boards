@@ -33,8 +33,8 @@ generic row, so you can tell at a glance that the right file is going up. Files
 upload one after another rather than all at once, which keeps each one moving
 at a sensible speed.
 
-A single file can be up to 100 MB. Attachments count towards your organisation's
-storage, alongside mail and drive.
+A single file can be up to 100 MB. Attachments count towards your storage
+quota on this server, alongside mail and drive.
 
 If an upload fails, the row stays in the list with the reason instead of quietly
 disappearing. Dismiss it with the ✕ and try again.

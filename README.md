@@ -3,9 +3,9 @@
 Kanban boards for tracking work across lists.
 
 A feature package for the [tinycld](https://tinycld.org/) ecosystem. It lives in
-its own git repo and is developed as a **workspace member** alongside the app
-shell (`app`), `@tinycld/core` (its own standalone repo, cloned as a sibling —
-not bundled), and the other feature packages.
+its own git repo and is developed as a **workspace member** alongside the
+`tinycld` repo — the app shell, with `@tinycld/core` nested at `tinycld/core/`
+— and the other feature packages.
 
 Four views over a board — canvas, table, timeline and (with sprints on) a
 backlog. Cards carry a key, description, checklist, threaded comments with
@@ -14,7 +14,10 @@ dates, sub-tasks, links to other cards, an epic and a sprint. Around them:
 filtering and sorting, multi-select bulk actions, card activity history,
 watching and notifications, per-column WIP limits and card aging, archive and
 restore, cross-board moves, CSV/JSON export and a Trello importer, share links
-for people outside the board, and burndown / progress / velocity charts.
+for people outside the board (embeddable in another website as a read-only
+iframe), emoji reactions on the card itself as well as on its comments, GitHub
+pull requests linked to cards by branch name or by hand, burndown / progress /
+velocity charts, and a source for core's federated search palette.
 
 **This file is contributor-facing** — how the package plugs into the shell.
 User-facing documentation is the in-app help in `help/`, one topic per feature;
@@ -22,10 +25,11 @@ prefer adding to that over describing behaviour here twice.
 
 ## Automation rules
 
-The package publishes sixteen triggers and eleven actions to the
-automation-rules engine, so a rule can fire on board activity. The catalog in
-`tinycld/boards/automation.ts` is the source of truth; the notes below cover
-the entries whose shape needed a decision rather than restating all of them:
+The package publishes its triggers and actions to the automation-rules engine,
+so a rule can fire on board activity. The catalog in
+`tinycld/boards/automation.ts` is the source of truth for the list; the notes
+below cover the entries whose shape needed a decision rather than restating all
+of them:
 
 - **`boards:card-created`** — "A card is created". A `boards_cards` create.
   Condition fields: `title`, `description`, `list`, `project` (labelled
@@ -70,6 +74,14 @@ the entries whose shape needed a decision rather than restating all of them:
   lifecycle, declared against `boards_sprints` and gated by
   `sprintBecameActive` / `sprintBecameCompleted` so a plain edit to a running
   sprint does not fire them.
+- **`boards:pr-opened`** / **`boards:pr-merged`** /
+  **`boards:pr-review-requested`** / **`boards:pr-approved`** — the GitHub
+  triggers. All four watch DERIVED columns on `boards_cards` (`pr_state`,
+  `pr_review_state`) that `server/pr_rollup.go` owns, not the
+  `boards_pr_links` rows themselves: a card with three linked PRs would
+  otherwise fire three times for one event, and "all linked pull requests
+  merge" cannot be expressed by watching a single row at all — the rollup is
+  where "no link remains open" is decided.
 
 There is deliberately NO trigger or action for `boards_card_links`. A link row
 carries no `project`, and `cardOwnerResolver` — which every boards trigger
@@ -138,39 +150,48 @@ anatomy reference](https://tinycld.org/docs/anatomy/automation).
 
 The package contributes its own command group to the `tinycld` binary. The Go
 source lives in `cli/` and is declared by a `cli` block in `manifest.ts` naming
-the Go module and the OAuth scopes it needs (`boards:read`, `boards:write`). The
-server cross-compiles the binary; users download it from **Settings → Personal
-→ About**.
+the Go module. The OAuth scopes the binary asks for (`boards:read`,
+`boards:write`) are not on the manifest: the Go server registers them, and
+which collections and routes each one admits, through `oauth.RegisterPackage`
+in `server/oauth_scopes.go`. The server cross-compiles the binary; users
+download it from **Settings → Personal → About**.
 
-Four groups. Cobra is the source of truth for the list and for `--help`, so
-this describes the shape rather than counting commands:
+Board-level verbs sit directly on the group; everything else is nested under
+`column`, `card`, `sprint` and `github`. Cobra is the source of truth for the
+list and for `--help`, so this describes the shape rather than counting
+commands:
 
 ```sh
 tinycld boards      list view archive remove export import
 tinycld boards column   show add rename move category done wip remove
 tinycld boards card     view add edit move copy archive remove \
-                        link unlink react unreact
+                        link unlink link-pr unlink-pr react unreact
 tinycld boards sprint   list view create edit start complete delete
+tinycld boards github   list
 ```
 
 `column category <list> <backlog|todo|in_progress|done|canceled>` sets a
 column's status; `column done` is the older shorthand for the `done` case and
 is kept as one. `column wip <list> <limit>` sets a WIP limit, `0` to clear.
 `card link` takes `--blocks` / `--related` / `--duplicates`, and `card unlink`
-is direction-agnostic. `sprint complete` takes
-`--unfinished next|new|backlog`.
+is direction-agnostic. `card link-pr` / `unlink-pr` take a GitHub pull request
+URL. `sprint complete` takes `--unfinished next|new|backlog`. `github list`
+shows the repositories a board watches; there is deliberately no `github
+attach` — see the file header in `cli/github.go`.
 
-**`boards export` and `boards import` need `tinycld` PR #235.** It classifies
-the two routes in core's `endpointScopes`; until it lands they work for a
-session but 403 for an OAuth token, which is what the CLI holds.
+`boards export` and `boards import` go through the two bespoke routes below;
+`server/oauth_scopes.go` classifies them (`boards:read` for the export,
+`boards:write` for the import) so they work over the OAuth token the CLI holds.
 
 A board resolves by id, key, or name; a sprint resolves by its number within
 the board, by `active` or `next`, or by id — never by name.
 
-Board sharing and membership are deliberately not exposed on the CLI — manage
-them in the app. That is a grant boundary, not a preference: the sharing
-collections are registered READ-ONLY in core's `collectionScopes`, so a
-`boards share` would need that widened first.
+Board sharing, membership and repository attachment are deliberately not
+exposed on the CLI — manage them in the app. That is a grant boundary, not a
+preference: `boards_project_members`, `boards_share_links` and
+`boards_project_repos` are registered READ-ONLY for OAuth callers in
+`server/oauth_scopes.go`, so a `boards share` or `github attach` would need
+that widened first.
 
 In-app help is `help/command-line.md`. See [the command line
 tool](https://tinycld.org/docs/command-line-tool) and the [CLI
@@ -178,10 +199,10 @@ reference](https://tinycld.org/docs/reference/cli-reference).
 
 ## Collections
 
-Sixteen, all registered in `tinycld/boards/collections.ts` and created by the
-migrations in `pb-migrations/`. `project` is DENORMALIZED onto every content
-collection so a PB rule can resolve board membership in one hop instead of a
-back-relation chain:
+All registered in `tinycld/boards/collections.ts` (the source of truth for the
+list) and created by the migrations in `pb-migrations/`. `project` is
+DENORMALIZED onto every content collection so a PB rule can resolve board
+membership in one hop instead of a back-relation chain:
 
 | Collection | Holds |
 |---|---|
@@ -192,7 +213,8 @@ back-relation chain:
 | `boards_labels` | board-scoped labels, UNIQUE on (project, name) |
 | `boards_checklist_items` | checklist rows |
 | `boards_comments` | threaded one level |
-| `boards_comment_reactions` | (comment, user, emoji) over a six-emoji select |
+| `boards_comment_reactions` | (comment, user, emoji) on a comment |
+| `boards_card_reactions` | (card, user, emoji) on the card itself — a separate count from its comments' |
 | `boards_card_links` | blocks / related / duplicates, stored once, read both ends |
 | `boards_card_watchers` | who is notified about a card |
 | `boards_attachments` | a PB `file` field, not a `drive_items` row |
@@ -200,7 +222,9 @@ back-relation chain:
 | `boards_epics` | epics, with a server-owned card rollup |
 | `boards_sprints` | numbered per board, `planned → active → completed` |
 | `boards_sprint_snapshots` | one row per sprint per day; server-only writer |
-| `boards_share_links` | tokenized public access |
+| `boards_share_links` | tokenized public access, plus the embed allow-list |
+| `boards_project_repos` | the GitHub repositories a board watches; READ-ONLY over OAuth |
+| `boards_pr_links` | a pull request linked to a card, by webhook or by hand; rolled up onto `boards_cards.pr_state` / `pr_review_state` |
 
 Ordering is by a fractional rank in `position`. **Ranks are NOT unique** — two
 offline clients can split the same gap — so every query ordering by rank must
@@ -209,8 +233,8 @@ sort `position, id`.
 ## HTTP endpoints
 
 Most reads and writes go through PocketBase's generated REST API, governed by
-the collection rules. These eleven are bespoke, because each does something a
-record write cannot:
+the collection rules. These are bespoke, because each does something a record
+write cannot:
 
 ```
 POST   /api/boards/cards/{id}/move          cross-board move: remaps labels by
@@ -228,21 +252,30 @@ POST   /api/boards/share-link/{token}/otp-request
 POST   /api/boards/share-link/{token}/otp-verify
 ```
 
-`GET /api/boards/search` is registered in core's route map rather than here.
+Two more surfaces are registered through core rather than mounted here.
+`GET /api/boards/search` is generated by core's `fts` package from the
+`ftsConfig` in `server/search.go`, which also registers the `search.Source`
+that feeds the federated `/api/search` behind the app's search palette (`/`,
+with a `boards:` chip); `tinycld/boards/search-adapter.ts` supplies the
+client-side selection handler. `POST /api/webhooks/github` is core's
+`webhookin` route; `server/github_webhook.go` registers the `github` source
+that receives pull-request deliveries and writes `boards_pr_links`.
+
 A bespoke route runs no rule engine, so each restates its own authorization —
 including the suspension check that `requireAuth` does not make.
 
 ## Development
 
 The package is one member of a tinycld workspace. To work on it you need a
-workspace root containing at least `app`, `core`, and this package as siblings,
-linked by a single `pnpm install` at the root.
+workspace root containing at least the `tinycld` member (the app shell, with
+`@tinycld/core` nested inside it) and this package as siblings, linked by a
+single `pnpm install` at the root.
 
 ```sh
 # In a fresh workspace directory, clone this package into a member slot…
 git clone git@github.com:tinycld/boards.git
 
-# …then assemble the rest of the workspace (app + core + the workspace
+# …then assemble the rest of the workspace (the tinycld member + the workspace
 # package.json / tinycld.packages.ts). bootstrap --assemble-only skips
 # dirs that already exist.
 npx @tinycld/bootstrap@latest --assemble-only
@@ -251,8 +284,8 @@ npx @tinycld/bootstrap@latest --assemble-only
 # member — siblings have no node_modules of their own; deps hoist to the root).
 pnpm install
 
-# Run the full stack (Expo + PocketBase, single-port dev proxy) from the app.
-cd app
+# Run the full stack (Expo + PocketBase, single-port dev proxy) from the shell.
+cd tinycld
 pnpm run dev
 ```
 
@@ -264,7 +297,7 @@ app shell's biome config, tsconfig base, and vitest/playwright configs (so
 
 ```sh
 cd boards
-pnpm exec tinycld-pkg check       # biome + typecheck
+pnpm exec tinycld-pkg check       # biome + typecheck + vitest
 pnpm exec tinycld-pkg test        # vitest unit tests
 pnpm exec tinycld-pkg test:e2e    # playwright e2e specs (full preset only — packages with screens)
 ```
@@ -288,14 +321,19 @@ package genuinely needs to override a rule:
 
 `.github/workflows/ci.yml` runs typecheck, unit tests, and e2e on every push to
 `main` and every PR. It checks out this PR's code into a member slot, assembles
-the rest of the workspace (`app` + `core` + the workspace `package.json` and
-coordination files) via `npx @tinycld/bootstrap --assemble-only`, installs at
+the rest of the workspace (the `tinycld` member + the workspace `package.json`
+and coordination files) via `npx @tinycld/bootstrap --assemble-only`, installs at
 the workspace root, and runs `tinycld-pkg check` / `tinycld-pkg test:e2e` —
 exactly what a developer runs locally.
 
 ## Package anatomy
 
-- `manifest.ts` — the single source of truth for this package's capabilities
+- `manifest.ts` — the single source of truth for this package's capabilities:
+  `routes` + `publicRoutes`, `nav`, `sidebar`, `provider`, a `settings` entry
+  (the GitHub screen), `help`, `search`, two calendar `eventSources`
+  (`boards-due`, `boards-sprints`), `quota` (attachments count against the
+  storage ceiling by their `size` column), `migrations`, `server`, `cli`,
+  `collections`, `automation`, `seed`, `repository`, `peerVersions`
 - `package.json` — name, exports map, `tinycld-pkg` scripts, peer deps
 - `tsconfig.json` — extends the app shell's package tsconfig base
 - `vitest.config.ts` (and `playwright.config.ts` — full preset only) — thin configs spreading the app's
@@ -306,9 +344,21 @@ exactly what a developer runs locally.
   (due notices, auto-archive, sprint automation), and the RLS test suites that
   drive the real REST router as several users
 - `server/automation.go` — owner resolver, the done-list filter, and the param authorizer for the automation triggers
+- `server/oauth_scopes.go` — the `boards:read` / `boards:write` scopes and the
+  collections and routes each admits to an OAuth caller
+- `server/search.go` — the FTS config and the federated-search source
+- `server/github_*.go`, `server/pr_rollup.go` — the GitHub App credential,
+  webhook deliveries, link discovery, and the per-card PR state rollup
+- `server/embed.go` — tells core which origins may frame `/p/boards/<token>`
 - `help/` — in-app help topics, one file per topic, surfaced at `/help`
 - `cli/` — Go source for this package's `tinycld` command group
-- `tinycld/boards/` — the TypeScript surface: five screens, `collections.ts`,
+- `tinycld/boards/` — the TypeScript surface: `screens/` (the board list,
+  a board, a card, and My cards, under a `_layout`),
+  `public-screens/[token].tsx` (the share-link page at `/p/boards/<token>`,
+  outside the app shell), `settings/github.tsx` (Settings → Boards → GitHub),
+  `sidebar.tsx`, `provider.tsx` (re-pulls the cards collections when a
+  membership grant changes what the rules let you read), `search-adapter.ts`,
+  `calendar-source.ts` + `calendar-sprint-source.ts`, `collections.ts`,
   `types.ts`, hooks, `lib/` (rank arithmetic, board projection, filtering,
   selection), `stores/`, and components grouped by area (`detail/`, `table/`,
   `timeline/`, `backlog/`, `filter/`, `sharing/`)
