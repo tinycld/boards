@@ -758,6 +758,10 @@ function CardWatchers({ watchers, cardId }: { watchers: RemoteCardsPresence[]; c
                 name: watcher.user.name,
                 color: watcher.user.color,
                 colorKey: watcher.user.id,
+                // Restores the label the old inline renderer carried — without
+                // it a screen reader hears a bare name, indistinguishable from
+                // an assignee. Visual distinction (ring="card") isn't enough.
+                accessibilityLabel: `${watcher.user.name} is viewing this card`,
             }))}
             max={MAX_WATCHERS}
             size={18}
