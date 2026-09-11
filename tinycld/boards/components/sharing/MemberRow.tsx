@@ -1,10 +1,11 @@
-import { NameAvatar } from '@tinycld/core/components/NameAvatar'
+import { Avatar } from '@tinycld/core/components/Avatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
+import { useAvatarUrl } from '@tinycld/core/lib/use-avatar-url'
 import { Menu } from '@tinycld/core/ui/menu'
 import { ChevronDown, X } from 'lucide-react-native'
 import { Pressable, Text, View } from 'react-native'
 import type { ProjectMemberRow } from '../../hooks/useProjectMembers'
-import { toBoardMember } from '../../lib/board-project'
+import { splitName } from '../../lib/board-project'
 import type { MemberRowActions } from '../../lib/permissions'
 import type { BoardsMemberRole } from '../../types'
 import { ROLE_OPTIONS, roleLabel } from './roles'
@@ -21,23 +22,31 @@ interface MemberRowProps {
 
 /**
  * One roster row: avatar, identity, role control, trailing action. Calendar's
- * MemberRow, with boards' NameAvatar and a "Leave" action on the caller's own
+ * MemberRow, with boards' avatar and a "Leave" action on the caller's own
  * row — the member delete rule allows self-removal, and a capability with no
  * affordance is dead.
  */
 export function MemberRow({ member, actions, onRoleChange, onRemove, onLeave }: MemberRowProps) {
-    const avatar = toBoardMember({ id: member.userId, name: member.name, email: member.email })
+    const { firstName, lastName } = splitName(member.name || member.email || '')
+    const avatar = useAvatarUrl({
+        id: member.userId,
+        avatar: member.avatar,
+        avatar_crop: member.avatarCrop,
+    })
 
     return (
         <View
             testID={`boards-member-row-${member.userId}`}
             className="flex-row items-center gap-3 py-2.5 px-3"
         >
-            <NameAvatar
-                firstName={avatar.firstName}
-                lastName={avatar.lastName}
-                size={32}
+            <Avatar
+                name={`${firstName} ${lastName}`.trim()}
+                email={member.email}
                 colorKey={member.userId}
+                avatar={avatar}
+                emoji={member.avatarEmoji || undefined}
+                color={member.avatarColor || undefined}
+                size={32}
             />
             <View className="flex-1 min-w-0">
                 <View className="flex-row items-center gap-1.5">

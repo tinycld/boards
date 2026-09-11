@@ -1,4 +1,4 @@
-import { NameAvatar } from '@tinycld/core/components/NameAvatar'
+import { Avatar } from '@tinycld/core/components/Avatar'
 import { PresenceAvatars } from '@tinycld/core/components/PresenceAvatars'
 import { ResponsiveToolbar, type ToolbarItem } from '@tinycld/core/components/ResponsiveToolbar'
 import { Tooltip } from '@tinycld/core/components/Tooltip'
@@ -438,9 +438,8 @@ function TeamAvatars({ project, onPress }: { project: BoardProject; onPress?: ()
                     key={member.id}
                     className={`rounded-full border-2 border-background ${index > 0 ? '-ml-1.5' : ''}`}
                 >
-                    <NameAvatar
-                        firstName={member.firstName}
-                        lastName={member.lastName}
+                    <Avatar
+                        name={`${member.firstName} ${member.lastName ?? ''}`.trim()}
                         size={24}
                         colorKey={member.id}
                     />

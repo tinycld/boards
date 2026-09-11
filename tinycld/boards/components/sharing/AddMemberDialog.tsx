@@ -1,4 +1,4 @@
-import { NameAvatar } from '@tinycld/core/components/NameAvatar'
+import { Avatar } from '@tinycld/core/components/Avatar'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
@@ -9,7 +9,7 @@ import { Search } from 'lucide-react-native'
 import { useMemo, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useAddMember } from '../../hooks/useMemberMutations'
-import { toBoardMember } from '../../lib/board-project'
+import { splitName } from '../../lib/board-project'
 import type { BoardsMemberRole } from '../../types'
 import { ROLE_OPTIONS } from './roles'
 
@@ -220,17 +220,12 @@ function CandidateRow({
     isPending: boolean
     onAdd: (userId: string) => void
 }) {
-    const avatar = toBoardMember({
-        id: candidate.userId,
-        name: candidate.name,
-        email: candidate.email,
-    })
+    const { firstName, lastName } = splitName(candidate.name || candidate.email || '')
 
     return (
         <View className="flex-row items-center gap-3 px-4 py-2.5">
-            <NameAvatar
-                firstName={avatar.firstName}
-                lastName={avatar.lastName}
+            <Avatar
+                name={`${firstName} ${lastName}`.trim()}
                 size={30}
                 colorKey={candidate.userId}
             />

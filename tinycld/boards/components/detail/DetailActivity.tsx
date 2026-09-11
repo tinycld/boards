@@ -1,8 +1,9 @@
+import { Avatar } from '@tinycld/core/components/Avatar'
 import { pressPoint } from '@tinycld/core/components/editor/LazyEditor'
-import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useAuth } from '@tinycld/core/lib/auth'
 import { formatRelativeDate } from '@tinycld/core/lib/format-utils'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
+import { useAvatarUrl } from '@tinycld/core/lib/use-avatar-url'
 import { ReactionBar } from '@tinycld/core/ui/reactions'
 import { History } from 'lucide-react-native'
 import { useMemo } from 'react'
@@ -139,6 +140,10 @@ export function DetailActivity({
 function ActivityRow({ item, context }: { item: BoardActivity; context: ActivityContext }) {
     const mutedColor = useThemeColor('muted')
     const { actor, text } = describeActivity(item, context)
+    // Called unconditionally — hooks can't sit behind the `actor ?` branch below.
+    const avatar = useAvatarUrl(
+        actor ? { id: actor.id, avatar: actor.avatar, avatar_crop: actor.avatarCrop } : null
+    )
     const who = actor ? `${actor.firstName} ${actor.lastName}`.trim() : 'Automatically'
     const timestamp = item.created ? formatRelativeDate(item.created) : 'Just now'
 
@@ -146,11 +151,14 @@ function ActivityRow({ item, context }: { item: BoardActivity; context: Activity
         <View testID={`boards-activity-${item.kind}`} className="flex-row items-center gap-2.5">
             <View className="w-[26px] items-center">
                 {actor ? (
-                    <NameAvatar
-                        firstName={actor.firstName}
-                        lastName={actor.lastName}
-                        size={20}
+                    <Avatar
+                        name={`${actor.firstName} ${actor.lastName ?? ''}`.trim()}
+                        email={actor.email}
                         colorKey={actor.id}
+                        avatar={avatar}
+                        emoji={actor.avatarEmoji || undefined}
+                        color={actor.avatarColor || undefined}
+                        size={20}
                     />
                 ) : (
                     <History size={16} color={mutedColor} strokeWidth={2} />
@@ -217,6 +225,11 @@ function CommentRow({
     // offering nothing.
     const { user } = useAuth({ throwIfAnon: false })
     const mutedColor = useThemeColor('muted')
+    const avatar = useAvatarUrl({
+        id: comment.author.id,
+        avatar: comment.author.avatar,
+        avatar_crop: comment.author.avatarCrop,
+    })
     // Author-or-owner, mirroring the delete rule.
     const isAuthor = !!user?.id && user.id === comment.author.id
     // The update rule is author AND current commenter standing — a demoted
@@ -253,11 +266,14 @@ function CommentRow({
 
     return (
         <View className="flex-row gap-2.5 group">
-            <NameAvatar
-                firstName={comment.author.firstName}
-                lastName={comment.author.lastName}
-                size={26}
+            <Avatar
+                name={`${comment.author.firstName} ${comment.author.lastName ?? ''}`.trim()}
+                email={comment.author.email}
                 colorKey={comment.author.id}
+                avatar={avatar}
+                emoji={comment.author.avatarEmoji || undefined}
+                color={comment.author.avatarColor || undefined}
+                size={26}
             />
             <View className="flex-1 min-w-0">
                 {isEditing ? (

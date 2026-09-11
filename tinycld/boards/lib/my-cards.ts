@@ -16,7 +16,7 @@ import type {
     BoardsSprints,
 } from '../types'
 import { matchesKeyword } from './board-filter'
-import { toBoardCard, toBoardEpic, toBoardSprint } from './board-project'
+import { toBoardCard, toBoardEpic, toBoardMember, toBoardSprint } from './board-project'
 import { dueStateFor } from './due-state'
 import { isClosedCategory, type ListCategory, normalizeListCategory } from './list-category'
 
@@ -84,7 +84,15 @@ export interface BuildMyCardsInput {
     /** Every epic and sprint the client has synced, so a row resolves its chips. */
     epics?: BoardsEpics[]
     sprints?: BoardsSprints[]
-    users: { id: string; name: string; email: string }[]
+    users: {
+        id: string
+        name: string
+        email: string
+        avatar: string
+        avatar_crop: string
+        avatar_color: string
+        avatar_emoji: string
+    }[]
     mode: MyCardsMode
     userId: string
     text: string
@@ -114,12 +122,9 @@ export function buildMyCardRows(input: BuildMyCardsInput): MyCardRow[] {
     const sprintsById = new Map(
         (input.sprints ?? []).map(sprint => [sprint.id, toBoardSprint(sprint)])
     )
-    const usersById = new Map<string, BoardMember>()
-    for (const user of input.users) {
-        const label = user.name || user.email || ''
-        const [first = '', ...rest] = label.split(' ').filter(Boolean)
-        usersById.set(user.id, { id: user.id, firstName: first, lastName: rest.join(' ') })
-    }
+    const usersById = new Map<string, BoardMember>(
+        input.users.map(user => [user.id, toBoardMember(user)])
+    )
 
     const out: MyCardRow[] = []
     for (const { card, project, list } of input.rows) {

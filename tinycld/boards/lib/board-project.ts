@@ -33,24 +33,39 @@ import { activeSprint, normalizeSprintRollover, sprintLengthDays } from './sprin
 import { normalizeWipLimit } from './wip'
 
 /** The subset of a user row the board actually renders. */
-type UserLike = Pick<Users, 'id' | 'name' | 'email'>
+type UserLike = Pick<
+    Users,
+    'id' | 'name' | 'email' | 'avatar' | 'avatar_crop' | 'avatar_color' | 'avatar_emoji'
+>
 
 /**
- * Split a user into the first/last pair NameAvatar wants.
+ * Split a display label into a first/last pair.
  *
  * `name` is a single free-text field, so this is a display heuristic, not a
- * parse: everything after the first space is the surname. Falls back to the
+ * parse: everything after the first space is the surname. Callers pass the
  * email when a user has no name yet (an invited-but-unfinished account), and
- * to the id when there is neither — an avatar with no glyph is worse than an
- * ugly one, and an empty label makes a row look broken.
+ * the id when there is neither — an avatar with no glyph is worse than an
+ * ugly one, and an empty label makes a row look broken. Exported for callers
+ * (e.g. AddMemberDialog's search candidates) that only ever have a name/email
+ * pair, never a full user row, and so cannot call `toBoardMember` itself.
  */
-export function toBoardMember(user: UserLike): BoardMember {
-    const label = user.name || user.email || ''
+export function splitName(label: string): { firstName: string; lastName: string } {
     const [first = '', ...rest] = label.split(' ').filter(Boolean)
+    return { firstName: first, lastName: rest.join(' ') }
+}
+
+/** Builds a `BoardMember` from a synced `users` row, stored photo included. */
+export function toBoardMember(user: UserLike): BoardMember {
+    const { firstName, lastName } = splitName(user.name || user.email || '')
     return {
         id: user.id,
-        firstName: first,
-        lastName: rest.join(' '),
+        firstName,
+        lastName,
+        email: user.email ?? '',
+        avatar: user.avatar ?? '',
+        avatarCrop: user.avatar_crop ?? '',
+        avatarColor: user.avatar_color ?? '',
+        avatarEmoji: user.avatar_emoji ?? '',
     }
 }
 
@@ -59,10 +74,20 @@ export function toBoardMember(user: UserLike): BoardMember {
  *
  * Keeps the id so identity-based memoization and structural sharing behave
  * exactly as they do for a resolved member — two renders of the same
- * unresolvable assignee compare equal.
+ * unresolvable assignee compare equal. No stored photo to show, so every
+ * avatar field is empty — the caller renders the "Board member" initials.
  */
 export function anonymousMember(id: string): BoardMember {
-    return { id, firstName: 'Board', lastName: 'member' }
+    return {
+        id,
+        firstName: 'Board',
+        lastName: 'member',
+        email: '',
+        avatar: '',
+        avatarCrop: '',
+        avatarColor: '',
+        avatarEmoji: '',
+    }
 }
 
 export function toBoardLabel(label: BoardsLabels): BoardLabel {

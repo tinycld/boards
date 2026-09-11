@@ -1,4 +1,4 @@
-import { NameAvatar } from '@tinycld/core/components/NameAvatar'
+import { Avatar } from '@tinycld/core/components/Avatar'
 import { Menu } from '@tinycld/core/ui/menu'
 import { UserMinus } from 'lucide-react-native'
 import type { ReactElement } from 'react'
@@ -36,9 +36,8 @@ export function ReporterPicker({ members, selectedId, onSelect, children }: Repo
                     label={`${member.firstName} ${member.lastName}`.trim()}
                     isSelected={member.id === selectedId}
                     leading={
-                        <NameAvatar
-                            firstName={member.firstName}
-                            lastName={member.lastName}
+                        <Avatar
+                            name={`${member.firstName} ${member.lastName ?? ''}`.trim()}
                             size={18}
                             colorKey={member.id}
                         />

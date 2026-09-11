@@ -477,9 +477,9 @@ test.describe('Boards — keyboard control', () => {
         // Multi-select, so it stays open by design — Escape is what closes it.
         await page.keyboard.press('Escape')
 
-        // The avatar row itself, not the initial it renders: NameAvatar shows
-        // ONE letter, which collides with card titles and keys and makes a
-        // text assertion meaningless in both directions.
+        // The avatar row itself, not the initials it renders: initials collide
+        // with card titles and keys, which makes a text assertion meaningless
+        // in both directions.
         await expect(boardCard(page, 'assigned').getByTestId('boards-card-assignees')).toBeVisible()
         await expect(boardCard(page, 'above').getByTestId('boards-card-assignees')).toHaveCount(0)
     })

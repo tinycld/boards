@@ -12,6 +12,10 @@ export interface ProjectMemberRow {
     email: string
     role: BoardsMemberRole
     isCurrentUser: boolean
+    avatar: string
+    avatarCrop: string
+    avatarColor: string
+    avatarEmoji: string
 }
 
 /**
@@ -54,6 +58,10 @@ export function useProjectMembers(projectId: string) {
             email: row.user.email,
             role: row.member.role,
             isCurrentUser: row.user.id === user?.id,
+            avatar: row.user.avatar ?? '',
+            avatarCrop: row.user.avatar_crop ?? '',
+            avatarColor: row.user.avatar_color ?? '',
+            avatarEmoji: row.user.avatar_emoji ?? '',
         }))
         // Owners first, then alphabetical — the people who can act on this
         // dialog are the ones worth finding fast.

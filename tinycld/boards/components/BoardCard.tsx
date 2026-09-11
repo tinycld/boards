@@ -1,6 +1,8 @@
+import { Avatar } from '@tinycld/core/components/Avatar'
+import { AvatarStack } from '@tinycld/core/components/AvatarStack'
 import { LabelBadge } from '@tinycld/core/components/LabelBadge'
-import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
+import { useAvatarUrl } from '@tinycld/core/lib/use-avatar-url'
 import { ReactionBar } from '@tinycld/core/ui/reactions'
 import {
     CalendarDays,
@@ -742,34 +744,29 @@ function CardMeta({
 /**
  * Who is looking at this card right now.
  *
- * Rendered as coloured initials rather than reusing NameAvatar: a watcher is
- * transient and must not read as an assignee, so it carries the peer's own
- * presence colour (stable per user id) and a ring that sets it apart from the
- * assignee stack it sits beside.
+ * Passes `color` explicitly rather than letting Avatar hash an identity color:
+ * a watcher is transient and must not read as an assignee, so it carries the
+ * peer's own presence colour (stable per user id) and a ring that sets it
+ * apart from the assignee stack it sits beside.
  */
 function CardWatchers({ watchers, cardId }: { watchers: RemoteCardsPresence[]; cardId: string }) {
-    if (watchers.length === 0) return null
-
-    const visible = watchers.slice(0, MAX_WATCHERS)
-    const overflow = watchers.length - visible.length
     return (
-        <View testID={`boards-watchers-${cardId}`} className="flex-row items-center">
-            {visible.map((watcher, index) => (
-                <View
-                    key={watcher.clientID}
-                    accessibilityLabel={`${watcher.user.name} is viewing this card`}
-                    className={`w-[18px] h-[18px] rounded-full items-center justify-center border-2 border-card ${index > 0 ? '-ml-1.5' : ''}`}
-                    style={{ backgroundColor: watcher.user.color }}
-                >
-                    <Text className="text-[9px] font-semibold text-white">
-                        {watcher.user.name.charAt(0).toUpperCase() || '?'}
-                    </Text>
-                </View>
-            ))}
-            {overflow > 0 ? (
-                <Text className="text-[10px] font-medium text-muted ml-1">+{overflow}</Text>
-            ) : null}
-        </View>
+        <AvatarStack
+            testID={`boards-watchers-${cardId}`}
+            items={watchers.map(watcher => ({
+                key: String(watcher.clientID),
+                name: watcher.user.name,
+                color: watcher.user.color,
+                colorKey: watcher.user.id,
+                // Restores the label the old inline renderer carried — without
+                // it a screen reader hears a bare name, indistinguishable from
+                // an assignee. Visual distinction (ring="card") isn't enough.
+                accessibilityLabel: `${watcher.user.name} is viewing this card`,
+            }))}
+            max={MAX_WATCHERS}
+            size={18}
+            ring="card"
+        />
     )
 }
 
@@ -922,21 +919,36 @@ function CardAssignees({ assignees }: { assignees: BoardMember[] }) {
     return (
         <View className="shrink-0 flex-row items-center" testID="boards-card-assignees">
             {visible.map((member, index) => (
-                <View
-                    key={member.id}
-                    className={`rounded-full border-2 border-card ${index > 0 ? '-ml-1.5' : ''}`}
-                >
-                    <NameAvatar
-                        firstName={member.firstName}
-                        lastName={member.lastName}
-                        size={20}
-                        colorKey={member.id}
-                    />
-                </View>
+                <CardAssigneeAvatar key={member.id} member={member} isStacked={index > 0} />
             ))}
             {overflow > 0 ? (
                 <Text className="text-[10px] font-medium text-muted ml-1">+{overflow}</Text>
             ) : null}
+        </View>
+    )
+}
+
+/** One assignee's avatar in the face's stack — its own component so
+ *  useAvatarUrl, a hook, is called once per row rather than inside the
+ *  .map() above. */
+function CardAssigneeAvatar({ member, isStacked }: { member: BoardMember; isStacked: boolean }) {
+    const avatar = useAvatarUrl({
+        id: member.id,
+        avatar: member.avatar,
+        avatar_crop: member.avatarCrop,
+    })
+
+    return (
+        <View className={`rounded-full border-2 border-card ${isStacked ? '-ml-1.5' : ''}`}>
+            <Avatar
+                name={`${member.firstName} ${member.lastName ?? ''}`.trim()}
+                email={member.email}
+                colorKey={member.id}
+                avatar={avatar}
+                emoji={member.avatarEmoji || undefined}
+                color={member.avatarColor || undefined}
+                size={20}
+            />
         </View>
     )
 }

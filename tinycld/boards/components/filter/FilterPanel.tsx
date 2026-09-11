@@ -1,4 +1,4 @@
-import { NameAvatar } from '@tinycld/core/components/NameAvatar'
+import { Avatar } from '@tinycld/core/components/Avatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
 import { usePopoverContext } from '@tinycld/core/ui/popover'
@@ -193,9 +193,8 @@ export function FilterPanel({ project, filter, onChange, onClear }: FilterPanelP
                             label={`${member.firstName} ${member.lastName}`.trim()}
                             isSelected={filter.assigneeIds.includes(member.id)}
                             leading={
-                                <NameAvatar
-                                    firstName={member.firstName}
-                                    lastName={member.lastName}
+                                <Avatar
+                                    name={`${member.firstName} ${member.lastName ?? ''}`.trim()}
                                     size={16}
                                     colorKey={member.id}
                                 />
@@ -216,9 +215,8 @@ export function FilterPanel({ project, filter, onChange, onClear }: FilterPanelP
                             label={`${member.firstName} ${member.lastName}`.trim()}
                             isSelected={filter.reporterIds.includes(member.id)}
                             leading={
-                                <NameAvatar
-                                    firstName={member.firstName}
-                                    lastName={member.lastName}
+                                <Avatar
+                                    name={`${member.firstName} ${member.lastName ?? ''}`.trim()}
                                     size={16}
                                     colorKey={member.id}
                                 />

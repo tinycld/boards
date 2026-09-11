@@ -1,6 +1,7 @@
+import { Avatar } from '@tinycld/core/components/Avatar'
 import { LabelBadge } from '@tinycld/core/components/LabelBadge'
-import { NameAvatar } from '@tinycld/core/components/NameAvatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
+import { useAvatarUrl } from '@tinycld/core/lib/use-avatar-url'
 import { CalendarDays, Clock, Gauge } from 'lucide-react-native'
 import { type GestureResponderEvent, Pressable, Text, View } from 'react-native'
 import { dueStateFor, formatDueDate } from '../../lib/due-state'
@@ -202,23 +203,37 @@ function Assignees({ assignees }: { assignees: BoardMember[] }) {
     return (
         <View className="flex-row">
             {assignees.slice(0, 3).map((member, index) => (
-                <View
-                    key={member.id}
-                    className={`rounded-full border-2 border-background ${index > 0 ? '-ml-1.5' : ''}`}
-                >
-                    <NameAvatar
-                        firstName={member.firstName}
-                        lastName={member.lastName}
-                        size={20}
-                        colorKey={member.id}
-                    />
-                </View>
+                <AssigneeAvatar key={member.id} member={member} isStacked={index > 0} />
             ))}
             {assignees.length > 3 ? (
                 <Text className="text-[11px] font-medium text-muted ml-1">
                     +{assignees.length - 3}
                 </Text>
             ) : null}
+        </View>
+    )
+}
+
+/** One assignee's avatar in the stack — its own component so useAvatarUrl,
+ *  a hook, is called once per row rather than inside the .map() above. */
+function AssigneeAvatar({ member, isStacked }: { member: BoardMember; isStacked: boolean }) {
+    const avatar = useAvatarUrl({
+        id: member.id,
+        avatar: member.avatar,
+        avatar_crop: member.avatarCrop,
+    })
+
+    return (
+        <View className={`rounded-full border-2 border-background ${isStacked ? '-ml-1.5' : ''}`}>
+            <Avatar
+                name={`${member.firstName} ${member.lastName ?? ''}`.trim()}
+                email={member.email}
+                colorKey={member.id}
+                avatar={avatar}
+                emoji={member.avatarEmoji || undefined}
+                color={member.avatarColor || undefined}
+                size={20}
+            />
         </View>
     )
 }
