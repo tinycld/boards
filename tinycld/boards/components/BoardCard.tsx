@@ -2,6 +2,7 @@ import { Avatar } from '@tinycld/core/components/Avatar'
 import { AvatarStack } from '@tinycld/core/components/AvatarStack'
 import { LabelBadge } from '@tinycld/core/components/LabelBadge'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
+import { useAvatarUrl } from '@tinycld/core/lib/use-avatar-url'
 import { ReactionBar } from '@tinycld/core/ui/reactions'
 import {
     CalendarDays,
@@ -914,20 +915,36 @@ function CardAssignees({ assignees }: { assignees: BoardMember[] }) {
     return (
         <View className="shrink-0 flex-row items-center" testID="boards-card-assignees">
             {visible.map((member, index) => (
-                <View
-                    key={member.id}
-                    className={`rounded-full border-2 border-card ${index > 0 ? '-ml-1.5' : ''}`}
-                >
-                    <Avatar
-                        name={`${member.firstName} ${member.lastName ?? ''}`.trim()}
-                        size={20}
-                        colorKey={member.id}
-                    />
-                </View>
+                <CardAssigneeAvatar key={member.id} member={member} isStacked={index > 0} />
             ))}
             {overflow > 0 ? (
                 <Text className="text-[10px] font-medium text-muted ml-1">+{overflow}</Text>
             ) : null}
+        </View>
+    )
+}
+
+/** One assignee's avatar in the face's stack — its own component so
+ *  useAvatarUrl, a hook, is called once per row rather than inside the
+ *  .map() above. */
+function CardAssigneeAvatar({ member, isStacked }: { member: BoardMember; isStacked: boolean }) {
+    const avatar = useAvatarUrl({
+        id: member.id,
+        avatar: member.avatar,
+        avatar_crop: member.avatarCrop,
+    })
+
+    return (
+        <View className={`rounded-full border-2 border-card ${isStacked ? '-ml-1.5' : ''}`}>
+            <Avatar
+                name={`${member.firstName} ${member.lastName ?? ''}`.trim()}
+                email={member.email}
+                colorKey={member.id}
+                avatar={avatar}
+                emoji={member.avatarEmoji || undefined}
+                color={member.avatarColor || undefined}
+                size={20}
+            />
         </View>
     )
 }

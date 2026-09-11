@@ -1,6 +1,7 @@
 import { Avatar } from '@tinycld/core/components/Avatar'
 import { LabelBadge } from '@tinycld/core/components/LabelBadge'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
+import { useAvatarUrl } from '@tinycld/core/lib/use-avatar-url'
 import { CalendarDays, Clock, Gauge, Layers, Timer } from 'lucide-react-native'
 import { forwardRef, type ReactElement, type ReactNode } from 'react'
 import { Pressable, Text, View } from 'react-native'
@@ -459,12 +460,22 @@ const AssigneesValue = forwardRef<View, { card: BoardCardView; onPress?: () => v
 
 /** One person, as a pill. Shared by the Reporter and Assignees rows. */
 function MemberChip({ member }: { member: BoardMember }) {
+    const avatar = useAvatarUrl({
+        id: member.id,
+        avatar: member.avatar,
+        avatar_crop: member.avatarCrop,
+    })
+
     return (
         <View className="flex-row items-center gap-1.5 bg-foreground/[0.06] rounded-full pl-[3px] pr-2.5 py-[2px]">
             <Avatar
                 name={`${member.firstName} ${member.lastName ?? ''}`.trim()}
-                size={20}
+                email={member.email}
                 colorKey={member.id}
+                avatar={avatar}
+                emoji={member.avatarEmoji || undefined}
+                color={member.avatarColor || undefined}
+                size={20}
             />
             <Text className="text-[12.5px] font-medium text-foreground">
                 {member.firstName} {member.lastName}

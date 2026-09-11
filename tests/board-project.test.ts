@@ -17,7 +17,7 @@ import type {
 } from '../tinycld/boards/types'
 
 function user(id: string, name: string, email = `${id}@test.local`) {
-    return { id, name, email }
+    return { id, name, email, avatar: '', avatar_crop: '', avatar_color: '', avatar_emoji: '' }
 }
 
 function project(overrides: Partial<BoardsProjects> = {}): BoardsProjects {
@@ -133,6 +133,11 @@ describe('toBoardMember', () => {
             id: 'u1',
             firstName: 'Maya',
             lastName: 'Kim',
+            email: 'u1@test.local',
+            avatar: '',
+            avatarCrop: '',
+            avatarColor: '',
+            avatarEmoji: '',
         })
     })
 
@@ -145,6 +150,11 @@ describe('toBoardMember', () => {
             id: 'u1',
             firstName: 'Maya',
             lastName: '',
+            email: 'u1@test.local',
+            avatar: '',
+            avatarCrop: '',
+            avatarColor: '',
+            avatarEmoji: '',
         })
     })
 
@@ -258,7 +268,18 @@ describe('toBoardCard', () => {
             'OTTER',
             'todo'
         )
-        expect(result.assignees).toEqual([{ id: 'gone', firstName: 'Board', lastName: 'member' }])
+        expect(result.assignees).toEqual([
+            {
+                id: 'gone',
+                firstName: 'Board',
+                lastName: 'member',
+                email: '',
+                avatar: '',
+                avatarCrop: '',
+                avatarColor: '',
+                avatarEmoji: '',
+            },
+        ])
     })
 
     it('keeps the id on a placeholder so memoization still compares equal', () => {
@@ -336,7 +357,16 @@ describe('toBoardCard', () => {
             'OTTER',
             'todo'
         )
-        expect(result.reporter).toEqual({ id: 'gone', firstName: 'Board', lastName: 'member' })
+        expect(result.reporter).toEqual({
+            id: 'gone',
+            firstName: 'Board',
+            lastName: 'member',
+            email: '',
+            avatar: '',
+            avatarCrop: '',
+            avatarColor: '',
+            avatarEmoji: '',
+        })
     })
 
     it('leaves the reporter undefined when the card has no creator either', () => {

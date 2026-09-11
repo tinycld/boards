@@ -138,6 +138,12 @@ export interface BoardMember {
     id: string
     firstName: string
     lastName: string
+    /** users.email — Avatar's colour and initials fall back to it when the name is empty. */
+    email: string
+    avatar: string
+    avatarCrop: string
+    avatarColor: string
+    avatarEmoji: string
 }
 
 export interface BoardLabel {
