@@ -2,7 +2,7 @@ import { PB_SERVER_ADDR } from '@tinycld/core/lib/pocketbase'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { Menu } from '@tinycld/core/ui/menu'
 import * as Clipboard from 'expo-clipboard'
-import { Check, ChevronDown, Code, Copy, Globe, Lock } from 'lucide-react-native'
+import { Check, ChevronDown, Code, Copy, Globe, Lock, Pencil } from 'lucide-react-native'
 import { useState } from 'react'
 import { Platform, Pressable, Switch, Text, TextInput, View } from 'react-native'
 import { useCopiedFlag } from '../../hooks/useCopiedFlag'
@@ -14,6 +14,7 @@ import {
     useCreateShareLink,
     useRevokeShareLink,
     useShareLinks,
+    useUpdateShareLink,
 } from '../../hooks/useShareLinks'
 import type { BoardsShareLinkRole } from '../../types'
 import { SHARE_LINK_ROLE_OPTIONS } from './roles'
@@ -86,6 +87,7 @@ export function ShareLinkSection({ projectId, isVisible }: ShareLinkSectionProps
 
                 {activeLink ? (
                     <LiveLink
+                        projectId={projectId}
                         link={activeLink}
                         copied={copied}
                         onCopy={onCopy}
@@ -142,6 +144,7 @@ function AccessSummary({ link }: { link: ShareLinkRow | undefined }) {
 }
 
 function LiveLink({
+    projectId,
     link,
     copied,
     onCopy,
@@ -150,6 +153,7 @@ function LiveLink({
     onRevoke,
     isRevoking,
 }: {
+    projectId: string
     link: ShareLinkRow
     copied: boolean
     onCopy: () => void
@@ -207,11 +211,11 @@ function LiveLink({
                 </Pressable>
             </View>
 
-            <EmbedSnippetRow
-                isVisible={!!link.embedDomains}
+            <EmbedPanel
+                projectId={projectId}
                 link={link}
                 copied={embedCopied}
-                onCopy={onCopyEmbed}
+                onCopySnippet={onCopyEmbed}
             />
 
             {/* Revoking means two different things depending on when it
@@ -320,10 +324,14 @@ function MintControls({
  * board that renders inside a page the owner never named is a surprise, and
  * `frame-ancestors` is the one control that can prevent it.
  *
+ * Shared by the mint form and the edit panel so the two cannot describe the
+ * same setting differently — the wording below IS the explanation of what
+ * embedding costs, and it has to be the same in both places.
+ *
  * Web-only. A phone has nowhere to paste an iframe, and the field would be a
  * control that does nothing on the platform showing it.
  */
-function EmbedControls({
+function EmbedFields({
     domains,
     onDomainsChange,
     isLive,
@@ -334,12 +342,8 @@ function EmbedControls({
     isLive: boolean
     onLiveChange: (value: boolean) => void
 }) {
-    if (Platform.OS !== 'web') return null
-
     return (
-        <View className="gap-2 pt-2 border-t border-border">
-            <Text className="text-[12px] font-medium text-foreground">Embed on a website</Text>
-
+        <>
             <TextInput
                 accessibilityLabel="Websites allowed to embed this board"
                 value={domains}
@@ -368,6 +372,140 @@ function EmbedControls({
                     used on high-traffic sites.
                 </Text>
             </View>
+        </>
+    )
+}
+
+/** The embed fields as they appear on the mint form, before a link exists. */
+function EmbedControls({
+    domains,
+    onDomainsChange,
+    isLive,
+    onLiveChange,
+}: {
+    domains: string
+    onDomainsChange: (value: string) => void
+    isLive: boolean
+    onLiveChange: (value: boolean) => void
+}) {
+    if (Platform.OS !== 'web') return null
+
+    return (
+        <View className="gap-2 pt-2 border-t border-border">
+            <Text className="text-[12px] font-medium text-foreground">Embed on a website</Text>
+            <EmbedFields
+                domains={domains}
+                onDomainsChange={onDomainsChange}
+                isLive={isLive}
+                onLiveChange={onLiveChange}
+            />
+        </View>
+    )
+}
+
+/**
+ * The embed policy of a link that already exists, and the form to change it.
+ *
+ * This is the whole point of the edit path: the right origin is rarely known
+ * when a link is minted. Someone pastes the snippet, the frame stays blank
+ * because the origin was wrong, and before this the only repair was to revoke
+ * and re-mint — which changes the token and so breaks every page already
+ * carrying the snippet, to fix a typo.
+ *
+ * Deliberately edits ONLY the embed policy. Role and expiry are not offered
+ * here: everyone already holding the URL would silently inherit a changed role,
+ * whereas changing where a board may be framed re-grants nothing to anyone who
+ * already has the link.
+ */
+function EmbedPanel({
+    projectId,
+    link,
+    copied,
+    onCopySnippet,
+}: {
+    projectId: string
+    link: ShareLinkRow
+    copied: boolean
+    onCopySnippet: () => void
+}) {
+    const {
+        isEditing,
+        domains,
+        isLive,
+        setDomains,
+        setLive,
+        startEditing,
+        cancelEditing,
+        save,
+        isSaving,
+        error,
+    } = useEmbedEditor(projectId, link)
+    const mutedColor = useThemeColor('muted')
+
+    if (Platform.OS !== 'web') return null
+
+    if (!isEditing) {
+        return (
+            <View className="gap-2 pt-2 border-t border-border">
+                <View className="flex-row items-center gap-2">
+                    <Text numberOfLines={1} className="flex-1 text-[11px] text-muted">
+                        {embedSummary(link)}
+                    </Text>
+                    <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Change where this board can be embedded"
+                        onPress={startEditing}
+                        className="shrink-0 flex-row items-center gap-1 px-2.5 py-1 rounded-md border border-border bg-background"
+                    >
+                        <Pencil size={14} color={mutedColor} strokeWidth={2.2} />
+                        <Text className="text-[12px] font-medium text-foreground">
+                            {link.embedDomains ? 'Change' : 'Embed'}
+                        </Text>
+                    </Pressable>
+                </View>
+
+                <EmbedSnippetRow
+                    isVisible={!!link.embedDomains}
+                    copied={copied}
+                    onCopy={onCopySnippet}
+                />
+            </View>
+        )
+    }
+
+    return (
+        <View className="gap-2 pt-2 border-t border-border">
+            <Text className="text-[12px] font-medium text-foreground">Embed on a website</Text>
+
+            <EmbedFields
+                domains={domains}
+                onDomainsChange={setDomains}
+                isLive={isLive}
+                onLiveChange={setLive}
+            />
+
+            <View className="flex-row items-center gap-2">
+                <View className="flex-1" />
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel embed changes"
+                    onPress={cancelEditing}
+                    className="shrink-0 px-2.5 py-1 rounded-md border border-border bg-background"
+                >
+                    <Text className="text-[12px] font-medium text-foreground">Cancel</Text>
+                </Pressable>
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Save embed changes"
+                    disabled={isSaving}
+                    onPress={save}
+                    className="shrink-0 px-3 py-1.5 rounded-md bg-primary"
+                >
+                    <Text className="text-[12px] font-medium text-primary-foreground">Save</Text>
+                </Pressable>
+            </View>
+
+            <ErrorNote message={error} />
         </View>
     )
 }
@@ -375,12 +513,10 @@ function EmbedControls({
 /** The iframe to paste, offered once a link may actually be framed. */
 function EmbedSnippetRow({
     isVisible,
-    link,
     copied,
     onCopy,
 }: {
     isVisible: boolean
-    link: ShareLinkRow
     copied: boolean
     onCopy: () => void
 }) {
@@ -388,12 +524,10 @@ function EmbedSnippetRow({
 
     if (!isVisible || Platform.OS !== 'web') return null
 
+    // The summary above already says where the board is framable, so this row
+    // is the button alone, right-aligned under it.
     return (
-        <View className="flex-row items-center gap-2">
-            <Text numberOfLines={1} className="flex-1 text-[11px] text-muted">
-                Embeddable on {link.embedDomains.split(' ').join(', ')}
-                {link.embedLive ? ' · live' : ''}
-            </Text>
+        <View className="flex-row items-center justify-end gap-2">
             <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Copy embed code"
@@ -411,6 +545,70 @@ function EmbedSnippetRow({
             </Pressable>
         </View>
     )
+}
+
+/**
+ * The edit form's state for one link's embed policy.
+ *
+ * A hook rather than state in the panel because the JSX stays free of the
+ * open/close, seed-from-row and submit handling, per the package's style guide.
+ *
+ * The draft is seeded from the row when editing STARTS, not on every render: a
+ * realtime update landing mid-edit must not overwrite what someone is typing.
+ * Cancel discards the draft, so the row remains the only truth once the form
+ * is closed.
+ */
+function useEmbedEditor(projectId: string, link: ShareLinkRow) {
+    const [isEditing, setIsEditing] = useState(false)
+    const [domains, setDomains] = useState('')
+    const [isLive, setLive] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+    const updateLink = useUpdateShareLink(projectId)
+
+    const startEditing = () => {
+        setDomains(link.embedDomains)
+        setLive(link.embedLive)
+        setError(null)
+        setIsEditing(true)
+    }
+
+    const cancelEditing = () => {
+        setError(null)
+        setIsEditing(false)
+    }
+
+    const save = () => {
+        setError(null)
+        updateLink.mutate(
+            { linkId: link.id, embedDomains: domains, embedLive: isLive },
+            {
+                onSuccess: () => setIsEditing(false),
+                // The server's message names the origin it refused and why, so
+                // it is shown verbatim rather than replaced with a generic one.
+                onError: err => setError(err.message),
+            }
+        )
+    }
+
+    return {
+        isEditing,
+        domains,
+        isLive,
+        setDomains,
+        setLive,
+        startEditing,
+        cancelEditing,
+        save,
+        isSaving: updateLink.isPending,
+        error,
+    }
+}
+
+/** Where this link may currently be framed, in one line. */
+export function embedSummary(link: ShareLinkRow): string {
+    if (!link.embedDomains) return 'Not embedded on any website'
+    const where = link.embedDomains.split(' ').join(', ')
+    return `Embeddable on ${where}${link.embedLive ? ' · live' : ''}`
 }
 
 /** An editor link is an unbounded invitation to change the board. Say so. */

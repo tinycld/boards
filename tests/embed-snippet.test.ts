@@ -1,6 +1,10 @@
 import { setResolvedAddress } from '@tinycld/core/lib/server-address'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { embedSnippet, shareLinkURL } from '~/tinycld/boards/components/sharing/ShareLinkSection'
+import {
+    embedSnippet,
+    embedSummary,
+    shareLinkURL,
+} from '~/tinycld/boards/components/sharing/ShareLinkSection'
 
 /**
  * The iframe an owner pastes into another page.
@@ -36,5 +40,47 @@ describe('embedSnippet', () => {
         // than a live risk — but the snippet is HTML an owner pastes into a
         // page they control, and an unquoted src is how that stops being true.
         expect(embedSnippet(token)).toContain(`src="`)
+    })
+})
+
+/**
+ * The line the share dialog shows about an existing link's embed policy.
+ *
+ * It is the only place an owner can see where their board is currently
+ * framable, and the bug this feature fixes is precisely someone believing a
+ * board was embeddable somewhere it was not. "Not embedded" has to be stated
+ * rather than left as a blank line.
+ */
+describe('embedSummary', () => {
+    const link = (embedDomains: string, embedLive = false) => ({
+        id: 'l1',
+        token: 'a'.repeat(64),
+        role: 'viewer' as const,
+        expiresAt: '',
+        isActive: true,
+        created: '',
+        embedDomains,
+        embedLive,
+    })
+
+    it('says so plainly when the link may not be framed anywhere', () => {
+        expect(embedSummary(link(''))).toBe('Not embedded on any website')
+    })
+
+    it('names the origin a board is framable at', () => {
+        expect(embedSummary(link('https://example.com'))).toContain('https://example.com')
+    })
+
+    it('separates several origins readably', () => {
+        // Stored space-separated for the CSP header; shown comma-separated,
+        // because a run of URLs split only by spaces is unreadable.
+        expect(embedSummary(link('https://a.example.com https://b.example.com'))).toBe(
+            'Embeddable on https://a.example.com, https://b.example.com'
+        )
+    })
+
+    it('marks a live embed, which is the one that costs a connection', () => {
+        expect(embedSummary(link('https://example.com', true))).toContain('live')
+        expect(embedSummary(link('https://example.com', false))).not.toContain('live')
     })
 })

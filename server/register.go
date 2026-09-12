@@ -232,6 +232,10 @@ func bindShareLinkRoutes(e *core.ServeEvent) {
 		return handleListShareLinks(e.App, re)
 	}).BindFunc(requireAuth)
 
+	e.Router.PATCH("/api/boards/share-link/{id}", func(re *core.RequestEvent) error {
+		return handleUpdateShareLink(e.App, re)
+	}).BindFunc(requireAuth)
+
 	e.Router.DELETE("/api/boards/share-link/{id}", func(re *core.RequestEvent) error {
 		return handleRevokeShareLink(e.App, re)
 	}).BindFunc(requireAuth)
