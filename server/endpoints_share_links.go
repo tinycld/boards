@@ -9,14 +9,14 @@ import (
 	"tinycld.org/core/ratelimit"
 )
 
-// Owner-facing share-link management: mint, list, revoke.
+// Owner-facing share-link management: mint, list, update, revoke.
 //
 // These are the only cards endpoints that write a share link. The read path
 // needs no endpoint at all — pb-migrations/1980000003 lets a visitor's token
 // satisfy the ordinary collection rules, so a public board is served by the
 // same REST and realtime a member uses.
 //
-// All three require auth AND project ownership. The collection's own rules are
+// All four require auth AND project ownership. The collection's own rules are
 // owner-only in all five directions, and these handlers bypass them (Go DAO
 // calls do not evaluate rules), so the ownership check is restated here rather
 // than inherited. Minting a link widens access to a whole board; an editor must
@@ -38,6 +38,24 @@ type createShareLinkRequest struct {
 	EmbedLive bool `json:"embed_live"`
 }
 
+// updateShareLinkRequest changes the embed policy on a link that already
+// exists.
+//
+// EMBED SETTINGS ONLY, and the omissions are the design. Role and expiry stay
+// immutable: everyone already holding the URL would silently inherit a changed
+// role, and a revoke-and-remint makes that widening visible by invalidating the
+// old token. Editing where a board may be FRAMED does not re-grant anything to
+// an existing holder — the link already opens for them — so it is the one part
+// of a live link that can change in place without surprising someone.
+//
+// Both fields are required rather than optional-with-omission. A PATCH whose
+// absent field means "leave alone" cannot express "clear the domains", which is
+// precisely the edit an owner reaching for this needs most.
+type updateShareLinkRequest struct {
+	EmbedDomains string `json:"embed_domains"`
+	EmbedLive    bool   `json:"embed_live"`
+}
+
 type shareLinkResponse struct {
 	ID        string `json:"id"`
 	Token     string `json:"token"`
@@ -45,10 +63,10 @@ type shareLinkResponse struct {
 	ExpiresAt string `json:"expires_at"`
 	IsActive  bool   `json:"is_active"`
 	Created   string `json:"created"`
-	// Both are OWNER-facing only. This struct is returned by mint, list and
-	// revoke, every one of which is behind requireAuth + isProjectOwner. The
-	// public metadata endpoint builds its own body and deliberately omits
-	// EmbedDomains — see handleShareLinkMetadata.
+	// Both are OWNER-facing only. This struct is returned by mint, list,
+	// update and revoke, every one of which is behind requireAuth +
+	// isProjectOwner. The public metadata endpoint builds its own body and
+	// deliberately omits EmbedDomains — see handleShareLinkMetadata.
 	EmbedDomains string `json:"embed_domains"`
 	EmbedLive    bool   `json:"embed_live"`
 }
@@ -172,6 +190,70 @@ func handleListShareLinks(app core.App, re *core.RequestEvent) error {
 		links = append(links, toShareLinkResponse(r))
 	}
 	return re.JSON(http.StatusOK, shareLinkListResponse{Links: links})
+}
+
+// handleUpdateShareLink changes which origins may frame an existing link.
+//
+// This exists because the embed policy is the one share-link setting whose
+// right value is not knowable when the link is minted: an owner pastes the
+// snippet, discovers the origin they named was wrong, and — before this — had
+// no way to correct it. Revoking and re-minting would have worked, but it
+// changes the token, so every page already carrying the old snippet breaks to
+// fix a typo.
+//
+// The token, role and expiry are untouched; see updateShareLinkRequest.
+//
+// A REVOKED OR EXPIRED LINK IS STILL EDITABLE, deliberately. embed_domains has
+// no effect on a dead link — embedDomainsFor resolves through resolveLiveLink,
+// so framing stops when the link stops — and refusing the edit would mean an
+// owner cannot tidy a policy on a link they might later want to reason about.
+// What must never happen is the reverse: editing must not resurrect a link, and
+// it does not, because nothing here writes is_active or expires_at.
+func handleUpdateShareLink(app core.App, re *core.RequestEvent) error {
+	if !shareLinkLimiter.Allow(ratelimit.ClientIP(re.Request)) {
+		return re.JSON(http.StatusTooManyRequests,
+			shareLinkErrorResponse{Error: "rate limit exceeded"})
+	}
+
+	id := re.Request.PathValue("id")
+	if id == "" {
+		return re.BadRequestError("share link id is required", nil)
+	}
+
+	var body updateShareLinkRequest
+	if err := json.NewDecoder(re.Request.Body).Decode(&body); err != nil {
+		return re.BadRequestError("invalid request body", nil)
+	}
+	// Validated before the record is loaded, matching mint: the same parser,
+	// so an origin that is refused at mint is refused here in the same words.
+	embedDomains, err := parseEmbedDomains(body.EmbedDomains)
+	if err != nil {
+		return re.BadRequestError(err.Error(), nil)
+	}
+
+	link, err := app.FindRecordById("boards_share_links", id)
+	if err != nil || link == nil {
+		return re.NotFoundError("share link not found", nil)
+	}
+	if !isProjectOwner(app, link.GetString("project"), re.Auth.Id) {
+		// 404 rather than 403, matching revoke: to a non-owner this link must
+		// not be distinguishable from one that does not exist.
+		return re.NotFoundError("share link not found", nil)
+	}
+
+	link.Set("embed_domains", embedDomains)
+	// Same invariant mint enforces: liveness is meaningless on a link nobody
+	// may frame, and storing it would leave a stale true behind. Clearing the
+	// domains here is exactly the path that would otherwise strand one.
+	link.Set("embed_live", embedDomains != "" && body.EmbedLive)
+	if err := app.Save(link); err != nil {
+		return re.InternalServerError("failed to update share link", err)
+	}
+
+	// No syncProjectVisibility call: the badge tracks whether a live link
+	// exists, and this endpoint cannot change that.
+
+	return re.JSON(http.StatusOK, toShareLinkResponse(link))
 }
 
 // handleRevokeShareLink deactivates a link.

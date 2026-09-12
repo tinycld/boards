@@ -29,7 +29,11 @@ part:
 
 To allow more than one site, separate them with a space. **Leave the box empty
 and the board can't be embedded anywhere** — which is how every link starts, so
-a link you already created is not embeddable and never becomes so on its own.
+a link is never embeddable until you say where.
+
+You do not have to get this right the first time. A link you already created
+can be pointed at different sites later, or made embeddable when it wasn't —
+see [Changing where a board is embedded](#changing-where-a-board-is-embedded).
 
 Once the link exists, **Embed code** copies the snippet to paste into your page:
 
@@ -75,12 +79,33 @@ can and cannot see, including that **attached files can be downloaded**.
 
 Treat embedding a board on a public page as publishing it.
 
+## Changing where a board is embedded
+
+Getting the address slightly wrong is easy, and the symptom is unhelpful: the
+page shows an empty box, because the browser refused to draw a board the site
+was not named for.
+
+To fix it, open the member list, find **General access**, and press **Change**
+next to the embed line. Correct the addresses and press **Save**.
+
+**The link keeps working and the snippet stays valid.** The address in the
+iframe you already pasted does not change, so pages carrying it start working
+as soon as you save — there is nothing to re-copy and no page to go back and
+edit.
+
+The same panel adds embedding to a link that never had it: press **Embed**,
+name the sites, and save.
+
 ## Turning embedding off
 
-**Revoke** on the link switches off the embed along with the link, immediately.
-The next time anyone loads the page, the board is gone from it.
+To stop a board appearing anywhere while leaving the link itself working, press
+**Change**, clear the box and save. People can still open the link; no page can
+frame it. Live updating switches off with it, since there is nothing left to
+keep up to date.
 
-To stop the board appearing on one site while keeping the link working
-elsewhere, create a new link with the sites you want and revoke the old one.
-The same applies to a link that has reached its expiry date — an expired link
-stops being embeddable at the moment it stops working.
+**Revoke** on the link is the broader hammer: it switches off the embed *and*
+the link together, immediately. The next time anyone loads the page, the board
+is gone from it.
+
+A link that reaches its expiry date stops being embeddable at the moment it
+stops working, without anything further from you.

@@ -605,3 +605,245 @@ func TestShareLinks_EditorCannotMintAnEmbeddableLink(t *testing.T) {
 		after:  requireNoLinks(env.project.Id),
 	}.run(t, env)
 }
+
+// --------------------------------------------------------------------------
+// Editing the embed policy on a link that already exists.
+//
+// The motivating bug: an owner pastes the snippet, finds the origin they named
+// was wrong, and has no way to correct it. Revoke-and-remint changes the token,
+// which breaks every page already carrying the snippet to fix a typo.
+
+func embedUpdateBody(domains string, live bool) string {
+	return fmt.Sprintf(`{"embed_domains":%q,"embed_live":%t}`, domains, live)
+}
+
+// embeddableLink seeds one link that is already embeddable, which is the state
+// every test below starts from: the bug being fixed is that such a link could
+// not be corrected once minted.
+//
+// shareLink() does not take an embed policy (its last argument is `expires`),
+// so the columns are set in a second save.
+func embeddableLink(t *testing.T, env *cardsEnv, token, role string, active bool,
+	domains string, live bool) *core.Record {
+	t.Helper()
+	shareLink(t, env, env.project.Id, token, role, active, "")
+	link, err := env.app.FindFirstRecordByFilter("boards_share_links",
+		"token = {:t}", dbx.Params{"t": token})
+	if err != nil {
+		t.Fatalf("find link %s: %v", token, err)
+	}
+	link.Set("embed_domains", domains)
+	link.Set("embed_live", live)
+	if err := env.app.Save(link); err != nil {
+		t.Fatalf("seed embed policy: %v", err)
+	}
+	return link
+}
+
+func TestShareLinks_OwnerCorrectsAWrongEmbedDomain(t *testing.T) {
+	env := setupCardsEnv(t)
+	link := embeddableLink(t, env, tok64("fixme"), "viewer", true,
+		"https://wrong.example.com", false)
+
+	mintReq{
+		method:  http.MethodPatch,
+		url:     "/api/boards/share-link/" + link.Id,
+		token:   env.ownerToken,
+		body:    embedUpdateBody("https://right.example.com", false),
+		want:    http.StatusOK,
+		content: []string{`"embed_domains":"https://right.example.com"`},
+		after: func(t testing.TB, app *tests.TestApp) {
+			fresh, err := app.FindRecordById("boards_share_links", link.Id)
+			if err != nil {
+				t.Fatalf("re-read link: %v", err)
+			}
+			if got := fresh.GetString("embed_domains"); got != "https://right.example.com" {
+				t.Fatalf("embed_domains = %q, want the corrected origin", got)
+			}
+			// The whole point of editing in place rather than re-minting:
+			// every page already carrying the snippet keeps working.
+			if fresh.GetString("token") != tok64("fixme") {
+				t.Fatal("editing the embed policy changed the token")
+			}
+		},
+	}.run(t, env)
+}
+
+// Role and expiry are not editable, and an edit must not disturb them.
+func TestShareLinks_EditingEmbedLeavesRoleAndExpiryAlone(t *testing.T) {
+	env := setupCardsEnv(t)
+	link := embeddableLink(t, env, tok64("intact"), "commentor", true,
+		"https://a.example.com", false)
+	wantExpiry := link.GetString("expires_at")
+
+	mintReq{
+		method:  http.MethodPatch,
+		url:     "/api/boards/share-link/" + link.Id,
+		token:   env.ownerToken,
+		body:    embedUpdateBody("https://b.example.com", false),
+		want:    http.StatusOK,
+		content: []string{`"role":"commentor"`},
+		after: func(t testing.TB, app *tests.TestApp) {
+			fresh, err := app.FindRecordById("boards_share_links", link.Id)
+			if err != nil {
+				t.Fatalf("re-read link: %v", err)
+			}
+			if got := fresh.GetString("role"); got != "commentor" {
+				t.Fatalf("role = %q, want commentor — an embed edit changed it", got)
+			}
+			if got := fresh.GetString("expires_at"); got != wantExpiry {
+				t.Fatalf("expires_at = %q, want %q", got, wantExpiry)
+			}
+		},
+	}.run(t, env)
+}
+
+// Clearing the domains is the edit an owner reaching for this needs most: it
+// un-embeds a board without revoking the link people are using to read it.
+func TestShareLinks_ClearingEmbedDomainsUnEmbedsTheLink(t *testing.T) {
+	env := setupCardsEnv(t)
+	link := embeddableLink(t, env, tok64("unembed"), "viewer", true,
+		"https://example.com", true)
+
+	mintReq{
+		method:  http.MethodPatch,
+		url:     "/api/boards/share-link/" + link.Id,
+		token:   env.ownerToken,
+		body:    embedUpdateBody("", true),
+		want:    http.StatusOK,
+		content: []string{`"embed_domains":""`, `"embed_live":false`},
+		after: func(t testing.TB, app *tests.TestApp) {
+			fresh, err := app.FindRecordById("boards_share_links", link.Id)
+			if err != nil {
+				t.Fatalf("re-read link: %v", err)
+			}
+			if got := fresh.GetString("embed_domains"); got != "" {
+				t.Fatalf("embed_domains = %q, want empty", got)
+			}
+			// Same invariant mint enforces: liveness on a link nobody may
+			// frame would be a stale true left behind by this very edit.
+			if fresh.GetBool("embed_live") {
+				t.Fatal("embed_live survived the domains being cleared")
+			}
+			// Un-embedding is not revoking — the link still opens.
+			if !fresh.GetBool("is_active") {
+				t.Fatal("clearing the embed domains revoked the link")
+			}
+		},
+	}.run(t, env)
+}
+
+// The same parser as mint, so an origin refused at mint is refused here — and
+// a refusal writes nothing.
+func TestShareLinks_MalformedEmbedDomainIsRefusedOnUpdate(t *testing.T) {
+	env := setupCardsEnv(t)
+	link := embeddableLink(t, env, tok64("keepgood"), "viewer", true,
+		"https://good.example.com", false)
+
+	mintReq{
+		method: http.MethodPatch,
+		url:    "/api/boards/share-link/" + link.Id,
+		token:  env.ownerToken,
+		body:   embedUpdateBody("https://evil.example.com;frame-ancestors *", false),
+		want:   http.StatusBadRequest,
+		after: func(t testing.TB, app *tests.TestApp) {
+			fresh, err := app.FindRecordById("boards_share_links", link.Id)
+			if err != nil {
+				t.Fatalf("re-read link: %v", err)
+			}
+			if got := fresh.GetString("embed_domains"); got != "https://good.example.com" {
+				t.Fatalf("embed_domains = %q — a refused update still wrote", got)
+			}
+		},
+	}.run(t, env)
+}
+
+// Framing is widening: it decides where a board can be made to appear, so only
+// an owner may change it. 404 rather than 403, matching revoke.
+func TestShareLinks_EditorCannotEditTheEmbedPolicy(t *testing.T) {
+	env := setupCardsEnv(t)
+	link := embeddableLink(t, env, tok64("noedit"), "viewer", true,
+		"https://owner.example.com", false)
+
+	mintReq{
+		method: http.MethodPatch,
+		url:    "/api/boards/share-link/" + link.Id,
+		token:  env.editorToken,
+		body:   embedUpdateBody("https://attacker.example.com", true),
+		want:   http.StatusNotFound,
+		after: func(t testing.TB, app *tests.TestApp) {
+			fresh, err := app.FindRecordById("boards_share_links", link.Id)
+			if err != nil {
+				t.Fatalf("re-read link: %v", err)
+			}
+			if got := fresh.GetString("embed_domains"); got != "https://owner.example.com" {
+				t.Fatalf("embed_domains = %q — an editor changed where the board may be framed", got)
+			}
+		},
+	}.run(t, env)
+}
+
+func TestShareLinks_AnonymousCannotEditTheEmbedPolicy(t *testing.T) {
+	env := setupCardsEnv(t)
+	link := embeddableLink(t, env, tok64("anonedit"), "viewer", true,
+		"https://owner.example.com", false)
+
+	mintReq{
+		method: http.MethodPatch,
+		url:    "/api/boards/share-link/" + link.Id,
+		body:   embedUpdateBody("https://attacker.example.com", true),
+		want:   http.StatusUnauthorized,
+		after: func(t testing.TB, app *tests.TestApp) {
+			fresh, err := app.FindRecordById("boards_share_links", link.Id)
+			if err != nil {
+				t.Fatalf("re-read link: %v", err)
+			}
+			if got := fresh.GetString("embed_domains"); got != "https://owner.example.com" {
+				t.Fatalf("embed_domains = %q — an anonymous caller changed it", got)
+			}
+		},
+	}.run(t, env)
+}
+
+// Editing must never resurrect a dead link. The edit is allowed (the policy is
+// inert on a revoked link anyway), but is_active must come back untouched.
+func TestShareLinks_EditingARevokedLinkDoesNotReviveIt(t *testing.T) {
+	env := setupCardsEnv(t)
+	link := embeddableLink(t, env, tok64("deadlink"), "viewer", false,
+		"https://old.example.com", false)
+
+	mintReq{
+		method:  http.MethodPatch,
+		url:     "/api/boards/share-link/" + link.Id,
+		token:   env.ownerToken,
+		body:    embedUpdateBody("https://new.example.com", true),
+		want:    http.StatusOK,
+		content: []string{`"is_active":false`},
+		after: func(t testing.TB, app *tests.TestApp) {
+			fresh, err := app.FindRecordById("boards_share_links", link.Id)
+			if err != nil {
+				t.Fatalf("re-read link: %v", err)
+			}
+			if fresh.GetBool("is_active") {
+				t.Fatal("editing the embed policy revived a revoked link")
+			}
+			// And the policy stays inert while the link is dead: framing
+			// resolves through resolveLiveLink, not through this column.
+			if got := embedDomainsFor(app, tok64("deadlink")); got != nil {
+				t.Fatalf("a revoked link grants framing to %v", got)
+			}
+		},
+	}.run(t, env)
+}
+
+func TestShareLinks_UnknownLinkIsNotFound(t *testing.T) {
+	env := setupCardsEnv(t)
+
+	mintReq{
+		method: http.MethodPatch,
+		url:    "/api/boards/share-link/doesnotexist00",
+		token:  env.ownerToken,
+		body:   embedUpdateBody("https://example.com", false),
+		want:   http.StatusNotFound,
+	}.run(t, env)
+}

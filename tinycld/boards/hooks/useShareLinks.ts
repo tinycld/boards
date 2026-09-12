@@ -17,8 +17,11 @@ import type { BoardsShareLinkRole } from '../types'
  * never-bypass-pbtsdb rule aside, for the reason the rule contemplates: the
  * token is 32 bytes of server entropy a client must not choose, and minting
  * also flips `boards_projects.visibility`, which a client insert cannot do
- * atomically. Both endpoints re-check ownership server-side; the affordance
- * gating in the dialog is convenience, not enforcement.
+ * atomically. Editing the embed policy joins them rather than going through the
+ * collection because the origins it writes end up in a CSP directive, and that
+ * value has to be parsed by the side a client cannot bypass. All three
+ * endpoints re-check ownership server-side; the affordance gating in the dialog
+ * is convenience, not enforcement.
  */
 
 export interface ShareLinkRow {
@@ -33,8 +36,8 @@ export interface ShareLinkRow {
      * Origins allowed to frame this link, space-separated. Empty means the
      * link is not embeddable — which is every link by default.
      *
-     * Owner-facing only: it comes back from mint/list/revoke, all three of
-     * which are owner-gated. The public metadata endpoint never returns it.
+     * Owner-facing only: it comes back from mint/list/update/revoke, all four
+     * of which are owner-gated. The public metadata endpoint never returns it.
      */
     embedDomains: string
     /** Whether an embed of this link holds a realtime subscription. */
@@ -179,6 +182,53 @@ export function useRevokeShareLink(projectId: string) {
                 await pb.send(`/api/boards/share-link/${linkId}`, { method: 'DELETE' })
             } catch (err) {
                 captureException('boards.shareLink.revoke', err, { projectId, linkId })
+                throw err
+            }
+        },
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['boards_share_links'] }),
+    })
+}
+
+export interface UpdateShareLinkInput {
+    linkId: string
+    /**
+     * The origins allowed to frame this link, replacing whatever it named
+     * before. Empty un-embeds the link without revoking it.
+     *
+     * Sent as typed and validated by the SERVER, exactly as on create — same
+     * parser, so an origin refused at mint is refused here in the same words.
+     */
+    embedDomains: string
+    embedLive: boolean
+}
+
+/**
+ * Change where an existing link may be framed.
+ *
+ * Embed settings only. Role and expiry are deliberately not editable: everyone
+ * already holding the URL would silently inherit a changed role, whereas
+ * changing the framing policy re-grants nothing to an existing holder. It
+ * exists because the right origin is often not knowable until the snippet has
+ * been pasted somewhere and found not to load — and re-minting to fix a typo
+ * would change the token, breaking every page already carrying the snippet.
+ */
+export function useUpdateShareLink(projectId: string) {
+    const queryClient = useQueryClient()
+
+    return useMutation<ShareLinkRow, Error, UpdateShareLinkInput>({
+        mutationKey: ['boards', 'share-link', 'update', projectId],
+        mutationFn: async ({ linkId, embedDomains, embedLive }: UpdateShareLinkInput) => {
+            try {
+                const payload = await pb.send<ShareLinkPayload>(
+                    `/api/boards/share-link/${linkId}`,
+                    {
+                        method: 'PATCH',
+                        body: { embed_domains: embedDomains, embed_live: embedLive },
+                    }
+                )
+                return toShareLinkRow(payload)
+            } catch (err) {
+                captureException('boards.shareLink.update', err, { projectId, linkId })
                 throw err
             }
         },
