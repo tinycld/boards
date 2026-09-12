@@ -33,7 +33,8 @@ export function registerCollections(
     // render member names without a second query.
     const boards_project_members = newCollection('boards_project_members', {
         omitOnInsert: ['created', 'updated'] as const,
-        expand: { project: boards_projects, user: coreStores.users },
+        relations: { project: boards_projects, user: coreStores.users },
+        alwaysExpand: ['project', 'user'],
         collectionOptions: indexed,
     })
 
