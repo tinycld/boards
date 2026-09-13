@@ -11,6 +11,7 @@ import { Pressable, Text, View } from 'react-native'
 import { useReactorNames } from '../../hooks/useReactorNames'
 import { type ActivityContext, buildActivityFeed, describeActivity } from '../../lib/activity-feed'
 import { buildCommentThreads } from '../../lib/comment-threads'
+import type { MentionName } from '../../lib/mention-text'
 import type { ReactionGroup } from '../../lib/reactions'
 import type { BoardActivity, BoardAttachment, BoardComment } from '../../types'
 import { COMMENT_HEADER_HEIGHT, InlineCommentEditor } from './CommentEditor'
@@ -33,6 +34,8 @@ interface DetailActivityProps {
     cardId: string
     projectId: string
     attachments: BoardAttachment[]
+    /** The roster as mention labels, resolved once by CardDetail. */
+    mentionMembers: MentionName[]
     /** The comment open for inline editing, or null. At most one at a time. */
     editingCommentId: string | null
     /** Where the press that opened the current edit landed; see CardDetail. */
@@ -56,6 +59,7 @@ export function DetailActivity({
     cardId,
     projectId,
     attachments,
+    mentionMembers,
     editingCommentId,
     editStartPoint,
     isSaving,
@@ -83,6 +87,7 @@ export function DetailActivity({
         cardId,
         projectId,
         attachments,
+        mentionMembers,
         editingCommentId,
         editStartPoint,
         isSaving,
@@ -186,6 +191,7 @@ interface CommentRowProps {
     cardId: string
     projectId: string
     attachments: BoardAttachment[]
+    mentionMembers: MentionName[]
     editingCommentId: string | null
     /** Where the press that opened the current edit landed; see CardDetail. */
     editStartPoint?: { x: number; y: number }
@@ -211,6 +217,7 @@ function CommentRow({
     cardId,
     projectId,
     attachments,
+    mentionMembers,
     editingCommentId,
     editStartPoint,
     isSaving,
@@ -296,7 +303,7 @@ function CommentRow({
                             <MarkdownText
                                 body={comment.body}
                                 variant="comment"
-                                projectId={projectId}
+                                mentionMembers={mentionMembers}
                             />
                         }
                         authorLine={authorLine}
@@ -329,7 +336,7 @@ function CommentRow({
                             comment={comment}
                             canEditOwn={canEditOwn}
                             onStartEdit={onStartEdit}
-                            projectId={projectId}
+                            mentionMembers={mentionMembers}
                         />
                     </>
                 )}
@@ -369,7 +376,7 @@ interface CommentBodyProps {
     canEditOwn: boolean
     onStartEdit: (commentId: string, at?: { x: number; y: number }) => void
     /** Resolves `[[@id]]` mention tokens to member names. */
-    projectId: string
+    mentionMembers: MentionName[]
 }
 
 /**
@@ -380,9 +387,11 @@ interface CommentBodyProps {
  * onPress claims the touch on both platforms. The editing state lives in
  * CommentRow, which swaps this AND the author line for InlineCommentEditor.
  */
-function CommentBody({ comment, canEditOwn, onStartEdit, projectId }: CommentBodyProps) {
+function CommentBody({ comment, canEditOwn, onStartEdit, mentionMembers }: CommentBodyProps) {
     if (!canEditOwn)
-        return <MarkdownText body={comment.body} variant="comment" projectId={projectId} />
+        return (
+            <MarkdownText body={comment.body} variant="comment" mentionMembers={mentionMembers} />
+        )
 
     return (
         <Pressable
@@ -397,7 +406,7 @@ function CommentBody({ comment, canEditOwn, onStartEdit, projectId }: CommentBod
             // and the editor is not mounted yet when this fires.
             onPress={event => onStartEdit(comment.id, pressPoint(event))}
         >
-            <MarkdownText body={comment.body} variant="comment" projectId={projectId} />
+            <MarkdownText body={comment.body} variant="comment" mentionMembers={mentionMembers} />
         </Pressable>
     )
 }

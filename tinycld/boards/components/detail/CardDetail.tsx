@@ -17,6 +17,7 @@ import { useProjectRole } from '../../hooks/useProjectRole'
 import { useReactorNames } from '../../hooks/useReactorNames'
 import { type SectionKey, visibleSections } from '../../lib/card-sections'
 import { type DescriptionMode, descriptionMode } from '../../lib/description-mode'
+import { type MentionName, mentionMember } from '../../lib/mention-text'
 import { childrenOf } from '../../lib/subtasks'
 import type {
     BoardAttachment,
@@ -144,6 +145,9 @@ export function CardDetail({
         () => new Map(projectCards.map(entry => [entry.id, entry])),
         [projectCards]
     )
+    // The roster as mention labels, once for every comment and the
+    // description — MarkdownText renders per comment and must not query.
+    const mentionMembers = useMemo(() => projectMembers.map(mentionMember), [projectMembers])
     const activityContext = useMemo(
         () => ({
             lists: projectLists,
@@ -319,6 +323,7 @@ export function CardDetail({
         cardId: card.id,
         projectId,
         attachments,
+        mentionMembers,
         description: card.description,
         onSave: value => updateCard.mutate({ cardId: card.id, description: value }),
         canEdit,
@@ -485,6 +490,7 @@ export function CardDetail({
                             cardId={card.id}
                             projectId={projectId}
                             attachments={attachments}
+                            mentionMembers={mentionMembers}
                             editingCommentId={editingCommentId}
                             isSaving={updateComment.isPending}
                             onStartEdit={startEditingComment}
@@ -537,6 +543,7 @@ function useDescriptionSection({
     cardId,
     projectId,
     attachments,
+    mentionMembers,
     description,
     onSave,
     canEdit,
@@ -544,6 +551,7 @@ function useDescriptionSection({
     cardId: string
     projectId: string
     attachments: BoardAttachment[]
+    mentionMembers: MentionName[]
     description?: string
     onSave: (value: string) => void
     canEdit: boolean
@@ -604,7 +612,7 @@ function useDescriptionSection({
         readView: (
             <DescriptionReadView
                 description={description}
-                projectId={projectId}
+                mentionMembers={mentionMembers}
                 canEdit={canEdit && canEditDoc}
             />
         ),
@@ -634,7 +642,7 @@ function useDescriptionSection({
                 accessibilityLabel="Edit description"
                 multiline
                 isDisabled={!canEdit}
-                renderValue={value => <MarkdownText body={value} projectId={projectId} />}
+                renderValue={value => <MarkdownText body={value} mentionMembers={mentionMembers} />}
             />
         ),
     }
@@ -653,11 +661,11 @@ function useDescriptionSection({
  */
 function DescriptionReadView({
     description,
-    projectId,
+    mentionMembers,
     canEdit,
 }: {
     description?: string
-    projectId: string
+    mentionMembers: MentionName[]
     canEdit: boolean
 }) {
     // The press target belongs to LazyEditor, which wraps this. What stays here
@@ -671,7 +679,9 @@ function DescriptionReadView({
     if (!canEdit) {
         return (
             <View testID="boards-description-read" className="py-2">
-                {description ? <MarkdownText body={description} projectId={projectId} /> : null}
+                {description ? (
+                    <MarkdownText body={description} mentionMembers={mentionMembers} />
+                ) : null}
             </View>
         )
     }
@@ -707,7 +717,7 @@ function DescriptionReadView({
             }
         >
             {description ? (
-                <MarkdownText body={description} projectId={projectId} />
+                <MarkdownText body={description} mentionMembers={mentionMembers} />
             ) : (
                 <Text className="text-[13.5px] text-muted">
                     Add a description — what does done look like?

@@ -22,6 +22,7 @@ import type {
     BoardsSprints,
     Users,
 } from '../types'
+import { type ArchivedCardRow, buildArchivedCards } from './archived-cards'
 import { type BoardFilter, cardMatchesFilter } from './board-filter'
 import { type BoardSort, compareCards } from './board-sort'
 import { formatCardKey } from './card-key'
@@ -472,6 +473,7 @@ export function buildBoardProject(
         listOrder: sortedLists.map(list => ({ id: list.id, position: list.position })),
         cardTotal,
         unplacedCards,
+        archivedCards: buildArchivedCards(cards, sortedLists, project.slug),
     }
 
     if (!previous || previous.id !== fresh.id) return fresh
@@ -599,6 +601,16 @@ function sameRank(a: BoardListRank, b: BoardListRank): boolean {
     return a.id === b.id && a.position === b.position
 }
 
+function sameArchivedCard(a: ArchivedCardRow, b: ArchivedCardRow): boolean {
+    return (
+        a.id === b.id &&
+        a.key === b.key &&
+        a.title === b.title &&
+        a.listName === b.listName &&
+        a.archivedAt === b.archivedAt
+    )
+}
+
 function sameElements<T>(a: T[], b: T[], same: (x: T, y: T) => boolean): boolean {
     return a.length === b.length && a.every((item, i) => same(item, b[i] as T))
 }
@@ -667,6 +679,7 @@ function shareTree(previous: BoardProject, fresh: BoardProject): BoardProject {
         ? previous.listOrder
         : fresh.listOrder
     const unplacedCards = shareById(previous.unplacedCards, fresh.unplacedCards, sameCard)
+    const archivedCards = shareById(previous.archivedCards, fresh.archivedCards, sameArchivedCard)
 
     if (
         sharedLists === previous.lists &&
@@ -676,6 +689,7 @@ function shareTree(previous: BoardProject, fresh: BoardProject): BoardProject {
         members === previous.members &&
         listOrder === previous.listOrder &&
         unplacedCards === previous.unplacedCards &&
+        archivedCards === previous.archivedCards &&
         previous.name === fresh.name &&
         // An owner editing the board's key re-keys every card on it, and the
         // card nodes above already reflect that. Without this line the PROJECT
@@ -704,5 +718,6 @@ function shareTree(previous: BoardProject, fresh: BoardProject): BoardProject {
         members,
         listOrder,
         unplacedCards,
+        archivedCards,
     }
 }

@@ -4,6 +4,7 @@ import {
     groupMyCards,
     isMine,
     type JoinedRow,
+    selectMemberProjectIds,
     sortMyCards,
 } from '../tinycld/boards/lib/my-cards'
 import type {
@@ -330,5 +331,17 @@ describe('groupMyCards by sprint', () => {
             ['Backlog', ['unfiled']],
             ['Closed', ['finished']],
         ])
+    })
+})
+
+describe('selectMemberProjectIds', () => {
+    it('deduplicates and sorts the boards a membership list names', () => {
+        expect(
+            selectMemberProjectIds([{ project: 'p2' }, { project: 'p1' }, { project: 'p2' }])
+        ).toEqual(['p1', 'p2'])
+    })
+
+    it('is empty for no memberships', () => {
+        expect(selectMemberProjectIds([])).toEqual([])
     })
 })

@@ -5,8 +5,7 @@ import { resolveProtectedFileSrc } from '@tinycld/core/lib/editor/rich/authed-im
 import { pb } from '@tinycld/core/lib/pocketbase'
 import { useCallback, useMemo } from 'react'
 import { View } from 'react-native'
-import { useProjectMembers } from '../../hooks/useProjectMembers'
-import { renderMentionTokens } from '../../lib/mention-text'
+import { type MentionName, renderMentionTokens } from '../../lib/mention-text'
 
 interface MarkdownTextProps {
     /** Markdown source. Callers must not render this component for empty text. */
@@ -18,11 +17,14 @@ interface MarkdownTextProps {
      */
     variant?: 'description' | 'comment'
     /**
-     * The board this text belongs to, used to turn `[[@id]]` tokens into names.
-     * Optional: a surface without one (the public board) renders mentions as
-     * the neutral `@someone` placeholder rather than leaking a record id.
+     * The board's roster as mention labels, used to turn `[[@id]]` tokens
+     * into names. Resolved ONCE by the card detail and threaded down, because
+     * this component renders once per comment and a roster query each would
+     * be one subscription per comment. Empty on a surface with no roster (the
+     * public board), where a token falls back to the name it carries or the
+     * neutral `@someone` rather than leaking a record id.
      */
-    projectId?: string
+    mentionMembers: MentionName[]
 }
 
 /**
@@ -48,7 +50,7 @@ interface MarkdownTextProps {
  * paragraph already has `marginVertical: 6`, so the section's own spacing is
  * applied outside to keep the display and edit states from jumping.
  */
-export function MarkdownText({ body, variant = 'description', projectId }: MarkdownTextProps) {
+export function MarkdownText({ body, variant = 'description', mentionMembers }: MarkdownTextProps) {
     // A comment is a message in a thread; a description is the read state of
     // the editor that replaces it on tap, so it matches that editor exactly.
     const purpose = variant === 'comment' ? 'compact' : 'description'
@@ -56,15 +58,7 @@ export function MarkdownText({ body, variant = 'description', projectId }: Markd
     // and the Go flush hook parse. Substituted into `@Name` before parsing so
     // this stays a pure string transform shared by web and native; see
     // lib/mention-text.ts for why it is not a renderer node.
-    const { members } = useProjectMembers(projectId ?? '')
-    const text = useMemo(
-        () =>
-            renderMentionTokens(
-                body,
-                members.map(m => ({ userId: m.userId, label: m.name || m.email || 'Unknown' }))
-            ),
-        [body, members]
-    )
+    const text = useMemo(() => renderMentionTokens(body, mentionMembers), [body, mentionMembers])
 
     // Description images are stored as tokenless protected-file paths (see
     // lib/description-image.ts); without a fresh ?token= the bytes 404. The

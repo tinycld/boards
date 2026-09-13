@@ -52,6 +52,7 @@ import type {
     BoardsSprints,
     Users,
 } from '@tinycld/core/types/pbSchema'
+import type { ArchivedCardRow } from './lib/archived-cards'
 import type { ListCategory } from './lib/list-category'
 import type { CardPriority } from './lib/priority'
 
@@ -451,6 +452,12 @@ export interface BoardProject {
     listOrder: BoardListRank[]
     /** Live cards across the whole board before the filter, for the header. */
     cardTotal: number
+    /**
+     * The archived cards, most recently archived first — the panel's rows.
+     * Built here from the same card rows as `lists`: the board query is the
+     * one read of a board's cards, so the panel must not run a second one.
+     */
+    archivedCards: ArchivedCardRow[]
     /**
      * Every label defined on this board — what the card label picker offers,
      * which is a superset of any one card's `labels`.
