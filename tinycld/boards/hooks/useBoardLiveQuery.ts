@@ -7,7 +7,7 @@ import { useLiveQuery } from '@tanstack/react-db'
  * `useMyLiveQuery` returns null whenever `scope.userId` is empty
  * (core/lib/use-org-live-query.ts), which is correct for every query that
  * filters "my own rows" — and fatal for a public board, where the whole point
- * is that there is no user. All six of the board's queries would go dead.
+ * is that there is no user. The board's query would go dead.
  *
  * So this is deliberately NOT a widening of `{ userId }`: that would relax the
  * guard for every caller in the ecosystem to serve one screen. The board's

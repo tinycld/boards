@@ -341,11 +341,11 @@ export interface BuildBoardInput {
  * Assemble the board tree, or null when there is no project to render.
  *
  * When `previous` is the tree from the last emission, every node whose value
- * is unchanged is returned BY IDENTITY from it (see shareTree). The six live
- * queries feeding this re-emit far more often than this board's content
- * changes — two of them (`users`, the membership join) react to org-wide
- * writes — and without sharing, every emission rebuilt every object, so every
- * column re-rendered and drax's sortable columns saw "external data changed"
+ * is unchanged is returned BY IDENTITY from it (see shareTree). The board's
+ * include query and the `users` read feeding this re-emit more often than
+ * this board's content changes — the users read reacts to org-wide writes —
+ * and without sharing, every emission rebuilt every object, so every column
+ * re-rendered and drax's sortable columns saw "external data changed"
  * mid-drag.
  */
 export function buildBoardProject(

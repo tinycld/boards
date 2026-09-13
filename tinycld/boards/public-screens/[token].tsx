@@ -21,7 +21,7 @@ import { decidePublicBoardRoute, type PublicBoardGoneReason } from '../lib/publi
  * The whole screen is a thin shell: it installs the token, resolves which board
  * the token names, and then renders the ORDINARY board. There is no parallel
  * read-only renderer, because there does not need to be — the access rules let
- * the token satisfy list/view, so `useBoardContent` runs the same six queries a
+ * the token satisfy list/view, so `useBoardContent` runs the same query a
  * member's board runs and `BoardCanvas` derives capabilities from
  * `useProjectRole`, which correctly finds no membership and denies everything.
  *

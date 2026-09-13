@@ -497,7 +497,7 @@ export interface BoardProject {
 }
 
 /**
- * The relation map pbtsdb uses to type `expand`.
+ * The relation map pbtsdb's `relations` option is typed from.
  *
  * The generator REQUIRES this export: `tinycld.config.ts` imports
  * `<Pascal>Schema` from every package's `./types` by name and feeds it to

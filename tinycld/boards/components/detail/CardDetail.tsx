@@ -190,7 +190,7 @@ export function CardDetail({
     const currentUserId = user?.id ?? ''
     const { uploadFiles } = useAttachmentMutations(card.id, projectId, user?.id ?? '')
     const { createComment, updateComment, deleteComment } = useCommentMutations(card.id, projectId)
-    // Its own query, not a fifth join in useCardDetail — see the hook.
+    // Read out of the card's one query (useCardChildren) — see the hook.
     const { reactionsFor, toggleReaction } = useCommentReactions(projectId, card.id)
     // Which comment the composer is replying to. Local because it is transient
     // UI state that dies with the open card, and it lives HERE rather than in

@@ -3,50 +3,43 @@ import { renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BoardProject } from '../tinycld/boards/types'
 
-// The rows each live query should return, keyed by the collection the query
-// reads from. useBoardLiveQuery is stubbed rather than driving a real TanStack
-// DB: what is under test is the RESOLUTION — which board and card come out for
-// a given route — not the query engine. `where` is a no-op, so each test lists
-// only the rows its query would have matched.
+// The project rows the board query should resolve, matched the way the query
+// would: by id OR by slug against the route segment. useBoardRows and
+// useBoardTree are stubbed rather than driving a real TanStack DB: what is
+// under test is the RESOLUTION — which board and card come out for a given
+// route — not the query engine.
 const h = vi.hoisted(() => ({
     projects: [] as { id: string; slug: string; archived?: boolean }[],
     boardContentCalledWith: [] as string[],
     board: null as BoardProject | null,
 }))
 
-vi.mock('@tinycld/core/lib/pocketbase', () => ({
-    useStore: (...names: string[]) => names.map(name => ({ __name: name })),
-}))
-
 vi.mock('@tinycld/core/lib/auth', () => ({
     useAuth: () => ({ user: { id: 'u1' } }),
 }))
 
-vi.mock('~/tinycld/boards/hooks/useBoardLiveQuery', () => ({
-    useBoardLiveQuery: (queryFn: (q: unknown) => unknown) => {
-        let target = ''
-        const builder = {
-            from: (spec: Record<string, { __name: string }>) => {
-                target = Object.values(spec)[0]?.__name ?? ''
-                return builder
-            },
-            where: () => builder,
-        }
-        const result = queryFn(builder)
-        if (result === null || result === undefined) return { data: [], isLoading: false }
-        if (target === 'boards_projects') return { data: h.projects, isLoading: false }
-        return { data: [], isLoading: false }
-    },
-}))
-
-// useBoardContent is the seam the whole design rests on: the route hands it a
-// project id resolved from the URL. Recording every id it is called with is
-// how the resolution is asserted.
+// useBoardRows/useBoardTree are the seam the whole design rests on: the route
+// hands the rows a selector from the URL and the tree the resolved rows.
+// Recording every project id the tree is built for is how the resolution is
+// asserted.
 vi.mock('~/tinycld/boards/hooks/useActiveBoard', async importOriginal => {
     const original = await importOriginal<typeof import('~/tinycld/boards/hooks/useActiveBoard')>()
     return {
         ...original,
-        useBoardContent: (projectId: string) => {
+        useBoardRows: (selector: { id: string } | { segment: string; slug: string }) => {
+            const key = 'id' in selector ? selector.id : selector.segment
+            const slug = 'slug' in selector ? selector.slug : ''
+            const project = key
+                ? h.projects.find(p => p.id === key || (slug !== '' && p.slug === slug))
+                : undefined
+            return {
+                rows: project ? { project } : null,
+                users: [],
+                isLoading: false,
+            }
+        },
+        useBoardTree: (rows: { rows: { project?: { id: string } } | null }) => {
+            const projectId = rows.rows?.project?.id ?? ''
             h.boardContentCalledWith.push(projectId)
             return {
                 project: projectId ? h.board : null,

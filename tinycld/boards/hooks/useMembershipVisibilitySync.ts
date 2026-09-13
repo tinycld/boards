@@ -4,14 +4,7 @@ import { usePocketBase, useStore } from '@tinycld/core/lib/pocketbase'
 import { useMyLiveQuery } from '@tinycld/core/lib/use-my-live-query'
 import { useEffect, useRef } from 'react'
 import { visibilityChanges } from '../lib/membership-visibility'
-import type {
-    BoardsCards,
-    BoardsLabels,
-    BoardsLists,
-    BoardsProjectMembers,
-    BoardsProjects,
-    Users,
-} from '../types'
+import type { BoardsProjectMembers, Users } from '../types'
 
 /**
  * Keep board visibility live as MY memberships change.
@@ -29,11 +22,13 @@ import type {
  * this client regardless of any join. Watch it, and reconcile SURGICALLY
  * (see visibilityChanges for when):
  *
- *   - a grant pulls exactly that project's rows and UPSERTS them. Never a
- *     collection-wide refetch: a full refetch's reconcile deletes synced rows
- *     missing from its snapshot, and a snapshot fetched while another of this
- *     user's sessions (or this one) has writes in flight clobbers those rows
- *     — measured as a freshly created board rendering "0 cards in 3 lists".
+ *   - a grant pulls that project's ROSTER and UPSERTS it. The board's own
+ *     rows need no pull: every board collection syncs on demand, so the
+ *     sidebar's membership join fetches the project row by id the moment the
+ *     member row lands, and the board fetches its lists and cards when it is
+ *     opened. The roster is the exception because its co-members may be
+ *     people this client's eager `users` store has never seen — a grant makes
+ *     their rows readable without any event describing it.
  *   - a revocation deletes exactly that project's rows from the local store.
  *     No fetch at all — the rules would refuse it anyway; the ids to drop are
  *     already here.
@@ -43,9 +38,8 @@ import type {
  * realtime handler writes through, not a component bypassing the store. This
  * file is exempted from the pbtsdb-no-raw-pb-access plugin in biome.json.
  *
- * The on-demand collections (checklist, comments, attachments) need no pull —
- * they fetch per open card — but a revocation drops their cached rows too, so
- * a re-shared board cannot resurrect a stale thread.
+ * A revocation drops the card children's cached rows too, so a re-shared
+ * board cannot resurrect a stale thread.
  *
  * Mounted app-wide by provider.tsx, so a grant lands even while the user is
  * in another package and the sidebar is ready the moment they arrive.
@@ -118,34 +112,19 @@ export function useMembershipVisibilitySync() {
 
         for (const projectId of granted) {
             const filter = pb.filter('project = {:id}', { id: projectId })
-            Promise.all([
-                pb.collection('boards_projects').getOne<BoardsProjects>(projectId),
-                pb
-                    .collection('boards_project_members')
-                    .getFullList<BoardsProjectMembers & { expand?: { user?: Users } }>({
-                        filter,
-                        expand: 'user',
-                    }),
-                pb.collection('boards_lists').getFullList<BoardsLists>({ filter }),
-                pb.collection('boards_cards').getFullList<BoardsCards>({ filter }),
-                pb.collection('boards_labels').getFullList<BoardsLabels>({ filter }),
-            ])
-                .then(([project, members, lists, cards, labels]) => {
-                    projectsCollection.utils.writeUpsert(project)
-                    // Expand is stripped before the upsert — the collection's
-                    // row type carries a fully-expanded shape this partial
-                    // fetch does not satisfy, and consumers resolve members
-                    // against the users store anyway (the realtime path
-                    // delivers expand-less rows too).
+            pb.collection('boards_project_members')
+                .getFullList<BoardsProjectMembers & { expand?: { user?: Users } }>({
+                    filter,
+                    expand: 'user',
+                })
+                .then(members => {
+                    // Expand is stripped before the upsert — rows never carry
+                    // it, and consumers resolve members against the users
+                    // store anyway (the realtime path delivers expand-less
+                    // rows too).
                     membersCollection.utils.writeUpsert(
                         members.map(({ expand, ...member }) => member)
                     )
-                    listsCollection.utils.writeUpsert(lists)
-                    cardsCollection.utils.writeUpsert(cards)
-                    labelsCollection.utils.writeUpsert(labels)
-                    // The roster's names resolve against the eager users
-                    // store, and a just-shared board's co-members may be
-                    // people this client has never synced.
                     for (const member of members) {
                         if (member.expand?.user) {
                             usersCollection.utils.writeUpsert(member.expand.user)

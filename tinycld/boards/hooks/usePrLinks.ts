@@ -1,23 +1,19 @@
-import { and, eq } from '@tanstack/db'
-import { useLiveQuery } from '@tanstack/react-db'
-import { useStore } from '@tinycld/core/lib/pocketbase'
+import { useMemo } from 'react'
+import { useCardChildren } from './useCardDetail'
 
 /**
- * One card's live PR links.
+ * One card's live PR links, in PR-number order.
  *
- * Tombstoned rows are filtered here rather than deleted in the database: a
- * link derived from a branch name comes back on the next delivery, so removal
- * has to be a flag rather than a row deletion. See pb-migrations/1980000021.
+ * The rows come with the card's one request (useCardChildren). Tombstoned
+ * rows are filtered here rather than deleted in the database: a link derived
+ * from a branch name comes back on the next delivery, so removal has to be a
+ * flag rather than a row deletion. See pb-migrations/1980000021.
  */
 export function usePrLinks(cardId: string) {
-    const [prLinksCollection] = useStore('boards_pr_links')
-
-    return useLiveQuery(
-        query =>
-            query
-                .from({ link: prLinksCollection })
-                .where(({ link }) => and(eq(link.card, cardId), eq(link.unlinked, false)))
-                .orderBy(({ link }) => link.number),
-        [cardId]
+    const rows = useCardChildren(cardId).children?.prLinks
+    const data = useMemo(
+        () => (rows ?? []).filter(link => !link.unlinked).sort((a, b) => a.number - b.number),
+        [rows]
     )
+    return { data }
 }
