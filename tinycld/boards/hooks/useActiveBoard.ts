@@ -1,4 +1,5 @@
-import { eq, or } from '@tanstack/db'
+import { eq, inArray, or } from '@tanstack/db'
+import { useLiveQuery } from '@tanstack/react-db'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { useMyLiveQuery } from '@tinycld/core/lib/use-my-live-query'
 import { materialize } from 'pbtsdb'
@@ -29,26 +30,50 @@ export function useBoardList() {
         'boards_project_members'
     )
 
-    // Driven from the MEMBERSHIP side with an innerJoin, following
-    // mail's useMailboxes: a board created optimistically renders the instant
-    // its owner-member row lands locally, instead of waiting for a realtime
-    // round-trip on boards_projects.
-    const { data: projectRows, isLoading: projectsLoading } = useMyLiveQuery((query, { userId }) =>
+    // My memberships, from the membership side: a board created optimistically
+    // renders the instant its owner-member row lands locally, instead of
+    // waiting for a realtime round-trip on boards_projects.
+    const { data: memberRows, isLoading: membersLoading } = useMyLiveQuery((query, { userId }) =>
         query
             .from({ member: membersCollection })
-            .innerJoin({ project: projectsCollection }, ({ member, project }) =>
-                eq(member.project, project.id)
-            )
             .where(({ member }) => eq(member.user, userId))
+            .select(({ member }) => ({ project: member.project }))
     )
+
+    const projectIds = useMemo(
+        () => [...new Set((memberRows ?? []).map(m => m.project))].sort(),
+        [memberRows]
+    )
+
+    // The projects those memberships name, asked for BY ID rather than reached
+    // through a join. boards_projects is on-demand, so the store holds only
+    // rows some query requested — and a join condition is not a `where`, so it
+    // never becomes a request. A board shared mid-session would then never
+    // arrive: its member row lands by realtime, and nothing fetches the
+    // project row the join needs (board-visibility.spec.ts pins this).
+    //
+    // `inArray(id, ...)` is the shape pbtsdb turns into an id subset, so this
+    // is one batched request for ids the store lacks and zero requests once
+    // they are filed.
+    const { data: projectRows, isLoading: projectsFetching } = useLiveQuery(
+        query =>
+            projectIds.length === 0
+                ? null
+                : query
+                      .from({ project: projectsCollection })
+                      .where(({ project }) => inArray(project.id, projectIds)),
+        [projectIds, projectsCollection]
+    )
+
+    const projectsLoading = membersLoading || (projectIds.length > 0 && projectsFetching)
 
     // Split by `archived` rather than filtered: the sidebar lists both, in
     // separate sections, and an archived board must still be openable so it
     // can be looked at and restored.
     return useMemo(() => {
-        const rows = (projectRows ?? [])
-            .map(r => r.project)
-            .sort((a, b) => a.name.localeCompare(b.name) || (a.id < b.id ? -1 : 1))
+        const rows = [...(projectRows ?? [])].sort(
+            (a, b) => a.name.localeCompare(b.name) || (a.id < b.id ? -1 : 1)
+        )
         return {
             projects: rows.filter(p => !p.archived),
             archivedProjects: rows.filter(p => p.archived),
