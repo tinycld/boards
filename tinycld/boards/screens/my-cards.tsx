@@ -1,4 +1,5 @@
 import { eq } from '@tanstack/db'
+import { useLiveQuery } from '@tanstack/react-db'
 import { DocumentTitle } from '@tinycld/core/components/DocumentTitle'
 import { EmptyState } from '@tinycld/core/components/EmptyState'
 import { HelpIcon } from '@tinycld/core/components/help/HelpIcon'
@@ -7,7 +8,7 @@ import { useAuth } from '@tinycld/core/lib/auth'
 import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { type Shortcut, useRegisterShortcuts, useShortcutScope } from '@tinycld/core/lib/shortcuts'
-import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
+import { useMyLiveQuery } from '@tinycld/core/lib/use-my-live-query'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
 import { useRouter } from 'expo-router'
 import { useMemo, useState } from 'react'
@@ -71,7 +72,7 @@ export default function MyCardsScreen() {
         'boards_sprints'
     )
 
-    const { data: joined } = useOrgLiveQuery(query =>
+    const { data: joined } = useLiveQuery(query =>
         query
             .from({ card: cardsCollection })
             .innerJoin({ project: projectsCollection }, ({ card, project }) =>
@@ -98,7 +99,7 @@ export default function MyCardsScreen() {
         [sprintsCollection]
     )
     // The caller's own watcher rows — the Watching tab's whole input.
-    const { data: watcherRows } = useOrgLiveQuery((query, { userId: me }) =>
+    const { data: watcherRows } = useMyLiveQuery((query, { userId: me }) =>
         query.from({ watcher: watchersCollection }).where(({ watcher }) => eq(watcher.user, me))
     )
     const watchedCardIds = useMemo(

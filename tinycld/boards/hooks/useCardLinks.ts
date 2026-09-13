@@ -1,8 +1,8 @@
 import { eq, inArray, or } from '@tanstack/db'
+import { useLiveQuery } from '@tanstack/react-db'
 import { useAuth } from '@tinycld/core/lib/auth'
 import { mutation, useMutation } from '@tinycld/core/lib/mutations'
 import { useStore } from '@tinycld/core/lib/pocketbase'
-import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
 import { newRecordId } from 'pbtsdb/core'
 import { useMemo } from 'react'
 import { formatCardKey } from '../lib/card-key'
@@ -88,7 +88,7 @@ export function useCardLinks(
     // Non-throwing: a public board renders links read-only, with no session.
     const { user } = useAuth({ throwIfAnon: false })
 
-    const { data: rows, isReady } = useOrgLiveQuery(
+    const { data: rows, isReady } = useLiveQuery(
         query => {
             if (!cardId) return null
             return query
@@ -125,7 +125,7 @@ export function useCardLinks(
         'boards_projects',
         'boards_lists'
     )
-    const { data: farRows, isReady: farReady } = useOrgLiveQuery(
+    const { data: farRows, isReady: farReady } = useLiveQuery(
         query => {
             if (farIds.length === 0) return null
             return query

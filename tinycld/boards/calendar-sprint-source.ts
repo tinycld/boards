@@ -1,9 +1,9 @@
 import { and, eq, gte, lte } from '@tanstack/db'
+import { useLiveQuery } from '@tanstack/react-db'
 import { addDays, toDateString } from '@tinycld/core/lib/dates'
 import type { EventSourceItem, EventSourceRange } from '@tinycld/core/lib/event-sources/types'
 import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { useStore } from '@tinycld/core/lib/pocketbase'
-import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
 import type { Href } from 'expo-router'
 import { useMemo } from 'react'
 import { parseDayValue } from './lib/due-time'
@@ -65,7 +65,7 @@ export function useEventSource({ start, end }: EventSourceRange): {
     const startDay = toDateString(addDays(start, -1))
     const endDay = toDateString(addDays(end, 1))
 
-    const { data: rows, isLoading } = useOrgLiveQuery(
+    const { data: rows, isLoading } = useLiveQuery(
         query =>
             query
                 .from({ sprint: sprintsCollection })

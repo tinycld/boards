@@ -30,7 +30,7 @@ export function useCommentReactions(projectId: string, cardId: string) {
     const { user } = useAuth({ throwIfAnon: false })
     const userId = user?.id ?? ''
 
-    // useBoardLiveQuery, NOT useOrgLiveQuery: the latter returns null when
+    // useBoardLiveQuery, NOT useMyLiveQuery: the latter returns null when
     // there is no signed-in user, which is exactly the public-board case this
     // hook's own header says it serves — reactions were silently absent for
     // share-link visitors. The query filters by card, never by user, so

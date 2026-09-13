@@ -15,8 +15,8 @@ const NO_REACTIONS: ReactionGroup[] = []
  * small and the fold is cheap; the migration's project index exists for this
  * read specifically.
  *
- * useBoardLiveQuery, not useOrgLiveQuery: the board face is exactly the screen
- * a share-link visitor sees with no session, and useOrgLiveQuery returns null
+ * useBoardLiveQuery, not useMyLiveQuery: the board face is exactly the screen
+ * a share-link visitor sees with no session, and useMyLiveQuery returns null
  * whenever the user id is empty.
  */
 export function useBoardCardReactions(projectId: string) {

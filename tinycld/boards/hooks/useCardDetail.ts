@@ -1,7 +1,7 @@
 import { eq } from '@tanstack/db'
+import { useLiveQuery } from '@tanstack/react-db'
 import { mimeFromFilename } from '@tinycld/core/file-viewer/file-naming'
 import { useStore } from '@tinycld/core/lib/pocketbase'
-import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
 import { useMemo } from 'react'
 import { attachmentDisplayName } from '../lib/attachment-source'
 import { toBoardMember } from '../lib/board-project'
@@ -77,7 +77,7 @@ export function useCardDetail(cardId: string) {
         'users'
     )
 
-    const { data: rows, isReady } = useOrgLiveQuery(
+    const { data: rows, isReady } = useLiveQuery(
         query => {
             if (!cardId) return null
 

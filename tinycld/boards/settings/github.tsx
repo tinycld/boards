@@ -1,11 +1,12 @@
 import { eq } from '@tanstack/db'
+import { useLiveQuery } from '@tanstack/react-db'
 import { HelpIcon } from '@tinycld/core/components/help/HelpIcon'
 import { errorToString, handleMutationErrorsWithForm } from '@tinycld/core/lib/errors'
 import { mutation, useMutation } from '@tinycld/core/lib/mutations'
 import { PB_SERVER_ADDR, useStore } from '@tinycld/core/lib/pocketbase'
 import { useToastStore } from '@tinycld/core/lib/stores/toast-store'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
-import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
+import { useMyLiveQuery } from '@tinycld/core/lib/use-my-live-query'
 import {
     type Control,
     FormErrorSummary,
@@ -61,7 +62,7 @@ function useGitHubSettingsData() {
         'boards_project_members'
     )
 
-    const { data: memberRows } = useOrgLiveQuery((query, { userId }) =>
+    const { data: memberRows } = useMyLiveQuery((query, { userId }) =>
         query
             .from({ member: membersCollection })
             .innerJoin({ project: projectsCollection }, ({ member, project }) =>
@@ -73,7 +74,7 @@ function useGitHubSettingsData() {
     // Unfiltered by project: the collection's own sync already scopes to
     // boards this user can read (viaMember in the migration's rules), so
     // there is nothing further to ask the query for.
-    const { data: repoRows } = useOrgLiveQuery(query => query.from({ repo: reposCollection }))
+    const { data: repoRows } = useLiveQuery(query => query.from({ repo: reposCollection }))
 
     const projectNames = new Map<string, string>()
     const ownedProjects: { id: string; name: string }[] = []

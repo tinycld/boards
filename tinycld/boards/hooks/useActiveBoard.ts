@@ -1,6 +1,6 @@
 import { eq } from '@tanstack/db'
 import { useStore } from '@tinycld/core/lib/pocketbase'
-import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
+import { useMyLiveQuery } from '@tinycld/core/lib/use-my-live-query'
 import { useMemo, useRef } from 'react'
 import { type BoardViewOptions, buildBoardProject } from '../lib/board-project'
 import type { SprintScope, ViewMode } from '../stores/boards-ui-store'
@@ -39,7 +39,7 @@ export function useBoardList() {
     // mail's useMailboxes: a board created optimistically renders the instant
     // its owner-member row lands locally, instead of waiting for a realtime
     // round-trip on boards_projects.
-    const { data: projectRows, isLoading: projectsLoading } = useOrgLiveQuery((query, { userId }) =>
+    const { data: projectRows, isLoading: projectsLoading } = useMyLiveQuery((query, { userId }) =>
         query
             .from({ member: membersCollection })
             .innerJoin({ project: projectsCollection }, ({ member, project }) =>
@@ -125,7 +125,7 @@ export function useMemberProjects() {
         'boards_projects',
         'boards_project_members'
     )
-    const { data: rows } = useOrgLiveQuery((query, { userId }) =>
+    const { data: rows } = useMyLiveQuery((query, { userId }) =>
         query
             .from({ member: membersCollection })
             .innerJoin({ project: projectsCollection }, ({ member, project }) =>
@@ -165,7 +165,7 @@ export function useWritableProjects() {
         'boards_projects',
         'boards_project_members'
     )
-    const { data: rows } = useOrgLiveQuery((query, { userId }) =>
+    const { data: rows } = useMyLiveQuery((query, { userId }) =>
         query
             .from({ member: membersCollection })
             .innerJoin({ project: projectsCollection }, ({ member, project }) =>
@@ -194,7 +194,7 @@ export function useWritableProjects() {
  * through the same queries. Nothing here scopes by user — every query filters
  * on the project id, and what authorizes it is decided server-side by the
  * access rules: a member's membership, or a visitor's `X-Share-Token`. That is
- * why these use useBoardLiveQuery rather than useOrgLiveQuery, which disables
+ * why these use useBoardLiveQuery rather than useMyLiveQuery, which disables
  * itself when there is no signed-in user and would leave a public board empty.
  *
  * The board UI therefore has ONE implementation, not a parallel read-only copy

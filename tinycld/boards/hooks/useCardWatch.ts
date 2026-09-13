@@ -1,8 +1,8 @@
 import { eq } from '@tanstack/db'
+import { useLiveQuery } from '@tanstack/react-db'
 import { useAuth } from '@tinycld/core/lib/auth'
 import { mutation, useMutation } from '@tinycld/core/lib/mutations'
 import { useStore } from '@tinycld/core/lib/pocketbase'
-import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
 import { newRecordId } from 'pbtsdb/core'
 
 /**
@@ -22,7 +22,7 @@ export function useCardWatch(projectId: string, cardId: string) {
     const { user } = useAuth({ throwIfAnon: false })
     const userId = user?.id ?? ''
 
-    const { data: rows } = useOrgLiveQuery(
+    const { data: rows } = useLiveQuery(
         query => {
             if (!cardId) return null
             return query

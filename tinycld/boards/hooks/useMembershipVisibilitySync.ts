@@ -1,7 +1,7 @@
 import { eq } from '@tanstack/db'
 import { captureException } from '@tinycld/core/lib/errors'
 import { usePocketBase, useStore } from '@tinycld/core/lib/pocketbase'
-import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
+import { useMyLiveQuery } from '@tinycld/core/lib/use-my-live-query'
 import { useEffect, useRef } from 'react'
 import { visibilityChanges } from '../lib/membership-visibility'
 import type {
@@ -74,7 +74,7 @@ export function useMembershipVisibilitySync() {
         'users'
     )
 
-    const { data: memberships, isReady } = useOrgLiveQuery(
+    const { data: memberships, isReady } = useMyLiveQuery(
         (query, { userId }) =>
             query
                 .from({ member: membersCollection })

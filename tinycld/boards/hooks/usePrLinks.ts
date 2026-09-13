@@ -1,6 +1,6 @@
 import { and, eq } from '@tanstack/db'
+import { useLiveQuery } from '@tanstack/react-db'
 import { useStore } from '@tinycld/core/lib/pocketbase'
-import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
 
 /**
  * One card's live PR links.
@@ -12,7 +12,7 @@ import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
 export function usePrLinks(cardId: string) {
     const [prLinksCollection] = useStore('boards_pr_links')
 
-    return useOrgLiveQuery(
+    return useLiveQuery(
         query =>
             query
                 .from({ link: prLinksCollection })
