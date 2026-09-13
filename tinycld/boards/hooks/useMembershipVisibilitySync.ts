@@ -40,7 +40,8 @@ import type {
  *
  * The fetch is read-only REST feeding the pbtsdb synced layer through its own
  * write utils — this hook is sync infrastructure, the same layer pbtsdb's
- * realtime handler writes through, not a component bypassing the store.
+ * realtime handler writes through, not a component bypassing the store. This
+ * file is exempted from the pbtsdb-no-raw-pb-access plugin in biome.json.
  *
  * The on-demand collections (checklist, comments, attachments) need no pull —
  * they fetch per open card — but a revocation drops their cached rows too, so

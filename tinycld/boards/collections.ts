@@ -34,7 +34,6 @@ export function registerCollections(
     const boards_project_members = newCollection('boards_project_members', {
         omitOnInsert: ['created', 'updated'] as const,
         relations: { project: boards_projects, user: coreStores.users },
-        alwaysExpand: ['project', 'user'],
         collectionOptions: indexed,
     })
 
