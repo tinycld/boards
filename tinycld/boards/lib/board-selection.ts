@@ -29,7 +29,7 @@ export function selectionOrder(project: BoardProject, visibleOrder?: string[]): 
  * archiving a selected card between the selection and the action turns into a
  * skipped row rather than a write against a row that is gone. Doing it here,
  * at the moment of use, is also what lets the store hold a plain Set with no
- * effect chasing six live queries to prune it.
+ * effect chasing the board's live query to prune it.
  */
 export function resolveSelection(
     project: BoardProject,

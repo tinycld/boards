@@ -34,6 +34,22 @@ export interface MentionName {
 }
 
 /**
+ * A board member as a mention label. The name wins; an invited-but-unfinished
+ * account has only an email; 'Unknown' keeps a token readable when a row has
+ * neither. `toBoardMember` already split a nameless email into the first-name
+ * slot, so the join below reproduces the original label either way.
+ */
+export function mentionMember(member: {
+    id: string
+    firstName: string
+    lastName: string
+    email: string
+}): MentionName {
+    const name = `${member.firstName} ${member.lastName}`.trim()
+    return { userId: member.id, label: name || member.email || 'Unknown' }
+}
+
+/**
  * Replace every `[[@id]]` / `[[@id|Name]]` with `@Name`.
  *
  * The roster wins when it knows the id — it is live, so a rename shows up

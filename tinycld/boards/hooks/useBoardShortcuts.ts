@@ -21,7 +21,7 @@ import { useArchiveCard, useMoveCard } from './useCardMutations'
  * archive or delete the focused card between keypresses; re-deriving turns that
  * into a no-op instead of a write against a row that is gone. Clearing focus
  * from an effect whenever the board changes would be the alternative, and that
- * is an effect chasing six live queries — exactly the per-emission re-render
+ * is an effect chasing the board's live query — exactly the per-emission re-render
  * this board is built to avoid.
  */
 export interface BoardShortcutOptions {

@@ -17,7 +17,7 @@ import type { BoardProject } from '../types'
  * are all store actions, and each clears it there, at the moment it happens.
  * The realtime case needs nothing at all: `resolveSelection` re-derives against
  * the live board and drops vanished ids at the point of use, which is what
- * keeps an effect from having to chase six live queries.
+ * keeps an effect from having to chase the board's live query.
  */
 export function useSelectionOrder(project: BoardProject, visibleOrder?: string[]) {
     const setSelectionOrder = useBoardsUIStore(s => s.setSelectionOrder)

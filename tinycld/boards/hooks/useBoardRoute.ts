@@ -1,6 +1,4 @@
-import { eq, or } from '@tanstack/db'
 import { useAuth } from '@tinycld/core/lib/auth'
-import { useStore } from '@tinycld/core/lib/pocketbase'
 import { useMemo } from 'react'
 import { flattenCards } from '../lib/board-cards'
 import type { BoardViewOptions } from '../lib/board-project'
@@ -19,8 +17,7 @@ import {
     useBoardsUIStore,
 } from '../stores/boards-ui-store'
 import type { BoardProject } from '../types'
-import { scopeForView, useBoardContent } from './useActiveBoard'
-import { useBoardLiveQuery } from './useBoardLiveQuery'
+import { scopeForView, useBoardRows, useBoardTree } from './useActiveBoard'
 
 /**
  * Resolve `/a/boards/<segment>[/<cardNumber>]` to a board and, where the URL
@@ -68,24 +65,24 @@ export function useBoardRoute(
     cardSegment = '',
     { focused = '', isViewed = true }: UseBoardRouteOptions = {}
 ): BoardRoute {
-    const [projectsCollection] = useStore('boards_projects')
-
-    const { slug } = useMemo(() => parseBoardSegment(routeSegment), [routeSegment])
-
-    // By id OR by slug in one query, so a board resolves the moment its
-    // OPTIMISTIC row lands — the instant it is created — rather than after a
-    // round trip, and a link by record id keeps working for a board that
-    // never had a slug.
-    const { data: projectRows, isLoading: projectLoading } = useBoardLiveQuery(
-        query => {
-            if (!routeSegment) return null
-            return query
-                .from({ project: projectsCollection })
-                .where(({ project }) => or(eq(project.id, routeSegment), eq(project.slug, slug)))
-        },
-        [routeSegment, slug, projectsCollection]
+    const { slug, cardNumber: keyNumber } = useMemo(
+        () => parseBoardSegment(routeSegment),
+        [routeSegment]
     )
-    const projectRow = projectRows?.[0]
+
+    // By id OR by slug in the board's one query, so a board resolves the
+    // moment its OPTIMISTIC row lands — the instant it is created — rather
+    // than after a round trip, and a link by record id keeps working for a
+    // board that never had a slug. The rows and the tree are two calls here
+    // rather than one useBoardContent because the reader's view below is
+    // keyed by the project id the rows resolve.
+    //
+    // Keyed on the BOARD half of the segment: `PL-12` and `PL` are the same
+    // board, so opening or closing a card must not become a new query — that
+    // re-fetched the board and flashed the loading state over it on every
+    // card open.
+    const rows = useBoardRows({ segment: keyNumber ? slug : routeSegment, slug })
+    const projectRow = rows.rows?.project
     const projectId = projectRow?.id ?? ''
 
     // The reader's view, applied only where a view exists. The full-page card
@@ -105,7 +102,7 @@ export function useBoardRoute(
         [isViewed, filter, sort, userId, storedScope, viewMode]
     )
 
-    const { project, cardCount, isLoading: contentLoading } = useBoardContent(projectId, view)
+    const { project, cardCount, isLoading: contentLoading } = useBoardTree(rows, view)
 
     // `/a/boards/PL/12` carries the number alone; `/a/boards/PL-12` and
     // `?focused=` carry a key or an id. Both resolve to a RECORD ID here, so
@@ -125,7 +122,7 @@ export function useBoardRoute(
         // A card needs the board's cards to have landed before "no such card"
         // can be true; without that a deep link flashes not-found on every
         // cold load.
-        isLoading: projectLoading || contentLoading,
+        isLoading: contentLoading,
         segment: projectRow ? boardSegment(projectRow) : '',
         isArchived: projectRow?.archived ?? false,
         cardCount,

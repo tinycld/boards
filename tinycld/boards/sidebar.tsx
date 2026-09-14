@@ -15,7 +15,7 @@ import { useBoardsUIStore } from './stores/boards-ui-store'
 import type { BoardsProjects } from './types'
 
 export default function BoardsSidebar() {
-    // NOT useActiveBoard: that also runs useBoardContent — six live queries
+    // NOT useBoardContent: that fetches and builds the active board's tree
     // over every card, label, epic, member and user of the active board — so
     // every card edit re-rendered this whole list, and the list is unbounded.
     const { projects, archivedProjects } = useBoardList()

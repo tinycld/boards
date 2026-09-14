@@ -1,4 +1,4 @@
-import { eq } from '@tanstack/db'
+import { and, eq } from '@tanstack/db'
 import { useLiveQuery } from '@tanstack/react-db'
 import { HelpIcon } from '@tinycld/core/components/help/HelpIcon'
 import { errorToString, handleMutationErrorsWithForm } from '@tinycld/core/lib/errors'
@@ -20,6 +20,7 @@ import * as Clipboard from 'expo-clipboard'
 import { Check, Copy, GitPullRequest, Trash2 } from 'lucide-react-native'
 import { newRecordId } from 'pbtsdb/core'
 import { Pressable, ScrollView, Text, View } from 'react-native'
+import { useBoardList } from '../hooks/useActiveBoard'
 import { useCopiedFlag } from '../hooks/useCopiedFlag'
 import { canRemoveRepo } from '../lib/repo-permissions'
 
@@ -46,53 +47,46 @@ interface RepoRow {
 
 /**
  * Every board this user belongs to (any role) plus every repo attached to
- * one of them — everything this package-wide screen needs in two queries.
+ * one of them — everything this package-wide screen needs in one query.
  *
- * Joined in JS rather than chained as a second `.innerJoin()`: TanStack DB
- * needs a single equality per join, and a THIRD table joined off an
- * already-joined alias blew up type inference here (the members collection's
- * `expand` shape multiplies against the other two). The membership join
- * alone is the same one useActiveBoard.ts uses, so mirroring it keeps this
- * within the shape the type checker already handles elsewhere.
+ * The membership join is the one useActiveBoard.ts uses; the repos ride
+ * along as an include correlated on the membership's project, so each row
+ * carries its board's repos and nothing is stitched in JS. Boards the user
+ * cannot read never appear, which is what filtered the repos before.
  */
 function useGitHubSettingsData() {
-    const [reposCollection, projectsCollection, membersCollection] = useStore(
+    const { projects, archivedProjects } = useBoardList()
+    const [reposCollection, membersCollection] = useStore(
         'boards_project_repos',
-        'boards_projects',
         'boards_project_members'
     )
 
-    const { data: memberRows } = useMyLiveQuery((query, { userId }) =>
+    // My owner rows, with the role in the request; the boards themselves are
+    // the sidebar's list, which the list rule already sized.
+    const { data: owned } = useMyLiveQuery((query, { userId }) =>
         query
             .from({ member: membersCollection })
-            .innerJoin({ project: projectsCollection }, ({ member, project }) =>
-                eq(member.project, project.id)
-            )
-            .where(({ member }) => eq(member.user, userId))
+            .where(({ member }) => and(eq(member.user, userId), eq(member.role, 'owner')))
+            .select(({ member }) => ({ project: member.project }))
+    )
+    // Every attached repo across my boards: the list rule is "a member".
+    const { data: repoRows } = useLiveQuery(
+        query => query.from({ repo: reposCollection }),
+        [reposCollection]
     )
 
-    // Unfiltered by project: the collection's own sync already scopes to
-    // boards this user can read (viaMember in the migration's rules), so
-    // there is nothing further to ask the query for.
-    const { data: repoRows } = useLiveQuery(query => query.from({ repo: reposCollection }))
-
-    const projectNames = new Map<string, string>()
-    const ownedProjects: { id: string; name: string }[] = []
-    for (const { member, project } of memberRows ?? []) {
-        projectNames.set(project.id, project.name)
-        if (member.role === 'owner' && !project.archived) {
-            ownedProjects.push({ id: project.id, name: project.name })
-        }
-    }
-    ownedProjects.sort((a, b) => a.name.localeCompare(b.name))
-    const ownedProjectIds = new Set(ownedProjects.map(p => p.id))
-
+    const ownedProjectIds = new Set((owned ?? []).map(m => m.project))
+    const ownedProjects = projects
+        .filter(project => ownedProjectIds.has(project.id))
+        .map(project => ({ id: project.id, name: project.name }))
+    const boardNames = new Map(
+        [...projects, ...archivedProjects].map(project => [project.id, project.name])
+    )
     const repos: RepoRow[] = (repoRows ?? [])
-        .filter(repo => projectNames.has(repo.project))
         .map(repo => ({
             id: repo.id,
             project: repo.project,
-            projectName: projectNames.get(repo.project) ?? '',
+            projectName: boardNames.get(repo.project) ?? '',
             repo: repo.repo,
         }))
         .sort((a, b) => a.projectName.localeCompare(b.projectName) || a.repo.localeCompare(b.repo))
