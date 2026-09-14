@@ -1,4 +1,4 @@
-import { eq, inArray, or } from '@tanstack/db'
+import { and, eq, inArray, or } from '@tanstack/db'
 import { useLiveQuery } from '@tanstack/react-db'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { useMyLiveQuery } from '@tinycld/core/lib/use-my-live-query'
@@ -20,66 +20,36 @@ import { useUserRows } from './useUsers'
  * board list, and the list is unbounded. `useBoardRoute` takes the same care
  * for the same reason.
  *
- * `boards_projects` syncs on demand, so the join reaches each project row by
- * id: served from the store when present, else one batched fetch for every
- * id the memberships name.
+ * No membership predicate: the list rule on boards_projects IS "a member",
+ * so a plain read returns exactly this user's boards, sized by the server. A
+ * board shared mid-session arrives through the membership subscription in
+ * provider.tsx, which carries the board with it.
  */
 export function useBoardList() {
-    const [projectsCollection, membersCollection] = useStore(
-        'boards_projects',
-        'boards_project_members'
-    )
+    const [projectsCollection] = useStore('boards_projects')
 
-    // My memberships, from the membership side: a board created optimistically
-    // renders the instant its owner-member row lands locally, instead of
-    // waiting for a realtime round-trip on boards_projects.
-    const { data: memberRows, isLoading: membersLoading } = useMyLiveQuery((query, { userId }) =>
-        query
-            .from({ member: membersCollection })
-            .where(({ member }) => eq(member.user, userId))
-            .select(({ member }) => ({ project: member.project }))
-    )
-
-    const projectIds = useMemo(
-        () => [...new Set((memberRows ?? []).map(m => m.project))].sort(),
-        [memberRows]
-    )
-
-    // The projects those memberships name, asked for BY ID rather than reached
-    // through a join. boards_projects is on-demand, so the store holds only
-    // rows some query requested — and a join condition is not a `where`, so it
-    // never becomes a request. A board shared mid-session would then never
-    // arrive: its member row lands by realtime, and nothing fetches the
-    // project row the join needs (board-visibility.spec.ts pins this).
-    //
-    // `inArray(id, ...)` is the shape pbtsdb turns into an id subset, so this
-    // is one batched request for ids the store lacks and zero requests once
-    // they are filed.
-    const { data: projectRows, isLoading: projectsFetching } = useLiveQuery(
+    const { data: projects, isLoading: projectsLoading } = useLiveQuery(
         query =>
-            projectIds.length === 0
-                ? null
-                : query
-                      .from({ project: projectsCollection })
-                      .where(({ project }) => inArray(project.id, projectIds)),
-        [projectIds, projectsCollection]
+            query
+                .from({ project: projectsCollection })
+                .where(({ project }) => eq(project.archived, false))
+                .orderBy(({ project }) => project.name),
+        [projectsCollection]
+    )
+    const { data: archivedProjects } = useLiveQuery(
+        query =>
+            query
+                .from({ project: projectsCollection })
+                .where(({ project }) => eq(project.archived, true))
+                .orderBy(({ project }) => project.name),
+        [projectsCollection]
     )
 
-    const projectsLoading = membersLoading || (projectIds.length > 0 && projectsFetching)
-
-    // Split by `archived` rather than filtered: the sidebar lists both, in
-    // separate sections, and an archived board must still be openable so it
-    // can be looked at and restored.
-    return useMemo(() => {
-        const rows = [...(projectRows ?? [])].sort(
-            (a, b) => a.name.localeCompare(b.name) || (a.id < b.id ? -1 : 1)
-        )
-        return {
-            projects: rows.filter(p => !p.archived),
-            archivedProjects: rows.filter(p => p.archived),
-            projectsLoading,
-        }
-    }, [projectRows, projectsLoading])
+    return {
+        projects: projects ?? [],
+        archivedProjects: archivedProjects ?? [],
+        projectsLoading,
+    }
 }
 
 /**
@@ -140,70 +110,33 @@ export function scopeForView(
  * needing write access, and that is the board the card is already open on.
  */
 export function useMemberProjects() {
-    const [projectsCollection, membersCollection] = useStore(
-        'boards_projects',
-        'boards_project_members'
-    )
-    const { data: rows } = useMyLiveQuery((query, { userId }) =>
-        query
-            .from({ member: membersCollection })
-            .innerJoin({ project: projectsCollection }, ({ member, project }) =>
-                eq(member.project, project.id)
-            )
-            .where(({ member }) => eq(member.user, userId))
-    )
-    return useMemo(() => selectLinkTargets(rows ?? []), [rows])
-}
-
-/**
- * The membership rows that qualify as link TARGETS: every live board, whatever
- * the role.
- *
- * Pure and exported so the role rule is testable without a hook harness —
- * and it is the rule most likely to be "tidied" into a role filter by someone
- * matching it to `useWritableProjects` below. It must not be: the create rule
- * is `writerOf(source) && memberOf(target)`, so a board the caller can only
- * VIEW is still a legitimate target, and filtering it out would make a link
- * the server would accept look forbidden.
- */
-export function selectLinkTargets<
-    TRow extends { project: { id: string; name: string; archived?: boolean } },
->(rows: TRow[]): TRow['project'][] {
-    return rows
-        .filter(r => !r.project.archived)
-        .map(r => r.project)
-        .sort((a, b) => a.name.localeCompare(b.name))
+    return useBoardList().projects
 }
 
 /**
  * The boards the caller may add cards to — owner or editor, not archived.
  * What the "Move to board" picker offers.
+ *
+ * The role is asked for on demand, with the role in the request, so the
+ * server answers "which boards can I write to" directly; the board rows are
+ * the sidebar's list, which the list rule already sized. A set lookup rather
+ * than a join or a per-row materialize: a join pushes the loaded board ids
+ * into the membership request, and a materialize per row is a nested query
+ * per board — both cost in proportion to the board count, on every card open.
  */
 export function useWritableProjects() {
-    const [projectsCollection, membersCollection] = useStore(
-        'boards_projects',
-        'boards_project_members'
-    )
-    const { data: rows } = useMyLiveQuery((query, { userId }) =>
+    const { projects } = useBoardList()
+    const [membersCollection] = useStore('boards_project_members')
+    const { data: mine } = useMyLiveQuery((query, { userId }) =>
         query
             .from({ member: membersCollection })
-            .innerJoin({ project: projectsCollection }, ({ member, project }) =>
-                eq(member.project, project.id)
+            .where(({ member }) =>
+                and(eq(member.user, userId), inArray(member.role, ['owner', 'editor']))
             )
-            .where(({ member }) => eq(member.user, userId))
+            .select(({ member }) => ({ project: member.project }))
     )
-    return useMemo(
-        () =>
-            (rows ?? [])
-                .filter(
-                    r =>
-                        !r.project.archived &&
-                        (r.member.role === 'owner' || r.member.role === 'editor')
-                )
-                .map(r => r.project)
-                .sort((a, b) => a.name.localeCompare(b.name)),
-        [rows]
-    )
+    const writable = new Set((mine ?? []).map(m => m.project))
+    return projects.filter(project => writable.has(project.id))
 }
 
 /** How the board screen names its board: by id, or by the URL segment (id or slug). */

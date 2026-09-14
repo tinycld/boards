@@ -1,4 +1,5 @@
-import { eq } from '@tanstack/db'
+import { and, eq } from '@tanstack/db'
+import { useLiveQuery } from '@tanstack/react-db'
 import { HelpIcon } from '@tinycld/core/components/help/HelpIcon'
 import { errorToString, handleMutationErrorsWithForm } from '@tinycld/core/lib/errors'
 import { mutation, useMutation } from '@tinycld/core/lib/mutations'
@@ -17,9 +18,9 @@ import {
 } from '@tinycld/core/ui/form'
 import * as Clipboard from 'expo-clipboard'
 import { Check, Copy, GitPullRequest, Trash2 } from 'lucide-react-native'
-import { materialize } from 'pbtsdb'
 import { newRecordId } from 'pbtsdb/core'
 import { Pressable, ScrollView, Text, View } from 'react-native'
+import { useBoardList } from '../hooks/useActiveBoard'
 import { useCopiedFlag } from '../hooks/useCopiedFlag'
 import { canRemoveRepo } from '../lib/repo-permissions'
 
@@ -54,50 +55,41 @@ interface RepoRow {
  * cannot read never appear, which is what filtered the repos before.
  */
 function useGitHubSettingsData() {
-    const [reposCollection, projectsCollection, membersCollection] = useStore(
+    const { projects, archivedProjects } = useBoardList()
+    const [reposCollection, membersCollection] = useStore(
         'boards_project_repos',
-        'boards_projects',
         'boards_project_members'
     )
 
-    const { data: rows } = useMyLiveQuery((query, { userId }) =>
+    // My owner rows, with the role in the request; the boards themselves are
+    // the sidebar's list, which the list rule already sized.
+    const { data: owned } = useMyLiveQuery((query, { userId }) =>
         query
             .from({ member: membersCollection })
-            .innerJoin({ project: projectsCollection }, ({ member, project }) =>
-                eq(member.project, project.id)
-            )
-            .where(({ member }) => eq(member.user, userId))
-            .select(({ member, project }) => ({
-                role: member.role,
-                projectId: project.id,
-                projectName: project.name,
-                archived: project.archived,
-                repos: materialize(
-                    query
-                        .from({ repo: reposCollection })
-                        .where(({ repo }) => eq(repo.project, member.project))
-                ),
-            }))
+            .where(({ member }) => and(eq(member.user, userId), eq(member.role, 'owner')))
+            .select(({ member }) => ({ project: member.project }))
+    )
+    // Every attached repo across my boards: the list rule is "a member".
+    const { data: repoRows } = useLiveQuery(
+        query => query.from({ repo: reposCollection }),
+        [reposCollection]
     )
 
-    const ownedProjects: { id: string; name: string }[] = []
-    const repos: RepoRow[] = []
-    for (const row of rows ?? []) {
-        if (row.role === 'owner' && !row.archived) {
-            ownedProjects.push({ id: row.projectId, name: row.projectName })
-        }
-        for (const repo of row.repos) {
-            repos.push({
-                id: repo.id,
-                project: repo.project,
-                projectName: row.projectName,
-                repo: repo.repo,
-            })
-        }
-    }
-    ownedProjects.sort((a, b) => a.name.localeCompare(b.name))
-    const ownedProjectIds = new Set(ownedProjects.map(p => p.id))
-    repos.sort((a, b) => a.projectName.localeCompare(b.projectName) || a.repo.localeCompare(b.repo))
+    const ownedProjectIds = new Set((owned ?? []).map(m => m.project))
+    const ownedProjects = projects
+        .filter(project => ownedProjectIds.has(project.id))
+        .map(project => ({ id: project.id, name: project.name }))
+    const boardNames = new Map(
+        [...projects, ...archivedProjects].map(project => [project.id, project.name])
+    )
+    const repos: RepoRow[] = (repoRows ?? [])
+        .map(repo => ({
+            id: repo.id,
+            project: repo.project,
+            projectName: boardNames.get(repo.project) ?? '',
+            repo: repo.repo,
+        }))
+        .sort((a, b) => a.projectName.localeCompare(b.projectName) || a.repo.localeCompare(b.repo))
 
     return { repos, ownedProjects, ownedProjectIds }
 }

@@ -279,9 +279,16 @@ export function registerCollections(
     // AND user, which is not a subset a project fetch could prove complete.
     // `user` is a relation into core's eager `users` store; the roster reads
     // names through a join there. Rows carry no expand.
+    // On demand: the roster is read per board (the share dialog, the open
+    // board's header) and my own rows by user, never the whole table. The
+    // board always rides along — in a request and in a realtime event — so
+    // a membership granted mid-session arrives WITH the board it opens, and
+    // that is how a shared board reaches the sidebar (see provider.tsx).
     const boards_project_members = newCollection('boards_project_members', {
         omitOnInsert: ['created', 'updated'] as const,
+        syncMode: 'on-demand' as const,
         relations: { project: boards_projects, user: coreStores.users },
+        alwaysFetchRelations: ['project'],
         collectionOptions: indexed,
     })
 

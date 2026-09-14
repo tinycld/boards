@@ -151,7 +151,7 @@ export function useRestoreProject() {
  * Every child collection relates to `project` with cascadeDelete, so the
  * lists, cards, checklist items, comments, attachments, memberships and share
  * links all go server-side in the same request. Other members see the board
- * vanish through the membership cascade (useMembershipVisibilitySync), and
+ * vanish through the membership cascade (useMembershipSync), and
  * server/realtime.go truncates the board's document journal. Callers MUST
  * confirm first — DeleteBoardDialog requires the name to be typed.
  */

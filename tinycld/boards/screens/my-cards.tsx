@@ -1,4 +1,4 @@
-import { eq, inArray } from '@tanstack/db'
+import { eq } from '@tanstack/db'
 import { useLiveQuery } from '@tanstack/react-db'
 import { DocumentTitle } from '@tinycld/core/components/DocumentTitle'
 import { EmptyState } from '@tinycld/core/components/EmptyState'
@@ -24,7 +24,6 @@ import {
     type MyCardsGroup,
     type MyCardsGroupView,
     type MyCardsMode,
-    selectMemberProjectIds,
 } from '../lib/my-cards'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
 
@@ -33,12 +32,11 @@ const MODES: MyCardsMode[] = ['assigned', 'reported', 'watching', 'all']
 /**
  * Every card across every board the user belongs to, narrowed to theirs.
  *
- * One cards query, mode-independent, scoped to the caller's boards by id:
- * boards_cards syncs per board, so the query has to say WHICH boards, and the
- * membership rows are the one place that list lives client-side. Switching
- * Assigned → Reported → All is a JS predicate over the same subscription — a
- * "cards where I am an assignee" filter is a multi-relation match PocketBase
- * expresses with `?=`, which the query converter has no operator for.
+ * One cards query, mode-independent, scoped by the cards list rule: a plain
+ * read IS the caller's boards' cards. Switching Assigned → Reported → All is
+ * a JS predicate over the same subscription — a "cards where I am an
+ * assignee" filter is a multi-relation match PocketBase expresses with `?=`,
+ * which the query converter has no operator for.
  * The search box makes this the way to find a card by title on a phone,
  * where the command palette does not exist.
  *
@@ -65,7 +63,6 @@ export default function MyCardsScreen() {
         watchersCollection,
         epicsCollection,
         sprintsCollection,
-        membersCollection,
     ] = useStore(
         'boards_cards',
         'boards_projects',
@@ -74,68 +71,38 @@ export default function MyCardsScreen() {
         'users',
         'boards_card_watchers',
         'boards_epics',
-        'boards_sprints',
-        'boards_project_members'
+        'boards_sprints'
     )
 
-    const { data: membershipRows } = useMyLiveQuery((query, { userId: me }) =>
-        query
-            .from({ member: membersCollection })
-            .where(({ member }) => eq(member.user, me))
-            .select(({ member }) => ({ project: member.project }))
-    )
-    const memberProjectIds = useMemo(
-        () => selectMemberProjectIds(membershipRows ?? []),
-        [membershipRows]
-    )
-
-    // Null until the memberships are known: an empty id list would match no
-    // board, and the screen must not flash "nothing assigned" while it waits.
+    // No board predicate: every board collection's list rule is "a member",
+    // so a plain read is exactly the caller's boards, sized by the server.
     const { data: joined } = useLiveQuery(
-        query => {
-            if (memberProjectIds.length === 0) return null
-            return query
+        query =>
+            query
                 .from({ card: cardsCollection })
                 .innerJoin({ project: projectsCollection }, ({ card, project }) =>
                     eq(card.project, project.id)
                 )
-                .innerJoin({ list: listsCollection }, ({ card, list }) => eq(card.list, list.id))
-                .where(({ card }) => inArray(card.project, memberProjectIds))
-        },
-        [memberProjectIds]
+                .innerJoin({ list: listsCollection }, ({ card, list }) => eq(card.list, list.id)),
+        [cardsCollection, projectsCollection, listsCollection]
     )
-    // Scoped by board like the cards: a row resolves its own board's label,
-    // epic and sprint from these, the same way the board tree does.
+    // A row resolves its own board's label, epic and sprint from these, the
+    // same way the board tree does.
     const { data: labels } = useBoardLiveQuery(
-        query => {
-            if (memberProjectIds.length === 0) return null
-            return query
-                .from({ label: labelsCollection })
-                .where(({ label }) => inArray(label.project, memberProjectIds))
-        },
-        [memberProjectIds, labelsCollection]
+        query => query.from({ label: labelsCollection }),
+        [labelsCollection]
     )
     const { data: users } = useBoardLiveQuery(
         query => query.from({ user: usersCollection }),
         [usersCollection]
     )
     const { data: epics } = useBoardLiveQuery(
-        query => {
-            if (memberProjectIds.length === 0) return null
-            return query
-                .from({ epic: epicsCollection })
-                .where(({ epic }) => inArray(epic.project, memberProjectIds))
-        },
-        [memberProjectIds, epicsCollection]
+        query => query.from({ epic: epicsCollection }),
+        [epicsCollection]
     )
     const { data: sprints } = useBoardLiveQuery(
-        query => {
-            if (memberProjectIds.length === 0) return null
-            return query
-                .from({ sprint: sprintsCollection })
-                .where(({ sprint }) => inArray(sprint.project, memberProjectIds))
-        },
-        [memberProjectIds, sprintsCollection]
+        query => query.from({ sprint: sprintsCollection }),
+        [sprintsCollection]
     )
     // The caller's own watcher rows — the Watching tab's whole input.
     const { data: watcherRows } = useMyLiveQuery((query, { userId: me }) =>

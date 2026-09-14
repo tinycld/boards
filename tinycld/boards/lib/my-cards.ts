@@ -72,16 +72,6 @@ export function isMine(
 
 const EMPTY_SET: ReadonlySet<string> = new Set()
 
-/**
- * The boards a membership list names, deduplicated and sorted.
- *
- * Sorted so the id list is a stable query dependency: two emissions that
- * differ only in row order must not rebuild the cards query.
- */
-export function selectMemberProjectIds(rows: readonly { project: string }[]): string[] {
-    return [...new Set(rows.map(row => row.project))].sort()
-}
-
 export interface JoinedRow {
     card: BoardsCards
     project: BoardsProjects
