@@ -4,10 +4,11 @@ import type { createCollection } from 'pbtsdb/core'
 import { BasicIndex } from 'pbtsdb/core'
 
 // The generated Schema already carries the boards_* collections and their
-// relations — it is produced by replaying the on-disk migrations, ours
-// included. So there is no separate package schema to intersect in; the
-// hand-written BoardsSchema this used to merge was a restatement of what the
-// generator emits (and typed the multi-relations as scalars, which was wrong).
+// relations in BOTH directions — it is produced by replaying the on-disk
+// migrations, ours included. So there is no separate package schema to
+// intersect in; the hand-written BoardsSchema this used to merge was a
+// restatement of what the generator emits (and typed the multi-relations as
+// scalars, which was wrong).
 type MergedSchema = Schema
 
 const indexed = {
@@ -19,57 +20,158 @@ export function registerCollections(
     newCollection: ReturnType<typeof createCollection<MergedSchema>>,
     coreStores: CoreStores
 ) {
-    // `next_number` is the card-number allocator's state (see
-    // server/card_number.go) — server-owned, never written by a client, and
-    // absent from a new board's insert so it starts at the column default.
-    // `slug` is NOT omitted: it is the one half of a card key a person chooses,
-    // and the New board dialog sends it.
-    const boards_projects = newCollection('boards_projects', {
-        omitOnInsert: ['created', 'updated', 'next_number', 'next_sprint_number'] as const,
+    // HOW A BOARD LOADS. Every board-scoped collection here syncs ON DEMAND,
+    // and the board's rows enter the store through ONE request: the board
+    // screen reads the project row through a view that fetches the
+    // back-relations declared on `boards_projects` below
+    // (`boards_cards_via_project` and friends), so PocketBase returns the
+    // project with every list, card, label, epic, sprint and card reaction it
+    // owns, and pbtsdb files each into its own collection and records that
+    // the subset for that project is complete. The includes that read them
+    // (`where card.project = project.id`) are then served from the store —
+    // no per-collection request, no waterfall, and nothing but the open board
+    // in memory. A card opens the same way through `boards_cards`'s own
+    // back-relations. See hooks/useActiveBoard.ts and hooks/useCardDetail.ts.
+    //
+    // Two rules that keep it one request:
+    //   - a child query must be a single-field equality on the foreign key
+    //     (`eq(list.project, project.id)`); anything else (`and`, a second
+    //     field) is not a subset pbtsdb can prove complete and goes to the
+    //     server;
+    //   - the children are created BEFORE the parents so the relation map
+    //     can name their instances.
+    //
+    // PocketBase caps a back-relation expand at 1000 rows per parent; a
+    // capped subset is never marked complete, so a board past that falls back
+    // to one filtered request for its cards. Nothing here uses
+    // `alwaysFetchRelations`: the board and card screens choose their paths
+    // per query, so the sidebar's board list and the pickers fetch plain rows.
+
+    // --- The open card's children. Read for one card at a time, through the
+    // card's back-relations; the counters a card face shows at rest
+    // (checklist ratio, comment and attachment counts) are denormalized onto
+    // the card row for exactly that reason.
+    const boards_checklist_items = newCollection('boards_checklist_items', {
+        omitOnInsert: ['created', 'updated'] as const,
+        syncMode: 'on-demand' as const,
         collectionOptions: indexed,
     })
 
-    // Expanded on `user` so the header avatar stack and the share dialog can
-    // render member names without a second query.
-    const boards_project_members = newCollection('boards_project_members', {
+    // `author` resolves against the eager `users` store through a join inside
+    // the card's include.
+    const boards_comments = newCollection('boards_comments', {
         omitOnInsert: ['created', 'updated'] as const,
-        expand: { project: boards_projects, user: coreStores.users },
+        syncMode: 'on-demand' as const,
         collectionOptions: indexed,
     })
 
-    // Which repositories a board watches. Eager, like boards_project_members:
-    // the GitHub settings screen (settings/github.tsx) lists every attached
-    // repo across every board the user belongs to in one screen, not one
-    // board's cards at a time, so on-demand sync tied to an open card would
-    // never fire for it. Rows are owner-managed and few per board.
-    const boards_project_repos = newCollection('boards_project_repos', {
+    const boards_attachments = newCollection('boards_attachments', {
         omitOnInsert: ['created', 'updated'] as const,
+        syncMode: 'on-demand' as const,
         collectionOptions: indexed,
     })
 
-    // Owner-only by rule, so this syncs a handful of rows at most.
-    const boards_share_links = newCollection('boards_share_links', {
+    // Server-written history (server/activity.go); the client only reads it.
+    // `actor` resolves against the eager `users` store like every other user
+    // relation here.
+    const boards_activity = newCollection('boards_activity', {
+        omitOnInsert: ['created'] as const,
+        syncMode: 'on-demand' as const,
+        collectionOptions: indexed,
+    })
+
+    // Who follows a card: read for the open card (the Watch button) and for
+    // the My cards "Watching" tab, which asks for the caller's own rows.
+    const boards_card_watchers = newCollection('boards_card_watchers', {
+        omitOnInsert: ['created'] as const,
+        collectionOptions: indexed,
+        syncMode: 'on-demand' as const,
+    })
+
+    // Emoji on comments, read for the open card in one subset keyed by `card`
+    // (see the migration for why the row carries it). `user` resolves against
+    // the eager `users` store, which the chip tooltip reads to name who reacted.
+    const boards_comment_reactions = newCollection('boards_comment_reactions', {
+        omitOnInsert: ['created'] as const,
+        syncMode: 'on-demand' as const,
+        collectionOptions: indexed,
+    })
+
+    // Links between cards.
+    //
+    // THE ONE COLLECTION HERE THAT CROSSES BOARDS. Every other row names one
+    // `project` and loads with the board it belongs to; a link names two cards
+    // and no project at all (see pb-migrations/1980000016 for why there is no
+    // denormalized column), so the card fetches it from both ends
+    // (`_via_source` and `_via_target`). A consequence the UI has to handle
+    // rather than wish away: the far card of a cross-board link is often NOT
+    // in the local store, either because the reader cannot see it or because
+    // that board has not loaded — lib/card-links.ts is where those two are
+    // told apart.
+    const boards_card_links = newCollection('boards_card_links', {
+        omitOnInsert: ['created'] as const,
+        syncMode: 'on-demand' as const,
+        collectionOptions: indexed,
+    })
+
+    // A card's linked pull requests. `created`/`updated` are the standard PB
+    // stamps. `state`, `title`, `author` are server-written by the GitHub
+    // webhook (server/github_links.go) even for a manually-added link, but
+    // they are plain text/select fields with a writable `''` zero-value, so a
+    // client insert still supplies it explicitly rather than omitting the
+    // column — the `priority: 'none'` convention `boards_cards` follows.
+    // `review_state` is the exception: like `boards_cards.pr_review_state`
+    // below, its migration declares only `['in_review', 'approved']` — there
+    // is no "none" value to write — so it is omitted here instead of cast.
+    const boards_pr_links = newCollection('boards_pr_links', {
+        omitOnInsert: ['created', 'updated', 'review_state'] as const,
+        syncMode: 'on-demand' as const,
+        collectionOptions: indexed,
+    })
+
+    // Server-written, like boards_activity, and read only by the sprint
+    // charts — one sprint at a time, through its own filtered query.
+    const boards_sprint_snapshots = newCollection('boards_sprint_snapshots', {
+        omitOnInsert: ['created'] as const,
+        syncMode: 'on-demand' as const,
+        collectionOptions: indexed,
+    })
+
+    // --- The board's rows, all filed by the project fetch.
+
+    // Votes on cards. The board face shows every card's chips, so the rows
+    // load per BOARD with the project and the open card reads its own out of
+    // that set rather than asking for them by card.
+    const boards_card_reactions = newCollection('boards_card_reactions', {
+        omitOnInsert: ['created'] as const,
+        syncMode: 'on-demand' as const,
+        collectionOptions: indexed,
+    })
+
+    const boards_lists = newCollection('boards_lists', {
         omitOnInsert: ['created', 'updated'] as const,
+        syncMode: 'on-demand' as const,
         collectionOptions: indexed,
     })
 
     const boards_labels = newCollection('boards_labels', {
         omitOnInsert: ['created', 'updated'] as const,
+        syncMode: 'on-demand' as const,
         collectionOptions: indexed,
     })
 
-    // Eager like boards_labels, and for the same reason: an epic chip renders on
-    // the card face, so every card on screen needs its epic's name and color
-    // resolvable without a per-card fetch. A board holds a handful of epics.
+    // An epic chip renders on the card face and the epic manager lists every
+    // epic, used or not, so the whole set rides with the project rather than
+    // being expanded per card.
     const boards_epics = newCollection('boards_epics', {
         omitOnInsert: ['created', 'updated'] as const,
+        syncMode: 'on-demand' as const,
         collectionOptions: indexed,
     })
 
-    // Eager, for the reason boards_epics is: a sprint chip renders on the card
-    // face and the header scopes the board to the active sprint, so every
-    // sprint on the board must resolve without a per-card fetch. A board holds
-    // a handful of live sprints; completed ones accumulate slowly.
+    // Sprints, for the reason epics are: a sprint chip renders on the card
+    // face, the header scopes the board to the active sprint and the backlog
+    // lists planned sprints with no cards yet.
     //
     // The omitted columns are all server-owned: `number` is allocated by
     // server/sprint_number.go, the rollup by sprint_rollup.go, and the
@@ -93,28 +195,18 @@ export function registerCollections(
             'completed_points',
             'rolled_count',
         ] as const,
-        collectionOptions: indexed,
-    })
-
-    // Server-written, like boards_activity, and read only by the sprint
-    // charts — on demand, for one sprint at a time.
-    const boards_sprint_snapshots = newCollection('boards_sprint_snapshots', {
-        omitOnInsert: ['created'] as const,
         syncMode: 'on-demand' as const,
         collectionOptions: indexed,
     })
 
-    const boards_lists = newCollection('boards_lists', {
-        omitOnInsert: ['created', 'updated'] as const,
-        collectionOptions: indexed,
-    })
-
-    // Eager, not on-demand: a board renders every card in every column at once,
-    // so on-demand would waterfall the whole screen.
+    // A board's cards load with the project (`boards_cards_via_project`); a
+    // card's children load with the card, through the relations below.
     //
-    // No `expand`: assignees resolve against `users` and labels against
-    // boards_labels, both already loaded eagerly, so expanding would ship a
-    // duplicate copy of those rows with every card. Consumers look them up by id.
+    // No relation entry for `assignees` or `labels`: both are multi-relations
+    // (`string[]`), which have no `eq()` correlation an include could use, and
+    // both targets are already in the store (users eagerly, labels with the
+    // board), so lib/board-project.ts resolves them by id.
+    //
     // `number` is omitted on insert because the server owns it: the
     // OnRecordCreate hook in server/card_number.go allocates it from the
     // board's sequence and overwrites anything the body carried. Same shape as
@@ -141,102 +233,77 @@ export function registerCollections(
             'pr_state',
             'pr_review_state',
         ] as const,
+        syncMode: 'on-demand' as const,
+        relations: {
+            boards_checklist_items_via_card: boards_checklist_items,
+            boards_comments_via_card: boards_comments,
+            boards_attachments_via_card: boards_attachments,
+            boards_activity_via_card: boards_activity,
+            boards_card_watchers_via_card: boards_card_watchers,
+            boards_comment_reactions_via_card: boards_comment_reactions,
+            boards_card_links_via_source: boards_card_links,
+            boards_card_links_via_target: boards_card_links,
+            boards_pr_links_via_card: boards_pr_links,
+        },
         collectionOptions: indexed,
     })
 
-    // The next three are read only for the card that is currently open, so they
-    // sync on demand rather than dragging every card's checklist, comment thread
-    // and attachment list into memory for a board the user is only scanning.
+    // `next_number` is the card-number allocator's state (see
+    // server/card_number.go) — server-owned, never written by a client, and
+    // absent from a new board's insert so it starts at the column default.
+    // `slug` is NOT omitted: it is the one half of a card key a person chooses,
+    // and the New board dialog sends it.
     //
-    // Consequence to keep in mind when wiring the board face: a checklist ratio
-    // or attachment count is not available until the card is opened. If those
-    // badges are wanted at rest, the fix is a denormalized counter on the card
-    // (mail_threads.has_attachments is the precedent), not eager sync.
-    const boards_checklist_items = newCollection('boards_checklist_items', {
+    // On demand like its children: the sidebar's board list reaches project
+    // rows by id through the membership join (served from the store or
+    // fetched in one batch), and the board screen reads one project through
+    // the back-relations below.
+    const boards_projects = newCollection('boards_projects', {
+        omitOnInsert: ['created', 'updated', 'next_number', 'next_sprint_number'] as const,
+        syncMode: 'on-demand' as const,
+        relations: {
+            boards_lists_via_project: boards_lists,
+            boards_labels_via_project: boards_labels,
+            boards_epics_via_project: boards_epics,
+            boards_sprints_via_project: boards_sprints,
+            boards_cards_via_project: boards_cards,
+            boards_card_reactions_via_project: boards_card_reactions,
+        },
+        collectionOptions: indexed,
+    })
+
+    // --- Small org-wide tables, eager.
+
+    // Every membership the caller can read, whole: the sidebar lists boards
+    // across the org from these rows, and the role check filters on project
+    // AND user, which is not a subset a project fetch could prove complete.
+    // `user` is a relation into core's eager `users` store; the roster reads
+    // names through a join there. Rows carry no expand.
+    // On demand: the roster is read per board (the share dialog, the open
+    // board's header) and my own rows by user, never the whole table. The
+    // board always rides along — in a request and in a realtime event — so
+    // a membership granted mid-session arrives WITH the board it opens, and
+    // that is how a shared board reaches the sidebar (see provider.tsx).
+    const boards_project_members = newCollection('boards_project_members', {
         omitOnInsert: ['created', 'updated'] as const,
         syncMode: 'on-demand' as const,
+        relations: { project: boards_projects, user: coreStores.users },
+        alwaysFetchRelations: ['project'],
         collectionOptions: indexed,
     })
 
-    // `author` resolves against the eager `users` store — no expand, same
-    // duplicate-row reasoning as boards_cards.
-    const boards_comments = newCollection('boards_comments', {
+    // Which repositories a board watches. Eager, like boards_project_members:
+    // the GitHub settings screen (settings/github.tsx) lists every attached
+    // repo across every board the user belongs to in one screen, not one
+    // board's cards at a time. Rows are owner-managed and few per board.
+    const boards_project_repos = newCollection('boards_project_repos', {
         omitOnInsert: ['created', 'updated'] as const,
-        syncMode: 'on-demand' as const,
         collectionOptions: indexed,
     })
 
-    const boards_attachments = newCollection('boards_attachments', {
+    // Owner-only by rule, so this syncs a handful of rows at most.
+    const boards_share_links = newCollection('boards_share_links', {
         omitOnInsert: ['created', 'updated'] as const,
-        syncMode: 'on-demand' as const,
-        collectionOptions: indexed,
-    })
-
-    // Server-written history (server/activity.go); the client only reads it,
-    // and only for the open card. No expand: `actor` resolves against the
-    // eager `users` store like every other user relation here.
-    const boards_activity = newCollection('boards_activity', {
-        omitOnInsert: ['created'] as const,
-        syncMode: 'on-demand' as const,
-        collectionOptions: indexed,
-    })
-
-    // Who follows a card. On-demand: read for the open card (the Watch
-    // button) and for the My cards "Watching" tab.
-    const boards_card_watchers = newCollection('boards_card_watchers', {
-        omitOnInsert: ['created'] as const,
-        syncMode: 'on-demand' as const,
-        collectionOptions: indexed,
-    })
-
-    // Emoji on comments. On-demand like the comments they hang off; read
-    // for the open card in one query keyed by `card` (see the migration for
-    // why the row carries it). No expand: `user` resolves against the eager
-    // `users` store, which the chip tooltip joins to name who reacted.
-    const boards_comment_reactions = newCollection('boards_comment_reactions', {
-        omitOnInsert: ['created'] as const,
-        syncMode: 'on-demand' as const,
-        collectionOptions: indexed,
-    })
-
-    // Votes on cards themselves. EAGER, unlike the comment reactions above:
-    // the board face shows every card's chips, so the rows are read per
-    // BOARD rather than per open card, and an on-demand fetch would arrive
-    // after the tiles have already painted.
-    const boards_card_reactions = newCollection('boards_card_reactions', {
-        omitOnInsert: ['created'] as const,
-        collectionOptions: indexed,
-    })
-
-    // Links between cards. On-demand like watchers and reactions: read for the
-    // open card only.
-    //
-    // THE ONE COLLECTION HERE THAT CROSSES BOARDS. Every other row names one
-    // `project` and syncs with the board it belongs to; a link names two cards
-    // and no project at all (see pb-migrations/1980000016 for why there is no
-    // denormalized column). A consequence the UI has to handle rather than
-    // wish away: the far card of a cross-board link is often NOT in the local
-    // store, either because the reader cannot see it or because that board has
-    // not synced — lib/card-links.ts is where those two are told apart.
-    const boards_card_links = newCollection('boards_card_links', {
-        omitOnInsert: ['created'] as const,
-        syncMode: 'on-demand' as const,
-        collectionOptions: indexed,
-    })
-
-    // A card's linked pull requests. On-demand like the links above: read for
-    // the open card only. `created`/`updated` are the standard PB stamps.
-    // `state`, `title`, `author` are server-written by the GitHub webhook
-    // (server/github_links.go) even for a manually-added link, but they are
-    // plain text/select fields with a writable `''` zero-value, so a client
-    // insert still supplies it explicitly rather than omitting the column —
-    // the `priority: 'none'` convention `boards_cards` follows.
-    // `review_state` is the exception: like `boards_cards.pr_review_state`
-    // above, its migration declares only `['in_review', 'approved']` — there
-    // is no "none" value to write — so it is omitted here instead of cast.
-    const boards_pr_links = newCollection('boards_pr_links', {
-        omitOnInsert: ['created', 'updated', 'review_state'] as const,
-        syncMode: 'on-demand' as const,
         collectionOptions: indexed,
     })
 

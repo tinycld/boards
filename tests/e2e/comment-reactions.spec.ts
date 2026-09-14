@@ -6,7 +6,7 @@ import {
     signInAsCollaborator,
     TEST_COLLABORATOR_EMAIL,
 } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard, openBoard } from './helpers'
+import { addCard, boardCard, createBoard, openBoard, pickEmoji } from './helpers'
 
 // Reactions end to end: the picker files one, the chip counts it and takes
 // it back, a second commentor's reaction raises the count for both, and a
@@ -105,26 +105,16 @@ function thumbsUp(page: Page) {
     return peek(page).locator(`[data-testid^="boards-reaction-"][data-testid$="-${THUMBS_UP}"]`)
 }
 
-/**
- * Open the picker and pick `unified`.
- *
- * The picker loads its ~99KB table on first open, so the cell is awaited
- * rather than assumed present — on a cold chunk it appears a beat late.
- */
+/** Open the picker and pick `unified`. */
 async function react(page: Page, unified: string) {
     await peek(page).getByTestId('boards-reaction-add').first().click()
-    const cell = page.getByTestId(`emoji-pick-${unified}`)
-    await cell.waitFor({ state: 'visible' })
-    await cell.click()
+    await pickEmoji(page, unified)
 }
 
-/** Type into the picker's search field, then pick the first result. */
+/** Open the picker, search, then pick `unified` from the results. */
 async function reactViaSearch(page: Page, query: string, unified: string) {
     await peek(page).getByTestId('boards-reaction-add').first().click()
-    await page.getByTestId('emoji-search').fill(query)
-    const cell = page.getByTestId(`emoji-pick-${unified}`)
-    await cell.waitFor({ state: 'visible' })
-    await cell.click()
+    await pickEmoji(page, unified, query)
 }
 
 test.describe('Boards — comment reactions', () => {

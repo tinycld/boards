@@ -610,3 +610,25 @@ export async function openBulkPicker(page: Page, testID: string, label: string) 
 async function openBulkMore(page: Page) {
     await page.getByTestId('boards-bulk-bar').getByTestId('toolbar-more-button').click()
 }
+
+/**
+ * Pick `unified` from an OPEN emoji picker, under the default skin tone.
+ *
+ * The skin tone is a user preference — it persists and it syncs, so the tone
+ * one spec chooses is the tone every later pick by this shared account
+ * renders with, on this worker or the other, in this run or the next against
+ * the same database. Choosing the default first makes a pick mean the plain
+ * emoji whatever ran before.
+ *
+ * Searches when asked: the grid is virtualized, so an emoji outside the first
+ * rows is not mounted until it scrolls into view — and searching is how
+ * someone actually finds a specific emoji.
+ */
+export async function pickEmoji(page: Page, unified: string, query?: string) {
+    await page.getByTestId('emoji-tone-toggle').click()
+    await page.getByTestId('emoji-tone-neutral').click()
+    if (query) await page.getByTestId('emoji-search').fill(query)
+    const cell = page.getByTestId(`emoji-pick-${unified}`)
+    await cell.waitFor({ state: 'visible' })
+    await cell.click()
+}

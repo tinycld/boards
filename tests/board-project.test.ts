@@ -596,6 +596,34 @@ describe('buildBoardProject', () => {
         expect(result?.lists[0]?.cards.map(c => c.id)).toEqual(['c1'])
     })
 
+    // The panel's rows come from the same card rows as the columns: the board
+    // query is the one read of a board's cards, so the archived list is built
+    // here rather than by a second query, and it shares identity across
+    // builds like every other node.
+    it('lists archived cards on the tree and shares them across builds', () => {
+        const input = {
+            ...base,
+            project: project(),
+            lists: [list('list1', 'a0', { name: 'To do' })],
+            cards: [
+                card('c1', 'list1', 'a0'),
+                card('c2', 'list1', 'a1', { archived: true, archived_at: '2026-09-01 00:00:00' }),
+            ],
+        }
+        const first = buildBoardProject(input)
+        expect(first?.archivedCards).toEqual([
+            {
+                id: 'c2',
+                key: 'OTTER-1',
+                title: 'c2',
+                listName: 'To do',
+                archivedAt: '2026-09-01 00:00:00',
+            },
+        ])
+        const second = buildBoardProject(input, first)
+        expect(second).toBe(first)
+    })
+
     // Someone removed from the project keeps their id on the cards they were
     // assigned, so assignees resolve against the full user set, not the roster.
     it('renders an assignee who is no longer a project member', () => {

@@ -70,7 +70,7 @@ interface MovePayload {
  * the number (endpoints_move_card.go). The returned record is written into
  * the local store straight away so the card leaves the source column now
  * rather than a realtime round-trip later — the same local write
- * useMembershipVisibilitySync makes.
+ * useMembershipSync makes.
  */
 export function useMoveCardToBoard() {
     const [cardsCollection] = useStore('boards_cards')

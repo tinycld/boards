@@ -1,4 +1,3 @@
-import { eq } from '@tanstack/db'
 import { useAuth } from '@tinycld/core/lib/auth'
 import { normalizeEmoji } from '@tinycld/core/lib/emoji/normalize'
 import { mutation, useMutation } from '@tinycld/core/lib/mutations'
@@ -6,17 +5,17 @@ import { useStore } from '@tinycld/core/lib/pocketbase'
 import { newRecordId } from 'pbtsdb/core'
 import { useMemo } from 'react'
 import { groupCommentReactions, type ReactionGroup } from '../lib/reactions'
-import { useBoardLiveQuery } from './useBoardLiveQuery'
+import { useCardChildren } from './useCardDetail'
 
 const NO_REACTIONS: ReactionGroup[] = []
 
 /**
  * Every reaction on the open card, folded per comment, and the toggle.
  *
- * ONE live query for the card, not one per comment, and deliberately not a
- * fifth join inside useCardDetail: that query is already a four-way product
- * of the card's children, and reactions are the one child that scales with
- * comments × people. The rows are cheap to fold in render.
+ * The rows come with the card's one request (useCardChildren) — one include
+ * for the card, not a query per comment — and are cheap to fold in render.
+ * Read with no user guard: comments render on the public board, where there
+ * is no session and the bar is read-only.
  *
  * The toggle inserts or deletes the caller's OWN row only — the rules refuse
  * anything else, the watchers shape. `project` and `card` are written
@@ -25,25 +24,10 @@ const NO_REACTIONS: ReactionGroup[] = []
  */
 export function useCommentReactions(projectId: string, cardId: string) {
     const [reactionsCollection] = useStore('boards_comment_reactions')
-    // Non-throwing: comments render on the public board, where there is no
-    // session and the bar is read-only.
     const { user } = useAuth({ throwIfAnon: false })
     const userId = user?.id ?? ''
 
-    // useBoardLiveQuery, NOT useOrgLiveQuery: the latter returns null when
-    // there is no signed-in user, which is exactly the public-board case this
-    // hook's own header says it serves — reactions were silently absent for
-    // share-link visitors. The query filters by card, never by user, so
-    // dropping the guard changes what is requested, never what is permitted.
-    const { data: rows } = useBoardLiveQuery(
-        query => {
-            if (!cardId) return null
-            return query
-                .from({ reaction: reactionsCollection })
-                .where(({ reaction }) => eq(reaction.card, cardId))
-        },
-        [cardId]
-    )
+    const rows = useCardChildren(cardId).children?.commentReactions
     const byComment = useMemo(() => groupCommentReactions(rows ?? [], userId), [rows, userId])
 
     const toggle = useMutation<void, Error, { commentId: string; emoji: string }>({

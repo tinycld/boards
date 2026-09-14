@@ -15,11 +15,12 @@ import { addCard, createBoard, openBoard, shareBoard } from './helpers'
 // avoids (they share first, sign in after — see shareBoard's doc), because
 // nothing in PocketBase describes it: the grant changes only the member row,
 // every board row stays byte-identical, so no realtime event reaches the
-// collaborator about the board itself. useMembershipVisibilitySync closes the
-// gap by watching the one deliverable signal — your own member row, whose
-// list rule passes on `user = @request.auth.id` alone, create and delete
-// alike — and re-pulling the eager cards collections when the set disagrees
-// with the store. These specs pin both directions through two live sessions.
+// collaborator about the board itself. The one deliverable signal is your own
+// member row, whose list rule passes on `user = @request.auth.id` alone,
+// create and delete alike: the row always carries its board, so a grant
+// arrives with the board and pbtsdb files it, and useMembershipSync drops the
+// board's rows on a revocation. These specs pin both directions through two
+// live sessions.
 
 const CARD_TITLE = 'Live visibility card'
 

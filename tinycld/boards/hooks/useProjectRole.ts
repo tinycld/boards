@@ -1,7 +1,7 @@
 import { and, eq } from '@tanstack/db'
 import { useAuth } from '@tinycld/core/lib/auth'
 import { useStore } from '@tinycld/core/lib/pocketbase'
-import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
+import { useMyLiveQuery } from '@tinycld/core/lib/use-my-live-query'
 import { capabilitiesFor, type ProjectCapabilities } from '../lib/permissions'
 import type { BoardsMemberRole } from '../types'
 
@@ -38,7 +38,7 @@ export function useProjectRole(projectId: string): ProjectRole {
     // the default turned that screen into an error boundary.
     const { user } = useAuth({ throwIfAnon: false })
 
-    const { data: rows, isReady } = useOrgLiveQuery(
+    const { data: rows, isReady } = useMyLiveQuery(
         (query, { userId }) => {
             if (!projectId) return null
             return query
@@ -50,7 +50,7 @@ export function useProjectRole(projectId: string): ProjectRole {
 
     const role = rows?.[0]?.role ?? null
 
-    // A share-link visitor is unauthenticated, so useOrgLiveQuery disables
+    // A share-link visitor is unauthenticated, so useMyLiveQuery disables
     // itself and `isReady` never settles. Left alone that would be a board with
     // every capability correctly denied but its read-only notice permanently
     // suppressed — the query is not "still loading", it is never going to run.

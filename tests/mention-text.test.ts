@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
     buildCommentMentionRows,
     mentionedUserIds,
+    mentionMember,
     renderMentionTokens,
 } from '../tinycld/boards/lib/mention-text'
 
@@ -176,5 +177,27 @@ describe('buildCommentMentionRows', () => {
     it('does not treat an empty author id as matching a real user', () => {
         const rows = buildCommentMentionRows({ ...base, authorId: '', body: '[[@u1]]' })
         expect(rows).toHaveLength(1)
+    })
+})
+
+describe('mentionMember', () => {
+    const member = (overrides: Partial<Parameters<typeof mentionMember>[0]>) => ({
+        id: 'u1',
+        firstName: '',
+        lastName: '',
+        email: '',
+        ...overrides,
+    })
+
+    it('labels a member by full name', () => {
+        expect(mentionMember(member({ firstName: 'Ada', lastName: 'Lovelace' }))).toEqual({
+            userId: 'u1',
+            label: 'Ada Lovelace',
+        })
+    })
+
+    it('falls back to the email, then to Unknown', () => {
+        expect(mentionMember(member({ email: 'ada@example.test' })).label).toBe('ada@example.test')
+        expect(mentionMember(member({})).label).toBe('Unknown')
     })
 })

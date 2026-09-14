@@ -1,66 +1,55 @@
-import { eq } from '@tanstack/db'
+import { and, eq, inArray, or } from '@tanstack/db'
+import { useLiveQuery } from '@tanstack/react-db'
 import { useStore } from '@tinycld/core/lib/pocketbase'
-import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
+import { useMyLiveQuery } from '@tinycld/core/lib/use-my-live-query'
+import { materialize } from 'pbtsdb'
 import { useMemo, useRef } from 'react'
 import { type BoardViewOptions, buildBoardProject } from '../lib/board-project'
 import type { SprintScope, ViewMode } from '../stores/boards-ui-store'
 import type { BoardProject } from '../types'
 import { useBoardLiveQuery } from './useBoardLiveQuery'
+import { useUserRows } from './useUsers'
 
-/**
- * The board, live.
- *
- * Four queries rather than one joined expression, and deliberately so:
- * `.join()` needs a single equality condition, but `boards_cards.labels` and
- * `.assignees` are MULTI-relations — `string[]` columns. There is no `eq()`
- * that joins an array column to a table's id, so those two resolve by id
- * against the eagerly-synced collections instead, exactly as collections.ts
- * says they must (expanding them would ship a duplicate copy of every label and
- * user with every card).
- */
 /**
  * The boards this user belongs to, split live/archived — and NOTHING about
  * their contents.
  *
  * The sidebar needs exactly this and no more, which is the whole reason it is
- * its own hook. Calling `useActiveBoard` there instead would also run
- * `useBoardContent` — six queries over every card, label, epic, member and
- * user of the ACTIVE board — so every card edit re-rendered the sidebar's
- * whole board list, and the list is unbounded. `useBoardRoute` takes the
- * same care for the same reason.
+ * its own hook. Calling `useBoardContent` there instead would fetch and build
+ * the ACTIVE board's whole tree, so every card edit re-rendered the sidebar's
+ * board list, and the list is unbounded. `useBoardRoute` takes the same care
+ * for the same reason.
+ *
+ * No membership predicate: the list rule on boards_projects IS "a member",
+ * so a plain read returns exactly this user's boards, sized by the server. A
+ * board shared mid-session arrives through the membership subscription in
+ * provider.tsx, which carries the board with it.
  */
 export function useBoardList() {
-    const [projectsCollection, membersCollection] = useStore(
-        'boards_projects',
-        'boards_project_members'
+    const [projectsCollection] = useStore('boards_projects')
+
+    const { data: projects, isLoading: projectsLoading } = useLiveQuery(
+        query =>
+            query
+                .from({ project: projectsCollection })
+                .where(({ project }) => eq(project.archived, false))
+                .orderBy(({ project }) => project.name),
+        [projectsCollection]
+    )
+    const { data: archivedProjects } = useLiveQuery(
+        query =>
+            query
+                .from({ project: projectsCollection })
+                .where(({ project }) => eq(project.archived, true))
+                .orderBy(({ project }) => project.name),
+        [projectsCollection]
     )
 
-    // Driven from the MEMBERSHIP side with an innerJoin, following
-    // mail's useMailboxes: a board created optimistically renders the instant
-    // its owner-member row lands locally, instead of waiting for a realtime
-    // round-trip on boards_projects.
-    const { data: projectRows, isLoading: projectsLoading } = useOrgLiveQuery((query, { userId }) =>
-        query
-            .from({ member: membersCollection })
-            .innerJoin({ project: projectsCollection }, ({ member, project }) =>
-                eq(member.project, project.id)
-            )
-            .where(({ member }) => eq(member.user, userId))
-    )
-
-    // Split by `archived` rather than filtered: the sidebar lists both, in
-    // separate sections, and an archived board must still be openable so it
-    // can be looked at and restored.
-    return useMemo(() => {
-        const rows = (projectRows ?? [])
-            .map(r => r.project)
-            .sort((a, b) => a.name.localeCompare(b.name) || (a.id < b.id ? -1 : 1))
-        return {
-            projects: rows.filter(p => !p.archived),
-            archivedProjects: rows.filter(p => p.archived),
-            projectsLoading,
-        }
-    }, [projectRows, projectsLoading])
+    return {
+        projects: projects ?? [],
+        archivedProjects: archivedProjects ?? [],
+        projectsLoading,
+    }
 }
 
 /**
@@ -121,86 +110,62 @@ export function scopeForView(
  * needing write access, and that is the board the card is already open on.
  */
 export function useMemberProjects() {
-    const [projectsCollection, membersCollection] = useStore(
-        'boards_projects',
-        'boards_project_members'
-    )
-    const { data: rows } = useOrgLiveQuery((query, { userId }) =>
-        query
-            .from({ member: membersCollection })
-            .innerJoin({ project: projectsCollection }, ({ member, project }) =>
-                eq(member.project, project.id)
-            )
-            .where(({ member }) => eq(member.user, userId))
-    )
-    return useMemo(() => selectLinkTargets(rows ?? []), [rows])
-}
-
-/**
- * The membership rows that qualify as link TARGETS: every live board, whatever
- * the role.
- *
- * Pure and exported so the role rule is testable without a hook harness —
- * and it is the rule most likely to be "tidied" into a role filter by someone
- * matching it to `useWritableProjects` below. It must not be: the create rule
- * is `writerOf(source) && memberOf(target)`, so a board the caller can only
- * VIEW is still a legitimate target, and filtering it out would make a link
- * the server would accept look forbidden.
- */
-export function selectLinkTargets<
-    TRow extends { project: { id: string; name: string; archived?: boolean } },
->(rows: TRow[]): TRow['project'][] {
-    return rows
-        .filter(r => !r.project.archived)
-        .map(r => r.project)
-        .sort((a, b) => a.name.localeCompare(b.name))
+    return useBoardList().projects
 }
 
 /**
  * The boards the caller may add cards to — owner or editor, not archived.
  * What the "Move to board" picker offers.
+ *
+ * The role is asked for on demand, with the role in the request, so the
+ * server answers "which boards can I write to" directly; the board rows are
+ * the sidebar's list, which the list rule already sized. A set lookup rather
+ * than a join or a per-row materialize: a join pushes the loaded board ids
+ * into the membership request, and a materialize per row is a nested query
+ * per board — both cost in proportion to the board count, on every card open.
  */
 export function useWritableProjects() {
-    const [projectsCollection, membersCollection] = useStore(
-        'boards_projects',
-        'boards_project_members'
-    )
-    const { data: rows } = useOrgLiveQuery((query, { userId }) =>
+    const { projects } = useBoardList()
+    const [membersCollection] = useStore('boards_project_members')
+    const { data: mine } = useMyLiveQuery((query, { userId }) =>
         query
             .from({ member: membersCollection })
-            .innerJoin({ project: projectsCollection }, ({ member, project }) =>
-                eq(member.project, project.id)
+            .where(({ member }) =>
+                and(eq(member.user, userId), inArray(member.role, ['owner', 'editor']))
             )
-            .where(({ member }) => eq(member.user, userId))
+            .select(({ member }) => ({ project: member.project }))
     )
-    return useMemo(
-        () =>
-            (rows ?? [])
-                .filter(
-                    r =>
-                        !r.project.archived &&
-                        (r.member.role === 'owner' || r.member.role === 'editor')
-                )
-                .map(r => r.project)
-                .sort((a, b) => a.name.localeCompare(b.name)),
-        [rows]
-    )
+    const writable = new Set((mine ?? []).map(m => m.project))
+    return projects.filter(project => writable.has(project.id))
 }
 
+/** How the board screen names its board: by id, or by the URL segment (id or slug). */
+export type BoardSelector = { id: string } | { segment: string; slug: string }
+
 /**
- * One board's content, by id.
+ * One board's rows, live, in ONE request.
  *
- * Split out of useActiveBoard so a SHARE-LINK VISITOR renders the same tree
- * through the same queries. Nothing here scopes by user — every query filters
- * on the project id, and what authorizes it is decided server-side by the
- * access rules: a member's membership, or a visitor's `X-Share-Token`. That is
- * why these use useBoardLiveQuery rather than useOrgLiveQuery, which disables
- * itself when there is no signed-in user and would leave a public board empty.
+ * The project row is read through a view that fetches the board's
+ * back-relations (collections.ts explains the model): PocketBase returns the
+ * project with its lists, cards, labels, epics, sprints and card reactions,
+ * pbtsdb files each into its own collection and marks the subset for this
+ * project complete, and the includes below — each a single-field equality on
+ * `project` — are served from the store. Nothing here scopes by user: what
+ * authorizes the read is decided server-side by the access rules (a member's
+ * membership, or a visitor's `X-Share-Token`), which is why this is
+ * useBoardLiveQuery rather than useMyLiveQuery, which disables itself when
+ * there is no signed-in user and would leave a public board empty. The board
+ * UI therefore has ONE implementation, not a parallel read-only copy.
  *
- * The board UI therefore has ONE implementation, not a parallel read-only copy
- * that drifts from it.
+ * `boards_cards.labels` and `.assignees` are multi-relations (`string[]`),
+ * which have no `eq()` correlation an include could use, so buildBoardProject
+ * resolves those two by id from the rows this returns and from `users`.
+ *
+ * `users` is the one separate read: assignees may name someone no longer on
+ * the roster, and a share-link visitor may read none at all — buildBoardProject
+ * substitutes a placeholder either way.
  */
-export function useBoardContent(projectId: string, view?: BoardViewOptions) {
+export function useBoardRows(selector: BoardSelector) {
     const [
         projectsCollection,
         membersCollection,
@@ -209,6 +174,7 @@ export function useBoardContent(projectId: string, view?: BoardViewOptions) {
         labelsCollection,
         epicsCollection,
         sprintsCollection,
+        reactionsCollection,
         usersCollection,
     ] = useStore(
         'boards_projects',
@@ -218,142 +184,135 @@ export function useBoardContent(projectId: string, view?: BoardViewOptions) {
         'boards_labels',
         'boards_epics',
         'boards_sprints',
+        'boards_card_reactions',
         'users'
     )
+    const key = 'id' in selector ? selector.id : selector.segment
+    const slug = 'slug' in selector ? selector.slug : ''
 
-    // A visitor reaches the board by id, so the project row is read directly
-    // rather than through the membership join useActiveBoard uses to LIST
-    // boards. For a member the rules resolve it via membership; for a visitor,
-    // via the token.
-    const { data: projectRows, isLoading: projectLoading } = useBoardLiveQuery(
+    // Every id-or-slug lookup hits the server once (a slug is not an id, and
+    // pbtsdb serves only id subsets from the store); a plain id is served from
+    // the store when the row is present. Either way the request carries the
+    // back-relations, which is what fills the store for the includes.
+    const { data, isLoading } = useBoardLiveQuery(
         query => {
-            if (!projectId) return null
+            if (!key) return null
+            const boardProjects = projectsCollection.fetchRelations(
+                'boards_lists_via_project',
+                'boards_labels_via_project',
+                'boards_epics_via_project',
+                'boards_sprints_via_project',
+                'boards_cards_via_project',
+                'boards_card_reactions_via_project'
+            )
             return query
-                .from({ project: projectsCollection })
-                .where(({ project }) => eq(project.id, projectId))
-        },
-        [projectId, projectsCollection]
-    )
-
-    const { data: listRows, isLoading: listsLoading } = useBoardLiveQuery(
-        query => {
-            if (!projectId) return null
-            return query
-                .from({ list: listsCollection })
-                .where(({ list }) => eq(list.project, projectId))
-        },
-        [projectId, listsCollection]
-    )
-
-    const { data: cardRows, isLoading: cardsLoading } = useBoardLiveQuery(
-        query => {
-            if (!projectId) return null
-            return query
-                .from({ card: cardsCollection })
-                .where(({ card }) => eq(card.project, projectId))
-        },
-        [projectId, cardsCollection]
-    )
-
-    const { data: labelRows } = useBoardLiveQuery(
-        query => {
-            if (!projectId) return null
-            return query
-                .from({ label: labelsCollection })
-                .where(({ label }) => eq(label.project, projectId))
-        },
-        [projectId, labelsCollection]
-    )
-
-    const { data: epicRows } = useBoardLiveQuery(
-        query => {
-            if (!projectId) return null
-            return query
-                .from({ epic: epicsCollection })
-                .where(({ epic }) => eq(epic.project, projectId))
-        },
-        [projectId, epicsCollection]
-    )
-
-    const { data: sprintRows } = useBoardLiveQuery(
-        query => {
-            if (!projectId) return null
-            return query
-                .from({ sprint: sprintsCollection })
-                .where(({ sprint }) => eq(sprint.project, projectId))
-        },
-        [projectId, sprintsCollection]
-    )
-
-    // The roster, joined to users for names. boards_project_members does expand
-    // `user`, but a join reads from the optimistic local store where the expand
-    // waits on a realtime round-trip — the same reasoning as the project query.
-    //
-    // A share-link visitor legally reads NOTHING here: the roster rule is
-    // member-AND-non-guest, and 1980000003 deliberately adds no token disjunct
-    // to it. The avatar stack is empty for them, which is the point — a link
-    // must not hand out the org's member names and emails.
-    const { data: memberRows } = useBoardLiveQuery(
-        query => {
-            if (!projectId) return null
-            return query
-                .from({ member: membersCollection })
-                .innerJoin({ user: usersCollection }, ({ member, user }) =>
-                    eq(member.user, user.id)
+                .from({ project: boardProjects })
+                .where(({ project }) =>
+                    slug ? or(eq(project.id, key), eq(project.slug, slug)) : eq(project.id, key)
                 )
-                .where(({ member }) => eq(member.project, projectId))
+                .select(({ project }) => ({
+                    project,
+                    lists: materialize(
+                        query
+                            .from({ list: listsCollection })
+                            .where(({ list }) => eq(list.project, project.id))
+                    ),
+                    cards: materialize(
+                        query
+                            .from({ card: cardsCollection })
+                            .where(({ card }) => eq(card.project, project.id))
+                    ),
+                    labels: materialize(
+                        query
+                            .from({ label: labelsCollection })
+                            .where(({ label }) => eq(label.project, project.id))
+                    ),
+                    epics: materialize(
+                        query
+                            .from({ epic: epicsCollection })
+                            .where(({ epic }) => eq(epic.project, project.id))
+                    ),
+                    sprints: materialize(
+                        query
+                            .from({ sprint: sprintsCollection })
+                            .where(({ sprint }) => eq(sprint.project, project.id))
+                    ),
+                    reactions: materialize(
+                        query
+                            .from({ reaction: reactionsCollection })
+                            .where(({ reaction }) => eq(reaction.project, project.id))
+                    ),
+                    // The roster, joined to users for names; the join reads the
+                    // optimistic local store, so a just-added member renders
+                    // before the realtime round-trip.
+                    //
+                    // A share-link visitor legally reads NOTHING here: the
+                    // roster rule is member-AND-non-guest, and 1980000003
+                    // deliberately adds no token disjunct to it. The avatar
+                    // stack is empty for them, which is the point — a link must
+                    // not hand out the org's member names and emails.
+                    members: materialize(
+                        query
+                            .from({ member: membersCollection })
+                            .innerJoin({ user: usersCollection }, ({ member, user }) =>
+                                eq(member.user, user.id)
+                            )
+                            .where(({ member }) => eq(member.project, project.id))
+                    ),
+                }))
+                .findOne()
         },
-        [projectId, membersCollection, usersCollection]
+        [
+            key,
+            slug,
+            projectsCollection,
+            membersCollection,
+            listsCollection,
+            cardsCollection,
+            labelsCollection,
+            epicsCollection,
+            sprintsCollection,
+            reactionsCollection,
+            usersCollection,
+        ]
     )
+    const users = useUserRows()
 
-    // Every user the client has synced, for resolving assignees. Deliberately
-    // NOT the roster: someone removed from the project keeps their id on the
-    // cards they were assigned, and must still render.
-    //
-    // Also empty for a visitor — core's users rule admits only a non-guest
-    // member or your own row. buildBoardProject substitutes a placeholder for
-    // an assignee it cannot resolve, so a shared board shows THAT a card is
-    // assigned without naming who.
-    const { data: userRows } = useBoardLiveQuery(
-        query => query.from({ user: usersCollection }),
-        [usersCollection]
-    )
+    return { rows: data ?? null, users, isLoading }
+}
 
-    // The queries above re-emit far more often than this board's content
-    // changes (users and the membership join react to org-wide writes), so the
-    // build reconciles against the previous tree: value-equal nodes keep their
-    // identity, and when nothing changed the previous PROJECT comes back — the
-    // canvas doesn't re-render at all. The ref write during render is the
-    // standard previous-value pattern; a StrictMode double render just feeds
-    // the second pass an equal tree, which shares back to the same object.
+export type BoardRows = ReturnType<typeof useBoardRows>
+
+/**
+ * The board tree over the rows, with the previous-tree structural sharing.
+ *
+ * The include query re-emits on any child change and the users read on any
+ * org-wide user write, so the build reconciles against the previous tree:
+ * value-equal nodes keep their identity, and when nothing changed the
+ * previous PROJECT comes back — the canvas doesn't re-render at all. The ref
+ * write during render is the standard previous-value pattern; a StrictMode
+ * double render just feeds the second pass an equal tree, which shares back
+ * to the same object.
+ */
+export function useBoardTree({ rows, users, isLoading }: BoardRows, view?: BoardViewOptions) {
     const previousProjectRef = useRef<BoardProject | null>(null)
     const project = useMemo(
         () =>
             buildBoardProject(
                 {
-                    project: (projectRows ?? [])[0],
-                    lists: listRows ?? [],
-                    cards: cardRows ?? [],
-                    labels: labelRows ?? [],
-                    epics: epicRows ?? [],
-                    sprints: sprintRows ?? [],
-                    members: (memberRows ?? []).map(r => r.user),
-                    users: userRows ?? [],
+                    project: rows?.project,
+                    lists: rows?.lists ?? [],
+                    cards: rows?.cards ?? [],
+                    labels: rows?.labels ?? [],
+                    epics: rows?.epics ?? [],
+                    sprints: rows?.sprints ?? [],
+                    members: (rows?.members ?? []).map(r => r.user),
+                    users: users ?? [],
                     view,
                 },
                 previousProjectRef.current
             ),
-        [
-            projectRows,
-            listRows,
-            cardRows,
-            labelRows,
-            epicRows,
-            sprintRows,
-            memberRows,
-            userRows,
-            view,
-        ]
+        [rows, users, view]
     )
     previousProjectRef.current = project
 
@@ -366,9 +325,16 @@ export function useBoardContent(projectId: string, view?: BoardViewOptions) {
         [project]
     )
 
-    return {
-        project,
-        cardCount,
-        isLoading: projectLoading || listsLoading || cardsLoading,
-    }
+    return { project, cardCount, isLoading }
+}
+
+/**
+ * One board's content, by id: the rows and the tree in one call, for the
+ * screens that hold only an id — the share-link visitor (whose token
+ * metadata names the board) and the cross-board pickers. The board route
+ * itself composes the two halves so the reader's view can be computed from
+ * the resolved project id in between.
+ */
+export function useBoardContent(projectId: string, view?: BoardViewOptions) {
+    return useBoardTree(useBoardRows({ id: projectId }), view)
 }

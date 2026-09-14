@@ -5,7 +5,6 @@ import { Dialog } from '@tinycld/core/ui/dialog'
 import { ArchiveRestore, Trash2 } from 'lucide-react-native'
 import { useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
-import { useArchivedCards } from '../hooks/useArchivedCards'
 import { useArchiveCard, useDeleteCard } from '../hooks/useCardMutations'
 import { useProjectRole } from '../hooks/useProjectRole'
 import type { ArchivedCardRow } from '../lib/archived-cards'
@@ -36,7 +35,7 @@ function ArchivedCardsPanelBody({
     project,
     onClose,
 }: ArchivedCardsPanelProps & { onClose: () => void }) {
-    const rows = useArchivedCards(project)
+    const rows = project.archivedCards
     const { canEdit } = useProjectRole(project.id)
 
     return (

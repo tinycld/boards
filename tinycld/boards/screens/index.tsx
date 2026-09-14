@@ -85,21 +85,30 @@ function useFocusedLink(focused: string): { isLoading: boolean; href: Href | nul
     const orgHref = useOrgHref()
     const [cardsCollection, projectsCollection] = useStore('boards_cards', 'boards_projects')
     const isKey = parseCardKey(focused) !== null
+    // Joined to the board rather than read with `.get()`: both collections
+    // sync on demand, so the join is what fetches a row this client has not
+    // loaded — the card by id, then its board by id.
     const { data: rows, isLoading } = useBoardLiveQuery(
         query => {
             if (!focused || isKey) return null
-            return query.from({ card: cardsCollection }).where(({ card }) => eq(card.id, focused))
+            return query
+                .from({ card: cardsCollection })
+                .innerJoin({ project: projectsCollection }, ({ card, project }) =>
+                    eq(card.project, project.id)
+                )
+                .where(({ card }) => eq(card.id, focused))
         },
-        [focused, isKey, cardsCollection]
+        [focused, isKey, cardsCollection, projectsCollection]
     )
 
     if (!focused) return { isLoading: false, href: null }
     if (isKey) return { isLoading: false, href: orgHref(boardPath(focused)) }
     if (isLoading) return { isLoading: true, href: null }
-    const card = rows?.[0]
-    if (!card) return { isLoading: false, href: null }
-    const owner = projectsCollection.get(card.project)
-    const segment = owner ? boardSegment(owner) : card.project
-    const key = formatCardKey(owner?.slug ?? '', card.number)
-    return { isLoading: false, href: peekHref(orgHref, segment, { key, id: card.id }) }
+    const row = rows?.[0]
+    if (!row) return { isLoading: false, href: null }
+    const key = formatCardKey(row.project.slug, row.card.number)
+    return {
+        isLoading: false,
+        href: peekHref(orgHref, boardSegment(row.project), { key, id: row.card.id }),
+    }
 }

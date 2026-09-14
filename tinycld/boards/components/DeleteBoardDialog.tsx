@@ -2,7 +2,6 @@ import { Dialog } from '@tinycld/core/ui/dialog'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
 import { useState } from 'react'
 import { Text, View } from 'react-native'
-import { useArchivedCards } from '../hooks/useArchivedCards'
 import { useDeleteProject } from '../hooks/useProjectMutations'
 import type { BoardProject } from '../types'
 
@@ -36,7 +35,7 @@ function DeleteBoardDialogBody({
     onClose,
 }: Omit<DeleteBoardDialogProps, 'isOpen'>) {
     const [typed, setTyped] = useState('')
-    const archived = useArchivedCards(project)
+    const archived = project.archivedCards
     const deleteProject = useDeleteProject()
     const totalCards = cardCount + archived.length
     const matches = typed.trim() === project.name.trim()

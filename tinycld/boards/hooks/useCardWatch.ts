@@ -1,16 +1,16 @@
-import { eq } from '@tanstack/db'
 import { useAuth } from '@tinycld/core/lib/auth'
 import { mutation, useMutation } from '@tinycld/core/lib/mutations'
 import { useStore } from '@tinycld/core/lib/pocketbase'
-import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
 import { newRecordId } from 'pbtsdb/core'
+import { useCardChildren } from './useCardDetail'
 
 /**
  * Whether the current user follows a card, how many people do, and the
  * toggle.
  *
- * One live query on the junction for this card; `isWatching` is derived in
- * render from the row that names the caller. The toggle inserts or deletes
+ * The watcher rows come with the card's one request (useCardChildren);
+ * `isWatching` is derived in render from the row that names the caller. The
+ * toggle inserts or deletes
  * the caller's OWN row only — the rules refuse anything else, which is why
  * watching is a junction rather than a column on the card (see the
  * migration). Auto-watching on assign, comment and create is the SERVER's
@@ -22,15 +22,7 @@ export function useCardWatch(projectId: string, cardId: string) {
     const { user } = useAuth({ throwIfAnon: false })
     const userId = user?.id ?? ''
 
-    const { data: rows } = useOrgLiveQuery(
-        query => {
-            if (!cardId) return null
-            return query
-                .from({ watcher: watchersCollection })
-                .where(({ watcher }) => eq(watcher.card, cardId))
-        },
-        [cardId]
-    )
+    const rows = useCardChildren(cardId).children?.watchers
     const own = (rows ?? []).find(row => row.user === userId)
 
     const toggle = useMutation<void, Error, void>({

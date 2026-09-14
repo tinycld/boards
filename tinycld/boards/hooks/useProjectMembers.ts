@@ -1,7 +1,7 @@
 import { eq } from '@tanstack/db'
+import { useLiveQuery } from '@tanstack/react-db'
 import { useAuth } from '@tinycld/core/lib/auth'
 import { useStore } from '@tinycld/core/lib/pocketbase'
-import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
 import { useMemo } from 'react'
 import type { BoardsMemberRole } from '../types'
 
@@ -37,7 +37,7 @@ export function useProjectMembers(projectId: string) {
     const { user } = useAuth({ throwIfAnon: false })
     const [membersCollection, usersCollection] = useStore('boards_project_members', 'users')
 
-    const { data: rows, isReady } = useOrgLiveQuery(
+    const { data: rows, isReady } = useLiveQuery(
         query => {
             if (!projectId) return null
             return query

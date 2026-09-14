@@ -1,4 +1,5 @@
 import { eq } from '@tanstack/db'
+import { useLiveQuery } from '@tanstack/react-db'
 import { DocumentTitle } from '@tinycld/core/components/DocumentTitle'
 import { EmptyState } from '@tinycld/core/components/EmptyState'
 import { HelpIcon } from '@tinycld/core/components/help/HelpIcon'
@@ -7,7 +8,7 @@ import { useAuth } from '@tinycld/core/lib/auth'
 import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { type Shortcut, useRegisterShortcuts, useShortcutScope } from '@tinycld/core/lib/shortcuts'
-import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
+import { useMyLiveQuery } from '@tinycld/core/lib/use-my-live-query'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
 import { useRouter } from 'expo-router'
 import { useMemo, useState } from 'react'
@@ -31,9 +32,11 @@ const MODES: MyCardsMode[] = ['assigned', 'reported', 'watching', 'all']
 /**
  * Every card across every board the user belongs to, narrowed to theirs.
  *
- * One live query, mode-independent: the cards list rule already scopes rows
- * to the caller's boards, so membership needs no client join, and switching
- * Assigned → Reported → All is a JS predicate over the same subscription.
+ * One cards query, mode-independent, scoped by the cards list rule: a plain
+ * read IS the caller's boards' cards. Switching Assigned → Reported → All is
+ * a JS predicate over the same subscription — a "cards where I am an
+ * assignee" filter is a multi-relation match PocketBase expresses with `?=`,
+ * which the query converter has no operator for.
  * The search box makes this the way to find a card by title on a phone,
  * where the command palette does not exist.
  *
@@ -71,14 +74,20 @@ export default function MyCardsScreen() {
         'boards_sprints'
     )
 
-    const { data: joined } = useOrgLiveQuery(query =>
-        query
-            .from({ card: cardsCollection })
-            .innerJoin({ project: projectsCollection }, ({ card, project }) =>
-                eq(card.project, project.id)
-            )
-            .innerJoin({ list: listsCollection }, ({ card, list }) => eq(card.list, list.id))
+    // No board predicate: every board collection's list rule is "a member",
+    // so a plain read is exactly the caller's boards, sized by the server.
+    const { data: joined } = useLiveQuery(
+        query =>
+            query
+                .from({ card: cardsCollection })
+                .innerJoin({ project: projectsCollection }, ({ card, project }) =>
+                    eq(card.project, project.id)
+                )
+                .innerJoin({ list: listsCollection }, ({ card, list }) => eq(card.list, list.id)),
+        [cardsCollection, projectsCollection, listsCollection]
     )
+    // A row resolves its own board's label, epic and sprint from these, the
+    // same way the board tree does.
     const { data: labels } = useBoardLiveQuery(
         query => query.from({ label: labelsCollection }),
         [labelsCollection]
@@ -87,8 +96,6 @@ export default function MyCardsScreen() {
         query => query.from({ user: usersCollection }),
         [usersCollection]
     )
-    // Both eager, both board-scoped by rule: a row resolves its own board's
-    // epic and sprint from these, the same way the board tree does.
     const { data: epics } = useBoardLiveQuery(
         query => query.from({ epic: epicsCollection }),
         [epicsCollection]
@@ -98,7 +105,7 @@ export default function MyCardsScreen() {
         [sprintsCollection]
     )
     // The caller's own watcher rows — the Watching tab's whole input.
-    const { data: watcherRows } = useOrgLiveQuery((query, { userId: me }) =>
+    const { data: watcherRows } = useMyLiveQuery((query, { userId: me }) =>
         query.from({ watcher: watchersCollection }).where(({ watcher }) => eq(watcher.user, me))
     )
     const watchedCardIds = useMemo(

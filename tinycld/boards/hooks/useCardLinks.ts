@@ -1,14 +1,15 @@
-import { eq, inArray, or } from '@tanstack/db'
+import { eq, inArray } from '@tanstack/db'
+import { useLiveQuery } from '@tanstack/react-db'
 import { useAuth } from '@tinycld/core/lib/auth'
 import { mutation, useMutation } from '@tinycld/core/lib/mutations'
 import { useStore } from '@tinycld/core/lib/pocketbase'
-import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
 import { newRecordId } from 'pbtsdb/core'
 import { useMemo } from 'react'
 import { formatCardKey } from '../lib/card-key'
 import { type CardLinkView, type LinkType, orientLinks } from '../lib/card-links'
 import { normalizeListCategory } from '../lib/list-category'
 import type { BoardCardView } from '../types'
+import { useCardChildren } from './useCardDetail'
 
 const NO_LINKS: CardLinkView[] = []
 
@@ -66,13 +67,9 @@ function toFarCardView(row: {
 /**
  * Every link touching the open card, oriented around it, plus the mutations.
  *
- * ONE query with an `or`, not two: a link names this card as either `source`
- * or `target`, and running a query per direction would double the round trips
- * to reassemble a list the client immediately concatenates anyway.
- *
- * Not folded into useCardDetail's join, for the reason useCommentReactions
- * gives: that query is already a four-way product of the card's children, and
- * links would be a fifth to-many join widening it again.
+ * The link rows come with the card's one request (useCardChildren), from both
+ * ends — a link names this card as either `source` or `target` — and are
+ * concatenated here.
  *
  * `cardsById` comes from the caller and holds the OPEN BOARD's cards, which is
  * enough for a same-board link and nothing else. A cross-board link's far card
@@ -88,15 +85,10 @@ export function useCardLinks(
     // Non-throwing: a public board renders links read-only, with no session.
     const { user } = useAuth({ throwIfAnon: false })
 
-    const { data: rows, isReady } = useOrgLiveQuery(
-        query => {
-            if (!cardId) return null
-            return query
-                .from({ link: linksCollection })
-                .where(({ link }) => or(eq(link.source, cardId), eq(link.target, cardId)))
-        },
-        [cardId]
-    )
+    const { children, isReady } = useCardChildren(cardId)
+    const outgoing = children?.outgoingLinks
+    const incoming = children?.incomingLinks
+    const rows = useMemo(() => [...(outgoing ?? []), ...(incoming ?? [])], [outgoing, incoming])
 
     // The far ends that are NOT on this board. Links may cross boards, and the
     // caller's map holds only the open one — so without this a legitimate
@@ -109,7 +101,7 @@ export function useCardLinks(
     // signal — the same one the rules already produce for the link row itself.
     const farIds = useMemo(() => {
         const ids = new Set<string>()
-        for (const row of rows ?? []) {
+        for (const row of rows) {
             const far = row.source === cardId ? row.target : row.source
             if (far && !cardsById.has(far)) ids.add(far)
         }
@@ -125,7 +117,7 @@ export function useCardLinks(
         'boards_projects',
         'boards_lists'
     )
-    const { data: farRows, isReady: farReady } = useOrgLiveQuery(
+    const { data: farRows, isReady: farReady } = useLiveQuery(
         query => {
             if (farIds.length === 0) return null
             return query
@@ -156,7 +148,7 @@ export function useCardLinks(
         // withheld.
         () =>
             orientLinks(
-                rows ?? [],
+                rows,
                 cardId,
                 resolved,
                 isCardSetReady && (farIds.length === 0 || farReady)

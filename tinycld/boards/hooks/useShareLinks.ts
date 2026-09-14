@@ -1,9 +1,9 @@
 import { eq } from '@tanstack/db'
+import { useLiveQuery } from '@tanstack/react-db'
 import { useQueryClient } from '@tanstack/react-query'
 import { captureException } from '@tinycld/core/lib/errors'
 import { useMutation } from '@tinycld/core/lib/mutations'
 import { pb, useStore } from '@tinycld/core/lib/pocketbase'
-import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
 import { useMemo } from 'react'
 import type { BoardsShareLinkRole } from '../types'
 
@@ -79,7 +79,7 @@ export const SHARE_LINK_EXPIRY_OPTIONS: { value: ShareLinkExpiryDays; label: str
 export function useShareLinks(projectId: string) {
     const [linksCollection] = useStore('boards_share_links')
 
-    const { data } = useOrgLiveQuery(
+    const { data } = useLiveQuery(
         query =>
             projectId
                 ? query

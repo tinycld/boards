@@ -1,9 +1,9 @@
 import { and, eq, gte, lt } from '@tanstack/db'
+import { useLiveQuery } from '@tanstack/react-db'
 import { addDays, toDateString } from '@tinycld/core/lib/dates'
 import type { EventSourceItem, EventSourceRange } from '@tinycld/core/lib/event-sources/types'
 import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { useStore } from '@tinycld/core/lib/pocketbase'
-import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
 import type { Href } from 'expo-router'
 import { useMemo } from 'react'
 import { cardHref } from './lib/board-route'
@@ -84,7 +84,7 @@ export function useEventSource({ start, end }: EventSourceRange): {
     // caller's member projects. Archived cards and cards on archived boards
     // are excluded to match search's policy — someone planning a week wants
     // active work, not history.
-    const { data: rows, isLoading } = useOrgLiveQuery(
+    const { data: rows, isLoading } = useLiveQuery(
         query =>
             query
                 .from({ card: cardsCollection })

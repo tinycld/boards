@@ -11,12 +11,13 @@ const NO_REACTIONS: ReactionGroup[] = []
  * Every card's votes for the whole board, folded per card.
  *
  * ONE query keyed by `project`, not one per card — a board can hold hundreds
- * of tiles, and a query each would be that many subscriptions. The rows are
- * small and the fold is cheap; the migration's project index exists for this
- * read specifically.
+ * of tiles, and a query each would be that many subscriptions. The rows
+ * arrive with the board's own request (`boards_card_reactions_via_project`,
+ * see collections.ts), so this single-field subset is served from the store;
+ * the migration's project index exists for the server side of that read.
  *
- * useBoardLiveQuery, not useOrgLiveQuery: the board face is exactly the screen
- * a share-link visitor sees with no session, and useOrgLiveQuery returns null
+ * useBoardLiveQuery, not useMyLiveQuery: the board face is exactly the screen
+ * a share-link visitor sees with no session, and useMyLiveQuery returns null
  * whenever the user id is empty.
  */
 export function useBoardCardReactions(projectId: string) {

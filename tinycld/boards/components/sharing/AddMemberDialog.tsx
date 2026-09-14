@@ -1,7 +1,5 @@
 import { Avatar } from '@tinycld/core/components/Avatar'
-import { useStore } from '@tinycld/core/lib/pocketbase'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
-import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
 import { Button, ButtonText } from '@tinycld/core/ui/button'
 import { Dialog } from '@tinycld/core/ui/dialog'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
@@ -9,6 +7,7 @@ import { Search } from 'lucide-react-native'
 import { useMemo, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useAddMember } from '../../hooks/useMemberMutations'
+import { useUserRows } from '../../hooks/useUsers'
 import { splitName } from '../../lib/board-project'
 import type { BoardsMemberRole } from '../../types'
 import { ROLE_OPTIONS } from './roles'
@@ -45,19 +44,12 @@ export function AddMemberDialog({
     const [query, setQuery] = useState('')
     const [role, setRole] = useState<BoardsMemberRole>('viewer')
     const [errorMessage, setErrorMessage] = useState<string | null>(null)
-    const [usersCollection] = useStore('users')
-
-    const { data: candidatesRaw } = useOrgLiveQuery(q =>
-        q.from({ user: usersCollection }).select(({ user }) => ({
-            userId: user.id,
-            name: user.name,
-            email: user.email,
-        }))
-    )
+    const users = useUserRows()
 
     const candidates = useMemo(() => {
         const trimmed = query.trim().toLowerCase()
-        return (candidatesRaw ?? [])
+        return (users ?? [])
+            .map(user => ({ userId: user.id, name: user.name, email: user.email }))
             .filter(candidate => !existingUserIds.has(candidate.userId))
             .filter(candidate => {
                 if (!trimmed) return true
@@ -67,7 +59,7 @@ export function AddMemberDialog({
                 )
             })
             .slice(0, 20)
-    }, [candidatesRaw, existingUserIds, query])
+    }, [users, existingUserIds, query])
 
     const reset = () => {
         setQuery('')

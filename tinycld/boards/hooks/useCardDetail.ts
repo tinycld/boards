@@ -1,7 +1,8 @@
 import { eq } from '@tanstack/db'
+import { useLiveQuery } from '@tanstack/react-db'
 import { mimeFromFilename } from '@tinycld/core/file-viewer/file-naming'
 import { useStore } from '@tinycld/core/lib/pocketbase'
-import { useOrgLiveQuery } from '@tinycld/core/lib/use-org-live-query'
+import { materialize } from 'pbtsdb'
 import { useMemo } from 'react'
 import { attachmentDisplayName } from '../lib/attachment-source'
 import { toBoardMember } from '../lib/board-project'
@@ -9,64 +10,45 @@ import { byCreatedThenId } from '../lib/created-order'
 import type { BoardActivity, BoardAttachment, BoardChecklistItem, BoardComment } from '../types'
 
 /**
- * Row-wise joins across three to-many relations yield the cartesian product of
- * the three child sets, so each child repeats once per combination. Collapse
- * back to one entry per id, preserving first-seen order.
+ * Everything hanging off one card — checklist, comments, attachments,
+ * activity, watchers, comment reactions, links and PR links — from ONE request.
  *
- * A missing value is a LEFT-join miss — this card has none of that child — not
- * a row to keep. Module-level so it is not a fresh identity on every render.
+ * The card is read through a view that fetches every child back-relation
+ * declared on `boards_cards` (collections.ts): PocketBase returns the card
+ * with its children, pbtsdb files each child into its own on-demand
+ * collection and marks the subset for this card complete, and the includes
+ * below — each a single-field equality on the card's foreign key — are served
+ * from the store. Anchoring on the card also means the request always
+ * carries the card row, so a fresh card with no children is never an empty
+ * filtered response (the pattern PocketBase throttles: >3 empty filtered
+ * lists in 3s trip `randomizedThrottle(500)` in upstream apis/record_crud.go).
+ *
+ * The to-one joins inside the includes (author, uploader, actor) resolve
+ * names against the eager `users` store and add no rows. `actor` is optional
+ * (a rule or seed has none), so that join is a LEFT one: a system row must
+ * survive with no user beside it.
+ *
+ * Every hook that reads a card's children (useCardDetail, useCardWatch,
+ * useCommentReactions, useCardLinks, usePrLinks) calls this with the same
+ * card id, so they share the one query rather than each racing the parent
+ * fetch with a filtered request of their own.
+ *
+ * `isReady` is the query having actually SETTLED, and it exists to gate
+ * EDITING, not just display. An unsettled query is indistinguishable from a
+ * genuinely empty card, so offering a composer during that window invites a
+ * user to re-add items they already have.
  */
-function collect<TRowSet, TRow, TOut>(
-    rows: TRowSet[] | undefined,
-    pick: (row: TRowSet) => TRow | undefined | null,
-    keyOf: (row: TRow) => string,
-    map: (row: TRow) => TOut
-): TOut[] {
-    const seen = new Map<string, TOut>()
-    for (const row of rows ?? []) {
-        const value = pick(row)
-        if (!value) continue
-        const key = keyOf(value)
-        if (!seen.has(key)) seen.set(key, map(value))
-    }
-    return Array.from(seen.values())
-}
-
-/**
- * Everything the card detail renders — checklist, comments and attachments —
- * from ONE query.
- *
- * The card is the driving row and each child set joins in as a SUBQUERY already
- * narrowed to this card. Driving from `boards_cards` rather than from the
- * children is what makes this one round trip instead of three, and it also
- * removes a self-inflicted stall: a freshly opened card has no checklist, no
- * comments and no attachments, so the three per-child reads this replaces were
- * three consecutive FILTERED READS RETURNING ZERO ROWS — exactly the pattern
- * PocketBase throttles on purpose (>3 empty filtered responses in 3s trips
- * `randomizedThrottle(500)` in upstream apis/record_crud.go: a random 0-500ms
- * sleep while the SQL itself measures 0.00ms). Anchoring on the card means the
- * result always carries the card row, so it is never empty and that gate never
- * fires.
- *
- * LEFT joins, not inner: a card with no comments must still return its own row.
- * An inner join would drop the card entirely and render an empty detail.
- *
- * Narrowing each child set INSIDE its subquery keeps every join condition the
- * single equality TanStack DB requires, and stops the product widening to other
- * boards' children.
- *
- * `isReady` is the query having actually SETTLED, and it exists to gate EDITING,
- * not just display. An unsettled query is indistinguishable from a genuinely
- * empty card, so offering a composer during that window invites a user to
- * re-add items they already have.
- */
-export function useCardDetail(cardId: string) {
+export function useCardChildren(cardId: string) {
     const [
         cardsCollection,
         checklistCollection,
         commentsCollection,
         attachmentsCollection,
         activityCollection,
+        watchersCollection,
+        commentReactionsCollection,
+        linksCollection,
+        prLinksCollection,
         usersCollection,
     ] = useStore(
         'boards_cards',
@@ -74,85 +56,139 @@ export function useCardDetail(cardId: string) {
         'boards_comments',
         'boards_attachments',
         'boards_activity',
+        'boards_card_watchers',
+        'boards_comment_reactions',
+        'boards_card_links',
+        'boards_pr_links',
         'users'
     )
 
-    const { data: rows, isReady } = useOrgLiveQuery(
+    const { data, isReady } = useLiveQuery(
         query => {
             if (!cardId) return null
-
-            const items = query
-                .from({ item: checklistCollection })
-                .where(({ item }) => eq(item.card, cardId))
-
-            // The author/uploader joins are to-ONE, so they add no rows — they
-            // resolve names against the eagerly-synced `users` store, which is
-            // why neither collection registers an `expand` of its own.
-            const comments = query
-                .from({ comment: commentsCollection })
-                .innerJoin({ author: usersCollection }, ({ comment, author }) =>
-                    eq(comment.author, author.id)
-                )
-                .where(({ comment }) => eq(comment.card, cardId))
-
-            const attachments = query
-                .from({ attachment: attachmentsCollection })
-                .innerJoin({ uploader: usersCollection }, ({ attachment, uploader }) =>
-                    eq(attachment.uploaded_by, uploader.id)
-                )
-                .where(({ attachment }) => eq(attachment.card, cardId))
-
-            // `actor` is optional (a rule or seed has none), so this join is
-            // a LEFT one: a system row must survive with no user beside it.
-            const activity = query
-                .from({ entry: activityCollection })
-                .leftJoin({ actor: usersCollection }, ({ entry, actor }) =>
-                    eq(entry.actor, actor.id)
-                )
-                .where(({ entry }) => eq(entry.card, cardId))
-
-            // A fourth to-many join widens the cartesian product `collect`
-            // dedupes; at kanban scale (tens of rows each) that stays cheap.
+            const cardWithChildren = cardsCollection.fetchRelations(
+                'boards_checklist_items_via_card',
+                'boards_comments_via_card',
+                'boards_attachments_via_card',
+                'boards_activity_via_card',
+                'boards_card_watchers_via_card',
+                'boards_comment_reactions_via_card',
+                'boards_card_links_via_source',
+                'boards_card_links_via_target',
+                'boards_pr_links_via_card'
+            )
+            // Every include correlates on `card.id` — the parent REF — never
+            // on the `cardId` constant: the include builder rejects a where
+            // with no parent/child equality, and a constant would not be a
+            // subset pbtsdb serves from the store.
             return query
-                .from({ card: cardsCollection })
+                .from({ card: cardWithChildren })
                 .where(({ card }) => eq(card.id, cardId))
-                .leftJoin({ items }, ({ card, items }) => eq(items.card, card.id))
-                .leftJoin({ comments }, ({ card, comments }) => eq(comments.comment.card, card.id))
-                .leftJoin({ attachments }, ({ card, attachments }) =>
-                    eq(attachments.attachment.card, card.id)
-                )
-                .leftJoin({ activity }, ({ card, activity }) => eq(activity.entry.card, card.id))
+                .select(({ card }) => ({
+                    id: card.id,
+                    items: materialize(
+                        query
+                            .from({ item: checklistCollection })
+                            .where(({ item }) => eq(item.card, card.id))
+                    ),
+                    comments: materialize(
+                        query
+                            .from({ comment: commentsCollection })
+                            .innerJoin({ author: usersCollection }, ({ comment, author }) =>
+                                eq(comment.author, author.id)
+                            )
+                            .where(({ comment }) => eq(comment.card, card.id))
+                    ),
+                    attachments: materialize(
+                        query
+                            .from({ attachment: attachmentsCollection })
+                            .innerJoin({ uploader: usersCollection }, ({ attachment, uploader }) =>
+                                eq(attachment.uploaded_by, uploader.id)
+                            )
+                            .where(({ attachment }) => eq(attachment.card, card.id))
+                    ),
+                    activity: materialize(
+                        query
+                            .from({ entry: activityCollection })
+                            .leftJoin({ actor: usersCollection }, ({ entry, actor }) =>
+                                eq(entry.actor, actor.id)
+                            )
+                            .where(({ entry }) => eq(entry.card, card.id))
+                    ),
+                    watchers: materialize(
+                        query
+                            .from({ watcher: watchersCollection })
+                            .where(({ watcher }) => eq(watcher.card, card.id))
+                    ),
+                    commentReactions: materialize(
+                        query
+                            .from({ reaction: commentReactionsCollection })
+                            .where(({ reaction }) => eq(reaction.card, card.id))
+                    ),
+                    // A link names this card as either end. Two includes, one
+                    // per end, because `or(source, target)` spans two fields
+                    // and is not a subset the store can prove complete.
+                    outgoingLinks: materialize(
+                        query
+                            .from({ link: linksCollection })
+                            .where(({ link }) => eq(link.source, card.id))
+                    ),
+                    incomingLinks: materialize(
+                        query
+                            .from({ link: linksCollection })
+                            .where(({ link }) => eq(link.target, card.id))
+                    ),
+                    // Tombstoned rows (`unlinked`) are filtered by the reader,
+                    // not here: a second predicate would push the read to the
+                    // server. See pb-migrations/1980000021 for the tombstone.
+                    prLinks: materialize(
+                        query
+                            .from({ link: prLinksCollection })
+                            .where(({ link }) => eq(link.card, card.id))
+                    ),
+                }))
+                .findOne()
         },
         [cardId]
     )
 
+    return { children: data ?? null, isReady }
+}
+
+export type CardChildren = NonNullable<ReturnType<typeof useCardChildren>['children']>
+
+/**
+ * The card detail's four sections — checklist, comments, attachments and
+ * activity — in render order, from the shared card query.
+ */
+export function useCardDetail(cardId: string) {
+    const { children, isReady } = useCardChildren(cardId)
+    const items = children?.items
+    const commentRows = children?.comments
+    const attachmentRows = children?.attachments
+    const activityRows = children?.activity
+
     const checklist = useMemo<BoardChecklistItem[]>(
         () =>
-            collect(
-                rows,
-                row => row.items,
-                item => item.id,
-                item => ({
+            (items ?? [])
+                .map(item => ({
                     id: item.id,
                     title: item.title,
                     isDone: item.is_done,
                     position: item.position,
-                })
-            ).sort((a, b) =>
-                a.position === b.position
-                    ? a.id.localeCompare(b.id)
-                    : a.position.localeCompare(b.position)
-            ),
-        [rows]
+                }))
+                .sort((a, b) =>
+                    a.position === b.position
+                        ? a.id.localeCompare(b.id)
+                        : a.position.localeCompare(b.position)
+                ),
+        [items]
     )
 
     const comments = useMemo<BoardComment[]>(
         () =>
-            collect(
-                rows,
-                row => row.comments,
-                joined => joined.comment.id,
-                joined => ({
+            (commentRows ?? [])
+                .map(joined => ({
                     id: joined.comment.id,
                     author: toBoardMember(joined.author),
                     // ?? '': the optimistic insert draft carries NO created at
@@ -163,21 +199,17 @@ export function useCardDetail(cardId: string) {
                     editedAt: joined.comment.edited_at ?? '',
                     body: joined.comment.body,
                     parent: joined.comment.parent,
-                })
-            )
+                }))
                 // Oldest first; '' (optimistic) sorts last, where the composer
                 // just put it.
                 .sort(byCreatedThenId),
-        [rows]
+        [commentRows]
     )
 
     const attachments = useMemo<BoardAttachment[]>(
         () =>
-            collect(
-                rows,
-                row => row.attachments,
-                joined => joined.attachment.id,
-                joined => ({
+            (attachmentRows ?? [])
+                .map(joined => ({
                     id: joined.attachment.id,
                     fileName: joined.attachment.file,
                     displayName: attachmentDisplayName(joined.attachment),
@@ -185,32 +217,28 @@ export function useCardDetail(cardId: string) {
                     mimeType: mimeFromFilename(joined.attachment.file),
                     uploadedBy: toBoardMember(joined.uploader),
                     created: joined.attachment.created ?? '',
-                })
-            )
+                }))
                 // Newest last, matching the comment thread: an attachment is
                 // appended to a list the reader is already scanning downwards.
                 // '' (optimistic) belongs where the upload just put it — at
                 // the end.
                 .sort(byCreatedThenId),
-        [rows]
+        [attachmentRows]
     )
 
     const activity = useMemo<BoardActivity[]>(
         () =>
-            collect(
-                rows,
-                row => row.activity,
-                joined => joined.entry.id,
-                joined => ({
+            (activityRows ?? [])
+                .map(joined => ({
                     id: joined.entry.id,
                     kind: joined.entry.kind,
                     actor: joined.actor ? toBoardMember(joined.actor) : undefined,
                     from: joined.entry.from,
                     to: joined.entry.to,
                     created: joined.entry.created ?? '',
-                })
-            ).sort(byCreatedThenId),
-        [rows]
+                }))
+                .sort(byCreatedThenId),
+        [activityRows]
     )
 
     return { checklist, comments, attachments, activity, isReady }
