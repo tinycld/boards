@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, closeCardPeek, createBoard } from './helpers'
+import { addCard, boardCard, closeCardPeek, createBoard, pickEmoji } from './helpers'
 
 // Votes on the card itself, as opposed to on a comment. What is asserted here
 // is the half comment reactions cannot cover: the chip reaching the BOARD TILE
@@ -49,10 +49,7 @@ function tileChip(page: Page, unified: string) {
 /** Open the tile's picker and vote, without opening the card. */
 async function voteOnTile(page: Page, title: string, query: string, unified: string) {
     await boardCard(page, title).getByTestId('boards-tile-reaction-add').click()
-    await page.getByTestId('emoji-search').fill(query)
-    const cell = page.getByTestId(`emoji-pick-${unified}`)
-    await cell.waitFor({ state: 'visible' })
-    await cell.click()
+    await pickEmoji(page, unified, query)
 }
 
 /**
@@ -64,10 +61,7 @@ async function voteOnTile(page: Page, title: string, query: string, unified: str
  */
 async function voteOnCard(page: Page, query: string, unified: string) {
     await peek(page).getByTestId('boards-card-reaction-add').click()
-    await page.getByTestId('emoji-search').fill(query)
-    const cell = page.getByTestId(`emoji-pick-${unified}`)
-    await cell.waitFor({ state: 'visible' })
-    await cell.click()
+    await pickEmoji(page, unified, query)
 }
 
 test.describe('Boards — card votes', () => {
@@ -203,10 +197,7 @@ test.describe('Boards — card votes', () => {
         await postComment(page, 'a note')
 
         await peek(page).getByTestId('boards-reaction-add').first().click()
-        await page.getByTestId('emoji-search').fill('rocket')
-        const cell = page.getByTestId(`emoji-pick-${ROCKET}`)
-        await cell.waitFor({ state: 'visible' })
-        await cell.click()
+        await pickEmoji(page, ROCKET, 'rocket')
 
         await expect(cardChip(page, ROCKET)).toContainText('1')
     })
