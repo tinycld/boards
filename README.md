@@ -310,7 +310,7 @@ package genuinely needs to override a rule:
 
 ```jsonc
 {
-    "$schema": "https://biomejs.dev/schemas/2.4.16/schema.json",
+    "$schema": "https://biomejs.dev/schemas/2.5.1/schema.json",
     "root": false,
     "extends": ["../tinycld/biome.json"],
     "linter": { "rules": { /* your overrides */ } }
