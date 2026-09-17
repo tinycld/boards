@@ -101,14 +101,21 @@ migrate(
 
         // Remove only this package's branch, leaving every other package's
         // intact — the same reason the up migration appends rather than sets.
+        //
+        // Find the branch by its OWN text, not by an " || (" prefix. The up
+        // migration writes the branch bare when the rule was empty (no
+        // package had authorized a mention yet), so a prefix-anchored search
+        // misses it entirely and uninstall silently leaves the branch behind
+        // — still naming @collection.boards_cards after boards is gone.
         const current = mentions.createRule || ''
-        const marker = ' || (target_collection = "boards_cards"'
-        const at = current.indexOf(marker)
+        const branchStart = '(target_collection = "boards_cards"'
+        const at = current.indexOf(branchStart)
         if (at === -1) return
 
+        // Span the branch by matching parens from its opening one.
         let depth = 0
-        let end = at + 4
-        for (let i = at + 4; i < current.length; i++) {
+        let end = current.length
+        for (let i = at; i < current.length; i++) {
             if (current[i] === '(') depth++
             else if (current[i] === ')') {
                 depth--
@@ -118,13 +125,66 @@ migrate(
                 }
             }
         }
-        let restored = current.slice(0, at) + current.slice(end)
-        // The up migration wrapped the pre-existing rule in parentheses to
-        // append; unwrap it so the rule returns to its exact prior text.
-        if (restored.charAt(0) === '(' && restored.charAt(restored.length - 1) === ')') {
-            restored = restored.slice(1, -1)
+
+        // Drop the branch together with whichever " || " joined it, on the
+        // side it actually sits.
+        let head = current.slice(0, at)
+        let tail = current.slice(end)
+        if (head.slice(-4) === ' || ') head = head.slice(0, -4)
+        else if (tail.slice(0, 4) === ' || ') tail = tail.slice(4)
+        let restored = (head + tail).trim()
+
+        // Boards installing FIRST means its branch was the wrapped left side,
+        // so removing it leaves the group empty — and a later package then
+        // wrapped THAT, giving "( || (…)) || (…)". Both the empty group and
+        // the join dangling inside it are parse errors, so tidy them wherever
+        // they sit, not just at the top level, until nothing more collapses.
+        let prev = null
+        while (prev !== restored) {
+            prev = restored
+            restored = restored
+                .split('( || ').join('(')
+                .split(' || )').join(')')
+                .split('()').join('')
+                .trim()
+            if (restored.slice(0, 3) === '|| ') restored = restored.slice(3).trim()
+            if (restored.slice(-3) === ' ||') restored = restored.slice(0, -3).trim()
         }
-        mentions.createRule = restored
+
+        // The up migration wrapped the pre-existing rule in parentheses to
+        // append, so unwrap — but ONLY when the outer parens are genuinely a
+        // matching pair around the whole expression. Testing just the first
+        // and last character strips one paren from each of two DIFFERENT
+        // groups when the remainder is itself OR-ed, e.g.
+        //
+        //     "(a = 1) || (b = 2)"  ->  "a = 1) || (b = 2"
+        //
+        // which PocketBase rejects with: Invalid rule. Raw error: unexpected
+        // character ')'. That aborts the uninstall — and, before the deploy
+        // protocol's snapshot restore, is exactly the kind of half-applied
+        // schema change that leaves an org unbootable.
+        if (restored.charAt(0) === '(' && restored.charAt(restored.length - 1) === ')') {
+            let d = 0
+            let wraps = true
+            for (let i = 0; i < restored.length; i++) {
+                if (restored[i] === '(') d++
+                else if (restored[i] === ')') {
+                    d--
+                    // Back to zero before the end: the leading paren closed
+                    // early, so it never wrapped the whole expression.
+                    if (d === 0 && i < restored.length - 1) {
+                        wraps = false
+                        break
+                    }
+                }
+            }
+            if (wraps) restored = restored.slice(1, -1)
+        }
+
+        // An empty rule is "superusers only", which is what the table had
+        // before any package authorized a mention — the correct end state
+        // when this was the only branch.
+        mentions.createRule = restored === '' ? null : restored
         app.save(mentions)
     }
 )
