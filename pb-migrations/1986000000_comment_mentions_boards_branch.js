@@ -102,17 +102,29 @@ migrate(
         // Remove only this package's branch, leaving every other package's
         // intact — the same reason the up migration appends rather than sets.
         //
-        // Find the branch by its OWN text, not by an " || (" prefix. The up
-        // migration writes the branch bare when the rule was empty (no
-        // package had authorized a mention yet), so a prefix-anchored search
-        // misses it entirely and uninstall silently leaves the branch behind
-        // — still naming @collection.boards_cards after boards is gone.
+        // Find the branch by its PREDICATE, and anchor on neither an " || ("
+        // prefix nor a leading "(". Two reasons, both observed on a real host:
+        //
+        //  - the up migration writes the branch bare when the rule was empty
+        //    (no package had authorized a mention yet), so a prefix-anchored
+        //    search misses it and uninstall leaves the branch behind — still
+        //    naming @collection.boards_cards after boards is gone;
+        //  - an earlier version of this migration stripped the branch's OWN
+        //    parentheses (it unwrapped whatever it was left with, without
+        //    checking the parens were a matching pair), so a deployment that
+        //    already ran that version has the branch stored WITHOUT them.
+        //    Requiring a leading "(" makes that state a fixed point: the only
+        //    code that can clean it up cannot see it.
         const current = mentions.createRule || ''
-        const branchStart = '(target_collection = "boards_cards"'
-        const at = current.indexOf(branchStart)
-        if (at === -1) return
+        const predicate = 'target_collection = "boards_cards"'
+        const found = current.indexOf(predicate)
+        if (found === -1) return
 
-        // Span the branch by matching parens from its opening one.
+        // Widen to the branch's own parenthesised group when it has one, so
+        // the span covers the whole branch rather than starting mid-expression.
+        let at = found
+        if (found > 0 && current.charAt(found - 1) === '(') at = found - 1
+
         let depth = 0
         let end = current.length
         for (let i = at; i < current.length; i++) {
@@ -121,6 +133,21 @@ migrate(
                 depth--
                 if (depth === 0) {
                     end = i + 1
+                    break
+                }
+            }
+        }
+        // No enclosing group (the parens were stripped): the branch runs to
+        // the next top-level " || " that is not inside a nested group, or to
+        // the end of the rule.
+        if (at === found) {
+            let d = 0
+            end = current.length
+            for (let i = found; i < current.length; i++) {
+                if (current[i] === '(') d++
+                else if (current[i] === ')') d--
+                else if (d === 0 && current.slice(i, i + 4) === ' || ') {
+                    end = i
                     break
                 }
             }

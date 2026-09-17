@@ -178,6 +178,52 @@ describe('comment_mentions boards branch', () => {
         expect(applyDown(DRIVE)).toBe(DRIVE)
     })
 
+    // Every case above builds its input from a correct `up`, which is exactly
+    // why the first version of this fix shipped broken: a deployment that had
+    // already run the ORIGINAL migration is in a state `up` never produces.
+    // That version stripped the branch's own parentheses (it unwrapped whatever
+    // it was left with without checking the parens matched), and the fix then
+    // required a leading "(" to find the branch — making the damaged state a
+    // fixed point that the only code able to repair it could not see.
+    //
+    // These inputs are transcribed from a real host, not constructed.
+    describe('states left behind by the original migration', () => {
+        const BARE_NO_PARENS =
+            'target_collection = "boards_cards" && @collection.boards_cards.id ?= target_record && (@collection.boards_cards.project.boards_project_members_via_project.role ?= "owner" || @collection.boards_cards.project.boards_project_members_via_project.role ?= "editor")'
+
+        it('removes a branch whose own parentheses were stripped', () => {
+            expect(applyDown(BARE_NO_PARENS)).toBeNull()
+        })
+
+        it('removes a paren-stripped branch that another package OR-ed after', () => {
+            const after = applyDown(`${BARE_NO_PARENS} || (${DRIVE})`)
+            expect(after ?? '').not.toContain('boards_cards')
+            expect(parensBalanced(after)).toBe(true)
+            expect(semantic(after)).toBe(semantic(DRIVE))
+        })
+
+        it('removes a paren-stripped branch that follows another package', () => {
+            const after = applyDown(`(${DRIVE}) || ${BARE_NO_PARENS}`)
+            expect(after ?? '').not.toContain('boards_cards')
+            expect(parensBalanced(after)).toBe(true)
+            expect(semantic(after)).toBe(semantic(DRIVE))
+        })
+
+        // Whatever the shape, running it twice must not corrupt or resurrect.
+        it('is idempotent on every repaired shape', () => {
+            for (const start of [
+                BARE_NO_PARENS,
+                `${BARE_NO_PARENS} || (${DRIVE})`,
+                `(${DRIVE}) || ${BARE_NO_PARENS}`,
+                applyUp(null),
+                applyUp(DRIVE),
+            ]) {
+                const once = applyDown(start)
+                expect(applyDown(once), `not idempotent for: ${start}`).toBe(once)
+            }
+        })
+    })
+
     it('leaves the rule superuser-only when it was the only branch', () => {
         // null, not "": an empty string is a rule that allows everyone.
         expect(applyDown(applyUp(null))).toBeNull()
