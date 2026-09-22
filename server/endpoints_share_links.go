@@ -95,7 +95,7 @@ func toShareLinkResponse(r *core.Record) shareLinkResponse {
 
 // handleCreateShareLink mints a link for a board the caller owns.
 func handleCreateShareLink(app core.App, re *core.RequestEvent) error {
-	if !shareLinkLimiter.Allow(ratelimit.ClientIP(re.Request)) {
+	if !shareLinkLimiter.AllowOrLog(ratelimit.ClientIP(re.Request), "boards.share.create") {
 		return re.JSON(http.StatusTooManyRequests,
 			shareLinkErrorResponse{Error: "rate limit exceeded"})
 	}
@@ -164,7 +164,7 @@ func handleCreateShareLink(app core.App, re *core.RequestEvent) error {
 // read this through ordinary REST. It exists so the dialog has one shape to
 // render and so listing stays symmetric with mint and revoke.
 func handleListShareLinks(app core.App, re *core.RequestEvent) error {
-	if !shareLinkLimiter.Allow(ratelimit.ClientIP(re.Request)) {
+	if !shareLinkLimiter.AllowOrLog(ratelimit.ClientIP(re.Request), "boards.share.list") {
 		return re.JSON(http.StatusTooManyRequests,
 			shareLinkErrorResponse{Error: "rate limit exceeded"})
 	}
@@ -210,7 +210,7 @@ func handleListShareLinks(app core.App, re *core.RequestEvent) error {
 // What must never happen is the reverse: editing must not resurrect a link, and
 // it does not, because nothing here writes is_active or expires_at.
 func handleUpdateShareLink(app core.App, re *core.RequestEvent) error {
-	if !shareLinkLimiter.Allow(ratelimit.ClientIP(re.Request)) {
+	if !shareLinkLimiter.AllowOrLog(ratelimit.ClientIP(re.Request), "boards.share.update") {
 		return re.JSON(http.StatusTooManyRequests,
 			shareLinkErrorResponse{Error: "rate limit exceeded"})
 	}
@@ -268,7 +268,7 @@ func handleUpdateShareLink(app core.App, re *core.RequestEvent) error {
 // help topic both say so, because "revoke" plainly means two different things
 // before and after a sign-in.
 func handleRevokeShareLink(app core.App, re *core.RequestEvent) error {
-	if !shareLinkLimiter.Allow(ratelimit.ClientIP(re.Request)) {
+	if !shareLinkLimiter.AllowOrLog(ratelimit.ClientIP(re.Request), "boards.share.revoke") {
 		return re.JSON(http.StatusTooManyRequests,
 			shareLinkErrorResponse{Error: "rate limit exceeded"})
 	}
