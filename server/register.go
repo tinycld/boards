@@ -8,6 +8,7 @@ import (
 	"tinycld.org/core/oauth"
 	"tinycld.org/core/offboard"
 	"tinycld.org/core/search"
+	"tinycld.org/core/sharequota"
 )
 
 // ftsConfig is the cards FTS index/search config, driving both the index-sync
@@ -94,6 +95,18 @@ func registerShared(app *pocketbase.PocketBase) {
 	// as the scopes above: the answer lives on a boards_share_links row that
 	// only we can read, so core asks us rather than knowing our routes.
 	registerEmbedPolicy(app)
+
+	// Attachment bytes on a shared board are metered against the link that
+	// served them. Same inversion again: core owns the ceilings and binds the
+	// hook, but only we know that an attachment belongs to a board, that a
+	// board can be shared, or which header carries the token.
+	if err := sharequota.RegisterMetered(sharequota.MeteredCollection{
+		Slug:       "boards",
+		Collection: "boards_attachments",
+		Meter:      meterAttachmentDownload,
+	}); err != nil {
+		shareLog.Error("could not register the attachment download meter", "err", err)
+	}
 
 	// A departing user's authored comments and uploaded attachments reassign
 	// rather than cascade — the board keeps its history. Every one of these
