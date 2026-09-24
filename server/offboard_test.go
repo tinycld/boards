@@ -157,6 +157,51 @@ func TestBoardsOffboard_ReassignUpgradesExistingMembership(t *testing.T) {
 	requireBoardKept(t, env)
 }
 
+// A group grant gives the successor a derived row. The derived row belongs to
+// the grant (core re-syncs its role and removes it when the grant goes), so
+// ownership must land on a direct row of its own: upgrading the derived row
+// would give an owner role that the grant can take away again.
+func TestBoardsOffboard_ReassignAddsDirectOwnerBesideDerivedRow(t *testing.T) {
+	env := setupBoardsOffboardApp(t)
+	g := cardsGroup(t, env.app, "Reviewers")
+	col, err := env.app.FindCollectionByNameOrId("boards_project_members")
+	if err != nil {
+		t.Fatal(err)
+	}
+	derived := core.NewRecord(col)
+	derived.Set("project", env.project.Id)
+	derived.Set("group", g.Id)
+	derived.Set("user", env.outsider.Id)
+	derived.Set("role", "editor")
+	if err := env.app.Save(derived); err != nil {
+		t.Fatalf("save derived row: %v", err)
+	}
+
+	if _, err := offboard.OffboardUser(env.app, env.owner.Id, offboard.Plan{
+		Mode: offboard.ModeReassign, SuccessorUserID: env.outsider.Id,
+	}, env.owner.Id); err != nil {
+		t.Fatalf("OffboardUser: %v", err)
+	}
+
+	stillDerived, err := env.app.FindRecordById("boards_project_members", derived.Id)
+	if err != nil {
+		t.Fatalf("derived row is gone: %v", err)
+	}
+	if got := stillDerived.GetString("role"); got != "editor" {
+		t.Errorf("derived row role = %q, want editor (it must not be upgraded)", got)
+	}
+	direct, err := env.app.FindFirstRecordByFilter("boards_project_members",
+		"project = {:p} && user = {:u} && group = ''",
+		map[string]any{"p": env.project.Id, "u": env.outsider.Id})
+	if err != nil {
+		t.Fatalf("no direct membership for the successor: %v", err)
+	}
+	if got := direct.GetString("role"); got != "owner" {
+		t.Errorf("direct membership role = %q, want owner", got)
+	}
+	requireBoardKept(t, env)
+}
+
 // A board with another owner does not need the leaver, so the successor gets
 // nothing on it. The leaver's own rows stay.
 func TestBoardsOffboard_LeavesCoOwnedAndNonOwnerMembershipsAlone(t *testing.T) {
