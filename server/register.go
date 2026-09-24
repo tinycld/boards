@@ -7,7 +7,6 @@ import (
 	"tinycld.org/core/fts"
 	"tinycld.org/core/groups"
 	"tinycld.org/core/oauth"
-	"tinycld.org/core/offboard"
 	"tinycld.org/core/search"
 	"tinycld.org/core/sharequota"
 )
@@ -109,20 +108,9 @@ func registerShared(app *pocketbase.PocketBase) {
 		shareLog.Error("could not register the attachment download meter", "err", err)
 	}
 
-	// A departing user's authored comments and uploaded attachments reassign
-	// rather than cascade — the board keeps its history. Every one of these
-	// relations is cascadeDelete:false in the migration, which is the shape
-	// offboard exists to handle.
-	for _, ref := range []offboard.ReassignableRef{
-		{Collection: "boards_projects", Field: "created_by"},
-		{Collection: "boards_cards", Field: "created_by"},
-		{Collection: "boards_cards", Field: "reporter"},
-		{Collection: "boards_comments", Field: "author"},
-		{Collection: "boards_attachments", Field: "uploaded_by"},
-		{Collection: "boards_sprints", Field: "created_by"},
-	} {
-		offboard.RegisterReassignable(ref)
-	}
+	// What happens to a departing user's boards data: authorship reassigns,
+	// and a board the leaver alone owns gets a new owner. See offboard.go.
+	registerOffboard()
 
 	// Core expands a group grant (group set, user empty) on this table into one
 	// derived row per member, inside the same transaction. Our rules already
@@ -195,6 +183,9 @@ func registerShared(app *pocketbase.PocketBase) {
 	registerSprintNotifications(app)
 	registerDueNotices(app)
 	registerMemberLastOwnerGuard(app)
+	// A direct users delete must not strip a shared board of its only owner.
+	// See offboard.go.
+	registerSoleOwnerDeleteGuard(app)
 	rt := registerRealtime(app)
 
 	// FTS index-sync record hooks only — deliberately NOT fts.Register, which

@@ -76,34 +76,21 @@ export default function MyCardsScreen() {
 
     // No board predicate: every board collection's list rule is "a member",
     // so a plain read is exactly the caller's boards, sized by the server.
-    const { data: joined } = useLiveQuery(
-        query =>
+    const { data: joined } = useLiveQuery({
+        query: query =>
             query
                 .from({ card: cardsCollection })
                 .innerJoin({ project: projectsCollection }, ({ card, project }) =>
                     eq(card.project, project.id)
                 )
                 .innerJoin({ list: listsCollection }, ({ card, list }) => eq(card.list, list.id)),
-        [cardsCollection, projectsCollection, listsCollection]
-    )
+    })
     // A row resolves its own board's label, epic and sprint from these, the
     // same way the board tree does.
-    const { data: labels } = useBoardLiveQuery(
-        query => query.from({ label: labelsCollection }),
-        [labelsCollection]
-    )
-    const { data: users } = useBoardLiveQuery(
-        query => query.from({ user: usersCollection }),
-        [usersCollection]
-    )
-    const { data: epics } = useBoardLiveQuery(
-        query => query.from({ epic: epicsCollection }),
-        [epicsCollection]
-    )
-    const { data: sprints } = useBoardLiveQuery(
-        query => query.from({ sprint: sprintsCollection }),
-        [sprintsCollection]
-    )
+    const { data: labels } = useBoardLiveQuery(query => query.from({ label: labelsCollection }))
+    const { data: users } = useBoardLiveQuery(query => query.from({ user: usersCollection }))
+    const { data: epics } = useBoardLiveQuery(query => query.from({ epic: epicsCollection }))
+    const { data: sprints } = useBoardLiveQuery(query => query.from({ sprint: sprintsCollection }))
     // The caller's own watcher rows — the Watching tab's whole input.
     const { data: watcherRows } = useMyLiveQuery((query, { userId: me }) =>
         query.from({ watcher: watchersCollection }).where(({ watcher }) => eq(watcher.user, me))

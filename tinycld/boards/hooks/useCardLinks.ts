@@ -117,8 +117,8 @@ export function useCardLinks(
         'boards_projects',
         'boards_lists'
     )
-    const { data: farRows, isReady: farReady } = useLiveQuery(
-        query => {
+    const { data: farRows, isReady: farReady } = useLiveQuery({
+        query: query => {
             if (farIds.length === 0) return null
             return query
                 .from({ card: cardsCollection })
@@ -128,8 +128,7 @@ export function useCardLinks(
                 .innerJoin({ list: listsCollection }, ({ card, list }) => eq(card.list, list.id))
                 .where(({ card }) => inArray(card.id, farIds))
         },
-        [farIds]
-    )
+    })
 
     const resolved = useMemo(() => {
         if (farIds.length === 0) return cardsById

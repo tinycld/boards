@@ -70,10 +70,9 @@ function useGitHubSettingsData() {
             .select(({ member }) => ({ project: member.project }))
     )
     // Every attached repo across my boards: the list rule is "a member".
-    const { data: repoRows } = useLiveQuery(
-        query => query.from({ repo: reposCollection }),
-        [reposCollection]
-    )
+    const { data: repoRows } = useLiveQuery({
+        query: query => query.from({ repo: reposCollection }),
+    })
 
     const ownedProjectIds = new Set((owned ?? []).map(m => m.project))
     const ownedProjects = projects

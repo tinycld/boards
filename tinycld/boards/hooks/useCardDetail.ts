@@ -63,8 +63,8 @@ export function useCardChildren(cardId: string) {
         'users'
     )
 
-    const { data, isReady } = useLiveQuery(
-        query => {
+    const { data, isReady } = useLiveQuery({
+        query: query => {
             if (!cardId) return null
             const cardWithChildren = cardsCollection.fetchRelations(
                 'boards_checklist_items_via_card',
@@ -149,8 +149,7 @@ export function useCardChildren(cardId: string) {
                 }))
                 .findOne()
         },
-        [cardId]
-    )
+    })
 
     return { children: data ?? null, isReady }
 }

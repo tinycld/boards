@@ -65,8 +65,8 @@ export function useEventSource({ start, end }: EventSourceRange): {
     const startDay = toDateString(addDays(start, -1))
     const endDay = toDateString(addDays(end, 1))
 
-    const { data: rows, isLoading } = useLiveQuery(
-        query =>
+    const { data: rows, isLoading } = useLiveQuery({
+        query: query =>
             query
                 .from({ sprint: sprintsCollection })
                 .innerJoin({ project: projectsCollection }, ({ sprint, project }) =>
@@ -89,8 +89,7 @@ export function useEventSource({ start, end }: EventSourceRange): {
                     end: sprint.end,
                     boardName: project.name,
                 })),
-        [startDay, endDay]
-    )
+    })
 
     const items = useMemo(() => buildSprintItems(rows ?? [], orgHref), [rows, orgHref])
     return { items, isLoading }

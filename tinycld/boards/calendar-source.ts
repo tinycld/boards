@@ -84,8 +84,8 @@ export function useEventSource({ start, end }: EventSourceRange): {
     // caller's member projects. Archived cards and cards on archived boards
     // are excluded to match search's policy — someone planning a week wants
     // active work, not history.
-    const { data: rows, isLoading } = useLiveQuery(
-        query =>
+    const { data: rows, isLoading } = useLiveQuery({
+        query: query =>
             query
                 .from({ card: cardsCollection })
                 .innerJoin({ project: projectsCollection }, ({ card, project }) =>
@@ -107,8 +107,7 @@ export function useEventSource({ start, end }: EventSourceRange): {
                     number: card.number,
                     board: { id: project.id, slug: project.slug },
                 })),
-        [startDay, dayAfterEnd]
-    )
+    })
 
     const items = useMemo(() => buildDueItems(rows ?? [], orgHref), [rows, orgHref])
     return { items, isLoading }

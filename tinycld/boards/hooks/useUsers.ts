@@ -20,10 +20,7 @@ import { useBoardLiveQuery } from './useBoardLiveQuery'
  */
 export function useUserRows() {
     const [usersCollection] = useStore('users')
-    const { data } = useBoardLiveQuery(
-        query => query.from({ user: usersCollection }),
-        [usersCollection]
-    )
+    const { data } = useBoardLiveQuery(query => query.from({ user: usersCollection }))
     return data
 }
 
