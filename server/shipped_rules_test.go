@@ -113,6 +113,20 @@ func TestCardsShippedRules_CarryTheirGuards(t *testing.T) {
 		{"boards_project_members", "create", `project.boards_project_members_via_project.id = ""`,
 			`PocketBase's empty-back-relation idiom, and the reason a fresh project can get its first owner without a privileged Go hook. This is the ONE intentional bare "=" in the file (see the ?!= sweep below, which deliberately does not generalize to bare =)`},
 
+		// --- group grants on boards_project_members (1986000003) ---
+		{"boards_project_members", "create", `(user = "" || group = "")`,
+			"a client may write a direct row or a group grant, never a derived row"},
+		{"boards_project_members", "create", `(group = "" || role != "owner")`,
+			"a group grant never carries the owner role"},
+		{"boards_project_members", "update", `(user = "" || group = "")`,
+			"a client may not edit a derived row"},
+		{"boards_project_members", "update", `(@request.body.group:isset = false || @request.body.group = group)`,
+			"group is pinned on update, like project"},
+		{"boards_project_members", "update", `(@request.body.user:isset = false || @request.body.user = user)`,
+			"user is pinned on update"},
+		{"boards_project_members", "delete", `(user = "" || group = "")`,
+			"a client may not delete a derived row"},
+
 		// --- boards_pr_links (1980000021) ---
 		//
 		// Server-written except for the manual link/unlink path: the webhook

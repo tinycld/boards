@@ -94,6 +94,7 @@ func setupMentionsEnv(t *testing.T) *mentionsEnv {
 	if err := app.Save(users); err != nil {
 		t.Fatalf("add users.role/users.disabled: %v", err)
 	}
+	stubGroupsCollection(t, app)
 
 	// Applied in the order a boards-only boot reaches them, which is filename
 	// order across the flat directory:
@@ -244,6 +245,7 @@ func TestCommentMentionsRLS_AppendPreservesExistingBranch(t *testing.T) {
 	if err := app.Save(users); err != nil {
 		t.Fatalf("add users.role/users.disabled: %v", err)
 	}
+	stubGroupsCollection(t, app)
 
 	rlstest.Apply(t, app, coreMentionsDir(t))
 

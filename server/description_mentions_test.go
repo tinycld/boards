@@ -115,6 +115,8 @@ func setupMentionFlushEnv(t *testing.T) *mentionFlushEnv {
 		t.Fatalf("save users: %v", err)
 	}
 
+	stubGroupsCollection(t, app)
+
 	rlstest.Apply(t, app, rlstest.MigrationsDir(t, "../pb-migrations"))
 
 	// NotifyUser writes here; boards' own migrations do not create it (it is

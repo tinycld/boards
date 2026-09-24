@@ -118,8 +118,24 @@ func newCardsApp(t *testing.T) *tests.TestApp {
 		t.Fatalf("add users.role/users.disabled: %v", err)
 	}
 
+	stubGroupsCollection(t, app)
+
 	rlstest.Apply(t, app, rlstest.MigrationsDir(t, "../pb-migrations"))
 	return app
+}
+
+// stubGroupsCollection creates core's groups collection at the id
+// 1986000003 names as its relation target. Every fixture that applies
+// ../pb-migrations against a bare test app needs this first — the migration
+// fails to save otherwise ("The relation collection doesn't exist").
+func stubGroupsCollection(t *testing.T, app core.App) {
+	t.Helper()
+	groups := core.NewBaseCollection("groups")
+	groups.Id = "pbc_groups_01"
+	groups.Fields.Add(&core.TextField{Name: "name", Required: true})
+	if err := app.Save(groups); err != nil {
+		t.Fatalf("stub groups collection: %v", err)
+	}
 }
 
 // fixtureUserSeq makes every fixture username unique within a process run.
@@ -176,6 +192,21 @@ func cardsProject(t *testing.T, app core.App, name string, createdBy *core.Recor
 		t.Fatalf("save project %s: %v", name, err)
 	}
 	return r
+}
+
+// cardsGroup creates a stub core group.
+func cardsGroup(t *testing.T, app core.App, name string) *core.Record {
+	t.Helper()
+	col, err := app.FindCollectionByNameOrId("groups")
+	if err != nil {
+		t.Fatalf("find groups: %v", err)
+	}
+	g := core.NewRecord(col)
+	g.Set("name", name)
+	if err := app.Save(g); err != nil {
+		t.Fatalf("save group: %v", err)
+	}
+	return g
 }
 
 func cardsMember(t *testing.T, app core.App, project, user *core.Record, role string) *core.Record {
