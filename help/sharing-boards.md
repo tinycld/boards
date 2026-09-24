@@ -100,3 +100,17 @@ remove anyone else.
 The last owner of a board cannot be demoted or removed — not even by
 themselves. To hand a board off, first make another member an owner, then
 change or remove your own row.
+
+## When an owner leaves
+
+When the only owner of a board deletes their account, the board is not lost:
+
+- If they choose a successor, the successor becomes an owner of the board.
+- If an admin deletes the account and chooses **Delete everything**, the admin
+  becomes an owner of every board that other people use.
+- If you delete your own account with **Delete everything**, you must first
+  make someone else an owner of each board other people use, or delete those
+  boards. Boards that only you use are deleted with your data.
+
+See [Account settings](help://core:account-settings) for how to delete an
+account and choose a successor.
