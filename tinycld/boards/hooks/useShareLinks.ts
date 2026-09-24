@@ -79,15 +79,14 @@ export const SHARE_LINK_EXPIRY_OPTIONS: { value: ShareLinkExpiryDays; label: str
 export function useShareLinks(projectId: string) {
     const [linksCollection] = useStore('boards_share_links')
 
-    const { data } = useLiveQuery(
-        query =>
+    const { data } = useLiveQuery({
+        query: query =>
             projectId
                 ? query
                       .from({ link: linksCollection })
                       .where(({ link }) => eq(link.project, projectId))
                 : undefined,
-        [projectId, linksCollection]
-    )
+    })
 
     const links = useMemo<ShareLinkRow[]>(() => {
         const rows = (data ?? []).map(link => ({

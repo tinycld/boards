@@ -115,11 +115,17 @@ vi.mock('@tinycld/core/lib/auth', () => ({
 }))
 
 vi.mock('@tinycld/core/lib/pocketbase', async () => {
-    const { createCollection, localOnlyCollectionOptions } = await import('@tanstack/db')
+    const { BasicIndex, createCollection, localOnlyCollectionOptions } = await import(
+        '@tanstack/db'
+    )
     const mk = (id: string, initialData: { id: string }[]) => {
-        const collection = createCollection(
-            localOnlyCollectionOptions({ id, getKey: (r: { id: string }) => r.id, initialData })
-        )
+        // Auto-indexed like the app's real collections (core/lib/pocketbase.ts),
+        // so the include joins use an index instead of scanning.
+        const collection = createCollection({
+            ...localOnlyCollectionOptions({ id, getKey: (r: { id: string }) => r.id, initialData }),
+            autoIndex: 'eager',
+            defaultIndexType: BasicIndex,
+        })
         return Object.assign(collection, { fetchRelations: () => collection })
     }
     const stores: Record<string, unknown> = {
@@ -168,4 +174,15 @@ test('the per-child hooks select from the same card query', async () => {
 
     const prs = renderHook(() => usePrLinks('c1'), { wrapper })
     await waitFor(() => expect(prs.result.current.data.map(p => p.number)).toEqual([1, 2]))
+})
+
+test('the card query re-runs when the card changes', async () => {
+    const { result, rerender } = renderHook(({ cardId }) => usePrLinks(cardId), {
+        wrapper,
+        initialProps: { cardId: 'c1' },
+    })
+    await waitFor(() => expect(result.current.data.map(p => p.number)).toEqual([1, 2]))
+
+    rerender({ cardId: 'c2' })
+    await waitFor(() => expect(result.current.data).toEqual([]))
 })

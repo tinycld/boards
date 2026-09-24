@@ -88,18 +88,15 @@ function useFocusedLink(focused: string): { isLoading: boolean; href: Href | nul
     // Joined to the board rather than read with `.get()`: both collections
     // sync on demand, so the join is what fetches a row this client has not
     // loaded — the card by id, then its board by id.
-    const { data: rows, isLoading } = useBoardLiveQuery(
-        query => {
-            if (!focused || isKey) return null
-            return query
-                .from({ card: cardsCollection })
-                .innerJoin({ project: projectsCollection }, ({ card, project }) =>
-                    eq(card.project, project.id)
-                )
-                .where(({ card }) => eq(card.id, focused))
-        },
-        [focused, isKey, cardsCollection, projectsCollection]
-    )
+    const { data: rows, isLoading } = useBoardLiveQuery(query => {
+        if (!focused || isKey) return null
+        return query
+            .from({ card: cardsCollection })
+            .innerJoin({ project: projectsCollection }, ({ card, project }) =>
+                eq(card.project, project.id)
+            )
+            .where(({ card }) => eq(card.id, focused))
+    })
 
     if (!focused) return { isLoading: false, href: null }
     if (isKey) return { isLoading: false, href: orgHref(boardPath(focused)) }

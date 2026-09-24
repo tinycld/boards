@@ -11,13 +11,11 @@ import { useBoardLiveQuery } from './useBoardLiveQuery'
  */
 export function useSprintSnapshots(sprintId: string): SprintSnapshot[] {
     const [snapshotsCollection] = useStore('boards_sprint_snapshots')
-    const { data } = useBoardLiveQuery(
-        query =>
-            query
-                .from({ row: snapshotsCollection })
-                .where(({ row }) => eq(row.sprint, sprintId))
-                .orderBy(({ row }) => row.day, 'asc'),
-        [sprintId]
+    const { data } = useBoardLiveQuery(query =>
+        query
+            .from({ row: snapshotsCollection })
+            .where(({ row }) => eq(row.sprint, sprintId))
+            .orderBy(({ row }) => row.day, 'asc')
     )
     return useMemo(() => (data ?? []).map(toSprintSnapshot), [data])
 }

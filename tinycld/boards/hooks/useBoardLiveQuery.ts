@@ -21,7 +21,11 @@ import { useLiveQuery } from '@tanstack/react-db'
  */
 export function useBoardLiveQuery<TContext extends Context>(
     queryFn: (q: InitialQueryBuilder) => QueryBuilder<TContext> | undefined | null,
-    deps: unknown[] = []
+    /**
+     * @deprecated Ignored. The query's identity comes from its IR, which holds
+     * every value the query captures, so a deps list adds nothing.
+     */
+    _deps?: unknown[]
 ) {
-    return useLiveQuery(q => queryFn(q), deps)
+    return useLiveQuery({ query: q => queryFn(q) })
 }
