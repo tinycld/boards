@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -92,16 +94,47 @@ type cardsEnv struct {
 }
 
 // newCardsApp builds a test app whose users collection carries the two fields
-// boards' rules read, then applies the shipped migrations.
+// boards' rules read, with the shipped migrations applied.
 //
 // Order is load-bearing: `users.role` and `users.disabled` must exist BEFORE
 // the migrations run. Every cards rule conjoins `@request.auth.disabled != true`
 // and several read `@request.auth.role`; PocketBase validates a rule expression
 // against the live schema when the collection is saved, so a migration
 // referencing an unknown field fails to apply at all.
+//
+// Applying the migrations costs about 0.65s, and several hundred tests call
+// this, which put the package past `go test`'s default 10-minute limit. So the
+// migrated database is built once per test binary and each test gets its own
+// copy of it: every test still starts from exactly the schema and rules that
+// ship, and nothing one test writes reaches another.
 func newCardsApp(t *testing.T) *tests.TestApp {
 	t.Helper()
-	app := rlstest.NewApp(t)
+	cardsTemplateOnce.Do(func() { cardsTemplateDir = buildCardsTemplate(t) })
+	if cardsTemplateDir == "" {
+		t.Fatal("the migrated template database failed to build in an earlier test")
+	}
+	app, err := tests.NewTestApp(cardsTemplateDir)
+	if err != nil {
+		t.Fatalf("NewTestApp from template: %v", err)
+	}
+	t.Cleanup(func() { app.Cleanup() })
+	return app
+}
+
+var (
+	cardsTemplateOnce sync.Once
+	cardsTemplateDir  string
+)
+
+// buildCardsTemplate returns the data dir of a migrated app whose database
+// connections are closed, ready for tests.NewTestApp to clone. TestMain
+// removes it.
+func buildCardsTemplate(t *testing.T) string {
+	t.Helper()
+	app, err := tests.NewTestApp()
+	if err != nil {
+		t.Fatalf("NewTestApp: %v", err)
+	}
 
 	users, err := app.FindCollectionByNameOrId("users")
 	if err != nil {
@@ -121,7 +154,19 @@ func newCardsApp(t *testing.T) *tests.TestApp {
 	stubGroupsCollection(t, app)
 
 	rlstest.Apply(t, app, rlstest.MigrationsDir(t, "../pb-migrations"))
-	return app
+
+	if err := app.ResetBootstrapState(); err != nil {
+		t.Fatalf("close template database: %v", err)
+	}
+	return app.DataDir()
+}
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if cardsTemplateDir != "" {
+		_ = os.RemoveAll(cardsTemplateDir)
+	}
+	os.Exit(code)
 }
 
 // stubGroupsCollection creates core's groups collection at the id
