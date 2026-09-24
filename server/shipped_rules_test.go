@@ -437,18 +437,20 @@ func TestCardsShippedRules_ShareTokenIsAbsentEverywhereElse(t *testing.T) {
 	}
 }
 
-// The disjunct must sit OUTSIDE the `enabled &&` conjunction.
+// The disjunct must sit OUTSIDE the member clause.
 //
-// @request.auth.* resolves to SQL NULL for an unauthenticated caller, and
-// `NULL != true` is NULL — falsy. A token clause conjoined with `enabled` is
-// therefore unsatisfiable for precisely the caller it exists to serve, and it
-// would look entirely correct while never matching. The shape below is what
-// keeps them separate; a rewrite that folds them fails here rather than
-// silently making every public board empty.
+// The member clause opens with the login guard `@request.auth.id != ""`
+// (2040000001), which an unauthenticated caller always fails. A token clause
+// conjoined with it is therefore unsatisfiable for precisely the caller it
+// exists to serve, and it would look entirely correct while never matching.
+// The shape below is what keeps them separate; a rewrite that folds them fails
+// here rather than silently making every public board empty.
 func TestCardsShippedRules_ShareTokenDisjunctIsTopLevel(t *testing.T) {
 	env := setupCardsEnv(t)
 
-	const wrapped = `(@request.auth.disabled != true && `
+	// The login guard (2040000001) sits inside the member clause, so the token
+	// disjunct stays reachable without a login.
+	const wrapped = `(@request.auth.id != "" && @request.auth.disabled != true && `
 
 	for _, collection := range []string{
 		"boards_projects", "boards_lists", "boards_cards", "boards_labels",
@@ -496,5 +498,30 @@ func TestCardsShippedRules_ServerWrittenCollectionsHaveNoWriteRule(t *testing.T)
 					collection, kind)
 			}
 		}
+	}
+}
+
+// The login guard on member tests (2040000001). A group grant row stores user
+// "", and an anonymous request's @request.auth.id is NULL, which PocketBase
+// compares as `(x = "" OR x IS NULL)` — so without the guard a caller with no
+// token matches the grant and gets its role on the board. Asserted on list and
+// view everywhere a member reads, and on each write path of the members table.
+func TestCardsShippedRules_MemberTestsRequireLogin(t *testing.T) {
+	env := setupCardsEnv(t)
+
+	for _, collection := range []string{
+		"boards_projects", "boards_project_members", "boards_share_links",
+		"boards_labels", "boards_lists", "boards_cards", "boards_checklist_items",
+		"boards_comments", "boards_attachments", "boards_activity",
+		"boards_card_watchers", "boards_comment_reactions", "boards_card_reactions",
+		"boards_card_links", "boards_epics", "boards_sprints", "boards_sprint_snapshots",
+	} {
+		for _, kind := range []string{"list", "view"} {
+			rlstest.RequireRuleContains(t, env.app, collection, kind, rlstest.AuthGuard)
+		}
+	}
+	for _, kind := range []string{"create", "update", "delete"} {
+		rlstest.RequireRuleContains(t, env.app, "boards_project_members", kind, rlstest.AuthGuard)
+		rlstest.RequireRuleContains(t, env.app, "boards_cards", kind, rlstest.AuthGuard)
 	}
 }
