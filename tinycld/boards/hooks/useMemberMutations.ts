@@ -44,6 +44,8 @@ export function useAddMember(
                 // The inviter — unlike useCreateProject's self-inserted first
                 // owner, whose created_by is '' by convention.
                 created_by: user?.id ?? '',
+                // Direct share: a group grant sets group and leaves user empty.
+                group: '',
             })
         }),
         ...options,

@@ -243,6 +243,8 @@ export function useCreateProject(options: { onError?: (error: unknown) => void }
                 // '' by convention for a self-inserted first owner: there is no
                 // other member to have added them.
                 created_by: '',
+                // Direct share: a group grant sets group and leaves user empty.
+                group: '',
             })
 
             const ranks = initialRanks(DEFAULT_LISTS.length)
