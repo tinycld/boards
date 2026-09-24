@@ -250,6 +250,45 @@ func TestBoardsOffboard_GuestSuccessorRefused(t *testing.T) {
 	requireUserAnonymized(t, env.app, env.owner, false)
 }
 
+// A no-plan account delete (ModeKeep, self actor) has no one to hand a shared
+// board to. Like the delete-my-data self-delete case, it is refused with
+// instructions, and nothing changes: no board is deleted, no membership moves.
+func TestBoardsOffboard_KeepRefusedForSoleOwnedSharedBoard(t *testing.T) {
+	env := setupBoardsOffboardApp(t)
+
+	_, err := offboard.OffboardUser(env.app, env.owner.Id,
+		offboard.Plan{Mode: offboard.ModeKeep}, env.owner.Id)
+	if !errors.Is(err, offboard.ErrInvalidPlan) {
+		t.Fatalf("err = %v, want ErrInvalidPlan", err)
+	}
+	requireBoardKept(t, env)
+	requireBoardRole(t, env.app, env.project, env.owner, "owner")
+	requireBoardRole(t, env.app, env.project, env.member, "viewer")
+	requireCreator(t, env.app, env.project, env.owner)
+	requireUserAnonymized(t, env.app, env.owner, false)
+}
+
+// Without a sole-owned shared board, a no-plan account delete succeeds and
+// leaves every board exactly as it was: ModeKeep never deletes a board, even
+// one only the leaver used (unlike delete-my-data).
+func TestBoardsOffboard_KeepAllowedAndLeavesBoardsInPlace(t *testing.T) {
+	env := setupBoardsOffboardApp(t)
+	created := cardsProject(t, env.app, "Mine", env.outsider)
+	cardsMember(t, env.app, created, env.outsider, "owner")
+
+	if _, err := offboard.OffboardUser(env.app, env.outsider.Id,
+		offboard.Plan{Mode: offboard.ModeKeep}, env.outsider.Id); err != nil {
+		t.Fatalf("OffboardUser: %v", err)
+	}
+
+	if _, err := env.app.FindRecordById("boards_projects", created.Id); err != nil {
+		t.Errorf("board kept only by the leaver was deleted in ModeKeep: %v", err)
+	}
+	requireBoardRole(t, env.app, created, env.outsider, "owner")
+	requireCreator(t, env.app, created, env.outsider)
+	requireUserAnonymized(t, env.app, env.outsider, true)
+}
+
 // D: a direct REST delete of your own account, while you are the only owner of
 // a board other people use, is refused and points at account deletion with a
 // successor.
