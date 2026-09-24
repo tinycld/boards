@@ -1,3 +1,4 @@
+import { GroupShareSection } from '@tinycld/core/components/groups/GroupShareSection'
 import { useAuth } from '@tinycld/core/lib/auth'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useCurrentRole } from '@tinycld/core/lib/use-current-role'
@@ -8,12 +9,14 @@ import { UserPlus } from 'lucide-react-native'
 import { useState } from 'react'
 import { Text, View } from 'react-native'
 import { useChangeMemberRole, useRemoveMember } from '../../hooks/useMemberMutations'
+import { useProjectGroupGrants } from '../../hooks/useProjectGroupGrants'
 import { type ProjectMemberRow, useProjectMembers } from '../../hooks/useProjectMembers'
 import { useProjectRole } from '../../hooks/useProjectRole'
 import { memberRowActionsFor } from '../../lib/permissions'
 import type { BoardProject, BoardsMemberRole } from '../../types'
 import { AddMemberDialog } from './AddMemberDialog'
 import { MemberRow } from './MemberRow'
+import { GROUP_ROLE_OPTIONS } from './roles'
 import { ShareLinkSection } from './ShareLinkSection'
 
 interface ShareDialogProps {
@@ -52,6 +55,7 @@ function ShareDialogContent({ onClose, project }: { onClose: () => void; project
     // The ORG axis, not the project one: an org-guest reads no roster by rule.
     const { isGuest, isReady: orgRoleReady } = useCurrentRole()
     const { members, ownerCount } = useProjectMembers(project.id)
+    const groupGrants = useProjectGroupGrants(project.id)
     const [isAdding, setIsAdding] = useState(false)
     const [isLeaving, setIsLeaving] = useState(false)
     const fgColor = useThemeColor('foreground')
@@ -90,6 +94,11 @@ function ShareDialogContent({ onClose, project }: { onClose: () => void; project
                         </View>
                     ))}
                 </View>
+                <GroupShareSection
+                    {...groupGrants}
+                    roles={GROUP_ROLE_OPTIONS}
+                    canManage={isOwner}
+                />
                 <GuestRosterNote isVisible={isGuest && orgRoleReady} />
                 <ShareLinkSection projectId={project.id} isVisible={isOwner} />
             </Dialog.Body>

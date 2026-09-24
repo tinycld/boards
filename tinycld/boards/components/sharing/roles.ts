@@ -52,3 +52,9 @@ export function roleLabel(role: BoardsMemberRole): string {
 export const SHARE_LINK_ROLE_OPTIONS: RoleOption[] = ROLE_OPTIONS.filter(
     option => option.value !== 'owner'
 )
+
+// A group is never an owner: the last-owner guard counts people, and ownership
+// of a board is a personal responsibility, not a team one.
+export const GROUP_ROLE_OPTIONS: RoleOption[] = ROLE_OPTIONS.filter(
+    option => option.value !== 'owner'
+)
