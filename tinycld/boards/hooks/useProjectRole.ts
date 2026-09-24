@@ -2,6 +2,7 @@ import { and, eq } from '@tanstack/db'
 import { useAuth } from '@tinycld/core/lib/auth'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { useMyLiveQuery } from '@tinycld/core/lib/use-my-live-query'
+import { highestRole } from '../lib/highest-role'
 import { capabilitiesFor, type ProjectCapabilities } from '../lib/permissions'
 import type { BoardsMemberRole } from '../types'
 
@@ -48,7 +49,8 @@ export function useProjectRole(projectId: string): ProjectRole {
         [projectId]
     )
 
-    const role = rows?.[0]?.role ?? null
+    // Several rows when a direct share and a group grant both apply.
+    const role = highestRole((rows ?? []).map(row => row.role))
 
     // A share-link visitor is unauthenticated, so useMyLiveQuery disables
     // itself and `isReady` never settles. Left alone that would be a board with

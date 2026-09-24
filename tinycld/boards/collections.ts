@@ -287,7 +287,7 @@ export function registerCollections(
     const boards_project_members = newCollection('boards_project_members', {
         omitOnInsert: ['created', 'updated'] as const,
         syncMode: 'on-demand' as const,
-        relations: { project: boards_projects, user: coreStores.users },
+        relations: { project: boards_projects, user: coreStores.users, group: coreStores.groups },
         alwaysFetchRelations: ['project'],
         collectionOptions: indexed,
     })

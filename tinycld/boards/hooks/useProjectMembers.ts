@@ -1,4 +1,4 @@
-import { eq } from '@tanstack/db'
+import { and, eq } from '@tanstack/db'
 import { useLiveQuery } from '@tanstack/react-db'
 import { useAuth } from '@tinycld/core/lib/auth'
 import { useStore } from '@tinycld/core/lib/pocketbase'
@@ -40,12 +40,15 @@ export function useProjectMembers(projectId: string) {
     const { data: rows, isReady } = useLiveQuery(
         query => {
             if (!projectId) return null
-            return query
-                .from({ member: membersCollection })
-                .innerJoin({ user: usersCollection }, ({ member, user: u }) =>
-                    eq(member.user, u.id)
-                )
-                .where(({ member }) => eq(member.project, projectId))
+            return (
+                query
+                    .from({ member: membersCollection })
+                    .innerJoin({ user: usersCollection }, ({ member, user: u }) =>
+                        eq(member.user, u.id)
+                    )
+                    // Direct shares only: grant rows have no user, derived rows are shown under their group.
+                    .where(({ member }) => and(eq(member.project, projectId), eq(member.group, '')))
+            )
         },
         [projectId]
     )
