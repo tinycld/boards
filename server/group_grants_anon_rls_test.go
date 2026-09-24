@@ -236,7 +236,9 @@ func TestGroupGrantAnon_EditorMayRenameCard(t *testing.T) {
 
 // Every rule in the app that reaches boards_project_members.user must carry
 // the login guard. This catches a future rule the sweeps above do not name.
+// The app carries core's migrations too: comment_mentions is core's table,
+// and its boards branch reaches the grant table — a boards-only app missed it.
 func TestGroupGrantAnon_EveryGrantRuleRequiresLogin(t *testing.T) {
-	app := newCardsApp(t)
+	app := rlstest.NewAssembledApp(t, rlstest.MigrationsDir(t, "../pb-migrations"))
 	rlstest.RequireAuthGuardOnGrantRules(t, app, "boards_project_members")
 }
