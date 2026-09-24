@@ -5,6 +5,7 @@ import { useMyLiveQuery } from '@tinycld/core/lib/use-my-live-query'
 import { materialize } from 'pbtsdb'
 import { useMemo, useRef } from 'react'
 import { type BoardViewOptions, buildBoardProject } from '../lib/board-project'
+import { uniqueByUserId } from '../lib/unique-by-user-id'
 import type { SprintScope, ViewMode } from '../stores/boards-ui-store'
 import type { BoardProject } from '../types'
 import { useBoardLiveQuery } from './useBoardLiveQuery'
@@ -306,7 +307,10 @@ export function useBoardTree({ rows, users, isLoading }: BoardRows, view?: Board
                     labels: rows?.labels ?? [],
                     epics: rows?.epics ?? [],
                     sprints: rows?.sprints ?? [],
-                    members: (rows?.members ?? []).map(r => r.user),
+                    // Group grants can put the same user on the roster twice (a
+                    // direct row and a group row); the avatar stack shows one
+                    // person once.
+                    members: uniqueByUserId(rows?.members ?? []).map(r => r.user),
                     users: users ?? [],
                     view,
                 },
