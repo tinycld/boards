@@ -38,15 +38,12 @@ export function useProjectRole(projectId: string): ProjectRole {
     // the default turned that screen into an error boundary.
     const { user } = useAuth({ throwIfAnon: false })
 
-    const { data: rows, isReady } = useMyLiveQuery(
-        (query, { userId }) => {
-            if (!projectId) return null
-            return query
-                .from({ member: membersCollection })
-                .where(({ member }) => and(eq(member.project, projectId), eq(member.user, userId)))
-        },
-        [projectId]
-    )
+    const { data: rows, isReady } = useMyLiveQuery((query, { userId }) => {
+        if (!projectId) return null
+        return query
+            .from({ member: membersCollection })
+            .where(({ member }) => and(eq(member.project, projectId), eq(member.user, userId)))
+    })
 
     const role = rows?.[0]?.role ?? null
 

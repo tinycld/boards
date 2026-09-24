@@ -141,11 +141,17 @@ vi.mock('@tinycld/core/lib/auth', () => ({
 }))
 
 vi.mock('@tinycld/core/lib/pocketbase', async () => {
-    const { createCollection, localOnlyCollectionOptions } = await import('@tanstack/db')
+    const { BasicIndex, createCollection, localOnlyCollectionOptions } = await import(
+        '@tanstack/db'
+    )
     const mk = (id: string, initialData: { id: string }[]) => {
-        const collection = createCollection(
-            localOnlyCollectionOptions({ id, getKey: (r: { id: string }) => r.id, initialData })
-        )
+        // Auto-indexed like the app's real collections (core/lib/pocketbase.ts),
+        // so the include joins use an index instead of scanning.
+        const collection = createCollection({
+            ...localOnlyCollectionOptions({ id, getKey: (r: { id: string }) => r.id, initialData }),
+            autoIndex: 'eager',
+            defaultIndexType: BasicIndex,
+        })
         // A local collection has no relations to fetch; the view the hook
         // reads through is the collection itself.
         return Object.assign(collection, { fetchRelations: () => collection })
@@ -183,6 +189,17 @@ test('useBoardRows resolves one board with its children, by id or by slug', asyn
 
     const bySlug = renderHook(() => useBoardRows({ segment: 'otter-2', slug: 'OTTER' }))
     await waitFor(() => expect(bySlug.result.current.rows?.project.id).toBe('p1'))
+})
+
+test('useBoardRows re-runs when the selected board changes', async () => {
+    const { result, rerender } = renderHook(({ id }) => useBoardRows({ id }), {
+        initialProps: { id: 'p1' },
+    })
+    await waitFor(() => expect(result.current.rows?.project.id).toBe('p1'))
+
+    rerender({ id: 'p2' })
+    await waitFor(() => expect(result.current.rows?.project.id).toBe('p2'))
+    expect(result.current.rows?.lists.map(l => l.id)).toEqual(['l2'])
 })
 
 test('useBoardContent builds the tree and keeps its identity across rerenders', async () => {

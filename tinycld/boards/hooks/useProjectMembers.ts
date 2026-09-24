@@ -37,8 +37,8 @@ export function useProjectMembers(projectId: string) {
     const { user } = useAuth({ throwIfAnon: false })
     const [membersCollection, usersCollection] = useStore('boards_project_members', 'users')
 
-    const { data: rows, isReady } = useLiveQuery(
-        query => {
+    const { data: rows, isReady } = useLiveQuery({
+        query: query => {
             if (!projectId) return null
             return query
                 .from({ member: membersCollection })
@@ -47,8 +47,7 @@ export function useProjectMembers(projectId: string) {
                 )
                 .where(({ member }) => eq(member.project, projectId))
         },
-        [projectId]
-    )
+    })
 
     const members = useMemo<ProjectMemberRow[]>(() => {
         const mapped = (rows ?? []).map(row => ({
