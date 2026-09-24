@@ -11,6 +11,7 @@ import (
 //	&& role = "owner"
 //	&& project.boards_project_members_via_project.id = ""
 //	&& @request.auth.role != "guest"
+//	&& project.created_by = @request.auth.id   (2040000001; owner_claim_rls_test.go)
 //
 // The third clause is PocketBase's "this back-relation is empty" idiom, and it
 // leans on the operator the migration's own trap notes warn about: bare `=` on

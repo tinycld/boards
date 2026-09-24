@@ -181,8 +181,9 @@ export function useDeleteProject() {
  *  1. The project must exist server-side before anything can relate to it.
  *  2. The owner row is admitted by the `bootstrapFirstOwner` branch of
  *     boards_project_members' create rule, which requires the caller to be
- *     inserting THEMSELVES as "owner" while the project still has no members.
- *     It is the only way a board gets its first owner — cards deliberately puts
+ *     inserting THEMSELVES as "owner" while the project still has no members,
+ *     and to be the project's `created_by` (which step 1 must therefore write
+ *     as the caller — the project create rule refuses any other value). It is the only way a board gets its first owner — cards deliberately puts
  *     this in the rule rather than a Go hook, so ownership is established by
  *     the same request that creates the board and no hook has to fire.
  *  3. The lists are admitted by `viaWriter`, which needs that owner row already

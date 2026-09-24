@@ -36,6 +36,22 @@
 // rlstest.RequireAuthGuardOnAccessRules fails the build on any rule that
 // reads @request.auth on a path without the guard.
 //
+// WHY bootstrapFirstOwner NOW REQUIRES THE PROJECT'S CREATOR.
+// 1980000000's branch asked only "does the project have no members?", so any
+// logged-in non-guest could POST an owner row for themselves on a memberless
+// board and own it: a board someone else just created (the window before its
+// creator's owner row lands), or one whose last member row a users-delete
+// cascade removed (the last-owner guard never sees a cascade). The branch now
+// also requires `project.created_by = @request.auth.id`. created_by already
+// exists (required, no cascade), so no new field is needed; the project create
+// rule pins it to the caller and the update rule pins it to its stored value,
+// so no one can forge or repoint the value the branch trusts.
+// Mail had the same hole (mail 1830000007).
+//
+// This is an in-place edit, not a new migration, because 2040000001 is not
+// released (boards v0.1.2 does not carry it). No database has applied the
+// version without the clause, so no upgrade path needs it restated.
+//
 // Rules are restated as literals, never read back off the collection
 // (shipped_rules_test.go asserts them): boards_project_members from
 // 1980000000 with the new clauses appended, the other collections from their
@@ -230,10 +246,13 @@ migrate(
         const rosterRule = `(${viaMember} && ${notGuest})`
         const ownMemberRow = 'user = @request.auth.id'
         const ownerCanAdd = viaOwner
+        // Only the project's creator may take the first owner row; see the
+        // header.
         const bootstrapFirstOwner =
             'user = @request.auth.id && role = "owner"' +
             ' && project.boards_project_members_via_project.id = ""' +
-            ` && ${notGuest}`
+            ` && ${notGuest}` +
+            ' && project.created_by = @request.auth.id'
         // A client writes direct rows and grants; derived rows (both set) are
         // core's. A grant never carries owner, so last-owner guards keep meaning.
         const notDerived = '(user = "" || group = "")'
@@ -258,9 +277,18 @@ migrate(
 
         app.save(members)
 
-        applyRules(app, grantReachingRules(`${authed} && `))
+        const guarded = grantReachingRules(`${authed} && `)
+        applyRules(app, guarded)
         applyRules(app, ownRowDeleteRules(`${authed} && `))
         rewriteMentionsBranch(app, mentionsBranchStart, mentionsBranchGuarded)
+
+        // bootstrapFirstOwner trusts created_by, so pin it: to the caller on
+        // create, to the stored value on update.
+        const projects = app.findCollectionByNameOrId('boards_projects')
+        projects.createRule = `${authed} && ${notGuest} && ${enabled} && created_by = @request.auth.id`
+        projects.updateRule =
+            `${guarded.boards_projects.updateRule} && (@request.body.created_by:isset = false || @request.body.created_by = created_by)`
+        app.save(projects)
     },
     app => {
         const members = app.findCollectionByNameOrId('boards_project_members')
@@ -298,5 +326,11 @@ migrate(
         applyRules(app, grantReachingRules(''))
         applyRules(app, ownRowDeleteRules(''))
         rewriteMentionsBranch(app, mentionsBranchGuarded, mentionsBranchStart)
+
+        // 1980000000's create rule. grantReachingRules('') above already
+        // restored the update rule without the created_by pin.
+        const projects = app.findCollectionByNameOrId('boards_projects')
+        projects.createRule = `@request.auth.id != "" && ${notGuest} && ${enabled}`
+        app.save(projects)
     }
 )
