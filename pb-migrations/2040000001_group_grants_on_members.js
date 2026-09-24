@@ -24,6 +24,18 @@
 // work. rlstest.RequireAuthGuardOnGrantRules fails the build if a later rule
 // forgets it. (boards_project_repos and boards_pr_links already carry it.)
 //
+// Two more rules gain the guard here, for the same reason:
+//   - comment_mentions.createRule's boards branch (1986000000) tests
+//     `…_via_project.user ?= @request.auth.id` too, so a grant row let an
+//     anonymous caller write a mention — and so a notification — for any user.
+//     The table is core's and its rule is shared by every package, so the
+//     branch is rewritten in place by its predicate rather than restated.
+//   - the own-row delete rules on watchers and reactions (`user =
+//     @request.auth.id`). They are safe today only because `user` is
+//     required there; the guard stops them depending on that.
+// rlstest.RequireAuthGuardOnAccessRules fails the build on any rule that
+// reads @request.auth on a path without the guard.
+//
 // Rules are restated as literals, never read back off the collection
 // (shipped_rules_test.go asserts them): boards_project_members from
 // 1980000000 with the new clauses appended, the other collections from their
@@ -140,6 +152,35 @@ function grantReachingRules(guard) {
     }
 }
 
+// The own-row delete rules from 1980000009, 1980000013 and 1980000020, with
+// `guard` in front. Up passes the login guard; down passes '' to restore them.
+function ownRowDeleteRules(guard) {
+    const deleteRule = `${guard}@request.auth.disabled != true && user = @request.auth.id`
+    return {
+        boards_card_watchers: { deleteRule },
+        boards_comment_reactions: { deleteRule },
+        boards_card_reactions: { deleteRule },
+    }
+}
+
+// boards' branch of comment_mentions.createRule starts with this predicate
+// (1986000000). Up inserts the login guard right after it; down removes it.
+const mentionsBranchStart = 'target_collection = "boards_cards" && '
+const mentionsBranchGuarded = `${mentionsBranchStart}@request.auth.id != "" && `
+
+function rewriteMentionsBranch(app, from, to) {
+    let mentions
+    try {
+        mentions = app.findCollectionByNameOrId('comment_mentions')
+    } catch {
+        return
+    }
+    const current = mentions.createRule || ''
+    if (current.indexOf(from) === -1) return
+    mentions.createRule = current.replace(from, to)
+    app.save(mentions)
+}
+
 function applyRules(app, byCollection) {
     for (const [name, rules] of Object.entries(byCollection)) {
         const col = app.findCollectionByNameOrId(name)
@@ -218,6 +259,8 @@ migrate(
         app.save(members)
 
         applyRules(app, grantReachingRules(`${authed} && `))
+        applyRules(app, ownRowDeleteRules(`${authed} && `))
+        rewriteMentionsBranch(app, mentionsBranchStart, mentionsBranchGuarded)
     },
     app => {
         const members = app.findCollectionByNameOrId('boards_project_members')
@@ -253,5 +296,7 @@ migrate(
         app.save(members)
 
         applyRules(app, grantReachingRules(''))
+        applyRules(app, ownRowDeleteRules(''))
+        rewriteMentionsBranch(app, mentionsBranchGuarded, mentionsBranchStart)
     }
 )
