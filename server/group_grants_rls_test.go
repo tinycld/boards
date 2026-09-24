@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tests"
 )
 
 // The three row kinds on boards_project_members, through the API as the
@@ -84,6 +85,54 @@ func TestGroupGrantRules_DerivedRowIsReadByItsUserAndUntouchableByTheOwner(t *te
 		token:   env.outsiderToken,
 		want:    http.StatusOK,
 		content: []string{env.project.Id},
+	}.run(t, env)
+}
+
+// The bug this guards: PocketBase evaluates an UPDATE rule's bare field names
+// against the STORED row, not the submitted body (the same reason
+// pinProject/pinUser/pinGroup compare @request.body.x to bare x). A
+// groupNeverOwner clause written as a bare `role != "owner"` would therefore
+// check the OLD role and let a PATCH re-role a grant to owner. The migration's
+// update rule must read @request.body.role explicitly.
+func TestGroupGrantRules_OwnerCannotRePromoteAGroupGrantToOwner(t *testing.T) {
+	env := setupCardsEnv(t)
+	g := cardsGroup(t, env.app, "keepers")
+	grant := cardsGroupGrant(t, env.app, env.project, g, "viewer")
+
+	req{
+		method: http.MethodPatch,
+		url:    "/api/collections/boards_project_members/records/" + grant.Id,
+		token:  env.ownerToken,
+		body:   `{"role":"owner"}`,
+		want:   http.StatusNotFound,
+		after: func(t testing.TB, app *tests.TestApp) {
+			fresh, err := app.FindRecordById("boards_project_members", grant.Id)
+			if err != nil {
+				t.Fatalf("re-read grant: %v", err)
+			}
+			if got := fresh.GetString("role"); got != "viewer" {
+				t.Fatalf("grant role = %q, want %q — the re-promotion landed despite the refusal", got, "viewer")
+			}
+		},
+	}.run(t, env)
+}
+
+// The positive case alongside it: an owner may still re-role a grant to any
+// NON-owner role. Without this, a fix that blocked owner-only by accident
+// (e.g. blocking every update once a group is set) would pass the negative
+// test above for the wrong reason.
+func TestGroupGrantRules_OwnerMayRepromoteAGroupGrantToEditor(t *testing.T) {
+	env := setupCardsEnv(t)
+	g := cardsGroup(t, env.app, "keepers")
+	grant := cardsGroupGrant(t, env.app, env.project, g, "viewer")
+
+	req{
+		method:  http.MethodPatch,
+		url:     "/api/collections/boards_project_members/records/" + grant.Id,
+		token:   env.ownerToken,
+		body:    `{"role":"editor"}`,
+		want:    http.StatusOK,
+		content: []string{`"role":"editor"`},
 	}.run(t, env)
 }
 

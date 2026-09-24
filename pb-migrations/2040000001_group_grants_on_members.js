@@ -56,12 +56,23 @@ migrate(
         // A client writes direct rows and grants; derived rows (both set) are
         // core's. A grant never carries owner, so last-owner guards keep meaning.
         const notDerived = '(user = "" || group = "")'
-        const groupNeverOwner = '(group = "" || role != "owner")'
+        // On CREATE, PocketBase evaluates a bare field name against the
+        // submitted record, so `role` here already reads the request body.
+        const groupNeverOwnerOnCreate = '(group = "" || role != "owner")'
+        // On UPDATE, a bare field name reads the STORED row instead (the same
+        // reason pinProject/pinUser/pinGroup compare @request.body.x to bare
+        // x) — so a bare `role != "owner"` here would check the value BEFORE
+        // the PATCH applied and let a grant be re-roled to owner. Read the
+        // body explicitly. `group` stays bare on purpose: it identifies the
+        // row as a grant, and pinGroup already stops the body from changing
+        // it mid-request.
+        const groupNeverOwnerOnUpdate =
+            '(group = "" || @request.body.role:isset = false || @request.body.role != "owner")'
 
         members.listRule = `${enabled} && (${ownMemberRow} || ${rosterRule})`
         members.viewRule = `${enabled} && (${ownMemberRow} || ${rosterRule})`
-        members.createRule = `${enabled} && ${notDerived} && ${groupNeverOwner} && ((${ownerCanAdd}) || (${bootstrapFirstOwner}))`
-        members.updateRule = `${enabled} && ${notDerived} && ${groupNeverOwner} && ${viaOwner} && ${pinProject} && ${pinUser} && ${pinGroup}`
+        members.createRule = `${enabled} && ${notDerived} && ${groupNeverOwnerOnCreate} && ((${ownerCanAdd}) || (${bootstrapFirstOwner}))`
+        members.updateRule = `${enabled} && ${notDerived} && ${groupNeverOwnerOnUpdate} && ${viaOwner} && ${pinProject} && ${pinUser} && ${pinGroup}`
         members.deleteRule = `${enabled} && ${notDerived} && (${ownMemberRow} || ${viaOwner})`
 
         app.save(members)

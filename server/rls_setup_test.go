@@ -125,7 +125,7 @@ func newCardsApp(t *testing.T) *tests.TestApp {
 }
 
 // stubGroupsCollection creates core's groups collection at the id
-// 1986000003 names as its relation target. Every fixture that applies
+// 2040000001 names as its relation target. Every fixture that applies
 // ../pb-migrations against a bare test app needs this first — the migration
 // fails to save otherwise ("The relation collection doesn't exist").
 func stubGroupsCollection(t *testing.T, app core.App) {
@@ -207,6 +207,25 @@ func cardsGroup(t *testing.T, app core.App, name string) *core.Record {
 		t.Fatalf("save group: %v", err)
 	}
 	return g
+}
+
+// cardsGroupGrant creates a client-shaped group grant (user empty, group
+// set) directly, as an API create test that isn't exercising create-rule
+// behaviour needs one to already exist.
+func cardsGroupGrant(t *testing.T, app core.App, project, group *core.Record, role string) *core.Record {
+	t.Helper()
+	col, err := app.FindCollectionByNameOrId("boards_project_members")
+	if err != nil {
+		t.Fatalf("find boards_project_members: %v", err)
+	}
+	r := core.NewRecord(col)
+	r.Set("project", project.Id)
+	r.Set("group", group.Id)
+	r.Set("role", role)
+	if err := app.Save(r); err != nil {
+		t.Fatalf("save group grant (%s): %v", role, err)
+	}
+	return r
 }
 
 func cardsMember(t *testing.T, app core.App, project, user *core.Record, role string) *core.Record {
