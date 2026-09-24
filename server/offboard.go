@@ -180,11 +180,13 @@ func moveProjectCreator(txApp core.App, leaverID, heirID string) error {
 }
 
 // makeProjectOwner gives the user an owner membership on the board, upgrading
-// the existing row when there is one: the unique (project, user) index allows
-// only one.
+// their direct row when there is one: the unique (project, user, group) index
+// allows only one. It matches direct rows only (group = ""). A derived row
+// belongs to a group grant, which re-syncs its role and removes it with the
+// grant, so an owner role set there would not last.
 func makeProjectOwner(txApp core.App, projectID, userID string) error {
 	existing, err := txApp.FindFirstRecordByFilter("boards_project_members",
-		"project = {:project} && user = {:user}",
+		"project = {:project} && user = {:user} && group = ''",
 		dbx.Params{"project": projectID, "user": userID})
 	if err == nil {
 		if existing.GetString("role") == "owner" {

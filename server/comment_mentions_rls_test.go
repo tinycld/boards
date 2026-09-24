@@ -94,6 +94,7 @@ func setupMentionsEnv(t *testing.T) *mentionsEnv {
 	if err := app.Save(users); err != nil {
 		t.Fatalf("add users.role/users.disabled: %v", err)
 	}
+	stubGroupsCollection(t, app)
 
 	// Applied in the order a boards-only boot reaches them, which is filename
 	// order across the flat directory:
@@ -192,6 +193,48 @@ func TestCommentMentionsRLS_NonMemberRefused(t *testing.T) {
 	postMention(t, env, env.outsiderToken, http.StatusBadRequest)
 }
 
+// A group grant stores user "". With no login, PocketBase resolves
+// @request.auth.id to NULL and rewrites `x = NULL` as `(x = ” OR x IS NULL)`,
+// so without the login guard the branch's
+// `…_via_project.user ?= @request.auth.id` matches the grant row, and anyone
+// with no token could notify any user — and copy a comment body into that
+// notification. The grant here is an EDITOR grant, a role the branch admits.
+func setupGroupGrantMentionsEnv(t *testing.T) *mentionsEnv {
+	t.Helper()
+	env := setupMentionsEnv(t)
+	cardsGroupGrant(t, env.app, env.project, cardsGroup(t, env.app, "keepers"), "editor")
+	return env
+}
+
+func requireNoMentions(t testing.TB, app *tests.TestApp) {
+	t.Helper()
+	n, err := app.CountRecords("comment_mentions")
+	if err != nil {
+		t.Fatalf("count comment_mentions: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("an anonymous request created %d comment_mentions rows", n)
+	}
+}
+
+func TestCommentMentionsRLS_AnonymousRefusedDespiteGroupGrant(t *testing.T) {
+	env := setupGroupGrantMentionsEnv(t)
+	req{
+		method: http.MethodPost,
+		url:    "/api/collections/comment_mentions/records",
+		body:   mentionBody(env, env.card.Id),
+		want:   http.StatusBadRequest,
+		after:  requireNoMentions,
+	}.run(t, env.cardsEnv)
+}
+
+// Positive control for the case above: on the same fixture, a member with
+// commenting standing still mentions, so the refusal is the login guard's.
+func TestCommentMentionsRLS_GroupGrantFixture_EditorMayMention(t *testing.T) {
+	env := setupGroupGrantMentionsEnv(t)
+	postMention(t, env, env.editorToken, http.StatusOK)
+}
+
 // A member of ANOTHER board must not reach this one. The branch resolves
 // membership through the TARGET CARD's project, so a legitimate membership
 // elsewhere must not carry over — the trap a `?=` back-relation invites.
@@ -244,6 +287,7 @@ func TestCommentMentionsRLS_AppendPreservesExistingBranch(t *testing.T) {
 	if err := app.Save(users); err != nil {
 		t.Fatalf("add users.role/users.disabled: %v", err)
 	}
+	stubGroupsCollection(t, app)
 
 	rlstest.Apply(t, app, coreMentionsDir(t))
 

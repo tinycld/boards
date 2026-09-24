@@ -33,6 +33,19 @@ To share a board, open the member list and choose **Add people** (owners
 only). Search for a person by name or email, pick the role they should have,
 and press **Add**. They see the board immediately.
 
+## Sharing with a group
+
+Under the list of people in the Share dialog is a **Groups** section. Choose
+**Add group**, pick a role, and pick a group. Everyone in the group gets that
+role on the board, including people who join the group later. Remove the group
+or change its role from the same section.
+
+A group can be an editor, commentor or viewer, never an owner. If someone is on
+the board directly and also through a group, the stronger role applies.
+
+Admins create and manage groups under **Settings → Groups**; see
+[Groups](help://core:groups).
+
 ## Changing a role or removing someone
 
 In the member list, an owner can change any member's role with the dropdown

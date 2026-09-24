@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -92,16 +94,47 @@ type cardsEnv struct {
 }
 
 // newCardsApp builds a test app whose users collection carries the two fields
-// boards' rules read, then applies the shipped migrations.
+// boards' rules read, with the shipped migrations applied.
 //
 // Order is load-bearing: `users.role` and `users.disabled` must exist BEFORE
 // the migrations run. Every cards rule conjoins `@request.auth.disabled != true`
 // and several read `@request.auth.role`; PocketBase validates a rule expression
 // against the live schema when the collection is saved, so a migration
 // referencing an unknown field fails to apply at all.
+//
+// Applying the migrations costs about 0.65s, and several hundred tests call
+// this, which put the package past `go test`'s default 10-minute limit. So the
+// migrated database is built once per test binary and each test gets its own
+// copy of it: every test still starts from exactly the schema and rules that
+// ship, and nothing one test writes reaches another.
 func newCardsApp(t *testing.T) *tests.TestApp {
 	t.Helper()
-	app := rlstest.NewApp(t)
+	cardsTemplateOnce.Do(func() { cardsTemplateDir = buildCardsTemplate(t) })
+	if cardsTemplateDir == "" {
+		t.Fatal("the migrated template database failed to build in an earlier test")
+	}
+	app, err := tests.NewTestApp(cardsTemplateDir)
+	if err != nil {
+		t.Fatalf("NewTestApp from template: %v", err)
+	}
+	t.Cleanup(func() { app.Cleanup() })
+	return app
+}
+
+var (
+	cardsTemplateOnce sync.Once
+	cardsTemplateDir  string
+)
+
+// buildCardsTemplate returns the data dir of a migrated app whose database
+// connections are closed, ready for tests.NewTestApp to clone. TestMain
+// removes it.
+func buildCardsTemplate(t *testing.T) string {
+	t.Helper()
+	app, err := tests.NewTestApp()
+	if err != nil {
+		t.Fatalf("NewTestApp: %v", err)
+	}
 
 	users, err := app.FindCollectionByNameOrId("users")
 	if err != nil {
@@ -118,8 +151,36 @@ func newCardsApp(t *testing.T) *tests.TestApp {
 		t.Fatalf("add users.role/users.disabled: %v", err)
 	}
 
+	stubGroupsCollection(t, app)
+
 	rlstest.Apply(t, app, rlstest.MigrationsDir(t, "../pb-migrations"))
-	return app
+
+	if err := app.ResetBootstrapState(); err != nil {
+		t.Fatalf("close template database: %v", err)
+	}
+	return app.DataDir()
+}
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if cardsTemplateDir != "" {
+		_ = os.RemoveAll(cardsTemplateDir)
+	}
+	os.Exit(code)
+}
+
+// stubGroupsCollection creates core's groups collection at the id
+// 2040000001 names as its relation target. Every fixture that applies
+// ../pb-migrations against a bare test app needs this first — the migration
+// fails to save otherwise ("The relation collection doesn't exist").
+func stubGroupsCollection(t *testing.T, app core.App) {
+	t.Helper()
+	groups := core.NewBaseCollection("groups")
+	groups.Id = "pbc_groups_01"
+	groups.Fields.Add(&core.TextField{Name: "name", Required: true})
+	if err := app.Save(groups); err != nil {
+		t.Fatalf("stub groups collection: %v", err)
+	}
 }
 
 // fixtureUserSeq makes every fixture username unique within a process run.
@@ -174,6 +235,40 @@ func cardsProject(t *testing.T, app core.App, name string, createdBy *core.Recor
 	r.Set("created_by", createdBy.Id)
 	if err := app.Save(r); err != nil {
 		t.Fatalf("save project %s: %v", name, err)
+	}
+	return r
+}
+
+// cardsGroup creates a stub core group.
+func cardsGroup(t *testing.T, app core.App, name string) *core.Record {
+	t.Helper()
+	col, err := app.FindCollectionByNameOrId("groups")
+	if err != nil {
+		t.Fatalf("find groups: %v", err)
+	}
+	g := core.NewRecord(col)
+	g.Set("name", name)
+	if err := app.Save(g); err != nil {
+		t.Fatalf("save group: %v", err)
+	}
+	return g
+}
+
+// cardsGroupGrant creates a client-shaped group grant (user empty, group
+// set) directly, as an API create test that isn't exercising create-rule
+// behaviour needs one to already exist.
+func cardsGroupGrant(t *testing.T, app core.App, project, group *core.Record, role string) *core.Record {
+	t.Helper()
+	col, err := app.FindCollectionByNameOrId("boards_project_members")
+	if err != nil {
+		t.Fatalf("find boards_project_members: %v", err)
+	}
+	r := core.NewRecord(col)
+	r.Set("project", project.Id)
+	r.Set("group", group.Id)
+	r.Set("role", role)
+	if err := app.Save(r); err != nil {
+		t.Fatalf("save group grant (%s): %v", role, err)
 	}
 	return r
 }
