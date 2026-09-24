@@ -141,10 +141,20 @@ vi.mock('@tinycld/core/lib/auth', () => ({
 }))
 
 vi.mock('@tinycld/core/lib/pocketbase', async () => {
-    const { createCollection, localOnlyCollectionOptions } = await import('@tanstack/db')
+    const { BasicIndex, createCollection, localOnlyCollectionOptions } = await import(
+        '@tanstack/db'
+    )
     const mk = (id: string, initialData: { id: string }[]) => {
         const collection = createCollection(
-            localOnlyCollectionOptions({ id, getKey: (r: { id: string }) => r.id, initialData })
+            localOnlyCollectionOptions({
+                id,
+                getKey: (r: { id: string }) => r.id,
+                initialData,
+                // As collections.ts configures the real ones, so the joins
+                // run against an index the way they do in the app.
+                autoIndex: 'eager',
+                defaultIndexType: BasicIndex,
+            })
         )
         // A local collection has no relations to fetch; the view the hook
         // reads through is the collection itself.
