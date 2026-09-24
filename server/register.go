@@ -5,6 +5,7 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 
 	"tinycld.org/core/fts"
+	"tinycld.org/core/groups"
 	"tinycld.org/core/oauth"
 	"tinycld.org/core/offboard"
 	"tinycld.org/core/search"
@@ -122,6 +123,14 @@ func registerShared(app *pocketbase.PocketBase) {
 	} {
 		offboard.RegisterReassignable(ref)
 	}
+
+	// Core expands a group grant (group set, user empty) on this table into one
+	// derived row per member, inside the same transaction. Our rules already
+	// test `user`, so a derived row is a member like any other.
+	groups.RegisterGrantTable(groups.GrantTable{
+		Collection:    "boards_project_members",
+		ResourceField: "project",
+	})
 
 	// Personal automation rules on cards resolve their owner through board
 	// membership; created_by would scope them to whoever made the card, so a
