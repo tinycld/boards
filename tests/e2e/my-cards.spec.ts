@@ -52,9 +52,16 @@ async function assignSelfAndCollaborator(page: Page, boardName: string, title: s
     await boardCard(page, title).click()
     await expect(peek(page).getByText('Description', { exact: true })).toBeVisible()
     await peek(page).getByRole('button', { name: 'Assign' }).click()
-    await page.getByRole('menuitemcheckbox').first().click()
-    // The picker lists display NAMES, not emails; the seeded collaborator's
-    // name contains "Collaborator" — same anchor card-watching.spec.ts uses.
+    // The picker lists display NAMES, not emails, and the roster it draws
+    // from (`projectMembers` — board-project.ts) is UNSORTED: with two
+    // members, `.first()` for self could just as easily resolve to the
+    // collaborator, and the next click would un-toggle them instead of
+    // adding a second assignee. Anchor each pick by name — the seeded
+    // primary account's display name is 'Test User' (scripts/seed-db.ts's
+    // TEST_DEFAULTS.userName; no exported constant for it, unlike the
+    // collaborator's TEST_COLLABORATOR_NAME) and the collaborator's contains
+    // "Collaborator" — same anchor card-watching.spec.ts uses.
+    await page.getByRole('menuitemcheckbox', { name: /Test User/ }).click()
     await page.getByRole('menuitemcheckbox', { name: /Collaborator/ }).click()
     await expect(peek(page).getByRole('button', { name: 'Change assignees' })).toBeVisible()
     await page.keyboard.press('Escape')
