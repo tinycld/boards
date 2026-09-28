@@ -4,6 +4,7 @@ import {
     groupMyCards,
     isMine,
     type JoinedRow,
+    myCardsQueryEnabled,
     sortMyCards,
 } from '../tinycld/boards/lib/my-cards'
 import type {
@@ -127,6 +128,34 @@ describe('isMine', () => {
     })
 })
 
+describe('myCardsQueryEnabled', () => {
+    it('holds off reported until a user id is known', () => {
+        expect(myCardsQueryEnabled('reported', '', false)).toBe(false)
+        expect(myCardsQueryEnabled('reported', 'u1', false)).toBe(true)
+    })
+
+    it('assigned never waits — it is filtered by isMine, not by the query', () => {
+        expect(myCardsQueryEnabled('assigned', '', false)).toBe(true)
+        expect(myCardsQueryEnabled('assigned', 'u1', false)).toBe(true)
+    })
+
+    it('holds off watching until the watcher rows have settled', () => {
+        expect(myCardsQueryEnabled('watching', 'u1', true, new Set(['c1']))).toBe(false)
+        expect(myCardsQueryEnabled('watching', 'u1', false, new Set(['c1']))).toBe(true)
+    })
+
+    it('holds off watching when the settled watcher set is empty', () => {
+        // inArray(card.id, []) has no valid PocketBase filter form — asking
+        // would 400. An empty result is already known without asking.
+        expect(myCardsQueryEnabled('watching', 'u1', false, new Set())).toBe(false)
+        expect(myCardsQueryEnabled('watching', 'u1', false)).toBe(false)
+    })
+
+    it('all never waits on anything', () => {
+        expect(myCardsQueryEnabled('all', '', true)).toBe(true)
+    })
+})
+
 describe('buildMyCardRows', () => {
     const p1 = project('p1', 'Alpha board')
 
@@ -147,6 +176,45 @@ describe('buildMyCardRows', () => {
         expect(rows[0]?.card.key).toBe('P1-4')
         expect(rows[0]?.board.name).toBe('Alpha board')
         expect(rows[0]?.list.name).toBe('To do')
+    })
+
+    it('assigned matches a card with several assignees, not just a sole one', () => {
+        // Regression: the vendored PocketBase fork makes plain `=` on a
+        // multi-relation column an ALL-match, so pushing `assigned` into the
+        // query would silently require the caller to be the ONLY assignee.
+        // isMine (and buildMyCardRows, which now always calls it for
+        // 'assigned') must keep matching on ANY membership in the array.
+        const rows = buildMyCardRows({
+            rows: [
+                row(card('shared', 'p1', { assignees: ['u2', 'u1', 'u3'] }), p1),
+                row(card('solo', 'p1', { assignees: ['u1'] }), p1),
+                row(card('other', 'p1', { assignees: ['u2'] }), p1),
+            ],
+            labels: [],
+            users,
+            mode: 'assigned',
+            userId: 'u1',
+            text: '',
+        })
+        expect(rows.map(r => r.card.id).sort()).toEqual(['shared', 'solo'])
+    })
+
+    it('reported/watching pass every row through — the query already filtered them', () => {
+        // Unlike 'assigned', these two modes ARE filtered server-side (see
+        // BuildMyCardsInput.rows), so buildMyCardRows must not re-filter and
+        // must not drop a row just because it doesn't independently look like
+        // a match — e.g. a row with no reporter/created_by set for `me` here,
+        // which a real 'reported' query would never have returned in the
+        // first place.
+        const rows = buildMyCardRows({
+            rows: [row(card('a', 'p1', { reporter: 'someone-else' }), p1)],
+            labels: [],
+            users,
+            mode: 'reported',
+            userId: 'u1',
+            text: '',
+        })
+        expect(rows.map(r => r.card.id)).toEqual(['a'])
     })
 
     it('leaves closed cards out unless asked, then lists them last', () => {

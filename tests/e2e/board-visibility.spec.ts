@@ -54,7 +54,7 @@ test.describe('Boards — live board visibility', () => {
                 timeout: 15_000,
             })
 
-            // Its CONTENT came along — lists and cards are separate eager
+            // Its CONTENT came along — lists and cards are separate on-demand
             // collections, each with the same no-event problem the project
             // row has. A sidebar-only refetch would open onto empty columns.
             await openBoard(bobPage, boardName, CARD_TITLE)

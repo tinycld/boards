@@ -313,20 +313,22 @@ export interface BoardCardView {
      * The epic this card is filed under, or null when it is unfiled.
      *
      * A resolved row rather than an id, the way `labels` is: the face renders
-     * the epic's title and color, and boards_epics syncs eagerly precisely so
-     * that lookup needs no per-card fetch. Always an epic on the SAME board —
-     * pinned by the rule in 1980000017 — so a resolver never looks outside the
-     * loaded set, and a dangling id (the epic was deleted; the relation does
-     * not cascade) reads as unfiled, exactly as a missing parent does.
+     * the epic's title and color, and boards_epics is already filed with the
+     * board precisely so that lookup needs no per-card fetch. Always an epic
+     * on the SAME board — pinned by the rule in 1980000017 — so a resolver
+     * never looks outside the loaded set, and a dangling id (the epic was
+     * deleted; the relation does not cascade) reads as unfiled, exactly as a
+     * missing parent does.
      */
     epic: BoardEpic | null
     /**
      * The sprint this card is in, or null when it is in the backlog.
      *
      * A resolved row, the way `epic` is and for the same reasons: the face
-     * renders the sprint's label, boards_sprints syncs eagerly, the pin in
-     * 1980000018 keeps it on the same board, and a dangling id (the sprint
-     * was deleted; the relation does not cascade) reads as backlog.
+     * renders the sprint's label, boards_sprints is already filed with the
+     * board, the pin in 1980000018 keeps it on the same board, and a dangling
+     * id (the sprint was deleted; the relation does not cascade) reads as
+     * backlog.
      */
     sprint: BoardSprint | null
 }

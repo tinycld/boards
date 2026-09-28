@@ -16,6 +16,12 @@ const indexed = {
     defaultIndexType: BasicIndex,
 }
 
+// Every collection syncs on demand and subscribes per query (pbtsdb 0.10):
+// only the rows a live query asks for enter the store, and realtime covers
+// exactly those rows. The server emits a delete to a subscription a row
+// leaves, so a filtered view stays correct across updates.
+const onDemand = { syncMode: 'on-demand', realtime: 'query' } as const
+
 export function registerCollections(
     newCollection: ReturnType<typeof createCollection<MergedSchema>>,
     coreStores: CoreStores
@@ -43,9 +49,10 @@ export function registerCollections(
     //
     // PocketBase caps a back-relation expand at 1000 rows per parent; a
     // capped subset is never marked complete, so a board past that falls back
-    // to one filtered request for its cards. Nothing here uses
-    // `alwaysFetchRelations`: the board and card screens choose their paths
-    // per query, so the sidebar's board list and the pickers fetch plain rows.
+    // to one filtered request for its cards. Only `boards_project_members`
+    // below uses `alwaysFetchRelations` (for `project`); the board and card
+    // screens otherwise choose their paths per query, so the sidebar's board
+    // list and the pickers fetch plain rows.
 
     // --- The open card's children. Read for one card at a time, through the
     // card's back-relations; the counters a card face shows at rest
@@ -53,30 +60,30 @@ export function registerCollections(
     // the card row for exactly that reason.
     const boards_checklist_items = newCollection('boards_checklist_items', {
         omitOnInsert: ['created', 'updated'] as const,
-        syncMode: 'on-demand' as const,
+        ...onDemand,
         collectionOptions: indexed,
     })
 
-    // `author` resolves against the eager `users` store through a join inside
+    // `author` resolves against the `users` store through a join inside
     // the card's include.
     const boards_comments = newCollection('boards_comments', {
         omitOnInsert: ['created', 'updated'] as const,
-        syncMode: 'on-demand' as const,
+        ...onDemand,
         collectionOptions: indexed,
     })
 
     const boards_attachments = newCollection('boards_attachments', {
         omitOnInsert: ['created', 'updated'] as const,
-        syncMode: 'on-demand' as const,
+        ...onDemand,
         collectionOptions: indexed,
     })
 
     // Server-written history (server/activity.go); the client only reads it.
-    // `actor` resolves against the eager `users` store like every other user
+    // `actor` resolves against the `users` store like every other user
     // relation here.
     const boards_activity = newCollection('boards_activity', {
         omitOnInsert: ['created'] as const,
-        syncMode: 'on-demand' as const,
+        ...onDemand,
         collectionOptions: indexed,
     })
 
@@ -85,15 +92,15 @@ export function registerCollections(
     const boards_card_watchers = newCollection('boards_card_watchers', {
         omitOnInsert: ['created'] as const,
         collectionOptions: indexed,
-        syncMode: 'on-demand' as const,
+        ...onDemand,
     })
 
     // Emoji on comments, read for the open card in one subset keyed by `card`
     // (see the migration for why the row carries it). `user` resolves against
-    // the eager `users` store, which the chip tooltip reads to name who reacted.
+    // the `users` store, which the chip tooltip reads to name who reacted.
     const boards_comment_reactions = newCollection('boards_comment_reactions', {
         omitOnInsert: ['created'] as const,
-        syncMode: 'on-demand' as const,
+        ...onDemand,
         collectionOptions: indexed,
     })
 
@@ -110,7 +117,7 @@ export function registerCollections(
     // told apart.
     const boards_card_links = newCollection('boards_card_links', {
         omitOnInsert: ['created'] as const,
-        syncMode: 'on-demand' as const,
+        ...onDemand,
         collectionOptions: indexed,
     })
 
@@ -125,7 +132,7 @@ export function registerCollections(
     // is no "none" value to write — so it is omitted here instead of cast.
     const boards_pr_links = newCollection('boards_pr_links', {
         omitOnInsert: ['created', 'updated', 'review_state'] as const,
-        syncMode: 'on-demand' as const,
+        ...onDemand,
         collectionOptions: indexed,
     })
 
@@ -133,7 +140,7 @@ export function registerCollections(
     // charts — one sprint at a time, through its own filtered query.
     const boards_sprint_snapshots = newCollection('boards_sprint_snapshots', {
         omitOnInsert: ['created'] as const,
-        syncMode: 'on-demand' as const,
+        ...onDemand,
         collectionOptions: indexed,
     })
 
@@ -144,19 +151,19 @@ export function registerCollections(
     // that set rather than asking for them by card.
     const boards_card_reactions = newCollection('boards_card_reactions', {
         omitOnInsert: ['created'] as const,
-        syncMode: 'on-demand' as const,
+        ...onDemand,
         collectionOptions: indexed,
     })
 
     const boards_lists = newCollection('boards_lists', {
         omitOnInsert: ['created', 'updated'] as const,
-        syncMode: 'on-demand' as const,
+        ...onDemand,
         collectionOptions: indexed,
     })
 
     const boards_labels = newCollection('boards_labels', {
         omitOnInsert: ['created', 'updated'] as const,
-        syncMode: 'on-demand' as const,
+        ...onDemand,
         collectionOptions: indexed,
     })
 
@@ -165,7 +172,7 @@ export function registerCollections(
     // being expanded per card.
     const boards_epics = newCollection('boards_epics', {
         omitOnInsert: ['created', 'updated'] as const,
-        syncMode: 'on-demand' as const,
+        ...onDemand,
         collectionOptions: indexed,
     })
 
@@ -195,7 +202,7 @@ export function registerCollections(
             'completed_points',
             'rolled_count',
         ] as const,
-        syncMode: 'on-demand' as const,
+        ...onDemand,
         collectionOptions: indexed,
     })
 
@@ -204,7 +211,7 @@ export function registerCollections(
     //
     // No relation entry for `assignees` or `labels`: both are multi-relations
     // (`string[]`), which have no `eq()` correlation an include could use, and
-    // both targets are already in the store (users eagerly, labels with the
+    // both targets are already in the store (users through useUsers, labels with the
     // board), so lib/board-project.ts resolves them by id.
     //
     // `number` is omitted on insert because the server owns it: the
@@ -233,7 +240,7 @@ export function registerCollections(
             'pr_state',
             'pr_review_state',
         ] as const,
-        syncMode: 'on-demand' as const,
+        ...onDemand,
         relations: {
             boards_checklist_items_via_card: boards_checklist_items,
             boards_comments_via_card: boards_comments,
@@ -260,7 +267,7 @@ export function registerCollections(
     // the back-relations below.
     const boards_projects = newCollection('boards_projects', {
         omitOnInsert: ['created', 'updated', 'next_number', 'next_sprint_number'] as const,
-        syncMode: 'on-demand' as const,
+        ...onDemand,
         relations: {
             boards_lists_via_project: boards_lists,
             boards_labels_via_project: boards_labels,
@@ -272,12 +279,12 @@ export function registerCollections(
         collectionOptions: indexed,
     })
 
-    // --- Small org-wide tables, eager.
+    // --- Small org-wide tables, on demand.
 
-    // Every membership the caller can read, whole: the sidebar lists boards
-    // across the org from these rows, and the role check filters on project
-    // AND user, which is not a subset a project fetch could prove complete.
-    // `user` is a relation into core's eager `users` store; the roster reads
+    // Every membership the caller can read: the sidebar lists boards across
+    // the org from these rows, and the role check filters on project AND
+    // user, which is not a subset a project fetch could prove complete.
+    // `user` is a relation into core's `users` store; the roster reads
     // names through a join there. Rows carry no expand.
     // On demand: the roster is read per board (the share dialog, the open
     // board's header) and my own rows by user, never the whole table. The
@@ -286,24 +293,26 @@ export function registerCollections(
     // that is how a shared board reaches the sidebar (see provider.tsx).
     const boards_project_members = newCollection('boards_project_members', {
         omitOnInsert: ['created', 'updated'] as const,
-        syncMode: 'on-demand' as const,
+        ...onDemand,
         relations: { project: boards_projects, user: coreStores.users, group: coreStores.groups },
         alwaysFetchRelations: ['project'],
         collectionOptions: indexed,
     })
 
-    // Which repositories a board watches. Eager, like boards_project_members:
+    // Which repositories a board watches. On demand, like boards_project_members:
     // the GitHub settings screen (settings/github.tsx) lists every attached
     // repo across every board the user belongs to in one screen, not one
     // board's cards at a time. Rows are owner-managed and few per board.
     const boards_project_repos = newCollection('boards_project_repos', {
         omitOnInsert: ['created', 'updated'] as const,
+        ...onDemand,
         collectionOptions: indexed,
     })
 
     // Owner-only by rule, so this syncs a handful of rows at most.
     const boards_share_links = newCollection('boards_share_links', {
         omitOnInsert: ['created', 'updated'] as const,
+        ...onDemand,
         collectionOptions: indexed,
     })
 

@@ -91,11 +91,20 @@ export function anonymousMember(id: string): BoardMember {
     }
 }
 
-export function toBoardLabel(label: BoardsLabels): BoardLabel {
+/** The subset of a label row `toBoardLabel` reads — narrow so a `.select()`'d query still fits. */
+export type LabelLike = Pick<BoardsLabels, 'id' | 'name' | 'color'>
+
+export function toBoardLabel(label: LabelLike): BoardLabel {
     return { id: label.id, name: label.name, color: label.color }
 }
 
-export function toBoardEpic(epic: BoardsEpics): BoardEpic {
+/** The subset of an epic row `toBoardEpic` reads — narrow so a `.select()`'d query still fits. */
+export type EpicLike = Pick<
+    BoardsEpics,
+    'id' | 'title' | 'color' | 'position' | 'archived' | 'points_total' | 'points_done'
+>
+
+export function toBoardEpic(epic: EpicLike): BoardEpic {
     return {
         id: epic.id,
         title: epic.title,
@@ -146,9 +155,10 @@ function bySprintOrder(a: BoardSprint, b: BoardSprint): number {
 /**
  * Resolve one card, looking its relations up by id.
  *
- * `boards_cards` registers with no `expand` — assignees and labels already sync
- * eagerly, so expanding would ship a duplicate copy of those rows with every
- * card. Hence the two lookup maps.
+ * `boards_cards` registers with no `expand` — assignees (`users`, loaded by useUsers) and
+ * labels (already filed with the board) are both already in the store, so
+ * expanding would ship a duplicate copy of those rows with every card. Hence
+ * the two lookup maps.
  *
  * Unresolvable ids are DROPPED rather than rendered as holes: a label or user
  * deleted while a board is open leaves its id behind on every card that
@@ -170,8 +180,8 @@ export function toBoardCard(
     parentKey = '',
     /**
      * The board's epics by id. Resolved here rather than expanded for the
-     * reason labels are: boards_epics syncs eagerly, so an expand would ship a
-     * duplicate copy of the row with every card.
+     * reason labels are: boards_epics is already filed with the board, so an
+     * expand would ship a duplicate copy of the row with every card.
      */
     epicsById: Map<string, BoardEpic> = new Map(),
     /** The board's sprints by id, resolved for the reason epics are. */

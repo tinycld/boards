@@ -1,4 +1,4 @@
-import { eq } from '@tanstack/db'
+import { and, eq, inArray, or } from '@tanstack/db'
 import { useLiveQuery } from '@tanstack/react-db'
 import { DocumentTitle } from '@tinycld/core/components/DocumentTitle'
 import { EmptyState } from '@tinycld/core/components/EmptyState'
@@ -15,6 +15,7 @@ import { useMemo, useState } from 'react'
 import { Pressable, SectionList, Text, View } from 'react-native'
 import { CardRow } from '../components/table/CardRow'
 import { useBoardLiveQuery } from '../hooks/useBoardLiveQuery'
+import { useUserRows } from '../hooks/useUsers'
 import { cardHref } from '../lib/board-route'
 import {
     buildMyCardRows,
@@ -24,6 +25,7 @@ import {
     type MyCardsGroup,
     type MyCardsGroupView,
     type MyCardsMode,
+    myCardsQueryEnabled,
 } from '../lib/my-cards'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
 
@@ -32,11 +34,15 @@ const MODES: MyCardsMode[] = ['assigned', 'reported', 'watching', 'all']
 /**
  * Every card across every board the user belongs to, narrowed to theirs.
  *
- * One cards query, mode-independent, scoped by the cards list rule: a plain
- * read IS the caller's boards' cards. Switching Assigned → Reported → All is
- * a JS predicate over the same subscription — a "cards where I am an
- * assignee" filter is a multi-relation match PocketBase expresses with `?=`,
- * which the query converter has no operator for.
+ * `reported`, `watching` and `archived = false` are pushed into the query —
+ * PocketBase can filter those server-side. `assigned` cannot: this
+ * deployment's vendored PocketBase fork (`tinycld/third_party/pocketbase`)
+ * makes plain `=` on a multi-relation column (`assignees`) an ALL-match
+ * ("every element equals"), not any-match — `assignees = me` would require
+ * `me` to be the only assignee on the card. Any-match needs `?=`, which
+ * pbtsdb has no emitter for, so `assigned` still filters in JS via `isMine`
+ * over every one of the caller's (unfiltered-by-mode) cards — see
+ * `lib/my-cards.ts`'s `BuildMyCardsInput.rows` for the full trace.
  * The search box makes this the way to find a card by title on a phone,
  * where the command palette does not exist.
  *
@@ -59,7 +65,6 @@ export default function MyCardsScreen() {
         projectsCollection,
         listsCollection,
         labelsCollection,
-        usersCollection,
         watchersCollection,
         epicsCollection,
         sprintsCollection,
@@ -68,37 +73,98 @@ export default function MyCardsScreen() {
         'boards_projects',
         'boards_lists',
         'boards_labels',
-        'users',
         'boards_card_watchers',
         'boards_epics',
         'boards_sprints'
     )
 
-    // No board predicate: every board collection's list rule is "a member",
-    // so a plain read is exactly the caller's boards, sized by the server.
-    const { data: joined } = useLiveQuery({
-        query: query =>
-            query
-                .from({ card: cardsCollection })
-                .innerJoin({ project: projectsCollection }, ({ card, project }) =>
-                    eq(card.project, project.id)
-                )
-                .innerJoin({ list: listsCollection }, ({ card, list }) => eq(card.list, list.id)),
-    })
-    // A row resolves its own board's label, epic and sprint from these, the
-    // same way the board tree does.
-    const { data: labels } = useBoardLiveQuery(query => query.from({ label: labelsCollection }))
-    const { data: users } = useBoardLiveQuery(query => query.from({ user: usersCollection }))
-    const { data: epics } = useBoardLiveQuery(query => query.from({ epic: epicsCollection }))
-    const { data: sprints } = useBoardLiveQuery(query => query.from({ sprint: sprintsCollection }))
-    // The caller's own watcher rows — the Watching tab's whole input.
-    const { data: watcherRows } = useMyLiveQuery((query, { userId: me }) =>
-        query.from({ watcher: watchersCollection }).where(({ watcher }) => eq(watcher.user, me))
+    // The caller's own watcher rows — the Watching tab's whole input. Read
+    // first because the cards query below needs the resulting id set before
+    // it can filter to them.
+    const { data: watcherRows, isLoading: watchersLoading } = useMyLiveQuery(
+        (query, { userId: me }) =>
+            query.from({ watcher: watchersCollection }).where(({ watcher }) => eq(watcher.user, me))
     )
     const watchedCardIds = useMemo(
         () => new Set((watcherRows ?? []).map(row => row.card)),
         [watcherRows]
     )
+
+    // No board predicate beyond `mode`: every board collection's list rule is
+    // "a member", so an otherwise-plain read is exactly the caller's boards,
+    // sized by the server. `reported`/`watching` and the always-off `archived`
+    // are pushed into the `where` — `assigned` cannot be, see the doc comment
+    // above — so switching to Reported or Watching re-subscribes to a
+    // narrower set instead of re-scanning everything; Assigned and All both
+    // fetch the same unfiltered-by-mode set and let `buildMyCardRows` sort out
+    // which. `watching` needs `watchedCardIds` first, so its query is null
+    // (and therefore not sent) until the watcher rows have settled — and
+    // stays null rather than sending an empty `inArray` when the caller is
+    // watching nothing, which pbtsdb cannot compile to a valid filter.
+    const { data: joined } = useLiveQuery({
+        query: query => {
+            if (!myCardsQueryEnabled(mode, userId, watchersLoading, watchedCardIds)) return null
+            return query
+                .from({ card: cardsCollection })
+                .innerJoin({ project: projectsCollection }, ({ card, project }) =>
+                    eq(card.project, project.id)
+                )
+                .innerJoin({ list: listsCollection }, ({ card, list }) => eq(card.list, list.id))
+                .where(({ card }) => {
+                    const notArchived = eq(card.archived, false)
+                    switch (mode) {
+                        case 'assigned':
+                        case 'all':
+                            return notArchived
+                        case 'reported':
+                            // Falls back to the creator, the way `isMine`/toReporter
+                            // do: a card whose reporter was never set reports to
+                            // whoever created it.
+                            return and(
+                                notArchived,
+                                or(
+                                    eq(card.reporter, userId),
+                                    and(eq(card.reporter, ''), eq(card.created_by, userId))
+                                )
+                            )
+                        case 'watching':
+                            return and(notArchived, inArray(card.id, [...watchedCardIds]))
+                    }
+                })
+        },
+    })
+    // A row resolves its own board's label, epic and sprint from these, the
+    // same way the board tree does — unfiltered because every row across the
+    // caller's boards may be needed to resolve some card's chip, tens of rows
+    // at most (see the collection-load audit). `.select()` never shrinks what
+    // crosses the wire (pbtsdb always fetches the full row; see useUsers.ts),
+    // only the result shape callers are typed against. Labels and epics get
+    // one, matching what toBoardLabel/toBoardEpic read; sprints does not —
+    // toBoardSprint reads nearly every column, so a select there would add a
+    // field list to keep in sync for almost no shape-narrowing benefit.
+    const { data: labels } = useBoardLiveQuery(query =>
+        query.from({ label: labelsCollection }).select(({ label }) => ({
+            id: label.id,
+            name: label.name,
+            color: label.color,
+        }))
+    )
+    // Shares useUsers.ts's query exactly — TanStack DB folds it into the one
+    // subscription useActiveBoard already holds for the whole boards session,
+    // so this costs nothing extra and stays narrowed by the same `.select()`.
+    const users = useUserRows()
+    const { data: epics } = useBoardLiveQuery(query =>
+        query.from({ epic: epicsCollection }).select(({ epic }) => ({
+            id: epic.id,
+            title: epic.title,
+            color: epic.color,
+            position: epic.position,
+            archived: epic.archived,
+            points_total: epic.points_total,
+            points_done: epic.points_done,
+        }))
+    )
+    const { data: sprints } = useBoardLiveQuery(query => query.from({ sprint: sprintsCollection }))
 
     const groups = useMemo(() => {
         const rows = buildMyCardRows({
@@ -110,23 +176,10 @@ export default function MyCardsScreen() {
             mode,
             userId,
             text,
-            watchedCardIds,
             showClosed,
         })
         return groupMyCards(rows, group)
-    }, [
-        joined,
-        labels,
-        epics,
-        sprints,
-        users,
-        mode,
-        userId,
-        text,
-        group,
-        watchedCardIds,
-        showClosed,
-    ])
+    }, [joined, labels, epics, sprints, users, mode, userId, text, group, showClosed])
 
     const openRow = (row: MyCardRow) => router.push(cardHref(orgHref, row.board, row.card))
 

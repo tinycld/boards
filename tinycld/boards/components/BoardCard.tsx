@@ -844,11 +844,12 @@ function ChecklistPill({ done, total }: { done: number; total: number }) {
  * The sub-task rollup — "2/5".
  *
  * Reads the denormalized counters for the reason ChecklistPill does, with one
- * difference worth knowing: the children here ARE cards, and cards sync
- * eagerly, so this one could be counted from the loaded board. It is not,
- * because a card face also renders where the board's card set is absent — My
- * cards, search results — and a badge that appears on one surface and not
- * another reads as a bug. server/card_parent.go keeps them current.
+ * difference worth knowing: the children here ARE cards, and cards are
+ * already filed with the board, so this one could be counted from the loaded
+ * board. It is not, because a card face also renders where the board's card
+ * set is absent — My cards, search results — and a badge that appears on one
+ * surface and not another reads as a bug. server/card_parent.go keeps them
+ * current.
  *
  * "Done" is the child's LIST category, not a flag, so this agrees with the
  * list header glyph a reader is looking at.
