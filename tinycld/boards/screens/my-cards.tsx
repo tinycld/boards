@@ -1,4 +1,4 @@
-import { and, eq, inArray, or, type Ref } from '@tanstack/db'
+import { and, eq, inArray, or } from '@tanstack/db'
 import { useLiveQuery } from '@tanstack/react-db'
 import { DocumentTitle } from '@tinycld/core/components/DocumentTitle'
 import { EmptyState } from '@tinycld/core/components/EmptyState'
@@ -34,13 +34,15 @@ const MODES: MyCardsMode[] = ['assigned', 'reported', 'watching', 'all']
 /**
  * Every card across every board the user belongs to, narrowed to theirs.
  *
- * `mode` is pushed into the query rather than applied in JS over one
- * mode-independent subscription: PocketBase's `=` on a multi-relation column
- * (`assignees`) is an any-match — the same "does this array contain me" test
- * `?=` would give — so `eq(card.assignees, userId)` is exactly the assigned
- * filter, server-side. Switching Assigned → Reported → Watching therefore
- * re-subscribes with a different filter instead of re-scanning every card on
- * every board the caller belongs to.
+ * `reported`, `watching` and `archived = false` are pushed into the query —
+ * PocketBase can filter those server-side. `assigned` cannot: this
+ * deployment's vendored PocketBase fork (`tinycld/third_party/pocketbase`)
+ * makes plain `=` on a multi-relation column (`assignees`) an ALL-match
+ * ("every element equals"), not any-match — `assignees = me` would require
+ * `me` to be the only assignee on the card. Any-match needs `?=`, which
+ * pbtsdb has no emitter for, so `assigned` still filters in JS via `isMine`
+ * over every one of the caller's (unfiltered-by-mode) cards — see
+ * `lib/my-cards.ts`'s `BuildMyCardsInput.rows` for the full trace.
  * The search box makes this the way to find a card by title on a phone,
  * where the command palette does not exist.
  *
@@ -90,14 +92,18 @@ export default function MyCardsScreen() {
 
     // No board predicate beyond `mode`: every board collection's list rule is
     // "a member", so an otherwise-plain read is exactly the caller's boards,
-    // sized by the server. `mode` and the always-off `archived` are pushed
-    // into the `where` — see the doc comment above — so switching tabs
-    // re-subscribes to a narrower set instead of re-scanning everything.
-    // `watching` needs `watchedCardIds` first, so its query is null (and
-    // therefore not sent) until the watcher rows have settled.
+    // sized by the server. `reported`/`watching` and the always-off `archived`
+    // are pushed into the `where` — `assigned` cannot be, see the doc comment
+    // above — so switching to Reported or Watching re-subscribes to a
+    // narrower set instead of re-scanning everything; Assigned and All both
+    // fetch the same unfiltered-by-mode set and let `buildMyCardRows` sort out
+    // which. `watching` needs `watchedCardIds` first, so its query is null
+    // (and therefore not sent) until the watcher rows have settled — and
+    // stays null rather than sending an empty `inArray` when the caller is
+    // watching nothing, which pbtsdb cannot compile to a valid filter.
     const { data: joined } = useLiveQuery({
         query: query => {
-            if (!myCardsQueryEnabled(mode, userId, watchersLoading)) return null
+            if (!myCardsQueryEnabled(mode, userId, watchersLoading, watchedCardIds)) return null
             return query
                 .from({ card: cardsCollection })
                 .innerJoin({ project: projectsCollection }, ({ card, project }) =>
@@ -108,20 +114,8 @@ export default function MyCardsScreen() {
                     const notArchived = eq(card.archived, false)
                     switch (mode) {
                         case 'assigned':
-                            // pbtsdb's `eq()` compiles to a plain PocketBase
-                            // `field = value` filter regardless of the field's
-                            // declared type; PocketBase itself is what gives `=`
-                            // its any-match behaviour on a multi-relation column
-                            // (tools/search/filter.go resolves a MultiMatchSubQuery
-                            // for both `=` and `?=` alike — the operator choice
-                            // never mattered). The cast only papers over pbtsdb's
-                            // TS signature, which requires both `eq()` operands to
-                            // share one type and has no "scalar vs array field"
-                            // overload; the runtime behaviour is unaffected.
-                            return and(
-                                notArchived,
-                                eq(card.assignees as unknown as Ref<string>, userId)
-                            )
+                        case 'all':
+                            return notArchived
                         case 'reported':
                             // Falls back to the creator, the way `isMine`/toReporter
                             // do: a card whose reporter was never set reports to
@@ -135,8 +129,6 @@ export default function MyCardsScreen() {
                             )
                         case 'watching':
                             return and(notArchived, inArray(card.id, [...watchedCardIds]))
-                        case 'all':
-                            return notArchived
                     }
                 })
         },
@@ -144,10 +136,12 @@ export default function MyCardsScreen() {
     // A row resolves its own board's label, epic and sprint from these, the
     // same way the board tree does — unfiltered because every row across the
     // caller's boards may be needed to resolve some card's chip, tens of rows
-    // at most (see the collection-load audit). Labels and epics get a
-    // `.select()` of just the fields toBoardLabel/toBoardEpic read; sprints
-    // does not — toBoardSprint reads nearly every column, so a select would
-    // barely shrink the payload while adding a field list to keep in sync.
+    // at most (see the collection-load audit). `.select()` never shrinks what
+    // crosses the wire (pbtsdb always fetches the full row; see useUsers.ts),
+    // only the result shape callers are typed against. Labels and epics get
+    // one, matching what toBoardLabel/toBoardEpic read; sprints does not —
+    // toBoardSprint reads nearly every column, so a select there would add a
+    // field list to keep in sync for almost no shape-narrowing benefit.
     const { data: labels } = useBoardLiveQuery(query =>
         query.from({ label: labelsCollection }).select(({ label }) => ({
             id: label.id,
@@ -179,11 +173,13 @@ export default function MyCardsScreen() {
             epics: epics ?? [],
             sprints: sprints ?? [],
             users: users ?? [],
+            mode,
+            userId,
             text,
             showClosed,
         })
         return groupMyCards(rows, group)
-    }, [joined, labels, epics, sprints, users, text, group, showClosed])
+    }, [joined, labels, epics, sprints, users, mode, userId, text, group, showClosed])
 
     const openRow = (row: MyCardRow) => router.push(cardHref(orgHref, row.board, row.card))
 

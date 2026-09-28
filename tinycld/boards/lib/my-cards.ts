@@ -1,9 +1,10 @@
 // The cross-board "My cards" list: which cards are mine, in what order, and
 // how they group.
 //
-// Pure, on the records, so the screen's one live query stays mode-independent
-// (switching Assigned → Reported never re-subscribes) and the ordering is
-// testable without React.
+// Pure, on the records, so the ordering and the mode predicates are testable
+// without React. `reported`/`watching`/`archived` are filtered server-side by
+// the screen's query (my-cards.tsx); `assigned` is filtered here by `isMine`
+// — see BuildMyCardsInput.rows for why that one mode can't move server-side.
 
 import type {
     BoardCardView,
@@ -35,23 +36,33 @@ export const MY_CARDS_MODE_LABELS: Record<MyCardsMode, string> = {
     all: 'All cards',
 }
 
+const EMPTY_SET: ReadonlySet<string> = new Set()
+
 /**
  * Whether the screen's cards query should run yet, for a given `mode`.
  *
- * Pulled out of the query builder in my-cards.tsx so the two guards it
- * encodes are unit-testable without mounting a live query: an empty `userId`
- * must never reach `eq(card.assignees, userId)` / `eq(card.reporter, userId)`
- * — it would match "no assignee" / "no reporter" rather than "nothing" — and
- * `watching` must wait for the caller's own watcher rows before it knows
- * which card ids to ask for.
+ * Pulled out of the query builder in my-cards.tsx so the guards it encodes
+ * are unit-testable without mounting a live query:
+ *
+ *   - an empty `userId` must never reach `eq(card.reporter, userId)` — it
+ *     would match "no reporter" rather than "nothing";
+ *   - `watching` must wait for the caller's own watcher rows to settle
+ *     before it knows which card ids to ask for; and
+ *   - `watching` with a SETTLED but EMPTY watcher set must not query at all —
+ *     `inArray(card.id, [])` compiles to `undefined` in pbtsdb's filter
+ *     converter (an empty `in` clause has no left-hand condition to join),
+ *     which then lands in the `and()` as a literal `undefined` operand and
+ *     PocketBase 400s on the resulting filter string. An empty result is
+ *     already known without asking the server.
  */
 export function myCardsQueryEnabled(
     mode: MyCardsMode,
     userId: string,
-    watchersLoading: boolean
+    watchersLoading: boolean,
+    watchedCardIds: ReadonlySet<string> = EMPTY_SET
 ): boolean {
-    if (mode === 'watching') return !watchersLoading
-    if (mode === 'assigned' || mode === 'reported') return userId !== ''
+    if (mode === 'watching') return !watchersLoading && watchedCardIds.size > 0
+    if (mode === 'reported') return userId !== ''
     return true
 }
 
@@ -95,8 +106,6 @@ export function isMine(
     }
 }
 
-const EMPTY_SET: ReadonlySet<string> = new Set()
-
 export interface JoinedRow {
     card: BoardsCards
     project: BoardsProjects
@@ -105,10 +114,15 @@ export interface JoinedRow {
 
 export interface BuildMyCardsInput {
     /**
-     * Already narrowed to `mode` (and to `archived = false`) by the screen's
-     * query — see my-cards.tsx. `isMine` still exists and is still unit-tested
-     * directly below; it is no longer called here because the server does that
-     * predicate now.
+     * `reported`/`watching` and `archived = false` are already applied by the
+     * screen's query (see my-cards.tsx) — PocketBase can filter those
+     * server-side. `assigned` cannot: the vendored PocketBase fork
+     * (`tinycld/third_party/pocketbase`, see its CHANGELOG) makes plain `=` on
+     * a multi-relation column an ALL-match ("every element equals"), not
+     * any-match — `card.assignees = me` would require `me` to be the ONLY
+     * assignee. Any-match needs `?=`, which pbtsdb has no emitter for. So
+     * `assigned` still runs `isMine` here, over every one of the caller's
+     * cards, exactly as before this file's other filters moved server-side.
      */
     rows: JoinedRow[]
     labels: LabelLike[]
@@ -124,6 +138,8 @@ export interface BuildMyCardsInput {
         avatar_color: string
         avatar_emoji: string
     }[]
+    mode: MyCardsMode
+    userId: string
     text: string
     /**
      * Whether cards in done or canceled lists are listed. Off by default:
@@ -141,7 +157,10 @@ export interface BuildMyCardsInput {
  * Rows → the list. Cards on archived boards are dropped here rather than in
  * the query so the query stays one shape (the card's own `archived` is
  * already false — the query filters it, see my-cards.tsx); the keyword
- * matches title and key exactly as the board filter does.
+ * matches title and key exactly as the board filter does. `isMine` runs only
+ * for `assigned` — see the comment on `BuildMyCardsInput.rows` for why that
+ * mode alone cannot be filtered server-side; `reported`/`watching`/`all`
+ * rows already are, by the query.
  */
 export function buildMyCardRows(input: BuildMyCardsInput): MyCardRow[] {
     const labelsById = new Map(
@@ -163,6 +182,12 @@ export function buildMyCardRows(input: BuildMyCardsInput): MyCardRow[] {
         if (card.archived || project.archived) continue
         const category = normalizeListCategory(list.category)
         if (!input.showClosed && isClosedCategory(category)) continue
+        // Only `assigned` needs this — `reported`/`watching`/`all` are
+        // already exactly the caller's boards' matching cards, filtered
+        // server-side (see BuildMyCardsInput.rows). Calling `isMine` for
+        // `watching` here would need `watchedCardIds` too, which the query
+        // already consumed; skip it rather than pass a second copy through.
+        if (input.mode === 'assigned' && !isMine(card, 'assigned', input.userId)) continue
         const view = toBoardCard(
             card,
             labelsById,

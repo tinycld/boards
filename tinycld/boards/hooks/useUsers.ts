@@ -10,14 +10,20 @@ import { useBoardLiveQuery } from './useBoardLiveQuery'
  * The one unfiltered read of the `users` store — so every user is in the
  * store while a board is open — shared by the board tree (assignees may name
  * someone no longer on the roster), the reaction tooltips and the "Add
- * people" picker (which needs the whole org roster precisely BECAUSE it is
- * offering people not yet on the board — scoping this read to the board's
- * own membership would make that picker unable to invite anyone new, so the
- * predicate stays unfiltered). One definition rather than one per caller:
- * TanStack DB already folds identical queries into one live collection, so
- * narrowing the predicate would save nothing on the wire — the `.select()`
- * below is the lever, shrinking every row to the seven fields any consumer
- * actually uses instead of the full record (password hash fields included).
+ * people" picker. The roster stays org-wide rather than scoped to the
+ * board's own membership because that picker needs to offer people NOT yet
+ * on the board — a membership-scoped read would make it unable to invite
+ * anyone new. One definition rather than one per caller: TanStack DB already
+ * folds identical queries into one live collection, so this costs nothing
+ * extra per consumer either way.
+ *
+ * The `.select()` below does NOT shrink what crosses the wire — pbtsdb never
+ * sends PocketBase a `fields=` restriction (it always fetches the full row),
+ * and PocketBase never returns password hashes regardless. What it narrows
+ * is the RESULT SHAPE every consumer is typed against: seven named fields
+ * instead of the full generated `Users` record, so a caller can't reach for
+ * a field this hook was never meant to expose and so board-project.ts's
+ * `UserLike`/`toBoardMember` stay the single place that shape is declared.
  *
  * Empty for a share-link visitor: core's rule admits only a non-guest member
  * or your own row, and every consumer already renders a placeholder for an
