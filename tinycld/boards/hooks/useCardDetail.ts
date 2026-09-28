@@ -24,7 +24,7 @@ import type { BoardActivity, BoardAttachment, BoardChecklistItem, BoardComment }
  * lists in 3s trip `randomizedThrottle(500)` in upstream apis/record_crud.go).
  *
  * The to-one joins inside the includes (author, uploader, actor) resolve
- * names against the eager `users` store and add no rows. `actor` is optional
+ * names against the `users` store and add no rows. `actor` is optional
  * (a rule or seed has none), so that join is a LEFT one: a system row must
  * survive with no user beside it.
  *

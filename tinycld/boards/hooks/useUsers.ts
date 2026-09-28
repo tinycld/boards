@@ -7,9 +7,10 @@ import { useBoardLiveQuery } from './useBoardLiveQuery'
 /**
  * Every user this client has synced.
  *
- * The one unfiltered read of the eager `users` store, shared by the board
- * tree (assignees may name someone no longer on the roster), the reaction
- * tooltips and the member picker. One definition rather than one per caller:
+ * The one unfiltered read of the `users` store — so every user is in the
+ * store while a board is open — shared by the board tree (assignees may name
+ * someone no longer on the roster), the reaction tooltips and the member
+ * picker. One definition rather than one per caller:
  * TanStack DB already folds identical queries into one live collection, so
  * this saves nothing on the wire — it keeps the read in one place so a
  * scoping decision is made once.

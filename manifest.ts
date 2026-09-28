@@ -19,9 +19,9 @@ const manifest = {
     sidebar: { component: 'sidebar' },
     settings: [{ slug: 'github', label: 'GitHub', component: 'settings/github' }],
     // Mounted at the app root: watches this user's own membership rows and
-    // re-pulls the eager cards collections when a grant or revocation changes
-    // what the rules let them read — no realtime event exists for that (the
-    // board rows themselves never changed). See useMembershipVisibilitySync.
+    // prunes the synced board collections when a revocation changes what the
+    // rules let them read — no realtime event exists for that (the board
+    // rows themselves never changed). See useMembershipSync.
     provider: { component: 'provider' },
     help: { directory: 'help' },
     tests: { directory: 'tests' },
