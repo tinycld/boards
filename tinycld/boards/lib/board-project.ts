@@ -91,11 +91,20 @@ export function anonymousMember(id: string): BoardMember {
     }
 }
 
-export function toBoardLabel(label: BoardsLabels): BoardLabel {
+/** The subset of a label row `toBoardLabel` reads — narrow so a `.select()`'d query still fits. */
+export type LabelLike = Pick<BoardsLabels, 'id' | 'name' | 'color'>
+
+export function toBoardLabel(label: LabelLike): BoardLabel {
     return { id: label.id, name: label.name, color: label.color }
 }
 
-export function toBoardEpic(epic: BoardsEpics): BoardEpic {
+/** The subset of an epic row `toBoardEpic` reads — narrow so a `.select()`'d query still fits. */
+export type EpicLike = Pick<
+    BoardsEpics,
+    'id' | 'title' | 'color' | 'position' | 'archived' | 'points_total' | 'points_done'
+>
+
+export function toBoardEpic(epic: EpicLike): BoardEpic {
     return {
         id: epic.id,
         title: epic.title,

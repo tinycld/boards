@@ -9,14 +9,19 @@ import type {
     BoardCardView,
     BoardMember,
     BoardsCards,
-    BoardsEpics,
-    BoardsLabels,
     BoardsLists,
     BoardsProjects,
     BoardsSprints,
 } from '../types'
 import { matchesKeyword } from './board-filter'
-import { toBoardCard, toBoardEpic, toBoardMember, toBoardSprint } from './board-project'
+import {
+    type EpicLike,
+    type LabelLike,
+    toBoardCard,
+    toBoardEpic,
+    toBoardMember,
+    toBoardSprint,
+} from './board-project'
 import { dueStateFor } from './due-state'
 import { isClosedCategory, type ListCategory, normalizeListCategory } from './list-category'
 
@@ -28,6 +33,26 @@ export const MY_CARDS_MODE_LABELS: Record<MyCardsMode, string> = {
     reported: 'Reported by me',
     watching: 'Watching',
     all: 'All cards',
+}
+
+/**
+ * Whether the screen's cards query should run yet, for a given `mode`.
+ *
+ * Pulled out of the query builder in my-cards.tsx so the two guards it
+ * encodes are unit-testable without mounting a live query: an empty `userId`
+ * must never reach `eq(card.assignees, userId)` / `eq(card.reporter, userId)`
+ * — it would match "no assignee" / "no reporter" rather than "nothing" — and
+ * `watching` must wait for the caller's own watcher rows before it knows
+ * which card ids to ask for.
+ */
+export function myCardsQueryEnabled(
+    mode: MyCardsMode,
+    userId: string,
+    watchersLoading: boolean
+): boolean {
+    if (mode === 'watching') return !watchersLoading
+    if (mode === 'assigned' || mode === 'reported') return userId !== ''
+    return true
 }
 
 export interface MyCardRow {
@@ -79,10 +104,16 @@ export interface JoinedRow {
 }
 
 export interface BuildMyCardsInput {
+    /**
+     * Already narrowed to `mode` (and to `archived = false`) by the screen's
+     * query — see my-cards.tsx. `isMine` still exists and is still unit-tested
+     * directly below; it is no longer called here because the server does that
+     * predicate now.
+     */
     rows: JoinedRow[]
-    labels: BoardsLabels[]
+    labels: LabelLike[]
     /** Every epic and sprint the client has synced, so a row resolves its chips. */
-    epics?: BoardsEpics[]
+    epics?: EpicLike[]
     sprints?: BoardsSprints[]
     users: {
         id: string
@@ -93,22 +124,23 @@ export interface BuildMyCardsInput {
         avatar_color: string
         avatar_emoji: string
     }[]
-    mode: MyCardsMode
-    userId: string
     text: string
-    /** Card ids from the caller's own boards_card_watchers rows. */
-    watchedCardIds?: ReadonlySet<string>
     /**
      * Whether cards in done or canceled lists are listed. Off by default:
      * "Assigned to me" is a to-do list, and finished cards piling up in it
      * defeat that. On, they sort last and group under "Closed".
+     *
+     * Stays a client-side predicate on the joined `list.category`: the value
+     * is normalized ('' and anything unrecognized read as `todo`, see
+     * `normalizeListCategory`), a fallback a PocketBase filter cannot express.
      */
     showClosed?: boolean
 }
 
 /**
- * Rows → the list. Archived cards and cards on archived boards are dropped
- * here rather than in the query so the query stays one shape; the keyword
+ * Rows → the list. Cards on archived boards are dropped here rather than in
+ * the query so the query stays one shape (the card's own `archived` is
+ * already false — the query filters it, see my-cards.tsx); the keyword
  * matches title and key exactly as the board filter does.
  */
 export function buildMyCardRows(input: BuildMyCardsInput): MyCardRow[] {
@@ -131,7 +163,6 @@ export function buildMyCardRows(input: BuildMyCardsInput): MyCardRow[] {
         if (card.archived || project.archived) continue
         const category = normalizeListCategory(list.category)
         if (!input.showClosed && isClosedCategory(category)) continue
-        if (!isMine(card, input.mode, input.userId, input.watchedCardIds)) continue
         const view = toBoardCard(
             card,
             labelsById,

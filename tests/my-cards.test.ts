@@ -4,6 +4,7 @@ import {
     groupMyCards,
     isMine,
     type JoinedRow,
+    myCardsQueryEnabled,
     sortMyCards,
 } from '../tinycld/boards/lib/my-cards'
 import type {
@@ -127,6 +128,26 @@ describe('isMine', () => {
     })
 })
 
+describe('myCardsQueryEnabled', () => {
+    it('holds off assigned/reported until a user id is known', () => {
+        expect(myCardsQueryEnabled('assigned', '', false)).toBe(false)
+        expect(myCardsQueryEnabled('assigned', 'u1', false)).toBe(true)
+        expect(myCardsQueryEnabled('reported', '', false)).toBe(false)
+        expect(myCardsQueryEnabled('reported', 'u1', false)).toBe(true)
+    })
+
+    it('holds off watching until the watcher rows have settled', () => {
+        expect(myCardsQueryEnabled('watching', 'u1', true)).toBe(false)
+        expect(myCardsQueryEnabled('watching', 'u1', false)).toBe(true)
+        // No user id needed: watching filters by card id, not by user.
+        expect(myCardsQueryEnabled('watching', '', false)).toBe(true)
+    })
+
+    it('all never waits on anything', () => {
+        expect(myCardsQueryEnabled('all', '', true)).toBe(true)
+    })
+})
+
 describe('buildMyCardRows', () => {
     const p1 = project('p1', 'Alpha board')
 
@@ -139,8 +160,6 @@ describe('buildMyCardRows', () => {
             ],
             labels: [],
             users,
-            mode: 'all',
-            userId: 'u1',
             text: '',
         })
         expect(rows.map(r => r.card.id)).toEqual(['live'])
@@ -158,8 +177,6 @@ describe('buildMyCardRows', () => {
             ],
             labels: [],
             users,
-            mode: 'all' as const,
-            userId: 'u1',
             text: '',
         }
         expect(buildMyCardRows(input).map(r => r.card.id)).toEqual(['open'])
@@ -191,8 +208,6 @@ describe('buildMyCardRows', () => {
             ],
             labels: [],
             users,
-            mode: 'all',
-            userId: 'u1',
             text: 'p1-9',
         })
         expect(rows.map(r => r.card.id)).toEqual(['c1'])
@@ -202,8 +217,7 @@ describe('buildMyCardRows', () => {
 describe('sortMyCards', () => {
     const p1 = project('p1', 'Alpha')
     const p2 = project('p2', 'Beta')
-    const build = (rows: JoinedRow[]) =>
-        buildMyCardRows({ rows, labels: [], users, mode: 'all', userId: 'u1', text: '' })
+    const build = (rows: JoinedRow[]) => buildMyCardRows({ rows, labels: [], users, text: '' })
 
     it('puts overdue first, then dated ascending, then undated by board', () => {
         const rows = sortMyCards(
@@ -240,8 +254,6 @@ describe('groupMyCards', () => {
             ],
             labels: [],
             users,
-            mode: 'all',
-            userId: 'u1',
             text: '',
         }),
         NOW
@@ -318,8 +330,6 @@ describe('groupMyCards by sprint', () => {
             labels: [],
             sprints: [sprintRow('s-active', 'active'), sprintRow('s-planned', 'planned')],
             users: [],
-            mode: 'all',
-            userId: 'u1',
             text: '',
             showClosed: true,
         })
