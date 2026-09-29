@@ -1,7 +1,7 @@
 const manifest = {
     name: 'Boards',
     slug: 'boards',
-    version: '0.1.2',
+    version: '0.2.0',
     description: 'Kanban boards for tracking work across lists.',
     routes: { directory: 'screens' },
     // Share links open at /p/boards/<token>, outside the workspace shell
