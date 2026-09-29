@@ -93,7 +93,7 @@ jobs:
       # bulk of the install step's runtime.
       - uses: actions/setup-go@v6
         with:
-          go-version-file: ws/.go-version
+          go-version-file: ws/tinycld/core/server/go.mod
           # boards' own key is go.mod, not go.sum: boards deliberately commits no
           # go.sum (see the comment in server/go.mod — every dep resolves
           # through go.work replaces to local dirs, so there are no module
@@ -230,7 +230,7 @@ jobs:
       - uses: actions/setup-go@v6
         if: steps.specs.outputs.found == 'true'
         with:
-          go-version-file: ws/.go-version
+          go-version-file: ws/tinycld/core/server/go.mod
           # Same key as the check job — see the note there.
           cache-dependency-path: |
             ws/boards/server/go.mod
