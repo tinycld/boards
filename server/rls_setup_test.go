@@ -155,7 +155,7 @@ func buildCardsTemplate(t *testing.T) string {
 
 	rlstest.Apply(t, app, rlstest.MigrationsDir(t, "../pb-migrations"))
 
-	if err := app.ResetBootstrapState(); err != nil {
+	if err := app.ClearBootstrap(); err != nil {
 		t.Fatalf("close template database: %v", err)
 	}
 	return app.DataDir()
