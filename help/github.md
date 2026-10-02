@@ -7,8 +7,8 @@ order: 42
 
 ## Attaching a repository
 
-Open **Settings → Boards → GitHub** and add the repository's owner and name
-(for example `octocat` / `hello-world`). Only a board's owner can attach or
+Open **Settings → GitHub** (in the **Account** group) and add the repository's
+owner and name (for example `octocat` / `hello-world`). Only a board's owner can attach or
 remove a repository — everyone else sees the list read-only.
 
 There is no separate on/off switch. A board's GitHub integration is active as
