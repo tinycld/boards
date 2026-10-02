@@ -2,6 +2,7 @@ import { captureException, errorToString } from '@tinycld/core/lib/errors'
 import { useMutation } from '@tinycld/core/lib/mutations'
 import { notify } from '@tinycld/core/lib/notify'
 import { pb } from '@tinycld/core/lib/pocketbase'
+import { serverFetch } from '@tinycld/core/lib/server-fetch'
 import { Platform } from 'react-native'
 
 export type BoardExportFormat = 'csv' | 'json'
@@ -44,7 +45,7 @@ export function useBoardExport() {
             if (pb.authStore.token) {
                 headers.Authorization = `Bearer ${pb.authStore.token}`
             }
-            const response = await fetch(url, { method: 'GET', headers })
+            const response = await serverFetch(url, { method: 'GET', headers })
             if (!response.ok) {
                 throw new Error(`Export failed: HTTP ${response.status}`)
             }
