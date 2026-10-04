@@ -41,6 +41,6 @@ follow across all your boards.
 ## Turning notifications off
 
 Each kind of card notification has its own switch under **Settings →
-Personal → Notifications**, in the **Boards** group: mentions, assignments,
+Notifications**, in the **Boards** group: mentions, assignments,
 replies, changes to watched cards, and due-date reminders. Turning one off
 stops both the bell and push for that kind; the others keep working.

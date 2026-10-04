@@ -17,7 +17,7 @@ const manifest = {
         shortcut: 'b',
     },
     sidebar: { component: 'sidebar' },
-    settings: [{ slug: 'github', label: 'GitHub', component: 'settings/github' }],
+    accountSettings: [{ slug: 'github', label: 'GitHub', component: 'settings/github' }],
     // Mounted at the app root: watches this user's own membership rows and
     // prunes the synced board collections when a revocation changes what the
     // rules let them read — no realtime event exists for that (the board
