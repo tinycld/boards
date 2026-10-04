@@ -13,8 +13,8 @@ import (
 // A board's document is one namespace shared by everyone on the board, and the
 // write gate is board-level. The validator is what stops a member from writing
 // anywhere except their boards' editors — data parked under another root would
-// be invisible in the UI but replicated to every peer, journaled, and reloaded
-// forever.
+// be invisible in the UI but replicated to every peer and kept in the
+// document forever.
 
 // updateWriting builds a real Yjs update that seeds the named fragment, which
 // is what a client's first edit to that card looks like on the wire.
@@ -25,7 +25,6 @@ import (
 func updateWriting(t *testing.T, fragment string) []byte {
 	t.Helper()
 	runtime := yjsdoc.NewRuntime()
-	t.Cleanup(runtime.Stop)
 
 	pmJSON, err := json.Marshal(&markdown.PMNode{
 		Type: markdown.NodeDoc,
@@ -44,6 +43,9 @@ func updateWriting(t *testing.T, fragment string) []byte {
 	handle, err := runtime.NewDoc("probe-source")
 	if err != nil {
 		t.Fatalf("new doc: %v", err)
+	}
+	if err := runtime.Seed(context.Background(), "probe-source", handle); err != nil {
+		t.Fatalf("seed: %v", err)
 	}
 	update, err := handle.EncodeStateAsUpdate()
 	if err != nil {

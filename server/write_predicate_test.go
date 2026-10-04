@@ -2,7 +2,6 @@ package boards
 
 import (
 	"testing"
-	"time"
 
 	"tinycld.org/core/realtime"
 )
@@ -30,12 +29,10 @@ func TestWritePredicate_RecoversWhenTheMembershipRowArrivesLate(t *testing.T) {
 	// written yet — exactly the window between the two inserts.
 	project := cardsProject(t, env.app, "Late owner row", env.owner)
 
-	state := newBoardDocState()
-	state.open(project.Id, time.Now())
 	client := realtime.NewClientForTest(env.owner.Id)
 
 	// The socket opens inside the window.
-	if _, err := makeOnConnect(env.app, state)(project.Id, client); err != nil {
+	if _, err := makeOnConnect(env.app)(project.Id, client); err != nil {
 		t.Fatalf("onConnect: %v", err)
 	}
 	if !client.ReadOnly() {
@@ -64,10 +61,8 @@ func TestWritePredicate_KeepsRefusingARealViewer(t *testing.T) {
 	// viewer, so every pass has to keep saying no.
 	env := setupCardsEnv(t)
 
-	state := newBoardDocState()
-	state.open(env.project.Id, time.Now())
 	client := realtime.NewClientForTest(env.viewer.Id)
-	if _, err := makeOnConnect(env.app, state)(env.project.Id, client); err != nil {
+	if _, err := makeOnConnect(env.app)(env.project.Id, client); err != nil {
 		t.Fatalf("onConnect: %v", err)
 	}
 
@@ -87,10 +82,8 @@ func TestWritePredicate_DoesNotRequeryAWriter(t *testing.T) {
 	// pure field read — this is the hot path for every keystroke in the room.
 	env := setupCardsEnv(t)
 
-	state := newBoardDocState()
-	state.open(env.project.Id, time.Now())
 	client := realtime.NewClientForTest(env.editor.Id)
-	if _, err := makeOnConnect(env.app, state)(env.project.Id, client); err != nil {
+	if _, err := makeOnConnect(env.app)(env.project.Id, client); err != nil {
 		t.Fatalf("onConnect: %v", err)
 	}
 	if client.ReadOnly() {

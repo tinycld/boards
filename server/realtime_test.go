@@ -45,8 +45,11 @@ func authorizeCardsRoom(t *testing.T, env *cardsEnv) realtime.AuthorizeFn {
 	if opts.RuntimeProvider == nil {
 		t.Error("board room has no document runtime; descriptions would never persist")
 	}
-	if opts.Journal == nil {
-		t.Error("board room has no journal; an update accepted before a flush would be lost")
+	if opts.Checkpoints == nil || opts.Fingerprint == nil || opts.FlushDirty == nil {
+		t.Error("board room keeps no checkpoints; a parked document could not survive a restart")
+	}
+	if opts.OnEvict == nil {
+		t.Error("board room drops no baselines when its document is evicted")
 	}
 	if opts.WritePredicate == nil {
 		t.Error("board room has no write gate; a viewer could edit descriptions")

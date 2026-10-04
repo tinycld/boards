@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
@@ -45,7 +44,7 @@ const seedBoardCountWarn = 200
 // stored prose, so a keystroke appends to it instead of replacing it.
 func makeBootstrap(app core.App, state *boardDocState) yjsdoc.BootstrapFn {
 	return func(_ context.Context, projectID string, doc *yjsdoc.Doc) error {
-		state.open(projectID, time.Now())
+		state.open(projectID)
 
 		records, err := app.FindRecordsByFilter(
 			"boards_cards",

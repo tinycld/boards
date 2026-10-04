@@ -3,7 +3,6 @@ package boards
 import (
 	"encoding/json"
 	"testing"
-	"time"
 
 	"tinycld.org/core/realtime"
 )
@@ -19,10 +18,8 @@ import (
 
 func helloFor(t *testing.T, env *cardsEnv, userID string) boardHello {
 	t.Helper()
-	state := newBoardDocState()
-	state.open(env.project.Id, time.Now())
 
-	onConnect := makeOnConnect(env.app, state)
+	onConnect := makeOnConnect(env.app)
 	client := realtime.NewClientForTest(userID)
 
 	payload, err := onConnect(env.project.Id, client)
@@ -78,14 +75,5 @@ func TestOnConnect_FailsClosed(t *testing.T) {
 				t.Errorf("%s was granted write access", name)
 			}
 		})
-	}
-}
-
-func TestOnConnect_ReportsTheDocumentEpoch(t *testing.T) {
-	// A client reconnecting after the room was rebuilt must be able to tell,
-	// so it discards state that would duplicate content instead of merging.
-	env := setupCardsEnv(t)
-	if hello := helloFor(t, env, env.owner.Id); hello.DocEpoch == 0 {
-		t.Error("hello carried no document epoch for an open board")
 	}
 }

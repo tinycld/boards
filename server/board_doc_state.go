@@ -3,8 +3,8 @@ package boards
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"sort"
 	"sync"
-	"time"
 )
 
 // boardDocState tracks, per open board room, what the server believes each
@@ -13,10 +13,9 @@ import (
 // The flush path compares a freshly serialized fragment against this baseline
 // to decide whether a row actually changed. That matters for three reasons:
 //
-//   - The journal truncates per ROOM, and one room covers a whole board. A
-//     flush must therefore persist every dirty card before the WAL is
-//     truncated, so it walks all fragments — the baseline is what keeps that
-//     walk from rewriting every card on every save.
+//   - One room covers a whole board, so a flush walks every fragment — the
+//     baseline is what keeps that walk from rewriting every card on every
+//     save.
 //   - A card edited through the normal REST path while the room is open, but
 //     never touched inside the room, keeps its value: its fragment still
 //     serializes to the baseline, so flush skips it.
@@ -28,11 +27,6 @@ type boardDocState struct {
 }
 
 type boardEntry struct {
-	// epoch identifies this incarnation of the room's document. A client
-	// holding state from a previous epoch must discard it rather than merge:
-	// y-crdt mints a fresh random clientID per document, so merging across
-	// epochs duplicates every item instead of converging.
-	epoch int64
 	// baseline maps card id → sha256 of the markdown last known to be stored.
 	baseline map[string]string
 }
@@ -41,31 +35,58 @@ func newBoardDocState() *boardDocState {
 	return &boardDocState{boards: make(map[string]*boardEntry)}
 }
 
-// open starts (or restarts) tracking for a room and returns its epoch.
-func (s *boardDocState) open(projectID string, now time.Time) int64 {
+// open starts (or restarts) tracking for a board's document. Called when
+// the broker seeds the document; the entry then lives as long as the
+// document, through every park and reopen, until the broker evicts it.
+func (s *boardDocState) open(projectID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	entry := &boardEntry{epoch: now.UnixMilli(), baseline: make(map[string]string)}
-	s.boards[projectID] = entry
-	return entry.epoch
+	s.boards[projectID] = &boardEntry{baseline: make(map[string]string)}
 }
 
-// drop forgets a room. Called when the last client leaves, after the final
-// flush — a later reopen re-seeds from the records and gets a new epoch.
+// drop forgets a document. Called from OnEvict, when the broker closes the
+// document; a later reopen re-seeds from the records.
 func (s *boardDocState) drop(projectID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.boards, projectID)
 }
 
-// epochOf returns the room's current epoch, or 0 when it is not open.
-func (s *boardDocState) epochOf(projectID string) int64 {
+// fingerprint summarizes what the document believes is stored for every
+// card, from the baselines, so the broker can tell a parked or stored
+// document from the records. Reports false when the board has no entry
+// (no document was seeded, or it was evicted).
+func (s *boardDocState) fingerprint(projectID string) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if entry := s.boards[projectID]; entry != nil {
-		return entry.epoch
+	entry := s.boards[projectID]
+	if entry == nil {
+		return "", false
 	}
-	return 0
+	return fingerprintOf(entry.baseline), true
+}
+
+// fingerprintOf hashes a card → description-hash map in a stable order.
+// A card with an empty description is left out, so it matches the record
+// query bootstrap runs (description != ”).
+func fingerprintOf(hashes map[string]string) string {
+	empty := hashMarkdown("")
+	ids := make([]string, 0, len(hashes))
+	for id, h := range hashes {
+		if h == empty {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	sum := sha256.New()
+	for _, id := range ids {
+		sum.Write([]byte(id))
+		sum.Write([]byte{0})
+		sum.Write([]byte(hashes[id]))
+		sum.Write([]byte{0})
+	}
+	return hex.EncodeToString(sum.Sum(nil))
 }
 
 // setBaseline records what a card's description now says on disk.
