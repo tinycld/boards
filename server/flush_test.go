@@ -1,6 +1,7 @@
 package boards
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -22,12 +23,14 @@ func boardRoom(t *testing.T, env *cardsEnv) (*yjsdoc.Runtime, *boardDocState, re
 	t.Helper()
 	state := newBoardDocState()
 	runtime := yjsdoc.NewRuntime()
-	t.Cleanup(runtime.Stop)
 	runtime.SetBootstrap(makeBootstrap(env.app, state))
 
 	handle, err := runtime.NewDoc(env.project.Id)
 	if err != nil {
 		t.Fatalf("open board document: %v", err)
+	}
+	if err := runtime.Seed(context.Background(), env.project.Id, handle); err != nil {
+		t.Fatalf("seed: %v", err)
 	}
 	return runtime, state, makeFlush(env.app, state), handle
 }

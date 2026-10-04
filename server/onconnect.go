@@ -15,11 +15,6 @@ type boardHello struct {
 	// right affordance. The gate itself is WritePredicate — this is the
 	// courtesy copy, not the enforcement.
 	ReadOnly bool `json:"readOnly"`
-	// DocEpoch identifies this incarnation of the board's document. A client
-	// that reconnects with state from an older epoch must discard it: y-crdt
-	// mints a fresh clientID per document, so merging across epochs duplicates
-	// content rather than converging.
-	DocEpoch int64 `json:"docEpoch"`
 }
 
 // makeOnConnect resolves the joining member's role and tells them what they may
@@ -86,14 +81,11 @@ func boardWritePredicate(app core.App) func(*realtime.Client, string) bool {
 	}
 }
 
-func makeOnConnect(app core.App, state *boardDocState) realtime.ServerHelloFn {
+func makeOnConnect(app core.App) realtime.ServerHelloFn {
 	return func(projectID string, c *realtime.Client) ([]byte, error) {
 		readOnly := isReadOnly(app, projectID, c.AuthID())
 		c.SetReadOnly(readOnly)
 
-		return json.Marshal(boardHello{
-			ReadOnly: readOnly,
-			DocEpoch: state.epochOf(projectID),
-		})
+		return json.Marshal(boardHello{ReadOnly: readOnly})
 	}
 }

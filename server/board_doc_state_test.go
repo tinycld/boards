@@ -2,7 +2,6 @@ package boards
 
 import (
 	"testing"
-	"time"
 )
 
 // The baseline map decides which cards a flush writes. Getting it wrong is not
@@ -12,7 +11,7 @@ import (
 
 func TestBaseline_UnknownCardIsTreatedAsEmpty(t *testing.T) {
 	state := newBoardDocState()
-	state.open("board", time.Now())
+	state.open("board")
 
 	// A card created while the room is live has no baseline. Its empty
 	// fragment must compare EQUAL to empty, so an untouched new card is not
@@ -28,7 +27,7 @@ func TestBaseline_UnknownCardIsTreatedAsEmpty(t *testing.T) {
 
 func TestBaseline_TracksTheLastSavedText(t *testing.T) {
 	state := newBoardDocState()
-	state.open("board", time.Now())
+	state.open("board")
 	state.setBaseline("board", "card", "First version.\n")
 
 	if !state.matchesBaseline("board", "card", "First version.\n") {
@@ -48,8 +47,8 @@ func TestBaseline_IsPerBoard(t *testing.T) {
 	// Two boards can hold cards with identical text; a save on one must not
 	// convince the other that its card is clean.
 	state := newBoardDocState()
-	state.open("a", time.Now())
-	state.open("b", time.Now())
+	state.open("a")
+	state.open("b")
 	state.setBaseline("a", "card", "shared text\n")
 
 	if state.matchesBaseline("b", "card", "shared text\n") {
@@ -61,7 +60,7 @@ func TestBaseline_ClosedBoardMatchesNothing(t *testing.T) {
 	// After the room is dropped there is nothing to compare against, so a late
 	// flush must write rather than assume clean.
 	state := newBoardDocState()
-	state.open("board", time.Now())
+	state.open("board")
 	state.setBaseline("board", "card", "text\n")
 	state.drop("board")
 
@@ -74,7 +73,7 @@ func TestBaseline_ForgetCardStopsRetrying(t *testing.T) {
 	// A deleted card's baseline is dropped so the flush loop does not keep
 	// trying to save a row that is gone.
 	state := newBoardDocState()
-	state.open("board", time.Now())
+	state.open("board")
 	state.setBaseline("board", "card", "text\n")
 	state.forgetCard("board", "card")
 
@@ -83,23 +82,38 @@ func TestBaseline_ForgetCardStopsRetrying(t *testing.T) {
 	}
 }
 
-func TestEpoch_ChangesWhenARoomReopens(t *testing.T) {
-	// A client reconnecting with state from a previous incarnation must be
-	// told to discard it: y-crdt mints a fresh clientID per document, so
-	// merging across epochs duplicates content instead of converging.
+// The fingerprint is how the broker tells a parked or stored document from
+// the records: equal baselines, equal fingerprint; a card written outside
+// the room, a different one.
+func TestFingerprint_FollowsTheBaselines(t *testing.T) {
 	state := newBoardDocState()
-	first := state.open("board", time.UnixMilli(1_000))
-	state.drop("board")
-	second := state.open("board", time.UnixMilli(2_000))
-
-	if first == second {
-		t.Errorf("epoch did not change across reopen: %d", first)
+	if _, ok := state.fingerprint("board"); ok {
+		t.Fatal("a board with no document reported a fingerprint")
 	}
-	if got := state.epochOf("board"); got != second {
-		t.Errorf("epochOf = %d, want %d", got, second)
+	state.open("board")
+	empty, _ := state.fingerprint("board")
+	state.setBaseline("board", "a", "First.\n")
+	state.setBaseline("board", "b", "Second.\n")
+	withTwo, _ := state.fingerprint("board")
+	if withTwo == empty {
+		t.Fatal("baselines did not change the fingerprint")
+	}
+	// Order of insertion must not matter.
+	other := newBoardDocState()
+	other.open("board")
+	other.setBaseline("board", "b", "Second.\n")
+	other.setBaseline("board", "a", "First.\n")
+	if got, _ := other.fingerprint("board"); got != withTwo {
+		t.Fatal("the same baselines in another order hashed differently")
+	}
+	// A card whose description is empty counts as absent, as it is for the
+	// bootstrap query that seeds only non-empty descriptions.
+	state.setBaseline("board", "c", "")
+	if got, _ := state.fingerprint("board"); got != withTwo {
+		t.Fatal("an empty description changed the fingerprint")
 	}
 	state.drop("board")
-	if got := state.epochOf("board"); got != 0 {
-		t.Errorf("a closed board should report no epoch, got %d", got)
+	if _, ok := state.fingerprint("board"); ok {
+		t.Fatal("a dropped board still reported a fingerprint")
 	}
 }

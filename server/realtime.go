@@ -1,12 +1,13 @@
 package boards
 
 import (
+	"fmt"
 	"log/slog"
-	"math"
 
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 
+	"tinycld.org/core/markdown"
 	"tinycld.org/core/realtime"
 	"tinycld.org/core/yjsdoc"
 )
@@ -38,17 +39,18 @@ func registerRealtime(app core.App) *boardRealtime {
 
 	runtime := yjsdoc.NewRuntime()
 	runtime.SetBootstrap(makeBootstrap(app, state))
-	runtime.StartJanitor()
 
-	journal := realtime.NewPocketBaseJournal(app)
+	checkpoints := realtime.NewPocketBaseCheckpointStore(app)
 	saveCoordinator := realtime.NewSaveCoordinator(makeFlush(app, state))
-	saveCoordinator.SetJournal(roomKindBoards, journal)
+	saveCoordinator.SetKind(roomKindBoards)
 
 	realtime.RegisterRoomKindWith(roomKindBoards, realtime.RoomKindOptions{
 		Authorize:              makeAuthorize(app),
 		RuntimeProvider:        runtime,
-		Journal:                journal,
-		OnConnect:              makeOnConnect(app, state),
+		Checkpoints:            checkpoints,
+		Fingerprint:            makeFingerprint(app, state),
+		FlushDirty:             saveCoordinator.FlushDirty,
+		OnConnect:              makeOnConnect(app),
 		UpdateContentValidator: validateUpdate,
 		// Read-only members still see presence: awareness frames are routed
 		// without consulting the write gate, so a viewer keeps their avatar
@@ -62,30 +64,61 @@ func registerRealtime(app core.App) *boardRealtime {
 			runtime.NoteRoom(projectID, room)
 			saveCoordinator.OnRoomCreate(projectID, handle, room)
 		},
-		OnDocUpdate:    saveCoordinator.OnDocUpdate,
-		OnDocUpdateSeq: saveCoordinator.NoteSeq,
+		OnDocUpdate: saveCoordinator.OnDocUpdate,
 		OnEmpty: func(projectID string) {
-			// Order matters: the coordinator's teardown flush must land before
-			// the room's tracking is dropped, or the final edits lose the
-			// baselines that tell flush what changed.
+			// The document is parked, not closed: the baselines stay with it
+			// so a reopen's flush still knows what changed. Only the room
+			// reference goes.
 			saveCoordinator.OnRoomEmpty(projectID)
 			runtime.NoteRoom(projectID, nil)
-			state.drop(projectID)
 		},
+		// The broker closes the document after it has been parked for a
+		// while, or when the records changed under it; the baselines go
+		// with it, and the next open re-seeds and rebuilds them.
+		OnEvict:    state.drop,
 		ForceFlush: saveCoordinator.FlushNow,
 	})
 
-	// A deleted board leaves its write-ahead log behind; nothing reads those
-	// rows again, but they are dead weight in a hot collection.
+	// A deleted board leaves nothing behind: its parked document is closed
+	// and its checkpoint row removed.
 	app.OnRecordAfterDeleteSuccess("boards_projects").BindFunc(func(e *core.RecordEvent) error {
-		if err := journal.Truncate(roomKindBoards, e.Record.Id, math.MaxInt64); err != nil {
-			slog.Warn("cards: could not truncate the journal for a deleted board",
+		if err := realtime.DropRoom(roomKindBoards, e.Record.Id); err != nil {
+			slog.Warn("cards: could not drop the document of a deleted board",
 				"projectID", e.Record.Id, "err", err)
 		}
 		return e.Next()
 	})
 
 	return &boardRealtime{state: state, runtime: runtime, flushNow: saveCoordinator.FlushNow}
+}
+
+// makeFingerprint identifies the records a board's document was seeded
+// from. While the document exists (open or parked) the baselines say what
+// it believes is stored, and a change made to the records outside the room
+// shows up as a difference at the next open. With no document, the rows
+// themselves are hashed, normalized the way bootstrap normalizes them, so
+// a document seeded from these rows and flushed unchanged matches.
+func makeFingerprint(app core.App, state *boardDocState) realtime.FingerprintFn {
+	return func(projectID string) (string, error) {
+		if fp, ok := state.fingerprint(projectID); ok {
+			return fp, nil
+		}
+		records, err := app.FindRecordsByFilter(
+			"boards_cards",
+			"project = {:project} && description != ''",
+			"", 0, 0,
+			dbx.Params{"project": projectID},
+		)
+		if err != nil {
+			return "", fmt.Errorf("cards: fingerprint of board %s: %w", projectID, err)
+		}
+		hashes := make(map[string]string, len(records))
+		for _, record := range records {
+			description := record.GetString("description")
+			hashes[record.Id] = hashMarkdown(markdown.FromPM(markdown.ToPM(description)))
+		}
+		return fingerprintOf(hashes), nil
+	}
 }
 
 // makeAuthorize gates connections: any non-disabled member of the board may
