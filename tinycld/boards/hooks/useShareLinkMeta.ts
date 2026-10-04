@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { PB_SERVER_ADDR } from '@tinycld/core/lib/pocketbase'
+import { serverFetch } from '@tinycld/core/lib/server-fetch'
 import type { PublicBoardGoneReason } from '../lib/public-board-routing'
 
 /**
@@ -93,7 +94,7 @@ export function useShareLinkMeta(token: string): ShareLinkMeta {
         // that has been sitting open.
         refetchOnWindowFocus: true,
         queryFn: async () => {
-            const res = await fetch(
+            const res = await serverFetch(
                 `${PB_SERVER_ADDR}/api/boards/share-link/${encodeURIComponent(token)}`
             )
             if (!res.ok) {
