@@ -93,7 +93,6 @@ func oauthPackage() oauth.Package {
 			"boards_project_repos": ro,
 		},
 		Endpoints: map[string][]string{
-			"GET /api/boards/search": {scopeRead},
 			// Whole-board transfer. The read/write split is the point: an
 			// export handed boards:write would be reachable by a token granted
 			// only to change cards, and an import admitted by boards:read

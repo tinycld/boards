@@ -91,13 +91,12 @@ func TestOAuthServerWrittenCollectionsAreReadOnly(t *testing.T) {
 	}
 }
 
-// The bespoke routes: search, whole-board transfer, and the per-record POST
+// The bespoke routes: whole-board transfer and the per-record POST
 // families classified by prefix. The move endpoint shipped unclassified, so
 // `card move --board` over a token was denied while a session succeeded.
 func TestOAuthClassifiesEndpoints(t *testing.T) {
 	registerScopes(t)
 	for _, r := range []struct{ method, path, scope string }{
-		{"GET", "/api/boards/search", scopeRead},
 		{"GET", "/api/boards/export", scopeRead},
 		{"POST", "/api/boards/import", scopeWrite},
 		{"POST", "/api/boards/cards/abc123/move", scopeWrite},
