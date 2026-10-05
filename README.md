@@ -158,7 +158,7 @@ the Go module. The OAuth scopes the binary asks for (`boards:read`,
 which collections and routes each one admits, through `oauth.RegisterPackage`:
 `server/oauth_scopes.go` builds the `oauth.Package` and `server/register.go`
 registers it. The server cross-compiles the binary; users
-download it from **Settings → Personal → About**.
+download it from **Settings → About** ("Command line tools").
 
 Board-level verbs sit directly on the group; everything else is nested under
 `column`, `card`, `sprint` and `github`. Cobra is the source of truth for the
@@ -336,8 +336,8 @@ exactly what a developer runs locally.
 ## Package anatomy
 
 - `manifest.ts` — the single source of truth for this package's capabilities:
-  `routes` + `publicRoutes`, `nav`, `sidebar`, `provider`, a `settings` entry
-  (the GitHub screen), `help`, `search`, two calendar `eventSources`
+  `routes` + `publicRoutes`, `nav`, `sidebar`, `accountSettings` (the per-user
+  GitHub panel), `provider`, `help`, `tests`, `search`, two calendar `eventSources`
   (`boards-due`, `boards-sprints`), `quota` (attachments count against the
   storage ceiling by their `size` column), `migrations`, `server`, `cli`,
   `collections`, `automation`, `seed`, `repository`, `peerVersions`
@@ -363,9 +363,9 @@ exactly what a developer runs locally.
 - `tinycld/boards/` — the TypeScript surface: `screens/` (the board list,
   a board, a card, and My cards, under a `_layout`),
   `public-screens/[token].tsx` (the share-link page at `/p/boards/<token>`,
-  outside the app shell), `settings/github.tsx` (Settings → Boards → GitHub),
-  `sidebar.tsx`, `provider.tsx` (re-pulls the cards collections when a
-  membership grant changes what the rules let you read), `search-adapter.ts`,
+  outside the app shell), `settings/github.tsx` (Settings → Account → GitHub),
+  `sidebar.tsx`, `provider.tsx` (prunes the synced board collections when a
+  membership revocation changes what the rules let you read), `search-adapter.ts`,
   `calendar-source.ts` + `calendar-sprint-source.ts`, `collections.ts`,
   `types.ts`, hooks, `lib/` (rank arithmetic, board projection, filtering,
   selection), `stores/`, and components grouped by area (`detail/`, `table/`,
