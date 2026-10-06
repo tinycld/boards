@@ -4,6 +4,7 @@ import { useUploadStore } from '@tinycld/core/file-viewer/upload-store'
 import { captureException, errorToString } from '@tinycld/core/lib/errors'
 import { mutation, useMutation } from '@tinycld/core/lib/mutations'
 import { useStore } from '@tinycld/core/lib/pocketbase'
+import { uploadFileUri } from '@tinycld/core/lib/upload-file'
 import { newRecordId } from 'pbtsdb/core'
 import { useCallback } from 'react'
 import { ATTACHMENTS_COLLECTION_ID } from '../lib/attachment-source'
@@ -156,21 +157,13 @@ export function useAttachmentMutations(cardId: string, projectId: string, userId
 }
 
 /**
- * A URL the local image can be drawn from before it has been uploaded.
- *
- * On web `PickedFile.file` is a real File, so `createObjectURL` works. On
- * native it is an opaque `{ uri, ... }` the FormData polyfill understands —
- * that uri is directly renderable, and `createObjectURL` does not exist.
+ * A URL the local image can be drawn from before it has been uploaded: a
+ * `blob:` URL on web, the file's own URI on native.
  */
 function localPreviewUri(file: PickedFile): string | undefined {
-    const native = file.file as unknown as { uri?: string }
-    if (native?.uri) return native.uri
-    if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
-        try {
-            return URL.createObjectURL(file.file as unknown as Blob)
-        } catch {
-            return undefined
-        }
+    try {
+        return uploadFileUri(file.file)
+    } catch {
+        return undefined
     }
-    return undefined
 }

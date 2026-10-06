@@ -1,6 +1,6 @@
 import { downloadFile } from '@tinycld/core/file-viewer/file-url'
 import { PreviewModal } from '@tinycld/core/file-viewer/PreviewModal'
-import { type PickedFile, webFileToPickedFile } from '@tinycld/core/file-viewer/picked-file'
+import { type PickedFile, uploadFileToPickedFile } from '@tinycld/core/file-viewer/picked-file'
 import { getPreviewActionFactories } from '@tinycld/core/file-viewer/preview-action-registry'
 import { Thumbnail } from '@tinycld/core/file-viewer/Thumbnail'
 import {
@@ -429,5 +429,5 @@ function UploadRow({ upload, onDismiss }: { upload: UploadingFile; onDismiss: ()
 /** Converts web `File`s from a drop into the picker's shape. */
 export function filesToPicked(files: File[]): PickedFile[] {
     if (Platform.OS !== 'web') return []
-    return files.map(webFileToPickedFile)
+    return files.map(uploadFileToPickedFile)
 }

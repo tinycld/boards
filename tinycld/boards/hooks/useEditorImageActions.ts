@@ -1,4 +1,4 @@
-import { type PickedFile, webFileToPickedFile } from '@tinycld/core/file-viewer/picked-file'
+import { type PickedFile, uploadFileToPickedFile } from '@tinycld/core/file-viewer/picked-file'
 import { usePickFiles } from '@tinycld/core/file-viewer/use-pick-files'
 import { useAuth } from '@tinycld/core/lib/auth'
 import type { EditorCommands } from '@tinycld/core/lib/editor/types'
@@ -88,7 +88,7 @@ export function useEditorImageActions({
     // land in the document at the drop point. Web only — the option is a
     // no-op on native.
     const onImageDrop = (files: File[], pos: number) => {
-        insertDroppedImages(files.map(webFileToPickedFile), pos, {
+        insertDroppedImages(files.map(uploadFileToPickedFile), pos, {
             upload: uploadImages,
             insertAt: (src, at, alt) => commandsRef.current?.insertImageAt?.(src, at, alt),
         }).catch(err => captureException(`${context}.imageDrop`, err, { card: cardId }))
