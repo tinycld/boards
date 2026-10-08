@@ -15,7 +15,6 @@
         "./public-screens/*": "./tinycld/boards/public-screens/*.tsx",
         "./settings/*": "./tinycld/boards/settings/*.tsx",
         "./sidebar": "./tinycld/boards/sidebar.tsx",
-        "./provider": "./tinycld/boards/provider.tsx",
         "./hooks/*": "./tinycld/boards/hooks/*.ts",
         "./lib/*": "./tinycld/boards/lib/*.ts",
         "./stores/*": "./tinycld/boards/stores/*.ts",

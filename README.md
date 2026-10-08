@@ -361,11 +361,11 @@ exactly what a developer runs locally.
 - `help/` — in-app help topics, one file per topic, surfaced at `/help`
 - `cli/` — Go source for this package's `tinycld` command group
 - `tinycld/boards/` — the TypeScript surface: `screens/` (the board list,
-  a board, a card, and My cards, under a `_layout`),
+  a board, a card, and My cards, under a `_layout` that also keeps the
+  board list in step with membership grants and revocations),
   `public-screens/[token].tsx` (the share-link page at `/p/boards/<token>`,
   outside the app shell), `settings/github.tsx` (Settings → Account → GitHub),
-  `sidebar.tsx`, `provider.tsx` (prunes the synced board collections when a
-  membership revocation changes what the rules let you read), `search-adapter.ts`,
+  `sidebar.tsx`, `search-adapter.ts`,
   `calendar-source.ts` + `calendar-sprint-source.ts`, `collections.ts`,
   `types.ts`, hooks, `lib/` (rank arithmetic, board projection, filtering,
   selection), `stores/`, and components grouped by area (`detail/`, `table/`,
