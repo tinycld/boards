@@ -1,5 +1,6 @@
 import { eq } from '@tanstack/db'
 import { useStore } from '@tinycld/core/lib/pocketbase'
+import { evictRows } from '@tinycld/core/lib/server-rows'
 import { useMyLiveQuery } from '@tinycld/core/lib/use-my-live-query'
 import { useEffect, useRef } from 'react'
 import { revokedProjectIds } from '../lib/membership-sync'
@@ -81,9 +82,9 @@ export function useMembershipSync() {
                 for (const [key, row] of collection.entries()) {
                     if ((row as { project?: string }).project === projectId) keys.push(String(key))
                 }
-                if (keys.length > 0) collection.utils.writeDelete(keys)
+                if (keys.length > 0) evictRows(collection, keys, 'boards.membership')
             }
-            projectsCollection.utils.writeDelete(projectId)
+            evictRows(projectsCollection, [projectId], 'boards.membership')
         }
     }, [
         isReady,

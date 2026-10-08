@@ -35,8 +35,8 @@ import type { BoardListView } from '../types'
  * writes that succeeded are not undone — they are real — and the toast names
  * the split so a retry is an informed one.
  */
-async function settleAll(transactions: { isPersisted: { promise: Promise<unknown> } }[]) {
-    const results = await Promise.allSettled(transactions.map(tx => tx.isPersisted.promise))
+async function settleAll(transactions: { when: (state: 'settled') => Promise<unknown> }[]) {
+    const results = await Promise.allSettled(transactions.map(tx => tx.when('settled')))
     const failed = results.filter(result => result.status === 'rejected')
     if (failed.length === 0) return
     const reason = failed[0].status === 'rejected' ? failed[0].reason : undefined

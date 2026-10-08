@@ -1,6 +1,5 @@
 import { eq } from '@tanstack/db'
 import { useLiveQuery } from '@tanstack/react-db'
-import { useQueryClient } from '@tanstack/react-query'
 import { captureException } from '@tinycld/core/lib/errors'
 import { useMutation } from '@tinycld/core/lib/mutations'
 import { pb, useStore } from '@tinycld/core/lib/pocketbase'
@@ -137,7 +136,7 @@ export interface CreateShareLinkInput {
 }
 
 export function useCreateShareLink(projectId: string) {
-    const queryClient = useQueryClient()
+    const [shareLinksCollection] = useStore('boards_share_links')
 
     return useMutation<ShareLinkRow, Error, CreateShareLinkInput>({
         mutationKey: ['boards', 'share-link', 'create', projectId],
@@ -166,13 +165,14 @@ export function useCreateShareLink(projectId: string) {
         },
         // The collection is live, so the new row arrives on its own; this only
         // covers the realtime round-trip so the dialog does not look inert for
-        // a beat after a press.
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['boards_share_links'] }),
+        // a beat after a press. The endpoint returns the dialog's shape, not
+        // the record, so the rows are reloaded rather than accepted.
+        onSuccess: () => shareLinksCollection.reload(),
     })
 }
 
 export function useRevokeShareLink(projectId: string) {
-    const queryClient = useQueryClient()
+    const [shareLinksCollection] = useStore('boards_share_links')
 
     return useMutation<void, Error, string>({
         mutationKey: ['boards', 'share-link', 'revoke', projectId],
@@ -184,7 +184,7 @@ export function useRevokeShareLink(projectId: string) {
                 throw err
             }
         },
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['boards_share_links'] }),
+        onSuccess: () => shareLinksCollection.reload(),
     })
 }
 
@@ -212,7 +212,7 @@ export interface UpdateShareLinkInput {
  * would change the token, breaking every page already carrying the snippet.
  */
 export function useUpdateShareLink(projectId: string) {
-    const queryClient = useQueryClient()
+    const [shareLinksCollection] = useStore('boards_share_links')
 
     return useMutation<ShareLinkRow, Error, UpdateShareLinkInput>({
         mutationKey: ['boards', 'share-link', 'update', projectId],
@@ -231,7 +231,7 @@ export function useUpdateShareLink(projectId: string) {
                 throw err
             }
         },
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['boards_share_links'] }),
+        onSuccess: () => shareLinksCollection.reload(),
     })
 }
 
