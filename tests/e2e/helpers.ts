@@ -153,12 +153,26 @@ export function columnHeader(page: Page, name: string): Locator {
  * whichever ran second, failing a test for a reason that has nothing to do with
  * what it was asserting. Callers that care about the key pass their own;
  * everyone else gets one derived from the (already per-test) name.
+ *
+ * Gated on the header naming the NEW board before the lists are checked. The
+ * dialog opens over the board already on screen, and every board starts with
+ * the same three lists, so the headers alone are satisfied by the PREVIOUS
+ * board while the insert is still in flight. A keystroke sent then reaches no
+ * board at all: in CI `n` fell into the new board's loading gap and the Enter
+ * after it re-opened "+ New board", which held the focus. Not the URL: it
+ * changes when the router accepts the navigation, before the screen commits.
+ * The "Add card" footer renders only once the role has resolved to an editor,
+ * which is also what registers the board's editing shortcuts.
  */
 export async function createBoard(page: Page, name: string, key?: string) {
     await page.getByText('+ New board', { exact: true }).click()
     await page.getByPlaceholder('Product launch').fill(name)
     await page.getByTestId('slug').fill(key ?? uniqueBoardKey(name))
     await page.getByText('Create board', { exact: true }).click()
+    await expect(page.getByTestId('boards-board-name').filter({ visible: true })).toHaveText(name)
+    await expect(
+        page.getByText('Add card', { exact: true }).filter({ visible: true }).first()
+    ).toBeVisible()
     await expect(columnHeader(page, 'To do')).toBeVisible()
     await expect(columnHeader(page, 'Doing')).toBeVisible()
     await expect(columnHeader(page, 'Done')).toBeVisible()
