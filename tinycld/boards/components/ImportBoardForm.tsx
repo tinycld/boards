@@ -104,6 +104,7 @@ function ImportSummary({ result, onDone }: { result: BoardImportResult; onDone: 
                 <Dialog.ActionButton
                     label="Open the board"
                     onPress={onDone}
+                    requiresServer={false}
                     testID="boards-import-done"
                 />
             </Dialog.Footer>

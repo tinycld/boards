@@ -129,6 +129,7 @@ function ExportBoardForm({
                     label={exportBoard.isPending ? 'Exporting…' : 'Export'}
                     onPress={onExport}
                     isDisabled={exportBoard.isPending}
+                    requiresServer={false}
                     testID="boards-export-confirm"
                 />
             </Dialog.Footer>
