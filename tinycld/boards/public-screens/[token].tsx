@@ -2,7 +2,7 @@ import { DocumentTitle } from '@tinycld/core/components/DocumentTitle'
 import { LoadingState } from '@tinycld/core/components/LoadingState'
 import { ShareLinkSignIn } from '@tinycld/core/components/share/ShareLinkSignIn'
 import { useAuth } from '@tinycld/core/lib/auth'
-import { installRealtimeGuard, setRealtimeEnabled } from '@tinycld/core/lib/realtime-enabled'
+import { setRealtimeEnabled } from '@tinycld/core/lib/realtime-enabled'
 import { setShareToken } from '@tinycld/core/lib/share-token'
 import { Redirect, useLocalSearchParams } from 'expo-router'
 import { useEffect, useState } from 'react'
@@ -149,16 +149,14 @@ function useInstalledShareToken(token: string) {
  * the socket would then be held on a page whose traffic the board's owner
  * neither sees nor controls.
  *
- * The guard is installed on the first render for the reason the file's other
+ * Realtime is turned off on the first render for the reason the file's other
  * install does: a collection read during that render can subscribe before any
- * effect runs, and a subscription that slipped through would keep the socket
- * open for the life of the page.
+ * effect runs. Turned off then, the connection never opens.
  */
 function useEmbedRealtime(isEmbed: boolean, embedLive: boolean) {
     const enabled = !isEmbed || embedLive
 
     useState(() => {
-        installRealtimeGuard()
         setRealtimeEnabled(enabled)
         return enabled
     })

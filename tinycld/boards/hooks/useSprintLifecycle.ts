@@ -1,6 +1,7 @@
 import { captureException } from '@tinycld/core/lib/errors'
 import { useMutation } from '@tinycld/core/lib/mutations'
 import { pb, useStore } from '@tinycld/core/lib/pocketbase'
+import { acceptServerRow } from '@tinycld/core/lib/server-rows'
 import type { BoardsSprints } from '../types'
 
 export interface StartSprintInput {
@@ -71,7 +72,7 @@ export function useSprintLifecycle() {
                         },
                     }
                 )
-                sprintsCollection.utils.writeUpsert(sprint)
+                await acceptServerRow(sprintsCollection, sprint, 'boards.sprint.start')
                 return sprint
             } catch (err) {
                 captureException('boards.sprint.start', err, { ...input })
@@ -94,7 +95,7 @@ export function useSprintLifecycle() {
                         },
                     }
                 )
-                sprintsCollection.utils.writeUpsert(payload.sprint)
+                await acceptServerRow(sprintsCollection, payload.sprint, 'boards.sprint.complete')
                 return {
                     sprint: payload.sprint,
                     completedCount: payload.completed_count ?? 0,

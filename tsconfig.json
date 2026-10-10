@@ -1,7 +1,6 @@
 {
     "extends": "@tinycld/core/tsconfig.package-base.json",
     "compilerOptions": {
-        "baseUrl": ".",
         "paths": {
             "~/tinycld/boards/*": ["./tinycld/boards/*"]
         }

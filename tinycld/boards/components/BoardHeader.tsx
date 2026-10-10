@@ -306,6 +306,7 @@ function TitleBlock({
                     <BoardNameInput key={project.name} project={project} onDone={onRenamed} />
                 ) : (
                     <Text
+                        testID="boards-board-name"
                         className="text-[17px] font-semibold tracking-tight text-foreground"
                         numberOfLines={1}
                     >

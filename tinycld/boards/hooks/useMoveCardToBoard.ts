@@ -1,6 +1,7 @@
 import { captureException } from '@tinycld/core/lib/errors'
 import { useMutation } from '@tinycld/core/lib/mutations'
 import { pb, useStore } from '@tinycld/core/lib/pocketbase'
+import { acceptServerRow } from '@tinycld/core/lib/server-rows'
 import type { BoardsCards } from '../types'
 
 export interface MoveCardToBoardInput {
@@ -92,7 +93,7 @@ export function useMoveCardToBoard() {
                         },
                     }
                 )
-                cardsCollection.utils.writeUpsert(payload.card)
+                await acceptServerRow(cardsCollection, payload.card, 'boards.card.moveToBoard')
                 return {
                     card: payload.card,
                     previousKey: payload.previous_key,

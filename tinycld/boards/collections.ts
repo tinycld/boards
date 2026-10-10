@@ -290,7 +290,8 @@ export function registerCollections(
     // board's header) and my own rows by user, never the whole table. The
     // board always rides along — in a request and in a realtime event — so
     // a membership granted mid-session arrives WITH the board it opens, and
-    // that is how a shared board reaches the sidebar (see provider.tsx).
+    // that is how a shared board reaches the sidebar (see useMembershipSync,
+    // mounted by the boards section's layout).
     const boards_project_members = newCollection('boards_project_members', {
         omitOnInsert: ['created', 'updated'] as const,
         ...onDemand,

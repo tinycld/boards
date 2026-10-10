@@ -1,6 +1,6 @@
 import { Avatar } from '@tinycld/core/components/Avatar'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
-import { Button, ButtonText } from '@tinycld/core/ui/button'
+import { ButtonText, ServerActionButton } from '@tinycld/core/ui/button'
 import { Dialog } from '@tinycld/core/ui/dialog'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
 import { Search } from 'lucide-react-native'
@@ -231,9 +231,13 @@ function CandidateRow({
                     </Text>
                 ) : null}
             </View>
-            <Button size="sm" onPress={() => onAdd(candidate.userId)} isDisabled={isPending}>
+            <ServerActionButton
+                size="sm"
+                onPress={() => onAdd(candidate.userId)}
+                isDisabled={isPending}
+            >
                 <ButtonText>{isPending ? 'Adding…' : 'Add'}</ButtonText>
-            </Button>
+            </ServerActionButton>
         </View>
     )
 }

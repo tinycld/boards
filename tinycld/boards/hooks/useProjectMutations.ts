@@ -190,7 +190,7 @@ export function useDeleteProject() {
  *     committed. They are yielded as an array because they are independent of
  *     each other — that runs them in parallel.
  *
- * `performMutations` awaits each yield's `isPersisted.promise` before resuming,
+ * `performMutations` awaits each yield's `when('settled')` before resuming,
  * which is exactly the sequencing above.
  */
 export function useCreateProject(options: { onError?: (error: unknown) => void } = {}) {

@@ -1,4 +1,4 @@
-import { webFileToPickedFile } from '@tinycld/core/file-viewer/picked-file'
+import { uploadFileToPickedFile } from '@tinycld/core/file-viewer/picked-file'
 import { useAuth } from '@tinycld/core/lib/auth'
 import { useFileDrop } from '@tinycld/core/lib/file-drop/use-file-drop'
 import { notify } from '@tinycld/core/lib/notify'
@@ -34,7 +34,7 @@ async function attachDroppedFiles(
         cardId,
         projectId,
         userId,
-        files: files.map(webFileToPickedFile),
+        files: files.map(uploadFileToPickedFile),
     })
     for (const failed of results.filter(r => r.storedFile === null)) {
         notify.emit({

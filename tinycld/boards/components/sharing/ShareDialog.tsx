@@ -109,7 +109,7 @@ function ShareDialogContent({ onClose, project }: { onClose: () => void; project
                     onPress={() => setIsAdding(true)}
                 />
                 <View className="flex-1" />
-                <Dialog.ActionButton label="Done" onPress={onClose} />
+                <Dialog.ActionButton label="Done" onPress={onClose} requiresServer={false} />
             </Dialog.Footer>
 
             <AddMemberDialog

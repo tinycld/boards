@@ -10,7 +10,7 @@ import { editorScaleFor } from '@tinycld/core/lib/editor/rich/editor-scale'
 import type { EditorCommands, EditorToolbarState } from '@tinycld/core/lib/editor/types'
 import { useDraft, useDraftStore } from '@tinycld/core/lib/editor/warm'
 import type { SurfaceId } from '@tinycld/core/lib/editor/warm/warm-editor-store'
-import { Button, ButtonText } from '@tinycld/core/ui/button'
+import { ButtonText, ServerActionButton } from '@tinycld/core/ui/button'
 import { PromptDialog } from '@tinycld/core/ui/PromptDialog'
 import { type ReactNode, type RefObject, useRef, useState } from 'react'
 import { Platform, Pressable, Text, View } from 'react-native'
@@ -380,7 +380,7 @@ export function CommentEditor({
                     <slots.EditorComponent />
                 </View>
                 <View className="flex-row justify-end gap-2">
-                    <Button
+                    <ServerActionButton
                         onPress={slots.submit}
                         isDisabled={!dialogs.canSubmit(slots.toolbarState)}
                         size="sm"
@@ -401,7 +401,7 @@ export function CommentEditor({
                             : {})}
                     >
                         <ButtonText>{isPending ? 'Sending…' : 'Send'}</ButtonText>
-                    </Button>
+                    </ServerActionButton>
                 </View>
             </View>
         ),

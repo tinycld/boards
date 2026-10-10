@@ -68,21 +68,28 @@ test.describe('Boards — one request per board, one per card', () => {
         await login(page)
         await navigateToPackage(page, 'boards')
         const first = `sync-a-${Date.now()}`
-        const second = `sync-b-${Date.now()}`
+
+        // A genuinely first-ever open: pbtsdb 2.0 keeps a query's result cached
+        // for its gcTime (react-query's stock 5 minutes; nothing here overrides
+        // it) independent of mount state, and a board PUSHes onto the boards
+        // stack rather than replacing the previous one (screens/_layout.tsx) —
+        // so revisiting an already-open board within one test run can be
+        // served from cache with no request at all. Only a board's first-ever
+        // open is guaranteed to hit the network, so that's what this measures.
+        const observed = observe(page)
         await createBoard(page, first)
         await addCard(page, 0, 'First card')
-        await createBoard(page, second)
-        await addCard(page, 0, 'Second card')
-
-        // Switching to a board the client has already fetched once: its rows
-        // were pruned when the screen left it, so this is a cold open.
-        const observed = observe(page)
-        await openBoard(page, first, 'First card')
         // Let the include demands settle before counting.
         await expect(page.getByText('First card')).toBeVisible()
         observed.stop()
 
-        const projectLists = observed.lists.filter(r => r.collection === 'boards_projects')
+        // The sidebar's own board-list query (useBoardList: `archived = false`
+        // / `archived = true`, no expand) legitimately re-fires on this same
+        // flow — it is a separate read from the board DETAIL fetch this test
+        // is about, so only requests naming this board are in scope here.
+        const projectLists = observed.lists.filter(
+            r => r.collection === 'boards_projects' && r.expand !== ''
+        )
         expect(projectLists.length).toBeGreaterThanOrEqual(1)
         for (const request of projectLists) {
             expect(request.expand).toContain('boards_cards_via_project')
