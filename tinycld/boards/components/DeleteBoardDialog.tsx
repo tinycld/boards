@@ -1,6 +1,6 @@
 import { Dialog } from '@tinycld/core/ui/dialog'
+import { Controller, confirmTextSchema, useForm, zodResolver } from '@tinycld/core/ui/form'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
-import { useState } from 'react'
 import { Text, View } from 'react-native'
 import { useDeleteProject } from '../hooks/useProjectMutations'
 import type { BoardProject } from '../types'
@@ -34,21 +34,28 @@ function DeleteBoardDialogBody({
     cardCount,
     onClose,
 }: Omit<DeleteBoardDialogProps, 'isOpen'>) {
-    const [typed, setTyped] = useState('')
     const archived = project.archivedCards
     const deleteProject = useDeleteProject()
     const totalCards = cardCount + archived.length
-    const matches = typed.trim() === project.name.trim()
+    const {
+        control,
+        handleSubmit,
+        formState: { isValid },
+    } = useForm({
+        resolver: zodResolver(confirmTextSchema(project.name)),
+        defaultValues: { confirm: '' },
+        mode: 'onChange',
+    })
     const summary = [
         pluralize(project.lists.length, 'list'),
         pluralize(totalCards, 'card'),
         pluralize(project.members.length, 'member'),
     ].join(', ')
 
-    const confirm = () => {
-        if (!matches || deleteProject.isPending) return
+    const confirm = handleSubmit(() => {
+        if (deleteProject.isPending) return
         deleteProject.mutate(project.id, { onSuccess: onClose })
-    }
+    })
 
     return (
         <Dialog
@@ -69,16 +76,23 @@ function DeleteBoardDialogBody({
                     className="flex-row border border-border rounded-lg px-3"
                     style={{ paddingVertical: 10 }}
                 >
-                    <PlainInput
-                        value={typed}
-                        onChangeText={setTyped}
-                        placeholder={project.name}
-                        autoFocus
-                        onSubmitEditing={confirm}
-                        editable={!deleteProject.isPending}
-                        accessibilityLabel="Board name"
-                        className="flex-1 text-foreground"
-                        style={{ fontSize: 15 }}
+                    <Controller
+                        control={control}
+                        name="confirm"
+                        render={({ field }) => (
+                            <PlainInput
+                                value={field.value}
+                                onChangeText={field.onChange}
+                                onBlur={field.onBlur}
+                                placeholder={project.name}
+                                autoFocus
+                                onSubmitEditing={confirm}
+                                editable={!deleteProject.isPending}
+                                accessibilityLabel="Board name"
+                                className="flex-1 text-foreground"
+                                style={{ fontSize: 15 }}
+                            />
+                        )}
                     />
                 </View>
             </Dialog.Body>
@@ -87,7 +101,7 @@ function DeleteBoardDialogBody({
                 <Dialog.ActionButton
                     label="Delete board"
                     onPress={confirm}
-                    isDisabled={!matches || deleteProject.isPending}
+                    isDisabled={!isValid || deleteProject.isPending}
                     isDestructive
                 />
             </Dialog.Footer>

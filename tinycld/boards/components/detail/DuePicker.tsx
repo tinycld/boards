@@ -1,10 +1,12 @@
 import { MiniCalendar } from '@tinycld/core/components/MiniCalendar'
 import { addDays, startOfDay } from '@tinycld/core/lib/dates'
+import { Controller, useForm, zodResolver } from '@tinycld/core/ui/form'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
 import { Popover } from '@tinycld/core/ui/popover'
 import { useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { type DueTime, encodeDue, formatDueTime, parseTimeText, timeOf } from '../../lib/due-time'
+import { dueTimeSchema } from '../../lib/form-schemas'
 import { anchorPropsFor, type PickerAnchor } from './picker-anchor'
 
 /** What a pick writes: a bare day, an instant with the flag, or a clear. */
@@ -143,8 +145,8 @@ const TIME_PRESETS: DueTime[] = [
 
 /**
  * Three common times, a free field, and a clear. The field commits on
- * Enter or blur through parseTimeText; a value it cannot read tints the
- * field rather than writing anything, so a typo never becomes a deadline.
+ * Enter or blur; a value dueTimeSchema cannot read tints the field rather
+ * than writing anything, so a typo never becomes a deadline.
  */
 function TimeRow({
     isVisible,
@@ -155,19 +157,23 @@ function TimeRow({
     current: DueTime | null
     onChange: (time: DueTime | null) => void
 }) {
-    const [text, setText] = useState(() => (current ? timeText(current) : ''))
-    const [isInvalid, setIsInvalid] = useState(false)
+    const {
+        control,
+        handleSubmit,
+        formState: { errors },
+    } = useForm({
+        resolver: zodResolver(dueTimeSchema),
+        defaultValues: { time: current ? timeText(current) : '' },
+    })
     if (!isVisible) return null
 
-    const commit = () => {
-        if (text.trim() === '') return
-        const parsed = parseTimeText(text)
-        if (!parsed) {
-            setIsInvalid(true)
-            return
-        }
-        onChange(parsed)
-    }
+    // An empty field parses to null and writes nothing; "Clear time" is the
+    // way to remove a time.
+    const commit = handleSubmit(({ time }) => {
+        const parsed = parseTimeText(time)
+        if (parsed) onChange(parsed)
+    })
+    const borderClass = errors.time ? 'border-danger' : 'border-border'
 
     return (
         <View className="border-t border-border px-3 py-2 gap-1.5">
@@ -180,23 +186,27 @@ function TimeRow({
                         onPress={() => onChange(time)}
                     />
                 ))}
-                <View
-                    className={`border rounded-full px-2.5 py-[2px] ${isInvalid ? 'border-danger' : 'border-border'}`}
-                >
-                    <PlainInput
-                        value={text}
-                        onChangeText={next => {
-                            setText(next)
-                            setIsInvalid(false)
-                        }}
-                        onSubmitEditing={commit}
-                        onBlur={commit}
-                        placeholder="HH:MM"
-                        accessibilityLabel="Due time"
-                        testID="boards-due-time"
-                        keyboardType="numbers-and-punctuation"
-                        className="text-[12px] text-foreground w-[64px]"
-                        style={{ minHeight: 20 }}
+                <View className={`border rounded-full px-2.5 py-[2px] ${borderClass}`}>
+                    <Controller
+                        control={control}
+                        name="time"
+                        render={({ field }) => (
+                            <PlainInput
+                                value={field.value}
+                                onChangeText={field.onChange}
+                                onSubmitEditing={commit}
+                                onBlur={() => {
+                                    field.onBlur()
+                                    void commit()
+                                }}
+                                placeholder="HH:MM"
+                                accessibilityLabel="Due time"
+                                testID="boards-due-time"
+                                keyboardType="numbers-and-punctuation"
+                                className="text-[12px] text-foreground w-[64px]"
+                                style={{ minHeight: 20 }}
+                            />
+                        )}
                     />
                 </View>
                 <ClearChip

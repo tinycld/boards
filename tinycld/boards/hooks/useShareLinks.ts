@@ -126,10 +126,11 @@ export interface CreateShareLinkInput {
      * Origins allowed to frame the link, space or newline separated. Left
      * empty the link is not embeddable, which is the default everywhere.
      *
-     * Sent as typed and validated by the SERVER (parseEmbedDomains), not here:
-     * the value ends up in a CSP directive, which has no escaping, so the
-     * check belongs on the side that cannot be bypassed. The error it returns
-     * is what the panel shows.
+     * The SERVER (parseEmbedDomains) is the authority: the value ends up in a
+     * CSP directive, which has no escaping, so the check must live on the side
+     * that cannot be bypassed. The form's embedDomainsSchema mirrors it only
+     * so a typo shows before the round trip; a server refusal still reaches
+     * the panel as the form's root error.
      */
     embedDomains?: string
     embedLive?: boolean

@@ -702,8 +702,9 @@ function CommentEditorDialogs({
                     const commands = core.commandsRef.current
                     if (!commands) return
                     // An empty value removes the link — PromptDialog is left
-                    // un-`required` so it can reach us.
-                    if (url.trim()) commands.setLink(url.trim())
+                    // un-`required` so it can reach us. It hands over the
+                    // value already trimmed.
+                    if (url) commands.setLink(url)
                     else commands.removeLink()
                 }}
                 title="Link"

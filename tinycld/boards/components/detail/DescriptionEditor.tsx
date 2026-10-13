@@ -483,8 +483,9 @@ function DescriptionBody({
                     // held before the dialog took focus, so the link
                     // applies to the text the user selected. An empty
                     // value is how you remove a link — PromptDialog is
-                    // deliberately left un-`required` so it can reach us.
-                    if (url.trim()) commands.setLink(url.trim())
+                    // deliberately left un-`required` so it can reach us,
+                    // and hands over the value already trimmed.
+                    if (url) commands.setLink(url)
                     else commands.removeLink()
                 }}
                 title="Link"

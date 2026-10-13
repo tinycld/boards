@@ -1,11 +1,17 @@
 import { EmptyState } from '@tinycld/core/components/EmptyState'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { Dialog } from '@tinycld/core/ui/dialog'
+import { useForm, zodResolver } from '@tinycld/core/ui/form'
 import { Check } from 'lucide-react-native'
-import { useState } from 'react'
+import { useMemo } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useBoardContent, useWritableProjects } from '../../hooks/useActiveBoard'
 import { useMoveCardToBoard } from '../../hooks/useMoveCardToBoard'
+import {
+    type MoveAnswer,
+    type MoveToBoardValues,
+    moveToBoardSchemaFor,
+} from '../../lib/form-schemas'
 import { rankForAppend } from '../../lib/move'
 import { remapLabels } from '../../lib/remap-labels'
 import type { BoardCardView, BoardProject, BoardsProjects } from '../../types'
@@ -31,32 +37,58 @@ export function MoveToBoardDialog(props: MoveToBoardDialogProps) {
     return <MoveToBoardDialogBody {...props} />
 }
 
+const NOTHING_CHOSEN: MoveToBoardValues = { targetId: '', listId: '', family: '', epic: '' }
+
+/**
+ * The dialog's choices as a form. The family and epic answers start unset,
+ * deliberately: the server refuses a family move or a filed card with no
+ * answer rather than picking one, so there is no default to preselect.
+ */
+function useMoveToBoardForm(card: BoardCardView) {
+    // A card in a family or an epic cannot move until the question is
+    // answered — the server would refuse it, so the button says so first.
+    const hasFamily = card.subtaskTotal > 0 || card.parent !== ''
+    const hasEpic = card.epic !== null
+    const schema = useMemo(() => moveToBoardSchemaFor({ hasFamily, hasEpic }), [hasFamily, hasEpic])
+    const {
+        watch,
+        setValue,
+        handleSubmit,
+        formState: { isValid },
+    } = useForm({
+        resolver: zodResolver(schema),
+        defaultValues: NOTHING_CHOSEN,
+        mode: 'onChange',
+    })
+    const choose = { shouldValidate: true, shouldDirty: true }
+
+    return {
+        values: watch(),
+        isValid,
+        handleSubmit,
+        selectTarget: (id: string) => {
+            setValue('targetId', id, choose)
+            setValue('listId', '', choose)
+        },
+        selectList: (id: string) => setValue('listId', id, choose),
+        selectFamily: (answer: MoveAnswer) => setValue('family', answer, choose),
+        selectEpic: (answer: MoveAnswer) => setValue('epic', answer, choose),
+    }
+}
+
 function MoveToBoardDialogBody({ card, projectId, onClose, onMoved }: MoveToBoardDialogProps) {
     const boards = useWritableProjects().filter(project => project.id !== projectId)
-    const [targetId, setTargetId] = useState<string>('')
-    const [listId, setListId] = useState<string>('')
-    // Unset until chosen, deliberately: the server refuses a family move with
-    // no answer rather than picking one, so there is no default to preselect.
-    const [family, setFamily] = useState<'move' | 'unlink' | ''>('')
-    // The epic question, asked the same way: the server refuses a filed card
-    // with no answer, so there is nothing to preselect.
-    const [epic, setEpic] = useState<'move' | 'unlink' | ''>('')
+    const form = useMoveToBoardForm(card)
+    const { targetId, listId, family, epic } = form.values
     const { project: target } = useBoardContent(targetId)
     const moveCard = useMoveCardToBoard()
 
     const list = target?.lists.find(l => l.id === listId) ?? target?.lists[0]
-    // A card in a family cannot move until the question is answered — the
-    // server would refuse it, so the button says so first.
-    const hasFamily = card.subtaskTotal > 0 || card.parent !== ''
-    const hasEpic = card.epic !== null
-    const canMove =
-        !!target &&
-        !!list &&
-        !moveCard.isPending &&
-        (!hasFamily || family !== '') &&
-        (!hasEpic || epic !== '')
+    // The target board loads after it is picked, and a board with no lists
+    // has nowhere to put the card.
+    const canMove = form.isValid && !!target && !!list && !moveCard.isPending
 
-    const confirm = () => {
+    const confirm = form.handleSubmit(answers => {
         if (!target || !list) return
         moveCard.mutate(
             {
@@ -64,8 +96,8 @@ function MoveToBoardDialogBody({ card, projectId, onClose, onMoved }: MoveToBoar
                 projectId: target.id,
                 listId: list.id,
                 position: rankForAppend(list.cards),
-                family: family || undefined,
-                epic: epic || undefined,
+                family: answers.family || undefined,
+                epic: answers.epic || undefined,
             },
             {
                 onSuccess: result => {
@@ -77,7 +109,7 @@ function MoveToBoardDialogBody({ card, projectId, onClose, onMoved }: MoveToBoar
                 },
             }
         )
-    }
+    })
 
     return (
         <Dialog
@@ -88,17 +120,19 @@ function MoveToBoardDialogBody({ card, projectId, onClose, onMoved }: MoveToBoar
             testID="boards-move-board-dialog"
         >
             <Dialog.Body contentClassName="pb-2">
-                <BoardChoices
-                    boards={boards}
-                    selectedId={targetId}
-                    onSelect={id => {
-                        setTargetId(id)
-                        setListId('')
-                    }}
+                <BoardChoices boards={boards} selectedId={targetId} onSelect={form.selectTarget} />
+                <ListChoices
+                    target={target}
+                    selectedId={list?.id ?? ''}
+                    onSelect={form.selectList}
                 />
-                <ListChoices target={target} selectedId={list?.id ?? ''} onSelect={setListId} />
-                <FamilyChoices card={card} selected={family} onSelect={setFamily} />
-                <EpicChoices card={card} target={target} selected={epic} onSelect={setEpic} />
+                <FamilyChoices card={card} selected={family} onSelect={form.selectFamily} />
+                <EpicChoices
+                    card={card}
+                    target={target}
+                    selected={epic}
+                    onSelect={form.selectEpic}
+                />
                 <Preview card={card} target={target} />
             </Dialog.Body>
             <Dialog.Footer>
@@ -223,8 +257,8 @@ function FamilyChoices({
     onSelect,
 }: {
     card: BoardCardView
-    selected: 'move' | 'unlink' | ''
-    onSelect: (choice: 'move' | 'unlink') => void
+    selected: MoveAnswer
+    onSelect: (choice: MoveAnswer) => void
 }) {
     const count = card.subtaskTotal
     if (count === 0 && !card.parent) return null
@@ -273,8 +307,8 @@ function EpicChoices({
 }: {
     card: BoardCardView
     target: BoardProject | null
-    selected: 'move' | 'unlink' | ''
-    onSelect: (choice: 'move' | 'unlink') => void
+    selected: MoveAnswer
+    onSelect: (choice: MoveAnswer) => void
 }) {
     if (!card.epic) return null
     const title = card.epic.title

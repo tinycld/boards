@@ -1,5 +1,6 @@
 import { PB_SERVER_ADDR } from '@tinycld/core/lib/pocketbase'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
+import { isFormSubmittable, useForm, z, zodResolver } from '@tinycld/core/ui/form'
 import { Menu } from '@tinycld/core/ui/menu'
 import * as Clipboard from 'expo-clipboard'
 import { Check, ChevronDown, Code, Copy, Globe, Lock, Pencil } from 'lucide-react-native'
@@ -16,6 +17,7 @@ import {
     useShareLinks,
     useUpdateShareLink,
 } from '../../hooks/useShareLinks'
+import { embedPolicySchema } from '../../lib/form-schemas'
 import type { BoardsShareLinkRole } from '../../types'
 import { SHARE_LINK_ROLE_OPTIONS } from './roles'
 
@@ -36,32 +38,22 @@ interface ShareLinkSectionProps {
  */
 export function ShareLinkSection({ projectId, isVisible }: ShareLinkSectionProps) {
     const { activeLink } = useShareLinks(projectId)
-    const [role, setRole] = useState<BoardsShareLinkRole>('viewer')
-    const [expiry, setExpiry] = useState<ShareLinkExpiryDays>(DEFAULT_SHARE_LINK_EXPIRY_DAYS)
-    const [embedDomains, setEmbedDomains] = useState('')
-    const [embedLive, setEmbedLive] = useState(false)
     const [copied, markCopied] = useCopiedFlag()
     const [embedCopied, markEmbedCopied] = useCopiedFlag()
-    const [error, setError] = useState<string | null>(null)
 
-    const createLink = useCreateShareLink(projectId)
+    const mint = useMintForm(projectId)
     const revokeLink = useRevokeShareLink(projectId)
     const mutedColor = useThemeColor('muted')
 
     if (!isVisible) return null
 
-    const onCreate = () => {
-        setError(null)
-        createLink.mutate(
-            { role, expiresInDays: expiry, embedDomains, embedLive },
-            { onError: err => setError(err.message) }
-        )
-    }
+    // Either failure is the server's own words, shown verbatim; a new attempt
+    // at either action clears it.
+    const error = mint.serverError ?? revokeLink.error?.message ?? null
 
     const onRevoke = () => {
-        setError(null)
         if (!activeLink) return
-        revokeLink.mutate(activeLink.id, { onError: err => setError(err.message) })
+        revokeLink.mutate(activeLink.id)
     }
 
     const onCopy = async () => {
@@ -97,19 +89,7 @@ export function ShareLinkSection({ projectId, isVisible }: ShareLinkSectionProps
                         isRevoking={revokeLink.isPending}
                     />
                 ) : (
-                    <MintControls
-                        role={role}
-                        expiry={expiry}
-                        onRoleChange={setRole}
-                        onExpiryChange={setExpiry}
-                        embedDomains={embedDomains}
-                        onEmbedDomainsChange={setEmbedDomains}
-                        embedLive={embedLive}
-                        onEmbedLiveChange={setEmbedLive}
-                        onCreate={onCreate}
-                        isCreating={createLink.isPending}
-                        mutedColor={mutedColor}
-                    />
+                    <MintControls form={mint} mutedColor={mutedColor} />
                 )}
 
                 <ErrorNote message={error} />
@@ -228,31 +208,72 @@ function LiveLink({
     )
 }
 
+const mintSchema = embedPolicySchema.extend({
+    // Both come from a menu of the allowed values, so there is nothing to check.
+    role: z.custom<BoardsShareLinkRole>(),
+    expiry: z.custom<ShareLinkExpiryDays>(),
+})
+
+const MINT_DEFAULTS: z.input<typeof mintSchema> = {
+    role: 'viewer',
+    expiry: DEFAULT_SHARE_LINK_EXPIRY_DAYS,
+    embedDomains: '',
+    embedLive: false,
+}
+
+/**
+ * The mint form. The embed domains are checked as they are typed; the server
+ * checks them again (the value ends up in a CSP header), and its refusal is
+ * shown as the form's error.
+ */
+function useMintForm(projectId: string) {
+    const createLink = useCreateShareLink(projectId)
+    const {
+        watch,
+        setValue,
+        setError,
+        handleSubmit,
+        formState: { errors, isValid },
+    } = useForm({
+        resolver: zodResolver(mintSchema),
+        defaultValues: MINT_DEFAULTS,
+        mode: 'onChange',
+    })
+    const change = { shouldValidate: true, shouldDirty: true }
+
+    const create = handleSubmit(data =>
+        createLink.mutate(
+            {
+                role: data.role,
+                expiresInDays: data.expiry,
+                embedDomains: data.embedDomains,
+                embedLive: data.embedLive,
+            },
+            { onError: err => setError('root', { message: err.message }) }
+        )
+    )
+
+    return {
+        values: watch(),
+        setRole: (role: BoardsShareLinkRole) => setValue('role', role, change),
+        setExpiry: (days: ShareLinkExpiryDays) => setValue('expiry', days, change),
+        setDomains: (value: string) => setValue('embedDomains', value, change),
+        setLive: (value: boolean) => setValue('embedLive', value, change),
+        domainsError: errors.embedDomains?.message,
+        serverError: errors.root?.message,
+        create,
+        canCreate: isFormSubmittable({ isValid, errors }) && !createLink.isPending,
+    }
+}
+
 function MintControls({
-    role,
-    expiry,
-    onRoleChange,
-    onExpiryChange,
-    embedDomains,
-    onEmbedDomainsChange,
-    embedLive,
-    onEmbedLiveChange,
-    onCreate,
-    isCreating,
+    form,
     mutedColor,
 }: {
-    role: BoardsShareLinkRole
-    expiry: ShareLinkExpiryDays
-    onRoleChange: (role: BoardsShareLinkRole) => void
-    onExpiryChange: (days: ShareLinkExpiryDays) => void
-    embedDomains: string
-    onEmbedDomainsChange: (value: string) => void
-    embedLive: boolean
-    onEmbedLiveChange: (value: boolean) => void
-    onCreate: () => void
-    isCreating: boolean
+    form: ReturnType<typeof useMintForm>
     mutedColor: string
 }) {
+    const { role, expiry, embedDomains, embedLive } = form.values
     return (
         <View className="gap-2">
             <View className="flex-row items-center gap-2">
@@ -267,7 +288,7 @@ function MintControls({
                             key={option.value}
                             label={option.label}
                             isSelected={option.value === role}
-                            onSelect={() => onRoleChange(option.value as BoardsShareLinkRole)}
+                            onSelect={() => form.setRole(option.value as BoardsShareLinkRole)}
                         />
                     ))}
                 </PickerMenu>
@@ -283,7 +304,7 @@ function MintControls({
                             key={option.value}
                             label={option.label}
                             isSelected={option.value === expiry}
-                            onSelect={() => onExpiryChange(option.value)}
+                            onSelect={() => form.setExpiry(option.value)}
                         />
                     ))}
                 </PickerMenu>
@@ -293,9 +314,10 @@ function MintControls({
                 <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Create share link"
-                    disabled={isCreating}
-                    onPress={onCreate}
+                    disabled={!form.canCreate}
+                    onPress={form.create}
                     className="shrink-0 px-3 py-1.5 rounded-md bg-primary"
+                    style={{ opacity: form.canCreate ? 1 : 0.5 }}
                 >
                     <Text className="text-[12px] font-medium text-primary-foreground">
                         Create link
@@ -307,9 +329,10 @@ function MintControls({
 
             <EmbedControls
                 domains={embedDomains}
-                onDomainsChange={onEmbedDomainsChange}
+                onDomainsChange={form.setDomains}
+                domainsError={form.domainsError}
                 isLive={embedLive}
-                onLiveChange={onEmbedLiveChange}
+                onLiveChange={form.setLive}
             />
         </View>
     )
@@ -334,14 +357,12 @@ function MintControls({
 function EmbedFields({
     domains,
     onDomainsChange,
+    domainsError,
     isLive,
     onLiveChange,
-}: {
-    domains: string
-    onDomainsChange: (value: string) => void
-    isLive: boolean
-    onLiveChange: (value: boolean) => void
-}) {
+}: EmbedFieldProps) {
+    const placeholderColor = useThemeColor('field-placeholder')
+    const borderClass = domainsError ? 'border-danger' : 'border-border'
     return (
         <>
             <TextInput
@@ -351,9 +372,10 @@ function EmbedFields({
                 autoCapitalize="none"
                 autoCorrect={false}
                 placeholder="https://example.com"
-                placeholderTextColor="#9ca3af"
-                className="px-2.5 py-1.5 rounded-md border border-border bg-background text-[12px] text-foreground web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+                placeholderTextColor={placeholderColor}
+                className={`px-2.5 py-1.5 rounded-md border bg-background text-[12px] text-foreground web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${borderClass}`}
             />
+            <FieldError message={domainsError} />
 
             <Text className="text-[11px] text-muted">
                 Leave empty to stop this board being embedded anywhere. Include the scheme, and
@@ -376,29 +398,22 @@ function EmbedFields({
     )
 }
 
-/** The embed fields as they appear on the mint form, before a link exists. */
-function EmbedControls({
-    domains,
-    onDomainsChange,
-    isLive,
-    onLiveChange,
-}: {
+interface EmbedFieldProps {
     domains: string
     onDomainsChange: (value: string) => void
+    domainsError: string | undefined
     isLive: boolean
     onLiveChange: (value: boolean) => void
-}) {
+}
+
+/** The embed fields as they appear on the mint form, before a link exists. */
+function EmbedControls(props: EmbedFieldProps) {
     if (Platform.OS !== 'web') return null
 
     return (
         <View className="gap-2 pt-2 border-t border-border">
             <Text className="text-[12px] font-medium text-foreground">Embed on a website</Text>
-            <EmbedFields
-                domains={domains}
-                onDomainsChange={onDomainsChange}
-                isLive={isLive}
-                onLiveChange={onLiveChange}
-            />
+            <EmbedFields {...props} />
         </View>
     )
 }
@@ -434,10 +449,11 @@ function EmbedPanel({
         isLive,
         setDomains,
         setLive,
+        domainsError,
         startEditing,
         cancelEditing,
         save,
-        isSaving,
+        canSave,
         error,
     } = useEmbedEditor(projectId, link)
     const mutedColor = useThemeColor('muted')
@@ -480,6 +496,7 @@ function EmbedPanel({
             <EmbedFields
                 domains={domains}
                 onDomainsChange={setDomains}
+                domainsError={domainsError}
                 isLive={isLive}
                 onLiveChange={setLive}
             />
@@ -497,9 +514,10 @@ function EmbedPanel({
                 <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Save embed changes"
-                    disabled={isSaving}
+                    disabled={!canSave}
                     onPress={save}
                     className="shrink-0 px-3 py-1.5 rounded-md bg-primary"
+                    style={{ opacity: canSave ? 1 : 0.5 }}
                 >
                     <Text className="text-[12px] font-medium text-primary-foreground">Save</Text>
                 </Pressable>
@@ -560,47 +578,51 @@ function EmbedSnippetRow({
  */
 function useEmbedEditor(projectId: string, link: ShareLinkRow) {
     const [isEditing, setIsEditing] = useState(false)
-    const [domains, setDomains] = useState('')
-    const [isLive, setLive] = useState(false)
-    const [error, setError] = useState<string | null>(null)
     const updateLink = useUpdateShareLink(projectId)
+    const {
+        watch,
+        setValue,
+        reset,
+        setError,
+        handleSubmit,
+        formState: { errors, isValid },
+    } = useForm({
+        resolver: zodResolver(embedPolicySchema),
+        defaultValues: { embedDomains: '', embedLive: false },
+        mode: 'onChange',
+    })
+    const change = { shouldValidate: true, shouldDirty: true }
+    const { embedDomains, embedLive } = watch()
 
     const startEditing = () => {
-        setDomains(link.embedDomains)
-        setLive(link.embedLive)
-        setError(null)
+        reset({ embedDomains: link.embedDomains, embedLive: link.embedLive })
         setIsEditing(true)
     }
 
-    const cancelEditing = () => {
-        setError(null)
-        setIsEditing(false)
-    }
-
-    const save = () => {
-        setError(null)
+    const save = handleSubmit(data =>
         updateLink.mutate(
-            { linkId: link.id, embedDomains: domains, embedLive: isLive },
+            { linkId: link.id, ...data },
             {
                 onSuccess: () => setIsEditing(false),
                 // The server's message names the origin it refused and why, so
                 // it is shown verbatim rather than replaced with a generic one.
-                onError: err => setError(err.message),
+                onError: err => setError('root', { message: err.message }),
             }
         )
-    }
+    )
 
     return {
         isEditing,
-        domains,
-        isLive,
-        setDomains,
-        setLive,
+        domains: embedDomains,
+        isLive: embedLive,
+        setDomains: (value: string) => setValue('embedDomains', value, change),
+        setLive: (value: boolean) => setValue('embedLive', value, change),
+        domainsError: errors.embedDomains?.message,
         startEditing,
-        cancelEditing,
+        cancelEditing: () => setIsEditing(false),
         save,
-        isSaving: updateLink.isPending,
-        error,
+        canSave: isFormSubmittable({ isValid, errors }) && !updateLink.isPending,
+        error: errors.root?.message ?? null,
     }
 }
 
@@ -619,6 +641,11 @@ function EditorWarning({ isVisible }: { isVisible: boolean }) {
             Anyone with this link can sign in with an email address and edit this board.
         </Text>
     )
+}
+
+function FieldError({ message }: { message: string | undefined }) {
+    if (!message) return null
+    return <Text className="text-[11px] text-danger">{message}</Text>
 }
 
 function ErrorNote({ message }: { message: string | null }) {
