@@ -68,9 +68,7 @@ test.describe('a card the server has not saved yet', () => {
         const release = await holdRequests(page, 'POST', CARD_CREATE)
         await addCard(page, 0, 'opened early')
         await openCard(page, 'opened early')
-
-        // No number yet, so there is no full page to open.
-        await expect(cardSurface(page).getByLabel('Open full page')).toHaveCount(0)
+        await expect(page).toHaveURL(/\?focused=[a-z0-9]{15}$/)
 
         release()
         await expect(cardSurface(page).getByTestId('boards-detail-key')).toHaveText(`${key}-1`)
@@ -84,5 +82,23 @@ test.describe('a card the server has not saved yet', () => {
         await page.goBack()
         await expect(page).toHaveURL(new RegExp(`/a/boards/${key}-1$`))
         await closeCardPeek(page)
+    })
+
+    test('a card still saving opens on its own page, which takes the number once it lands', async ({
+        page,
+    }) => {
+        const key = await freshBoard(page)
+        const release = await holdRequests(page, 'POST', CARD_CREATE)
+        await addCard(page, 0, 'paged early')
+        await openCard(page, 'paged early')
+
+        await cardSurface(page).getByLabel('Open full page').click()
+        await expect(page.getByRole('button', { name: 'Back to board' })).toBeVisible()
+        await expect(page).toHaveURL(new RegExp(`/a/boards/${key}/[a-z0-9]{15}$`))
+
+        release()
+        await expect(page).toHaveURL(new RegExp(`/a/boards/${key}/1$`))
+        // Still the page, not a remount into "this card doesn't exist".
+        await expect(page.getByRole('button', { name: 'Back to board' })).toBeVisible()
     })
 })

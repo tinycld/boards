@@ -115,6 +115,20 @@ describe('useBoardRoute', () => {
         expect(result.current.cardId).toBe('c7')
     })
 
+    // The page of a card not numbered yet, and only on its own board.
+    it('resolves the full-page shape by record id on this board', () => {
+        h.projects = [{ id: 'p1', slug: 'OTTER' }]
+        h.board = board()
+
+        const { result } = renderHook(() => useBoardRoute('OTTER', 'c7', { isViewed: false }))
+        expect(result.current.cardId).toBe('c7')
+
+        const { result: other } = renderHook(() =>
+            useBoardRoute('OTTER', 'cardonanother01', { isViewed: false })
+        )
+        expect(other.current.cardId).toBe('')
+    })
+
     // The spelling core's notifications mint, and the keyless fallback.
     it('honours ?focused= on the board it names', () => {
         h.projects = [{ id: 'p1', slug: 'OTTER' }]

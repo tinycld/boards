@@ -4,10 +4,12 @@ import { login, navigateToPackage, TEST_COLLABORATOR_EMAIL } from '@tinycld/core
 import {
     addCard,
     boardCard,
+    CARD_CREATE,
+    CARD_UPDATE,
     closeCardPeek,
     createBoard,
+    holdRequests,
     shareBoard,
-    uniqueBoardKey,
 } from './helpers'
 
 // The cross-board list: what is mine shows up with its board and list, the
@@ -118,19 +120,40 @@ test.describe('Boards — My cards', () => {
         await assignSelf(page, MINE)
 
         await openMyCards(page)
-        const row = page
+        await page
             .locator('[data-testid^="boards-row-"]')
             .filter({ hasText: MINE })
             .filter({ hasText: name })
-        // The full page is addressed by the card's number, and a row whose
-        // card is still saving has none yet, so it opens the card peeked on its
-        // board instead. The key in the row is the sign the number has landed.
-        await expect(row).toContainText(`${uniqueBoardKey(name)}-1`)
-        await row.click()
+            .click()
         // The full-page card: its back button reads the board's name, and the
         // body renders the description section.
         await expect(page.getByRole('button', { name: 'Back to board' })).toContainText(name)
         await expect(page.getByText('Description', { exact: true })).toBeVisible()
+    })
+
+    // A change made before the server numbered the card shows the card as that
+    // change left it until the change saves: without a number, although the
+    // server has assigned one. The row must still open the page.
+    test('a row opens the card page while a change from before its number saves', async ({
+        page,
+    }) => {
+        const name = await freshBoard(page)
+        const releaseCreate = await holdRequests(page, 'POST', CARD_CREATE)
+        const release = await holdRequests(page, 'PATCH', CARD_UPDATE)
+        await addCard(page, 0, MINE)
+        await assignSelf(page, MINE)
+        releaseCreate()
+
+        await openMyCards(page)
+        await page
+            .locator('[data-testid^="boards-row-"]')
+            .filter({ hasText: MINE })
+            .filter({ hasText: name })
+            .click()
+        await expect(page.getByRole('button', { name: 'Back to board' })).toContainText(name)
+
+        release()
+        await expect(page).toHaveURL(/\/a\/boards\/[A-Z0-9]+\/1$/)
     })
 
     test('a card with more than one assignee still lists under Assigned to me', async ({

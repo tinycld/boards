@@ -6,9 +6,9 @@ import { type Shortcut, useRegisterShortcuts, useShortcutScope } from '@tinycld/
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useNavigateBack } from '@tinycld/core/lib/use-navigate-back'
 import { useDeviceInsets } from '@tinycld/core/lib/use-safe-area'
-import { useLocalSearchParams, useRouter } from 'expo-router'
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router'
 import { ChevronLeft } from 'lucide-react-native'
-import { type RefObject, useMemo, useRef } from 'react'
+import { type RefObject, useEffect, useMemo, useRef } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { BoardPresenceProvider } from '../../components/BoardPresenceProvider'
 import { CardDetail } from '../../components/detail/CardDetail'
@@ -18,7 +18,7 @@ import { ProjectWash } from '../../components/ProjectWash'
 import { useBoardRoute } from '../../hooks/useBoardRoute'
 import { useProjectRole } from '../../hooks/useProjectRole'
 import { type CardEntry, findCardEntry, flattenCards, neighborCardId } from '../../lib/board-cards'
-import { boardPath, cardPagePath, paramString } from '../../lib/board-route'
+import { boardPath, cardPagePath, paramString, parseCardNumber } from '../../lib/board-route'
 import type { BoardProject } from '../../types'
 
 function usePageShortcuts(
@@ -41,10 +41,8 @@ function usePageShortcuts(
         const step = (delta: number) => {
             const next = neighborCardId(project, cardId, delta)
             const entry = next ? findCardEntry(project, next) : null
-            // A neighbour the server has not numbered yet has no URL of its
-            // own — skip rather than navigate somewhere that will not resolve.
-            if (!entry?.card.number) return
-            router.replace(orgHref(cardPagePath(segment, entry.card.number)))
+            if (!entry) return
+            router.replace(orgHref(cardPagePath(segment, entry.card)))
         }
         // Mirrors the peek's binding at this scope, so `e` means the same thing
         // whichever surface the card is open on.
@@ -121,6 +119,7 @@ export default function CardDetailScreen() {
     // bare `/a/boards` would have sent them somewhere else entirely.
     const navigateBack = useNavigateBack(() => orgHref(segment ? boardPath(segment) : 'boards'))
     const entry = project && cardId ? findCardEntry(project, cardId) : null
+    useNumberedPagePath(cardNumber, entry?.card.number ?? 0)
 
     // Loading is checked BEFORE the not-found branch. findCardEntry returns
     // null while the board query is still in flight, so without this guard
@@ -148,6 +147,24 @@ export default function CardDetailScreen() {
             />
         </BoardPresenceProvider>
     )
+}
+
+/**
+ * Respell `/PL/<id>` as `/PL/12` once the server numbers the card, so the
+ * address reads like every other card page. setParams rather than replace,
+ * which would remount the page and end the editing session.
+ *
+ * Only while this page is the focused route: setParams writes to whichever
+ * route is on top. A page covered when the number lands keeps its id
+ * spelling, which still resolves.
+ */
+function useNumberedPagePath(cardSegment: string, cardNumber: number) {
+    const router = useRouter()
+    const navigation = useNavigation()
+    useEffect(() => {
+        if (!cardNumber || parseCardNumber(cardSegment) || !navigation.isFocused()) return
+        router.setParams({ cardNumber: String(cardNumber) })
+    }, [cardSegment, cardNumber, router, navigation])
 }
 
 interface CardPageProps {

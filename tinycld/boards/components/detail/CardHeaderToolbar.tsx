@@ -171,9 +171,7 @@ function useCardHeaderItems({
             overflow: { label: mode.label, icon: mode.icon, onPress: onToggleDisplayMode },
         })
     }
-    // No number, no page: the full page is addressed by the number the server
-    // assigns, so a card still saving would be sent back to its own peek.
-    if (onExpand && entry.card.number) {
+    if (onExpand) {
         items.push({
             type: 'custom',
             key: 'expand',

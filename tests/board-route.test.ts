@@ -72,17 +72,16 @@ describe('paths', () => {
         expect(boardSegment({ id: 'p1', slug: 'PL' })).toBe('PL')
         expect(boardSegment({ id: 'p1', slug: '' })).toBe('p1')
         expect(boardPath('PL')).toBe('boards/PL')
-        expect(cardPagePath('PL', 12)).toBe('boards/PL/12')
+        expect(cardPagePath('PL', { id: 'c12', number: 12 })).toBe('boards/PL/12')
     })
 
-    // A card the server has not numbered has no page yet, so it links peeked.
-    it('links a card to its page, or peeked on its board before it is numbered', () => {
+    // A card still saving has no number yet; its page is addressed by its id,
+    // so opening it does not depend on how fast the server answers.
+    it('links a card to its page by number, or by id before it is numbered', () => {
         const orgHref = (path: string, extra?: Record<string, string>): Href => appHref(path, extra)
         const board = { id: 'p1', slug: 'PL' }
         expect(cardHref(orgHref, board, { id: 'c12', number: 12 })).toEqual(appHref('boards/PL/12'))
-        expect(cardHref(orgHref, board, { id: 'c0', number: 0 })).toEqual(
-            appHref('boards/PL', { focused: 'c0' })
-        )
+        expect(cardHref(orgHref, board, { id: 'c0', number: 0 })).toEqual(appHref('boards/PL/c0'))
     })
 
     it('puts a keyed card in the path and a keyless one in ?focused=', () => {
