@@ -9,13 +9,45 @@ import { expect } from '@playwright/test'
  * that uniqueness carries over to the key, which the database enforces
  * globally.
  */
-function uniqueBoardKey(name: string): string {
+export function uniqueBoardKey(name: string): string {
     let hash = 0
     for (let i = 0; i < name.length; i++) {
         hash = (hash * 31 + name.charCodeAt(i)) >>> 0
     }
     return `B${hash.toString(36).toUpperCase()}`.slice(0, 10)
 }
+
+/**
+ * Hold every `method` request to `url` until the returned `release` is called.
+ *
+ * This is how a spec sees the window between an optimistic write and the
+ * server's answer. That window is a few milliseconds on a laptop and up to a
+ * second on a loaded CI runner, so a bug inside it shows only in CI. Holding
+ * the request opens the window on demand with no timer, and the spec then acts
+ * inside it on purpose. Requests made after the release pass straight through.
+ */
+export async function holdRequests(
+    page: Page,
+    method: string,
+    url: string | RegExp
+): Promise<() => void> {
+    let release = () => {}
+    const released = new Promise<void>(resolve => {
+        release = resolve
+    })
+    await page.route(url, async route => {
+        if (route.request().method() !== method) return route.fallback()
+        await released
+        await route.continue()
+    })
+    return release
+}
+
+/** A card's create request — what `holdRequests` holds to keep a card unsaved. */
+export const CARD_CREATE = '**/api/collections/boards_cards/records'
+
+/** A card's update request. */
+export const CARD_UPDATE = '**/api/collections/boards_cards/records/*'
 
 /** The card face for a title, anywhere on the board. */
 export function boardCard(page: Page, title: string): Locator {

@@ -1,7 +1,7 @@
 import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { useUrlStateSync } from '@tinycld/core/lib/use-url-state-sync'
-import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useCallback } from 'react'
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router'
+import { useCallback, useEffect, useRef } from 'react'
 import { findCardEntry } from '../lib/board-cards'
 import {
     boardPath,
@@ -53,11 +53,20 @@ export function usePeekUrl(project: BoardProject | null, segment: string) {
         [project]
     )
 
+    // The card this hook last spelled by its id for want of a key. Only that
+    // spelling is upgraded when the key lands; a `?focused=<id>` link that
+    // arrived from outside is left as it came.
+    const spelledByIdRef = useRef<string | null>(null)
+
     useUrlStateSync<string | null>({
         isReady: project !== null,
         urlValue,
         params: { boardSlug, focused },
-        format: cardId => peekParams(segment, cardOf(cardId)),
+        format: cardId => {
+            const spelled = peekParams(segment, cardOf(cardId))
+            spelledByIdRef.current = spelled.focused ?? null
+            return spelled
+        },
         read: readOpenCard,
         write: cardId => (cardId ? openCard(cardId) : closeCard()),
         subscribe: useBoardsUIStore.subscribe,
@@ -66,9 +75,40 @@ export function usePeekUrl(project: BoardProject | null, segment: string) {
         // this board with the card peeked, which pops the page.
         onChangeWhileBlurred: cardId => {
             const card = cardOf(cardId)
+            spelledByIdRef.current = card && !card.key ? card.id : null
             router.navigate(card ? peekHref(orgHref, segment, card) : orgHref(boardPath(segment)))
         },
     })
+
+    useKeyRespelling(project, segment, focused, spelledByIdRef)
+}
+
+/**
+ * Re-spell `?focused=<id>` as the card's key once the server numbers it.
+ *
+ * A card opened in the optimistic window has no key yet, so the sync above
+ * writes its id. When the key lands, nothing in the store changes, so the sync
+ * never runs again: the address bar kept the id spelling for as long as the
+ * card stayed open, and a Back from its full page returned to it.
+ */
+function useKeyRespelling(
+    project: BoardProject | null,
+    segment: string,
+    focused: string,
+    spelledByIdRef: { current: string | null }
+) {
+    const router = useRouter()
+    const navigation = useNavigation()
+    const openCardId = useBoardsUIStore(s => s.openCardId)
+    const openKey =
+        openCardId && project ? (findCardEntry(project, openCardId)?.card.key ?? '') : ''
+
+    useEffect(() => {
+        if (!openCardId || !openKey || focused !== openCardId) return
+        if (spelledByIdRef.current !== openCardId || !navigation.isFocused()) return
+        spelledByIdRef.current = null
+        router.setParams(peekParams(segment, { key: openKey, id: openCardId }))
+    }, [openCardId, openKey, focused, segment, spelledByIdRef, router, navigation])
 }
 
 function readOpenCard(): string | null {

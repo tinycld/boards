@@ -81,8 +81,12 @@ export function BoardBacklog({ project }: { project: BoardProject }) {
                                 canEdit={canEdit}
                                 onPlan={() => setPlanning({})}
                                 onEdit={sprint => setPlanning({ sprint })}
-                                onStart={sprint => setTransition({ kind: 'start', sprint })}
-                                onComplete={sprint => setTransition({ kind: 'complete', sprint })}
+                                onStart={sprint =>
+                                    setTransition({ kind: 'start', sprintId: sprint.id })
+                                }
+                                onComplete={sprint =>
+                                    setTransition({ kind: 'complete', sprintId: sprint.id })
+                                }
                             />
                         }
                     />

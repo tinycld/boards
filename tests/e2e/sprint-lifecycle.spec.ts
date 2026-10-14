@@ -4,9 +4,11 @@ import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
 import {
     addCard,
     boardCard,
+    CARD_UPDATE,
     closeCardPeek,
     createBoard,
     dragCardToSection,
+    holdRequests,
     openCard,
 } from './helpers'
 
@@ -42,6 +44,30 @@ function peek(page: Page) {
     return page.getByTestId('boards-card-peek')
 }
 
+/**
+ * A sprint board whose Sprint 1 holds `titles` and has been started, left on
+ * the backlog.
+ */
+async function startSprintWith(page: Page, label: string, titles: string[]) {
+    await freshSprintBoard(page, label)
+    for (const title of titles) await addCard(page, 0, title)
+
+    await page.getByTestId('boards-view-backlog').click()
+    await page.getByTestId('boards-new-sprint').click()
+    await page.getByTestId('boards-sprint-save').click()
+    await expect(section(page, 'Sprint 1')).toBeVisible()
+    for (const title of titles) {
+        await dragCardToSection(page, row(page, title), 'Sprint 1')
+        await expect(section(page, 'Sprint 1').getByText(title)).toBeVisible()
+    }
+
+    // Start: the dialog confirms the dates the board's length suggests.
+    await page.getByTestId('boards-sprint-start-1').click()
+    await page.getByTestId('boards-start-sprint-confirm').click()
+    await expect(page.getByTestId('boards-start-sprint-dialog')).toHaveCount(0)
+    await expect(page.getByTestId('boards-sprint-complete-1')).toBeVisible()
+}
+
 test.describe('Boards — sprint lifecycle', () => {
     test.beforeEach(async ({ page }) => {
         await login(page)
@@ -49,24 +75,7 @@ test.describe('Boards — sprint lifecycle', () => {
     })
 
     test('starts a sprint and completes it into a new one', async ({ page }) => {
-        await freshSprintBoard(page, 'roll')
-        await addCard(page, 0, 'finished work')
-        await addCard(page, 0, 'open work')
-
-        await page.getByTestId('boards-view-backlog').click()
-        await page.getByTestId('boards-new-sprint').click()
-        await page.getByTestId('boards-sprint-save').click()
-        await expect(section(page, 'Sprint 1')).toBeVisible()
-        await dragCardToSection(page, row(page, 'finished work'), 'Sprint 1')
-        await expect(section(page, 'Sprint 1').getByText('finished work')).toBeVisible()
-        await dragCardToSection(page, row(page, 'open work'), 'Sprint 1')
-        await expect(section(page, 'Sprint 1').getByText('open work')).toBeVisible()
-
-        // Start: the dialog confirms the dates the board's length suggests.
-        await page.getByTestId('boards-sprint-start-1').click()
-        await page.getByTestId('boards-start-sprint-confirm').click()
-        await expect(page.getByTestId('boards-start-sprint-dialog')).toHaveCount(0)
-        await expect(page.getByTestId('boards-sprint-complete-1')).toBeVisible()
+        await startSprintWith(page, 'roll', ['finished work', 'open work'])
 
         // Once active it is what the canvas scopes to; finish one card there
         // through the peek's list stepper. A button, not a drag: the drag
@@ -116,6 +125,30 @@ test.describe('Boards — sprint lifecycle', () => {
             /added this to Sprint 1/,
             /moved this from Sprint 1 to Sprint 2/,
         ])
+    })
+
+    // The counts are the server's rollup, which reaches the board only after
+    // the card's move is saved. Complete asked for in that window must follow
+    // the rollup when it lands, not keep the counts from when it was asked.
+    test('the complete dialog counts a card finished while its move saves', async ({ page }) => {
+        await startSprintWith(page, 'counts', ['done late', 'left open'])
+        await page.getByTestId('boards-view-board').click()
+        await openCard(page, 'done late')
+
+        const release = await holdRequests(page, 'PATCH', CARD_UPDATE)
+        await peek(page).getByRole('button', { name: 'Move to Done' }).click()
+        await expect(boardCard(page, 'done late').getByTestId(/^boards-card-closed-/)).toBeVisible()
+        await closeCardPeek(page)
+
+        await page.getByTestId('boards-sprint-scope').click()
+        await page.getByTestId('boards-scope-complete-sprint').click()
+        const dialog = page.getByTestId('boards-complete-sprint-dialog')
+        await expect(dialog).toContainText('0 cards done · 2 unfinished')
+
+        release()
+        await expect(dialog).toContainText('1 card done · 1 unfinished')
+        await dialog.getByRole('button', { name: 'Cancel' }).click()
+        await expect(dialog).toHaveCount(0)
     })
 
     test('the scope pill starts the next planned sprint', async ({ page }) => {

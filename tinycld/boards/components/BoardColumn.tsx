@@ -321,7 +321,6 @@ export const BoardColumn = memo(function BoardColumn({
                 {canEdit && !isCollapsed ? (
                     <CardComposer
                         onSubmit={addCard}
-                        isPending={createCard.isPending}
                         isOpen={isComposerOpen}
                         onOpenChange={next => openComposer(next ? list.id : null)}
                     />
