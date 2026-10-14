@@ -337,7 +337,7 @@ exactly what a developer runs locally.
 
 - `manifest.ts` — the single source of truth for this package's capabilities:
   `routes` + `publicRoutes`, `nav`, `sidebar`, `accountSettings` (the per-user
-  GitHub panel), `provider`, `help`, `tests`, `search`, two calendar `eventSources`
+  GitHub panel), `help`, `tests`, `search`, two calendar `eventSources`
   (`boards-due`, `boards-sprints`), `quota` (attachments count against the
   storage ceiling by their `size` column), `migrations`, `server`, `cli`,
   `collections`, `automation`, `seed`, `repository`, `peerVersions`
