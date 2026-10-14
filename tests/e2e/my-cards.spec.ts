@@ -1,7 +1,14 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage, TEST_COLLABORATOR_EMAIL } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, closeCardPeek, createBoard, shareBoard } from './helpers'
+import {
+    addCard,
+    boardCard,
+    closeCardPeek,
+    createBoard,
+    shareBoard,
+    uniqueBoardKey,
+} from './helpers'
 
 // The cross-board list: what is mine shows up with its board and list, the
 // search box narrows it, and a row opens the card without touching the
@@ -111,11 +118,15 @@ test.describe('Boards — My cards', () => {
         await assignSelf(page, MINE)
 
         await openMyCards(page)
-        await page
+        const row = page
             .locator('[data-testid^="boards-row-"]')
             .filter({ hasText: MINE })
             .filter({ hasText: name })
-            .click()
+        // The full page is addressed by the card's number, and a row whose
+        // card is still saving has none yet, so it opens the card peeked on its
+        // board instead. The key in the row is the sign the number has landed.
+        await expect(row).toContainText(`${uniqueBoardKey(name)}-1`)
+        await row.click()
         // The full-page card: its back button reads the board's name, and the
         // body renders the description section.
         await expect(page.getByRole('button', { name: 'Back to board' })).toContainText(name)

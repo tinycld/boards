@@ -250,6 +250,24 @@ async function paragraphTops(page: Page): Promise<number[]> {
     )
 }
 
+/**
+ * Close the card, reopen it, and return its description's read view once it
+ * shows `lastTyped`.
+ *
+ * The read view renders the saved record, not the editor's document, and the
+ * server writes the record only when the flush sent on close lands. Before
+ * then the read view is the empty-description placeholder, a different layout
+ * entirely, and measuring it compares the editor with the wrong thing.
+ * `lastTyped` is the end of what was typed, so it shows only once all of it is.
+ */
+async function reopenOnReadView(page: Page, lastTyped: string): Promise<Locator> {
+    await closeCardPeek(page)
+    await openCard(page, 'Parity card')
+    const readView = page.getByTestId('boards-description-read')
+    await expect(readView).toContainText(lastTyped)
+    return readView
+}
+
 function steps(tops: number[]): number[] {
     return tops.slice(1).map((top, i) => top - tops[i])
 }
@@ -272,10 +290,7 @@ test.describe('the editor lays out exactly as the read view', () => {
         const edit = await blocks(editor)
 
         // Reopening is what returns the description to its rendered state.
-        await closeCardPeek(page)
-        await openCard(page, 'Parity card')
-        const readView = page.getByTestId('boards-description-read')
-        await expect(readView).toBeVisible()
+        const readView = await reopenOnReadView(page, SAMPLE[SAMPLE.length - 1].marker)
 
         expectSameLayout(await blocks(readView), edit)
     })
@@ -306,10 +321,7 @@ test.describe('the editor lays out exactly as the read view', () => {
         await typeLists(page, editor)
         const edit = await blocks(editor)
 
-        await closeCardPeek(page)
-        await openCard(page, 'Parity card')
-        const readView = page.getByTestId('boards-description-read')
-        await expect(readView).toBeVisible()
+        const readView = await reopenOnReadView(page, NESTED[NESTED.length - 1].marker)
 
         expectSameLayout(await blocks(readView), edit, [...LISTS, ...NESTED])
     })
@@ -377,9 +389,7 @@ test.describe('the editor lays out exactly as the read view', () => {
             if (i < PARAGRAPHS.length - 1) await page.keyboard.press('Enter')
         }
 
-        await closeCardPeek(page)
-        await openCard(page, 'Parity card')
-        await expect(page.getByTestId('boards-description-read')).toBeVisible()
+        await reopenOnReadView(page, PARAGRAPHS[PARAGRAPHS.length - 1])
 
         // "Attachments" is the next section down — what a reader watching this
         // description would see move.
@@ -416,9 +426,7 @@ test.describe('the editor lays out exactly as the read view', () => {
         await editor.click()
         await editor.pressSequentially('One short line', { delay: 6 })
 
-        await closeCardPeek(page)
-        await openCard(page, 'Parity card')
-        await expect(page.getByTestId('boards-description-read')).toBeVisible()
+        await reopenOnReadView(page, 'One short line')
 
         const below = page.getByText('Attachments', { exact: true })
         const topOf = async () => Math.round((await below.boundingBox())?.y ?? -1)
