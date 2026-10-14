@@ -93,7 +93,6 @@ export function DetailSubtasks({
             {canEdit ? (
                 <CardComposer
                     onSubmit={addSubtask}
-                    isPending={createCard.isPending}
                     label="Add sub-task"
                     placeholder="What needs doing?"
                     isOpen={isComposing}

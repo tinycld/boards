@@ -58,14 +58,16 @@ export function SprintScopePill({
                     icon={Play}
                     label={next ? `Start ${sprintLabel(next)}…` : ''}
                     testID="boards-scope-start-sprint"
-                    onPress={() => next && setTransition({ kind: 'start', sprint: next })}
+                    onPress={() => next && setTransition({ kind: 'start', sprintId: next.id })}
                 />
                 <TransitionItem
                     isVisible={canEdit && active !== undefined}
                     icon={CircleCheck}
                     label={active ? `Complete ${sprintLabel(active)}…` : ''}
                     testID="boards-scope-complete-sprint"
-                    onPress={() => active && setTransition({ kind: 'complete', sprint: active })}
+                    onPress={() =>
+                        active && setTransition({ kind: 'complete', sprintId: active.id })
+                    }
                 />
             </Menu>
             <SprintTransitionDialogs

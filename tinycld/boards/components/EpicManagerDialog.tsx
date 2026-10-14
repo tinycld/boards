@@ -1,12 +1,14 @@
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { COLOR_PALETTE, ColorPickerGrid } from '@tinycld/core/ui/color-picker'
 import { Dialog } from '@tinycld/core/ui/dialog'
+import { Controller, useForm, zodResolver } from '@tinycld/core/ui/form'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
 import { Archive, ArchiveRestore, Plus, Trash2 } from 'lucide-react-native'
 import { useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useEpicMutations } from '../hooks/useEpicMutations'
 import { formatEstimate } from '../lib/estimate'
+import { newEpicSchema } from '../lib/form-schemas'
 import type { BoardEpic } from '../types'
 
 const DEFAULT_COLOR = COLOR_PALETTE.find(s => s.hex === '#4A86E8')?.hex ?? COLOR_PALETTE[0].hex
@@ -232,21 +234,6 @@ function CreateEpicRow({
     isPending: boolean
 }) {
     const [isOpen, setIsOpen] = useState(false)
-    const [title, setTitle] = useState('')
-    const [color, setColor] = useState(DEFAULT_COLOR)
-    const mutedColor = useThemeColor('muted')
-
-    const submit = () => {
-        const trimmed = title.trim()
-        if (!trimmed) {
-            setIsOpen(false)
-            return
-        }
-        onCreate(trimmed, color)
-        setTitle('')
-        setColor(DEFAULT_COLOR)
-        setIsOpen(false)
-    }
 
     if (!isOpen) {
         return (
@@ -263,31 +250,85 @@ function CreateEpicRow({
     }
 
     return (
+        <CreateEpicForm
+            onCreate={onCreate}
+            isPending={isPending}
+            onClose={() => setIsOpen(false)}
+        />
+    )
+}
+
+// Mounted only while open, so each new epic starts from an empty name and the
+// default color.
+function CreateEpicForm({
+    onCreate,
+    isPending,
+    onClose,
+}: {
+    onCreate: (title: string, color: string) => void
+    isPending: boolean
+    onClose: () => void
+}) {
+    const mutedColor = useThemeColor('muted')
+    const {
+        control,
+        handleSubmit,
+        formState: { errors, isValid },
+    } = useForm({
+        resolver: zodResolver(newEpicSchema),
+        defaultValues: { title: '', color: DEFAULT_COLOR },
+        mode: 'onChange',
+    })
+
+    const submit = handleSubmit(data => {
+        onCreate(data.title, data.color)
+        onClose()
+    })
+    const inputBorder = errors.title ? 'border-danger' : 'border-border'
+
+    return (
         <View className="gap-1.5 py-1 mt-1">
-            <PlainInput
-                value={title}
-                onChangeText={setTitle}
-                placeholder="Epic name"
-                placeholderTextColor={mutedColor}
-                autoFocus
-                editable={!isPending}
-                returnKeyType="done"
-                onSubmitEditing={submit}
-                onKeyPress={e => {
-                    if (e.nativeEvent.key === 'Escape') setIsOpen(false)
-                }}
-                className="min-w-0 text-[13px] text-foreground border border-border rounded-md px-2 py-1"
+            <Controller
+                control={control}
+                name="title"
+                render={({ field }) => (
+                    <PlainInput
+                        value={field.value}
+                        onChangeText={field.onChange}
+                        onBlur={field.onBlur}
+                        placeholder="Epic name"
+                        placeholderTextColor={mutedColor}
+                        autoFocus
+                        editable={!isPending}
+                        returnKeyType="done"
+                        onSubmitEditing={submit}
+                        onKeyPress={e => {
+                            if (e.nativeEvent.key === 'Escape') onClose()
+                        }}
+                        className={`min-w-0 text-[13px] text-foreground border rounded-md px-2 py-1 ${inputBorder}`}
+                    />
+                )}
             />
-            <ColorPickerGrid selected={color} onSelect={setColor} />
+            <FieldError message={errors.title?.message} />
+            <Controller
+                control={control}
+                name="color"
+                render={({ field }) => (
+                    <ColorPickerGrid selected={field.value} onSelect={field.onChange} />
+                )}
+            />
             <View className="flex-row justify-end gap-2">
-                <Pressable
-                    accessibilityRole="button"
-                    onPress={() => setIsOpen(false)}
-                    className="px-2 py-1"
-                >
+                <Pressable accessibilityRole="button" onPress={onClose} className="px-2 py-1">
                     <Text className="text-[12px] text-muted">Cancel</Text>
                 </Pressable>
-                <Pressable accessibilityRole="button" onPress={submit} className="px-2 py-1">
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: !isValid }}
+                    disabled={!isValid}
+                    onPress={submit}
+                    className="px-2 py-1"
+                    style={{ opacity: isValid ? 1 : 0.5 }}
+                >
                     <View className="flex-row items-center gap-1">
                         <Plus size={12} color={mutedColor} strokeWidth={2.4} />
                         <Text className="text-[12px] font-semibold text-foreground">
@@ -298,4 +339,11 @@ function CreateEpicRow({
             </View>
         </View>
     )
+}
+
+// Shown once the name has been touched and is invalid — an untouched empty
+// field is the starting state, not a mistake.
+function FieldError({ message }: { message: string | undefined }) {
+    if (!message) return null
+    return <Text className="text-[11.5px] text-danger">{message}</Text>
 }

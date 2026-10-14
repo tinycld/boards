@@ -13,7 +13,7 @@ import {
     SelectInput,
     TextInput,
     useForm,
-    z,
+    type z,
     zodResolver,
 } from '@tinycld/core/ui/form'
 import * as Clipboard from 'expo-clipboard'
@@ -22,19 +22,8 @@ import { newRecordId } from 'pbtsdb/core'
 import { Pressable, ScrollView, Text, View } from 'react-native'
 import { useBoardList } from '../hooks/useActiveBoard'
 import { useCopiedFlag } from '../hooks/useCopiedFlag'
+import { repoSchema } from '../lib/form-schemas'
 import { canRemoveRepo } from '../lib/repo-permissions'
-
-const repoSchema = z.object({
-    project: z.string().min(1, 'Choose a board'),
-    owner: z
-        .string()
-        .min(1, 'Owner is required')
-        .regex(/^[a-zA-Z0-9-]+$/, 'Only letters, numbers, and hyphens'),
-    name: z
-        .string()
-        .min(1, 'Repository name is required')
-        .regex(/^[a-zA-Z0-9._-]+$/, 'Only letters, numbers, dots, hyphens, underscores'),
-})
 
 type RepoFormValues = z.infer<typeof repoSchema>
 
@@ -310,7 +299,7 @@ function AddRepoForm({ ownedProjects }: { ownedProjects: { id: string; name: str
         reset,
         setError,
         getValues,
-        formState: { errors, isSubmitted, isDirty },
+        formState: { errors, isSubmitted, isValid },
     } = useForm({
         mode: 'onChange',
         resolver: zodResolver(repoSchema),
@@ -322,7 +311,7 @@ function AddRepoForm({ ownedProjects }: { ownedProjects: { id: string; name: str
             yield reposCollection.insert({
                 id: newRecordId(),
                 project: data.project,
-                repo: `${data.owner.trim()}/${data.name.trim()}`,
+                repo: `${data.owner}/${data.name}`,
                 installation_id: '',
                 created: '',
                 updated: '',
@@ -333,7 +322,7 @@ function AddRepoForm({ ownedProjects }: { ownedProjects: { id: string; name: str
     })
 
     const onSubmit = handleSubmit(data => create.mutate(data))
-    const canSubmit = !create.isPending && isDirty
+    const canSubmit = !create.isPending && isValid
 
     return (
         <View className="gap-2 border-t border-border pt-4">

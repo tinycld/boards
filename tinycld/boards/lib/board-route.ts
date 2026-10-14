@@ -18,13 +18,16 @@ import { parseCardKey } from './card-key'
  *                           link core mints (`?focused=` is an ecosystem
  *                           convention, so it is accepted and never dropped)
  *   boards/PL/12            card 12, full page
+ *   boards/PL/<id>          the full page of a card with no number yet; the
+ *                           page respells it as the number once that lands
  *   boards/my-cards         unchanged — it does not parse as a key
  *
  * ONE segment, told apart by `parseCardKey`: a key has a hyphen followed by
  * digits, a slug has neither, and a 15-character PocketBase id has no hyphen
  * at all. So `my-cards` and a record id both fall through to "board" without
  * a special case. A record id in the segment always names a BOARD; a card is
- * only ever spelled by its key, its number, or `?focused=<id>`.
+ * only ever spelled by its key, its number, `?focused=<id>`, or its id in the
+ * full page's own segment.
  */
 
 export interface BoardSegment {
@@ -62,8 +65,12 @@ export function boardPath(segment: string): string {
     return `boards/${segment}`
 }
 
-export function cardPagePath(segment: string, cardNumber: number): string {
-    return `boards/${segment}/${cardNumber}`
+/**
+ * The path of `card`'s full page: `boards/PL/12`, or `boards/PL/<id>` while
+ * the server has not numbered it, so a card still saving has a page too.
+ */
+export function cardPagePath(segment: string, card: { id: string; number: number }): string {
+    return `boards/${segment}/${card.number || card.id}`
 }
 
 /**
@@ -87,21 +94,13 @@ export function peekParams(
 
 type HrefBuilder = (path: string, extra?: Record<string, string>) => Href
 
-/**
- * A link to `card`'s full page, `boards/PL/12`.
- *
- * A card the server has not numbered yet has no page of its own, so it is
- * linked peeked on its board instead — the same `?focused=` fallback every
- * other keyless link uses. Once the number lands, the next link is the page.
- */
+/** A link to `card`'s full page (see cardPagePath). */
 export function cardHref(
     orgHref: HrefBuilder,
     board: { id: string; slug: string },
     card: { id: string; number: number }
 ): Href {
-    const segment = boardSegment(board)
-    if (card.number) return orgHref(cardPagePath(segment, card.number))
-    return peekHref(orgHref, segment, { key: '', id: card.id })
+    return orgHref(cardPagePath(boardSegment(board), card))
 }
 
 /** A link to `card` peeked on its board — what search and cross-board links navigate to. */

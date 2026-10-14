@@ -104,15 +104,18 @@ export function useBoardRoute(
 
     const { project, cardCount, isLoading: contentLoading } = useBoardTree(rows, view)
 
-    // `/a/boards/PL/12` carries the number alone; `/a/boards/PL-12` and
-    // `?focused=` carry a key or an id. Both resolve to a RECORD ID here, so
-    // everything downstream — findCardEntry, the presence room, the j/k
-    // stepper — keeps working on ids and never learns that keys exist.
+    // `/a/boards/PL/12` carries the number alone, or the id of a card not yet
+    // numbered; `/a/boards/PL-12` and `?focused=` carry a key or an id. All
+    // resolve to a RECORD ID here, so everything downstream — findCardEntry,
+    // the presence room, the j/k stepper — keeps working on ids and never
+    // learns that keys exist.
     const cardNumber = parseCardNumber(cardSegment)
     const urlCard = urlCardParam(routeSegment, focused)
     const cardId = useMemo(() => {
         if (!project) return ''
-        if (cardSegment) return cardNumber ? findByNumber(project, cardNumber) : ''
+        if (cardSegment) {
+            return cardNumber ? findByNumber(project, cardNumber) : findById(project, cardSegment)
+        }
         return resolveCardOnBoard(project, urlCard)
     }, [project, cardSegment, cardNumber, urlCard])
 
@@ -127,6 +130,14 @@ export function useBoardRoute(
         isArchived: projectRow?.archived ?? false,
         cardCount,
     }
+}
+
+/** A card by its record id on THIS board, as findByNumber is. */
+function findById(project: BoardProject, id: string): string {
+    for (const { card } of flattenCards(project)) {
+        if (card.id === id) return card.id
+    }
+    return ''
 }
 
 /** A card by its number on THIS board, so `/PL/12` cannot reach card 12 of another. */

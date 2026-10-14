@@ -209,9 +209,38 @@ describe('usePeekUrl', () => {
     })
 
     // A card's key is assigned server-side, so a card opened in the optimistic
-    // window is written as its id; when the key lands nothing changes in the
-    // store, so nothing is rewritten. Both spellings resolve to the card.
-    it('does not rewrite the URL when the key arrives for the open card', () => {
+    // window is written as its id. Once the key lands that spelling is upgraded:
+    // otherwise nothing in the store changes, so nothing would ever rewrite it.
+    it('re-spells a card it wrote by id once the key arrives', () => {
+        const withCard = (key: string, number: number) =>
+            board({
+                lists: [
+                    {
+                        id: 'l1',
+                        name: 'To do',
+                        position: 'a0',
+                        category: 'todo',
+                        cards: [card('c3', key, number)],
+                    },
+                ],
+            })
+        h.params = { boardSlug: 'HOME' }
+        const { rerender } = renderHook(({ p }) => usePeekUrl(p, 'HOME'), {
+            initialProps: { p: withCard('', 0) },
+        })
+        act(() => useBoardsUIStore.getState().openCard('c3'))
+        expect(setParams).toHaveBeenLastCalledWith({ boardSlug: 'HOME', focused: 'c3' })
+
+        h.params = { boardSlug: 'HOME', focused: 'c3' }
+        rerender({ p: withCard('HOME-3', 3) })
+        expect(setParams).toHaveBeenLastCalledWith({ boardSlug: 'HOME-3', focused: undefined })
+        expect(setParams).toHaveBeenCalledTimes(2)
+        expect(openCardId()).toBe('c3')
+    })
+
+    // The same arrival on a `?focused=<id>` link that came from OUTSIDE is left
+    // alone: a URL a page was opened with is never rewritten under it.
+    it('does not rewrite an arriving ?focused=<id> link when the key lands', () => {
         const keyless = board({
             lists: [
                 {

@@ -1,7 +1,16 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage, TEST_COLLABORATOR_EMAIL } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, closeCardPeek, createBoard, shareBoard } from './helpers'
+import {
+    addCard,
+    boardCard,
+    CARD_CREATE,
+    CARD_UPDATE,
+    closeCardPeek,
+    createBoard,
+    holdRequests,
+    shareBoard,
+} from './helpers'
 
 // The cross-board list: what is mine shows up with its board and list, the
 // search box narrows it, and a row opens the card without touching the
@@ -120,6 +129,31 @@ test.describe('Boards — My cards', () => {
         // body renders the description section.
         await expect(page.getByRole('button', { name: 'Back to board' })).toContainText(name)
         await expect(page.getByText('Description', { exact: true })).toBeVisible()
+    })
+
+    // A change made before the server numbered the card shows the card as that
+    // change left it until the change saves: without a number, although the
+    // server has assigned one. The row must still open the page.
+    test('a row opens the card page while a change from before its number saves', async ({
+        page,
+    }) => {
+        const name = await freshBoard(page)
+        const releaseCreate = await holdRequests(page, 'POST', CARD_CREATE)
+        const release = await holdRequests(page, 'PATCH', CARD_UPDATE)
+        await addCard(page, 0, MINE)
+        await assignSelf(page, MINE)
+        releaseCreate()
+
+        await openMyCards(page)
+        await page
+            .locator('[data-testid^="boards-row-"]')
+            .filter({ hasText: MINE })
+            .filter({ hasText: name })
+            .click()
+        await expect(page.getByRole('button', { name: 'Back to board' })).toContainText(name)
+
+        release()
+        await expect(page).toHaveURL(/\/a\/boards\/[A-Z0-9]+\/1$/)
     })
 
     test('a card with more than one assignee still lists under Assigned to me', async ({

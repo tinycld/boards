@@ -7,7 +7,6 @@ import { Pressable, Text, View } from 'react-native'
 interface CardComposerProps {
     /** Adds the card. Returning keeps the composer open for the next one. */
     onSubmit: (title: string) => void
-    isPending?: boolean
     /** "Add card" by default; a column with no cards can say more. */
     label?: string
     placeholder?: string
@@ -30,13 +29,16 @@ interface CardComposerProps {
  * an empty field, which is what makes clicking away feel like a cancel rather
  * than leaving a stray input on the board.
  *
+ * For the same reason the field never locks while a card saves. The insert is
+ * optimistic, so the next title can go in at once; a field that turned
+ * read-only until the server answered dropped every keystroke typed meanwhile.
+ *
  * This is deliberately NOT react-hook-form. One field with no validation beyond
  * "not blank" does not need a resolver, a schema, or a form context — the
  * useState here is the genuinely-local UI state the style guide reserves it for.
  */
 export function CardComposer({
     onSubmit,
-    isPending = false,
     label = 'Add card',
     placeholder = 'What needs doing?',
     isOpen: controlledOpen,
@@ -97,7 +99,6 @@ export function CardComposer({
                     placeholderTextColor={mutedColor}
                     autoFocus
                     multiline={false}
-                    editable={!isPending}
                     returnKeyType="done"
                     // blurOnSubmit={false} keeps focus for the next title;
                     // without it RN dismisses the keyboard on every Enter.
