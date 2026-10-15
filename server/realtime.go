@@ -92,15 +92,19 @@ func registerRealtime(app core.App) *boardRealtime {
 }
 
 // makeFingerprint identifies the records a board's document was seeded
-// from. While the document exists (open or parked) the baselines say what
-// it believes is stored, and a change made to the records outside the room
-// shows up as a difference at the next open. With no document, the rows
-// themselves are hashed per fragment, normalized the way bootstrap
-// normalizes them, so a document seeded from these rows and flushed
-// unchanged matches.
+// from. While the document exists (open or parked) the baselines of the
+// cards still on the board say what it believes is stored, and a change made
+// to the records outside the room shows up as a difference at the next open.
+// With no document, the rows themselves are hashed per fragment, normalized
+// the way bootstrap normalizes them, so a document seeded from these rows and
+// flushed unchanged matches.
 func makeFingerprint(app core.App, state *boardDocState) realtime.FingerprintFn {
 	return func(projectID string) (string, error) {
-		if fp, ok := state.fingerprint(projectID); ok {
+		onBoard, err := boardCardIDs(app, projectID)
+		if err != nil {
+			return "", fmt.Errorf("cards: fingerprint of board %s: %w", projectID, err)
+		}
+		if fp, ok := state.fingerprint(projectID, onBoard); ok {
 			return fp, nil
 		}
 		records, err := seedableCards(app, projectID)
@@ -116,6 +120,24 @@ func makeFingerprint(app core.App, state *boardDocState) realtime.FingerprintFn 
 		}
 		return fingerprintOf(hashes), nil
 	}
+}
+
+// boardCardIDs lists every card on a board, whatever it holds: a card whose
+// text was emptied outside the room must still count, so its baseline shows
+// the change.
+func boardCardIDs(app core.App, projectID string) (map[string]bool, error) {
+	var ids []string
+	err := app.DB().Select("id").From("boards_cards").
+		Where(dbx.HashExp{"project": projectID}).
+		Column(&ids)
+	if err != nil {
+		return nil, err
+	}
+	onBoard := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		onBoard[id] = true
+	}
+	return onBoard, nil
 }
 
 // makeAuthorize gates connections: any non-disabled member of the board may

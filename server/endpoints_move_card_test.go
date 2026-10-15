@@ -813,4 +813,18 @@ func TestMoveCard_HandsCustomFragmentsToTheTargetRoom(t *testing.T) {
 	if !state.matchesBaseline(env.project.Id, notes, "") {
 		t.Error("the refused source edit kept a baseline")
 	}
+	// The kept baseline silences stale edits, but the card is no longer on
+	// the source board: the parked room must fingerprint as the records do,
+	// or its checkpoint is thrown away and the board re-seeds for nothing.
+	parked, err := makeFingerprint(env.app, state)(env.project.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := makeFingerprint(env.app, newBoardDocState())(env.project.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parked != fresh {
+		t.Error("the moved card still shapes the source room's fingerprint")
+	}
 }

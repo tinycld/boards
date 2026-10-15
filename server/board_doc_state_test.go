@@ -88,35 +88,55 @@ func TestBaseline_ForgetCardStopsRetrying(t *testing.T) {
 // the records: equal baselines, equal fingerprint; a card written outside
 // the room, a different one.
 func TestFingerprint_FollowsTheBaselines(t *testing.T) {
+	onBoard := map[string]bool{"a": true, "b": true, "c": true}
 	state := newBoardDocState()
-	if _, ok := state.fingerprint("board"); ok {
+	if _, ok := state.fingerprint("board", onBoard); ok {
 		t.Fatal("a board with no document reported a fingerprint")
 	}
 	state.open("board")
-	empty, _ := state.fingerprint("board")
-	state.setBaseline("board", "a", "First.\n")
-	state.setBaseline("board", "b", "Second.\n")
-	withTwo, _ := state.fingerprint("board")
+	empty, _ := state.fingerprint("board", onBoard)
+	state.setBaseline("board", cardFragment("a"), "First.\n")
+	state.setBaseline("board", cardFragment("b"), "Second.\n")
+	withTwo, _ := state.fingerprint("board", onBoard)
 	if withTwo == empty {
 		t.Fatal("baselines did not change the fingerprint")
 	}
 	// Order of insertion must not matter.
 	other := newBoardDocState()
 	other.open("board")
-	other.setBaseline("board", "b", "Second.\n")
-	other.setBaseline("board", "a", "First.\n")
-	if got, _ := other.fingerprint("board"); got != withTwo {
+	other.setBaseline("board", cardFragment("b"), "Second.\n")
+	other.setBaseline("board", cardFragment("a"), "First.\n")
+	if got, _ := other.fingerprint("board", onBoard); got != withTwo {
 		t.Fatal("the same baselines in another order hashed differently")
 	}
 	// A card whose description is empty counts as absent, as it is for the
 	// bootstrap query that seeds only non-empty descriptions.
-	state.setBaseline("board", "c", "")
-	if got, _ := state.fingerprint("board"); got != withTwo {
+	state.setBaseline("board", cardFragment("c"), "")
+	if got, _ := state.fingerprint("board", onBoard); got != withTwo {
 		t.Fatal("an empty description changed the fingerprint")
 	}
 	state.drop("board")
-	if _, ok := state.fingerprint("board"); ok {
+	if _, ok := state.fingerprint("board", onBoard); ok {
 		t.Fatal("a dropped board still reported a fingerprint")
+	}
+}
+
+// A card moved off the board keeps its baseline, to silence stale edits in
+// the source room, but the records no longer hold it, so neither may the
+// fingerprint.
+func TestFingerprint_LeavesOutCardsNoLongerOnTheBoard(t *testing.T) {
+	state := newBoardDocState()
+	state.open("board")
+	state.setBaseline("board", cardFragment("a"), "First.\n")
+	onlyA, _ := state.fingerprint("board", map[string]bool{"a": true})
+
+	state.setBaseline("board", cardFragment("moved"), "Gone.\n")
+	state.setBaseline("board", customFragment("moved", formatMarkdown, "steps"), "Steps.\n")
+	if got, _ := state.fingerprint("board", map[string]bool{"a": true}); got != onlyA {
+		t.Error("a card no longer on the board shaped the fingerprint")
+	}
+	if !state.matchesBaseline("board", cardFragment("moved"), "Gone.\n") {
+		t.Error("leaving a card out of the fingerprint dropped its baseline")
 	}
 }
 
@@ -139,7 +159,7 @@ func TestFingerprint_ADescriptionKeepsItsPreviousFingerprint(t *testing.T) {
 	state.open("board")
 	state.setBaseline("board", cardFragment("a"), "First.\n")
 	state.setBaseline("board", cardFragment("b"), "Second.\n")
-	if got, _ := state.fingerprint("board"); got != want {
+	if got, _ := state.fingerprint("board", map[string]bool{"a": true, "b": true}); got != want {
 		t.Errorf("fingerprint = %s, want the pre-fragment %s", got, want)
 	}
 }

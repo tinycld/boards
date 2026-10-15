@@ -32,6 +32,17 @@ type boardEntry struct {
 	// baseline maps fragment name → sha256 of the text last known to be
 	// stored. Keyed by fragment, not card: one card has several fragments,
 	// and each one is written to the row on its own.
+	//
+	// An entry lives in one of two ways:
+	//
+	//   - For a card on the board, from seed or save until the document is
+	//     evicted. It decides what a flush writes and shapes the fingerprint.
+	//   - For a card moved to another board, from the move until the source
+	//     document is evicted (drop forgets it with the rest). The fragment
+	//     lingers in the document, so the entry keeps a stale edit to it from
+	//     looking changed. It must not shape the fingerprint: the records no
+	//     longer hold the card, so a parked or stored document would never
+	//     match them and would re-seed for nothing.
 	baseline map[string]string
 }
 
@@ -58,16 +69,24 @@ func (s *boardDocState) drop(projectID string) {
 
 // fingerprint summarizes what the document believes is stored for every
 // fragment, from the baselines, so the broker can tell a parked or stored
-// document from the records. Reports false when the board has no entry
+// document from the records. onBoard holds the ids of the cards now on the
+// board; a fragment of any other card is left out, as the records leave it
+// out (see boardEntry.baseline). Reports false when the board has no entry
 // (no document was seeded, or it was evicted).
-func (s *boardDocState) fingerprint(projectID string) (string, bool) {
+func (s *boardDocState) fingerprint(projectID string, onBoard map[string]bool) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	entry := s.boards[projectID]
 	if entry == nil {
 		return "", false
 	}
-	return fingerprintOf(entry.baseline), true
+	kept := make(map[string]string, len(entry.baseline))
+	for fragment, h := range entry.baseline {
+		if cardID, _, _, ok := parseCardFragment(fragment); ok && onBoard[cardID] {
+			kept[fragment] = h
+		}
+	}
+	return fingerprintOf(kept), true
 }
 
 // fingerprintOf hashes a fragment → text-hash map in a stable order. An

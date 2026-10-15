@@ -502,7 +502,8 @@ func membersOnly(app core.App, projectID string, userIDs []string) []string {
 // them "changed" relative to no baseline and try to write them to a card that
 // now belongs elsewhere (the flush refuses, loudly). Setting each baseline to
 // the stored text keeps every later flush silent unless someone edits a stale
-// fragment — and even then the refusal stands.
+// fragment — and even then the refusal stands. Those baselines stay out of the
+// source room's fingerprint, since its records no longer hold the card.
 //
 // Target: an open room was bootstrapped before this card existed there, so
 // its fragments are seeded now and the update is published to every client in

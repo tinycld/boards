@@ -600,7 +600,11 @@ func TestFingerprint_RecordsMatchASeededDocumentWithCustomFields(t *testing.T) {
 	}
 
 	_, state, _, _ := boardRoom(t, env)
-	seeded, ok := state.fingerprint(env.project.Id)
+	onBoard, err := boardCardIDs(env.app, env.project.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seeded, ok := state.fingerprint(env.project.Id, onBoard)
 	if !ok {
 		t.Fatal("no fingerprint for a seeded board")
 	}
