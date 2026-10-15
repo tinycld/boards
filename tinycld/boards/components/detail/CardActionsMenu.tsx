@@ -109,7 +109,7 @@ export function useCardActions({ card, list, projectId, onDismiss }: CardActions
  * with the card's own marked. A card on an archived type keeps it until
  * someone picks another; the archived one is no longer offered.
  */
-function useCardTypes(cardId: string) {
+export function useCardTypes(cardId: string) {
     const { forms, defaultForm } = useFormsOfHost(CARD_HOST_KEY)
     const [cardsCollection] = useStore('boards_cards')
     const { record } = useRecord(cardsCollection, cardId)
@@ -130,7 +130,7 @@ function useCardTypes(cardId: string) {
 type CardActions = ReturnType<typeof useCardActions>
 
 /** "Change type": a submenu of the card's types (a section in a sheet). */
-function ChangeTypeRows({ types }: { types: CardActions['types'] }) {
+export function ChangeTypeRows({ types }: { types: ReturnType<typeof useCardTypes> }) {
     if (!types.isOffered) return null
     const rows = types.choices.map(choice => (
         <Menu.Item
