@@ -208,6 +208,12 @@ export function useCardDetail(cardId: string) {
     const attachments = useMemo<BoardAttachment[]>(
         () =>
             (attachmentRows ?? [])
+                // The card's own files only: a type's file field keeps its
+                // files in the same collection, named by `field`, and lists
+                // them in its own cell. Filtered here, not in the query: the
+                // include rides the card's one relation fetch, and a second
+                // predicate there turns it into a list request of its own.
+                .filter(joined => !joined.attachment.field)
                 .map(joined => ({
                     id: joined.attachment.id,
                     fileName: joined.attachment.file,

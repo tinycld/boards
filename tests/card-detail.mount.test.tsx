@@ -112,6 +112,18 @@ const h = vi.hoisted(() => {
                 file: 'x.png',
                 name: '',
                 size: 10,
+                field: '',
+                created: '',
+            },
+            // A file field's row: the field lists it, the Attachments section does not.
+            {
+                id: 'a2',
+                card: 'c1',
+                uploaded_by: 'u1',
+                file: 'shot.png',
+                name: '',
+                size: 10,
+                field: 'screenshot',
                 created: '',
             },
         ],
