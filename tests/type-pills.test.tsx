@@ -17,15 +17,9 @@ const render = (ui: ReactElement) => renderBare(<OverlayProvider>{ui}</OverlayPr
 const q = (id: string) =>
     document.body.querySelector(`[testID="${id}"], [data-testid="${id}"]`) as HTMLElement | null
 
-/**
- * The stub renders RN hosts as custom elements, where React writes a boolean
- * `true` as an empty attribute, so `aria-selected` is read from the props React
- * holds for the element.
- */
+/** The stub writes a boolean `aria-*` prop as the string "true" or "false". */
 function isSelectedTab(el: Element): boolean {
-    const key = Object.keys(el).find(k => k.startsWith('__reactProps$'))
-    const props = key ? (el as unknown as Record<string, unknown>)[key] : undefined
-    return (props as { 'aria-selected'?: boolean } | undefined)?.['aria-selected'] === true
+    return el.getAttribute('aria-selected') === 'true'
 }
 
 const types = (count: number) =>

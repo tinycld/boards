@@ -7,7 +7,8 @@ import { useFormsOfHost } from '@tinycld/core/lib/forms/use-forms-of-host'
 import { log } from '@tinycld/core/lib/logger'
 import { Dialog } from '@tinycld/core/ui/dialog'
 import { FormRenderer, useFormCreate, useHostUi } from '@tinycld/core/ui/forms'
-import { useEffect, useMemo } from 'react'
+import { type ReactNode, useEffect, useMemo } from 'react'
+import { Text } from 'react-native'
 import { CreateCardProvider, type CreateCardValue } from '../forms/CreateCardContext'
 import { CARD_HOST_KEY } from '../forms/hosts'
 import { useBoardPickerData } from '../hooks/useBoardPickerData'
@@ -47,7 +48,7 @@ function useCardCreate({ host, projectId, target, onClose }: CreateBodyProps) {
         () => ({ today: toDateString(new Date()), userId }),
         [userId]
     )
-    const { forms } = useFormsOfHost(host.key)
+    const { forms, isReady } = useFormsOfHost(host.key)
     const offered = forms.filter(form => !form.archived)
     const create = useFormCreate(host, undefined, context, { title: '' })
     const ui = useHostUi(host)
@@ -80,11 +81,19 @@ function useCardCreate({ host, projectId, target, onClose }: CreateBodyProps) {
             .then(onClose, create.onError)
     }
 
-    return { offered, create, ui, context, createValue, submit }
+    return {
+        offered,
+        isEmpty: isReady && offered.length === 0,
+        create,
+        ui,
+        context,
+        createValue,
+        submit,
+    }
 }
 
 function CreateBody(props: CreateBodyProps) {
-    const { offered, create, ui, context, createValue, submit } = useCardCreate(props)
+    const { offered, isEmpty, create, ui, context, createValue, submit } = useCardCreate(props)
     return (
         <Dialog
             isOpen
@@ -93,7 +102,8 @@ function CreateBody(props: CreateBodyProps) {
             size="lg"
             testID="card-create-dialog"
         >
-            <Dialog.Body>
+            <NoCardTypes isVisible={isEmpty} />
+            <CreateFields isVisible={!isEmpty}>
                 <TypePills
                     forms={offered}
                     selectedId={create.formId}
@@ -108,8 +118,24 @@ function CreateBody(props: CreateBodyProps) {
                         onSubmit={submit}
                     />
                 </CreateCardProvider>
-            </Dialog.Body>
+            </CreateFields>
         </Dialog>
+    )
+}
+
+function CreateFields({ isVisible, children }: { isVisible: boolean; children: ReactNode }) {
+    if (!isVisible) return null
+    return <Dialog.Body>{children}</Dialog.Body>
+}
+
+function NoCardTypes({ isVisible }: { isVisible: boolean }) {
+    if (!isVisible) return null
+    return (
+        <Dialog.Body>
+            <Text className="text-muted-foreground">
+                This board has no card types yet. An admin adds them in Settings → Forms.
+            </Text>
+        </Dialog.Body>
     )
 }
 

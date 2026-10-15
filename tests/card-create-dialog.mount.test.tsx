@@ -66,13 +66,19 @@ vi.mock('@tinycld/core/lib/pocketbase', async () => {
             { value: 'high', label: 'High' },
         ],
     }
-    const form = (id: string, name: string, order: number, definition: unknown) => ({
+    const form = (
+        id: string,
+        name: string,
+        order: number,
+        definition: unknown,
+        archived = false
+    ) => ({
         id,
         host: host.key,
         name,
         slug: name.toLowerCase(),
         is_default: order === 0,
-        archived: false,
+        archived,
         order,
         definition,
     })
@@ -100,11 +106,16 @@ vi.mock('@tinycld/core/lib/pocketbase', async () => {
             // A default the card's priority column does not store: the form
             // accepts it (priority is a custom built-in), the card row cannot.
             form('f-odd', 'Odd', 2, { ...base, defaults: { priority: 'critical' } }),
+            // Archived types are not offered, so no pill shows for it.
+            form('f-old', 'Retired', 3, base, true),
         ]),
         boards_projects: mk('boards_projects', [
             { id: 'p1', name: 'Otters', slug: 'OTTER', sprints_enabled: false },
         ]),
-        boards_labels: mk('boards_labels', []),
+        boards_labels: mk('boards_labels', [
+            { id: 'l1', project: 'p1', name: 'Urgent', color: '#ff0000' },
+            { id: 'l2', project: 'p1', name: 'Design', color: '#0000ff' },
+        ]),
         boards_epics: mk('boards_epics', []),
         boards_sprints: mk('boards_sprints', []),
         boards_cards: mk('boards_cards', []),
@@ -268,6 +279,7 @@ describe('CardCreateDialog', () => {
         )
         await waitFor(() => expect(q(container, 'form-field-title')).toBeTruthy())
         typeTitle(container, 'Login fails')
+        expect(container.querySelectorAll('[accessibilityRole="tab"]')).toHaveLength(3)
 
         fireEvent.click(getByText('Bug'))
         await waitFor(() => expect(q(container, 'form-field-severity')).toBeTruthy())
@@ -275,9 +287,8 @@ describe('CardCreateDialog', () => {
 
         // Create with Severity empty: the form refuses and says why.
         fireEvent.click(q(container, 'form-wizard-next') as HTMLElement)
-        await waitFor(() =>
-            expect(queryAllByText('Severity is required').length).toBeGreaterThan(0)
-        )
+        // Once in the error summary and once under the field.
+        await waitFor(() => expect(queryAllByText('Severity is required')).toHaveLength(2))
         expect(useCardCreateStore.getState().target).not.toBeNull()
 
         await pickSelect(container, 'severity', 'High')
@@ -313,8 +324,7 @@ describe('CardCreateDialog', () => {
         await waitFor(() => expect(q(container, 'form-field-title')).toBeTruthy())
         typeTitle(container, 'Odd one')
         fireEvent.click(getByText('Odd'))
-        // The DOM writes a true aria-selected as a bare attribute and a false one as "false".
-        const selected = (id: string) => q(container, id)?.getAttribute('aria-selected') !== 'false'
+        const selected = (id: string) => q(container, id)?.getAttribute('aria-selected') === 'true'
         await waitFor(() => expect(selected('card-type-f-odd')).toBe(true))
         expect(selected('card-type-f-card')).toBe(false)
 
@@ -324,5 +334,34 @@ describe('CardCreateDialog', () => {
         expect(useCardCreateStore.getState().target).not.toBeNull()
         expect(q(container, 'card-create-dialog')).toBeTruthy()
         expect(h.stores.boards_cards.toArray.some(c => c.title === 'Odd one')).toBe(false)
+    })
+
+    it('stores the labels picked in the dialog on the card', async () => {
+        useCardCreateStore.getState().open({ projectId: 'p1', listId: 'l1', position: 'a0' })
+        const { container, getByText } = render(<CardCreateDialog projectId="p1" />, { wrapper })
+        const cell = await waitFor(() => {
+            const found = q(container, 'form-field-labels')
+            if (!found) throw new Error('no labels cell')
+            return found
+        })
+        typeTitle(container, 'Labelled')
+        fireEvent.click(getByText('Add label', { container: cell }) as HTMLElement)
+        await waitFor(() => expect(getByText('Urgent')).toBeTruthy())
+        fireEvent.click(getByText('Urgent'))
+        await waitFor(() => expect(getByText('Design')).toBeTruthy())
+        fireEvent.click(getByText('Design'))
+
+        fireEvent.click(q(container, 'form-wizard-next') as HTMLElement)
+        await waitFor(() => expect(useCardCreateStore.getState().target).toBeNull())
+        const card = h.stores.boards_cards.toArray.find(c => c.title === 'Labelled')
+        expect(card?.labels).toEqual(['l1', 'l2'])
+    })
+
+    it('says so when the host has no card types', async () => {
+        const forms = h.stores.forms as unknown as { delete: (ids: string[]) => void }
+        forms.delete(h.stores.forms.toArray.map(row => row.id))
+        useCardCreateStore.getState().open({ projectId: 'p1', listId: 'l1', position: 'a0' })
+        const { getByText } = render(<CardCreateDialog projectId="p1" />, { wrapper })
+        await waitFor(() => expect(getByText(/no card types/)).toBeTruthy())
     })
 })
