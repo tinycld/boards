@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard } from './helpers'
+import { addCard, boardCard, createBoard, uniqueStamp } from './helpers'
 
 // The MANUAL link/unlink path, end to end, entirely through the UI: link a PR
 // by URL from the card's "Card actions" menu, see the chip, unlink it, and
@@ -40,7 +40,7 @@ test.describe('Boards — manual pull request linking', () => {
     })
 
     test('links a PR by URL, shows the chip, then unlinks it', async ({ page }) => {
-        const boardName = `pr-link-${Date.now()}`
+        const boardName = `pr-link-${uniqueStamp()}`
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
@@ -65,7 +65,7 @@ test.describe('Boards — manual pull request linking', () => {
     })
 
     test('rejects an invalid URL and creates nothing', async ({ page }) => {
-        const boardName = `pr-link-invalid-${Date.now()}`
+        const boardName = `pr-link-invalid-${uniqueStamp()}`
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)

@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, closeCardPeek, createBoard } from './helpers'
+import { addCard, boardCard, closeCardPeek, createBoard, uniqueStamp } from './helpers'
 
 // Priority end to end: the picker writes the field, the board face renders
 // the glyph, and the compact face keeps it. Every assertion reads the FACE
@@ -14,7 +14,7 @@ const CARD_TITLE = 'Investigate the outage'
 
 let run = 0
 async function freshBoard(page: Page): Promise<string> {
-    const name = `priority-${Date.now()}-${run++}`
+    const name = `priority-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     return name
 }

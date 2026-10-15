@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, closeCardPeek, createBoard } from './helpers'
+import { addCard, boardCard, closeCardPeek, createBoard, uniqueStamp } from './helpers'
 
 // Sub-tasks end to end: the composer creates a real card, the parent's face
 // shows the rollup, the child's face shows the parent chip, and moving the
@@ -18,7 +18,7 @@ const CHILD = 'Write the headline'
 
 let run = 0
 async function freshBoard(page: Page): Promise<string> {
-    const name = `subtasks-${Date.now()}-${run++}`
+    const name = `subtasks-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     return name
 }
@@ -40,7 +40,7 @@ async function addSubtask(page: Page, parentTitle: string, title: string) {
     // composer button is the one to press — this helper files both the first
     // sub-task and the second.
     const inSection = peek(page).getByRole('button', { name: 'Add sub-task' })
-    if (await inSection.isVisible().catch(() => false)) {
+    if (await inSection.isVisible()) {
         await inSection.click()
     } else {
         await peek(page)

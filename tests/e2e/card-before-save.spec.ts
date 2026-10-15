@@ -9,6 +9,8 @@ import {
     createBoard,
     holdRequests,
     openCard,
+    uniqueNumber,
+    uniqueStamp,
 } from './helpers'
 
 // A card the server has not answered for yet.
@@ -23,8 +25,8 @@ import {
 let run = 0
 
 async function freshBoard(page: Parameters<typeof createBoard>[0]): Promise<string> {
-    const key = `SAVE${(Date.now() % 10000) + run}`
-    await createBoard(page, `before-save-${Date.now()}-${run++}`, key)
+    const key = `SAVE${(uniqueNumber() % 10000) + run}`
+    await createBoard(page, `before-save-${uniqueStamp()}-${run++}`, key)
     return key
 }
 

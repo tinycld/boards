@@ -1,6 +1,6 @@
 import { expect, type Page, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, createBoard } from './helpers'
+import { addCard, createBoard, uniqueNumber, uniqueStamp } from './helpers'
 
 // A pasted card link opened cold: the card's peek opens and the address bar
 // keeps the card. Two spellings are covered — the canonical /a/boards/KEY-1,
@@ -52,8 +52,8 @@ for (const spelling of ['path', 'focused'] as const) {
     }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        const key = `LINK${Date.now() % 100000}`
-        await createBoard(page, `deep-link-${Date.now()}`, key)
+        const key = `LINK${uniqueNumber() % 100000}`
+        await createBoard(page, `deep-link-${uniqueStamp()}`, key)
         await addCard(page, 0, 'Linked card')
 
         const canonical = `/a/boards/${key}-1`

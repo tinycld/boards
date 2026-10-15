@@ -6,6 +6,7 @@ import {
     signInAsCollaborator,
     TEST_COLLABORATOR_EMAIL,
 } from '@tinycld/core/e2e-helpers'
+import { chooseFile, pngFile } from './file-helpers'
 import { addField, buildSeverityType, pick } from './forms-helpers'
 import {
     boardCard,
@@ -21,6 +22,7 @@ import {
     pickOption,
     selectedOption,
     shareBoard,
+    uniqueStamp,
 } from './helpers'
 
 // Card types end to end: an admin builds a type in Settings → Forms, and a
@@ -33,7 +35,7 @@ import {
 
 let run = 0
 function stamp(): string {
-    return `${Date.now()}-${run++}`
+    return `${uniqueStamp()}-${run++}`
 }
 
 const TITLE = 'Login fails'
@@ -60,33 +62,15 @@ async function createTypedCard(
 }
 
 /**
- * Pick a file through a control that opens the browser's chooser.
+ * Open the card in `page`, run `check`, and close it again.
  *
- * Playwright's chooser interception suppresses the native dialog and the
- * window blur → focus round trip it causes; the picker runs inside that round
- * trip for every real user, so it is restored here before the selection is
- * delivered (see card-attachments.spec.ts, which this follows).
+ * Used on the SECOND session: a value another session wrote and this one reads
+ * on a fresh open came from the server, not from the writer's local state.
  */
-async function chooseFile(
-    page: Page,
-    trigger: Locator,
-    file: { name: string; mimeType: string; buffer: Buffer }
-) {
-    const chooserPromise = page.waitForEvent('filechooser')
-    await trigger.click()
-    const chooser = await chooserPromise
-    await page.evaluate(() => window.dispatchEvent(new Event('blur')))
-    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
-    await page.evaluate(
-        () => new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)))
-    )
-    await chooser.setFiles(file)
-}
-
-function pngFile(name: string) {
-    const base64 =
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
-    return { name, mimeType: 'image/png', buffer: Buffer.from(base64, 'base64') }
+async function reopenCard(page: Page, title: string, check: () => Promise<void>) {
+    await openCard(page, title)
+    await check()
+    await closeCardPeek(page)
 }
 
 test.describe('Card types', () => {
@@ -146,16 +130,22 @@ test.describe('Card types', () => {
 
             // The edit reached the server: the admin's own session reads it.
             await openBoardNamed(page, board)
-            await openCard(page, TITLE)
-            await expect(selectedOption(cell(page, 'severity'), 'severity')).toHaveText('Low')
-            await closeCardPeek(page)
+            await reopenCard(page, TITLE, async () => {
+                await expect(selectedOption(cell(page, 'severity'), 'severity')).toHaveText('Low')
+            })
 
             // Change type: the default type has no Severity; back on Bug the
             // value it had is still there.
             await changeType(mPage, 'Card')
             await expect(cell(mPage, 'severity')).toHaveCount(0)
+            await reopenCard(page, TITLE, async () => {
+                await expect(cell(page, 'severity')).toHaveCount(0)
+            })
             await changeType(mPage, bug)
             await expect(selectedOption(cell(mPage, 'severity'), 'severity')).toHaveText('Low')
+            await reopenCard(page, TITLE, async () => {
+                await expect(selectedOption(cell(page, 'severity'), 'severity')).toHaveText('Low')
+            })
 
             // The checklist is a built-in whose rows live in the host's own
             // table; an item added on a typed card is kept.
@@ -167,9 +157,10 @@ test.describe('Card types', () => {
             await item.fill('Repro')
             await item.press('Enter')
             await expect(cardSurface(mPage).getByLabel('Edit Repro').first()).toBeVisible()
-            await closeCardPeek(mPage)
-            await openCard(mPage, TITLE)
             await expect(cardSurface(mPage).getByLabel('Edit Repro').first()).toBeVisible()
+            await reopenCard(page, TITLE, async () => {
+                await expect(cardSurface(page).getByLabel('Edit Repro').first()).toBeVisible()
+            })
         } finally {
             await member.close()
         }
@@ -185,7 +176,9 @@ test.describe('Card types', () => {
             await addField(page, firstPage, 'file', 'Screenshot')
         })
         await navigateToPackage(page, 'boards')
-        await createBoard(page, `files-${id}`)
+        const board = `files-${id}`
+        await createBoard(page, board)
+        await shareBoard(page, board, TEST_COLLABORATOR_EMAIL, 'Viewer')
         await createTypedCard(page, shot, title)
 
         await openCard(page, title)
@@ -208,6 +201,20 @@ test.describe('Card types', () => {
         await closeCardPeek(page)
         await openCard(page, title)
         await expect(cell(page, 'screenshot').getByText('shot.png', { exact: true })).toBeVisible()
+
+        // A second session reads the file from the server.
+        const reader = await signInAsCollaborator(page)
+        try {
+            await navigateToPackage(reader.page, 'boards')
+            await openBoardNamed(reader.page, board)
+            await reopenCard(reader.page, title, async () => {
+                await expect(
+                    cell(reader.page, 'screenshot').getByText('shot.png', { exact: true })
+                ).toBeVisible()
+            })
+        } finally {
+            await reader.close()
+        }
     })
 
     test('a shared board shows a typed card read-only', async ({ page, browser }) => {
@@ -235,14 +242,12 @@ test.describe('Card types', () => {
             // so that helper's gate never shows.
             await boardCard(visitor, title).click()
             const severity = cell(visitor, 'severity')
-            await expect(selectedOption(severity, 'severity')).toHaveText('High')
 
-            // Read-only: no choice takes focus (an editor's do), and pressing
-            // one changes nothing.
-            await expect(severity.getByText('Low', { exact: true })).toBeVisible()
+            // Read-only: the chosen label is all a reader sees. The other
+            // options are not rendered, so there is nothing to press.
+            await expect(severity.getByText('High', { exact: true })).toBeVisible()
+            await expect(severity.getByText('Low', { exact: true })).toHaveCount(0)
             await expect(severity.locator('[tabindex="0"]')).toHaveCount(0)
-            await severity.getByText('Low', { exact: true }).click({ force: true })
-            await expect(selectedOption(severity, 'severity')).toHaveText('High')
         } finally {
             await context.close()
         }

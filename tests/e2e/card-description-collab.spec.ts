@@ -7,6 +7,7 @@ import {
     TEST_COLLABORATOR_EMAIL,
     TEST_COLLABORATOR_NAME,
 } from '@tinycld/core/e2e-helpers'
+import { openEditor } from './editor-helpers'
 import {
     addCard,
     createBoard,
@@ -51,9 +52,7 @@ function description(page: Page) {
  */
 async function openDescription(page: Page) {
     const editor = descriptionEditor(page).locator('.ProseMirror')
-    if (await editor.isVisible().catch(() => false)) return
-    await page.getByRole('button', { name: 'Edit description' }).click()
-    await expect(editor).toBeVisible()
+    await openEditor(editor, page.getByRole('button', { name: 'Edit description' }))
 }
 
 test.describe('Boards — collaborative descriptions', () => {

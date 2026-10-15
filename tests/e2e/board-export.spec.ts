@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, createBoard } from './helpers'
+import { addCard, createBoard, uniqueStamp } from './helpers'
 
 // Exporting a board to a file.
 //
@@ -11,7 +11,7 @@ import { addCard, createBoard } from './helpers'
 // actually hands the person a file with their cards in it.
 
 let run = 0
-const boardName = () => `export-${Date.now()}-${run++}`
+const boardName = () => `export-${uniqueStamp()}-${run++}`
 
 test.beforeEach(async ({ page }) => {
     await login(page)

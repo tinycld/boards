@@ -7,7 +7,8 @@ import {
     signInAsCollaborator,
     TEST_COLLABORATOR_EMAIL,
 } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard } from './helpers'
+import { openEditor } from './editor-helpers'
+import { addCard, boardCard, createBoard, uniqueStamp } from './helpers'
 
 // @mentions, end to end through the UI.
 //
@@ -68,10 +69,7 @@ function descriptionEditor(page: Page) {
  */
 async function openDescription(page: Page) {
     const editor = descriptionEditor(page)
-    if (await editor.isVisible().catch(() => false)) return editor
-    await page.getByRole('button', { name: 'Edit description' }).click()
-    await expect(editor).toBeVisible()
-    return editor
+    return openEditor(editor, page.getByRole('button', { name: 'Edit description' }))
 }
 
 /**
@@ -87,7 +85,7 @@ async function openDescription(page: Page) {
  */
 async function descriptionText(page: Page): Promise<string> {
     const editor = descriptionEditor(page)
-    if (!(await editor.isVisible().catch(() => false))) return ''
+    if ((await editor.count()) === 0) return ''
     return (await editor.textContent().catch(() => '')) ?? ''
 }
 
@@ -128,7 +126,7 @@ test.describe('card mentions', () => {
         await login(page)
         await navigateToPackage(page, 'boards')
 
-        const boardName = `mention-${Date.now()}`
+        const boardName = `mention-${uniqueStamp()}`
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
         await openBoard(page, boardName)
@@ -218,7 +216,7 @@ test.describe('card mentions', () => {
         await login(page)
         await navigateToPackage(page, 'boards')
 
-        const boardName = `mentionpersist-${Date.now()}`
+        const boardName = `mentionpersist-${uniqueStamp()}`
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
 
@@ -305,7 +303,7 @@ test.describe('card mentions', () => {
         await login(page)
         await navigateToPackage(page, 'boards')
 
-        const boardName = `mentionview-${Date.now()}`
+        const boardName = `mentionview-${uniqueStamp()}`
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
 

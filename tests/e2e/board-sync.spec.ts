@@ -1,7 +1,7 @@
 import type { Page, Request } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, closeCardPeek, createBoard, openBoard, openCard } from './helpers'
+import { addCard, closeCardPeek, createBoard, openBoard, openCard, uniqueStamp } from './helpers'
 
 // How a board and a card reach the client, measured at the network: one
 // request each. The board screen reads the project row through a view that
@@ -67,7 +67,7 @@ test.describe('Boards — one request per board, one per card', () => {
     }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        const first = `sync-a-${Date.now()}`
+        const first = `sync-a-${uniqueStamp()}`
 
         // A genuinely first-ever open: pbtsdb 2.0 keeps a query's result cached
         // for its gcTime (react-query's stock 5 minutes; nothing here overrides
@@ -104,7 +104,7 @@ test.describe('Boards — one request per board, one per card', () => {
     test('opening a card lists the card once and no child collection', async ({ page }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        const name = `sync-c-${Date.now()}`
+        const name = `sync-c-${uniqueStamp()}`
         await createBoard(page, name)
         await addCard(page, 0, 'Fresh card')
         // Leave and come back so the card open is measured on a settled board.

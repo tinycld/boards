@@ -1,6 +1,13 @@
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, cardsInColumn, createBoard, dragCardToColumn } from './helpers'
+import {
+    addCard,
+    boardCard,
+    cardsInColumn,
+    createBoard,
+    dragCardToColumn,
+    uniqueStamp,
+} from './helpers'
 
 // Collapsed columns and card density: both are per-user view preferences
 // held in the Zustand store, so nothing here touches the server. Every spec
@@ -16,7 +23,7 @@ import { addCard, boardCard, cardsInColumn, createBoard, dragCardToColumn } from
 
 let run = 0
 async function freshBoard(page: import('@playwright/test').Page, label: string): Promise<string> {
-    const name = `view-${label}-${Date.now()}-${run++}`
+    const name = `view-${label}-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     return name
 }

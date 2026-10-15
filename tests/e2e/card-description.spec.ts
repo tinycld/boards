@@ -1,7 +1,8 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, closeCardPeek, createBoard, openBoard, openCard } from './helpers'
+import { openEditor } from './editor-helpers'
+import { addCard, closeCardPeek, createBoard, openBoard, openCard, uniqueStamp } from './helpers'
 
 // Card descriptions are stored as Markdown and edited in place: the editor IS
 // the rendering, so there is no view/edit swap and no commit step. Typing `## `
@@ -17,7 +18,7 @@ const CARD_TITLE = 'Release checklist'
 
 let run = 0
 async function freshBoard(page: Page, label: string): Promise<string> {
-    const name = `desc-${label}-${Date.now()}-${run++}`
+    const name = `desc-${label}-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     return name
 }
@@ -37,10 +38,7 @@ function descriptionEditor(page: Page) {
  */
 async function openDescription(page: Page) {
     const editor = descriptionEditor(page)
-    if (await editor.isVisible().catch(() => false)) return editor
-    await page.getByRole('button', { name: 'Edit description' }).click()
-    await expect(editor).toBeVisible()
-    return editor
+    return openEditor(editor, page.getByRole('button', { name: 'Edit description' }))
 }
 
 async function descriptionText(page: Page): Promise<string> {

@@ -6,7 +6,7 @@ import {
     signInAsCollaborator,
     TEST_COLLABORATOR_EMAIL,
 } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard } from './helpers'
+import { addCard, boardCard, createBoard, uniqueStamp } from './helpers'
 
 // Notifications beyond mentions, end to end: an assignment reaches the
 // assignee's bell, a comment reaches a watcher, and stopping watching
@@ -74,7 +74,7 @@ test.describe('card watching and notifications', () => {
         await login(page)
         await navigateToPackage(page, 'boards')
 
-        const boardName = `watch-${Date.now()}`
+        const boardName = `watch-${uniqueStamp()}`
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
         await addMemberToBoard(page, boardName, TEST_COLLABORATOR_EMAIL, 'Editor')

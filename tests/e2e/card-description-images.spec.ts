@@ -1,7 +1,9 @@
-import type { Locator, Page } from '@playwright/test'
+import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard, openBoard, openCard } from './helpers'
+import { openEditor } from './editor-helpers'
+import { chooseFile, pngFile } from './file-helpers'
+import { addCard, boardCard, createBoard, openBoard, openCard, uniqueStamp } from './helpers'
 
 // Images in card descriptions, end to end: the toolbar's chooser inserting an
 // existing image attachment, the chooser's upload path, and dropping an image
@@ -13,13 +15,9 @@ import { addCard, boardCard, createBoard, openBoard, openCard } from './helpers'
 
 const CARD_TITLE = 'Design the landing page'
 
-/** A real 1x1 PNG — the editor renders the bytes, so they must decode. */
-const PNG_BASE64 =
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
-
 let run = 0
 async function freshBoard(page: Page, label: string): Promise<string> {
-    const name = `descimg-${label}-${Date.now()}-${run++}`
+    const name = `descimg-${label}-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     return name
 }
@@ -39,40 +37,12 @@ function descriptionEditor(page: Page) {
  */
 async function openDescription(page: Page) {
     const editor = descriptionEditor(page)
-    if (await editor.isVisible().catch(() => false)) return editor
-    await page.getByRole('button', { name: 'Edit description' }).click()
-    await expect(editor).toBeVisible()
-    return editor
+    return openEditor(editor, page.getByRole('button', { name: 'Edit description' }))
 }
 
 /** An inserted description image — the tokenless stored src, re-signed. */
 function descriptionImage(page: Page) {
     return descriptionEditor(page).locator('img[src*="/api/files/boards_attachments/"]').first()
-}
-
-/** Attach via the strip's picker, with the blur/focus dance the real dialog
- *  causes (same shape as card-attachments.spec.ts — see the note there). */
-async function attachViaChooser(page: Page, trigger: Locator, name: string) {
-    const chooserPromise = page.waitForEvent('filechooser')
-    await trigger.click()
-    const chooser = await chooserPromise
-    await page.evaluate(() => window.dispatchEvent(new Event('blur')))
-    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
-    // The blur/focus pair mimics the OS file dialog opening and closing, which
-    // is what the real picker does around a chooser. Nothing in the app listens
-    // for those events, so there is no app-side signal to await — but the
-    // chooser must be settled before setFiles, and a wall-clock sleep is both
-    // slower than needed and flaky under load. Waiting for the renderer to go
-    // idle (one animation frame after the event loop drains) is the condition
-    // that actually matters.
-    await page.evaluate(
-        () => new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)))
-    )
-    await chooser.setFiles({
-        name,
-        mimeType: 'image/png',
-        buffer: Buffer.from(PNG_BASE64, 'base64'),
-    })
 }
 
 /**
@@ -113,7 +83,7 @@ async function dropPngAt(page: Page, x: number, y: number, name: string) {
                 })
             )
         },
-        { x, y, name, b64: PNG_BASE64 }
+        { x, y, name, b64: pngFile().buffer.toString('base64') }
     )
 }
 
@@ -132,10 +102,10 @@ test.describe('Boards — images in descriptions', () => {
 
         // Attachments is opt-in and this card has none yet, so the chip is what
         // opens the file chooser — revealing the section launches the picker.
-        await attachViaChooser(
+        await chooseFile(
             page,
             page.getByTestId('boards-section-chips').getByRole('button', { name: 'Attachments' }),
-            'diagram.png'
+            pngFile('diagram.png')
         )
         await expect(page.getByText('diagram.png', { exact: true })).toBeVisible({
             timeout: 15_000,
@@ -220,7 +190,7 @@ test.describe('Boards — images in descriptions', () => {
         await focusDescription(page)
         await page.getByRole('button', { name: 'Insert image' }).click()
         await expect(page.getByText('No image attachments yet.')).toBeVisible()
-        await attachViaChooser(page, page.getByTestId('boards-image-picker-upload'), 'fresh.png')
+        await chooseFile(page, page.getByTestId('boards-image-picker-upload'), pngFile('fresh.png'))
 
         await expect(descriptionImage(page)).toBeVisible({ timeout: 15_000 })
         // The upload went through the ordinary attachment path, so the strip

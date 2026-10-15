@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard } from './helpers'
+import { addCard, boardCard, createBoard, uniqueStamp } from './helpers'
 
 // One editor for the whole app, handed between surfaces.
 //
@@ -19,7 +19,7 @@ const CARD_TITLE = 'Handover notes'
 
 let run = 0
 async function freshBoard(page: Page, label: string): Promise<string> {
-    const name = `handover-${label}-${Date.now()}-${run++}`
+    const name = `handover-${label}-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     return name
 }

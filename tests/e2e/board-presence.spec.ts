@@ -7,7 +7,7 @@ import {
     TEST_COLLABORATOR_EMAIL,
     TEST_COLLABORATOR_NAME,
 } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard, openBoard, shareBoard } from './helpers'
+import { addCard, boardCard, createBoard, openBoard, shareBoard, uniqueStamp } from './helpers'
 
 // Real-time presence, which needs what no other cards spec does: TWO live
 // sessions at once. `signInAsCollaborator` supplies the second in its own
@@ -29,7 +29,7 @@ test.describe('Boards — real-time presence', () => {
     test('shows who else is on the board, and which card they have open', async ({ page }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        const boardName = `presence-${Date.now()}`
+        const boardName = `presence-${uniqueStamp()}`
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
         await addCard(page, 0, OTHER_CARD)

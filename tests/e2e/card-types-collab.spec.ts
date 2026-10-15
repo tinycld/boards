@@ -6,6 +6,7 @@ import {
     signInAsCollaborator,
     TEST_COLLABORATOR_EMAIL,
 } from '@tinycld/core/e2e-helpers'
+import { openEditor } from './editor-helpers'
 import {
     addField,
     createForm,
@@ -50,9 +51,7 @@ function notesCell(page: Page) {
  */
 async function openNotes(page: Page) {
     const editor = notesCell(page).locator('.ProseMirror')
-    if (await editor.isVisible().catch(() => false)) return
-    await notesCell(page).getByTestId('form-input-notes').click()
-    await expect(editor).toBeVisible()
+    await openEditor(editor, notesCell(page).getByTestId('form-input-notes'))
 }
 
 test.describe('Card types — collaborative fields', () => {

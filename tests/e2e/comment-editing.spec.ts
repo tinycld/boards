@@ -6,7 +6,15 @@ import {
     signInAsCollaborator,
     TEST_COLLABORATOR_EMAIL,
 } from '@tinycld/core/e2e-helpers'
-import { addCard, closeCardPeek, createBoard, openBoard, openCard, shareBoard } from './helpers'
+import {
+    addCard,
+    closeCardPeek,
+    createBoard,
+    openBoard,
+    openCard,
+    shareBoard,
+    uniqueStamp,
+} from './helpers'
 
 // Editing your own comments in place: clicking the body (or the hover Edit
 // action) swaps the rendered markdown for the rich editor with the formatting
@@ -19,7 +27,7 @@ const CARD_TITLE = 'Retro notes'
 
 let run = 0
 async function freshBoard(page: Page, label: string): Promise<string> {
-    const name = `commentedit-${label}-${Date.now()}-${run++}`
+    const name = `commentedit-${label}-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     return name
 }

@@ -8,6 +8,7 @@ import {
     clickBulkAction,
     createBoard,
     openBulkPicker,
+    uniqueStamp,
 } from './helpers'
 
 // Multi-select and the bulk bar end to end: the gestures that build a
@@ -21,7 +22,7 @@ const CARDS = ['Alpha task', 'Bravo task', 'Charlie task', 'Delta task']
 
 let run = 0
 async function freshBoard(page: Page): Promise<string> {
-    const name = `bulk-${Date.now()}-${run++}`
+    const name = `bulk-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     for (const title of CARDS) await addCard(page, 0, title)
     return name

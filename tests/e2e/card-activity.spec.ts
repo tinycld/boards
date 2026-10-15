@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard } from './helpers'
+import { addCard, boardCard, createBoard, uniqueStamp } from './helpers'
 
 // Card history, read back from the Activity section: creating, moving,
 // assigning and setting a due date each leave a sentence, in order, and the
@@ -13,7 +13,7 @@ const CARD_TITLE = 'Trace the outage'
 
 let run = 0
 async function freshBoard(page: Page): Promise<string> {
-    const name = `activity-${Date.now()}-${run++}`
+    const name = `activity-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     return name
 }

@@ -10,6 +10,7 @@ import {
     dragCardToSection,
     holdRequests,
     openCard,
+    uniqueStamp,
 } from './helpers'
 
 // A sprint's life: planned, started, completed with the unfinished work
@@ -19,7 +20,7 @@ import {
 
 let run = 0
 async function freshSprintBoard(page: Page, label: string) {
-    const name = `lifecycle-${label}-${Date.now()}-${run++}`
+    const name = `lifecycle-${label}-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     await page.getByLabel('Board actions').click()
     await page.getByTestId('boards-settings').click()

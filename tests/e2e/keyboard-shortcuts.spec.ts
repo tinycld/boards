@@ -7,6 +7,7 @@ import {
     columnHeader,
     createBoard,
     stableBoxOf,
+    uniqueStamp,
 } from './helpers'
 
 // Every spec creates its own uniquely-named board (three default lists:
@@ -23,7 +24,7 @@ const TODAY_CHIP = new Date().toLocaleDateString(undefined, { month: 'short', da
 
 let run = 0
 async function freshBoard(page: import('@playwright/test').Page, label: string): Promise<string> {
-    const name = `keys-${label}-${Date.now()}-${run++}`
+    const name = `keys-${label}-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     return name
 }

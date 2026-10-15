@@ -10,6 +10,7 @@ import {
     createBoard,
     holdRequests,
     shareBoard,
+    uniqueStamp,
 } from './helpers'
 
 // The cross-board list: what is mine shows up with its board and list, the
@@ -23,7 +24,7 @@ const OTHER = 'Someone else will do this'
 
 let run = 0
 async function freshBoard(page: Page): Promise<string> {
-    const name = `mine-${Date.now()}-${run++}`
+    const name = `mine-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     return name
 }

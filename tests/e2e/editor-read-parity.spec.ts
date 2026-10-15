@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, closeCardPeek, createBoard, openCard } from './helpers'
+import { addCard, closeCardPeek, createBoard, openCard, uniqueStamp } from './helpers'
 
 /**
  * The editor and the rendered markdown it replaces must lay out identically.
@@ -279,7 +279,7 @@ test.describe('the editor lays out exactly as the read view', () => {
     })
 
     test('a description', async ({ page }) => {
-        await createBoard(page, `parity-desc-${Date.now()}`)
+        await createBoard(page, `parity-desc-${uniqueStamp()}`)
         await addCard(page, 0, 'Parity card')
         await openCard(page, 'Parity card')
 
@@ -311,7 +311,7 @@ test.describe('the editor lays out exactly as the read view', () => {
      * handles by letting the marker overflow LEFT rather than moving the text.
      */
     test('ordered and nested lists', async ({ page }) => {
-        await createBoard(page, `parity-lists-${Date.now()}`)
+        await createBoard(page, `parity-lists-${uniqueStamp()}`)
         await addCard(page, 0, 'Parity card')
         await openCard(page, 'Parity card')
 
@@ -327,7 +327,7 @@ test.describe('the editor lays out exactly as the read view', () => {
     })
 
     test('a comment', async ({ page }) => {
-        await createBoard(page, `parity-comment-${Date.now()}`)
+        await createBoard(page, `parity-comment-${uniqueStamp()}`)
         await addCard(page, 0, 'Parity card')
         await openCard(page, 'Parity card')
 
@@ -375,7 +375,7 @@ test.describe('the editor lays out exactly as the read view', () => {
      * wrong for several.
      */
     test('focusing a description moves nothing below it', async ({ page }) => {
-        await createBoard(page, `parity-jump-desc-${Date.now()}`)
+        await createBoard(page, `parity-jump-desc-${uniqueStamp()}`)
         await addCard(page, 0, 'Parity card')
         await openCard(page, 'Parity card')
 
@@ -416,7 +416,7 @@ test.describe('the editor lays out exactly as the read view', () => {
      * invisible to a test whose sample happens to be tall enough.
      */
     test('focusing a short description moves nothing below it', async ({ page }) => {
-        await createBoard(page, `parity-jump-short-${Date.now()}`)
+        await createBoard(page, `parity-jump-short-${uniqueStamp()}`)
         await addCard(page, 0, 'Parity card')
         await openCard(page, 'Parity card')
 
@@ -441,7 +441,7 @@ test.describe('the editor lays out exactly as the read view', () => {
     })
 
     test('focusing a comment moves nothing below it', async ({ page }) => {
-        await createBoard(page, `parity-jump-${Date.now()}`)
+        await createBoard(page, `parity-jump-${uniqueStamp()}`)
         await addCard(page, 0, 'Parity card')
         await openCard(page, 'Parity card')
 
@@ -501,7 +501,7 @@ test.describe('the editor lays out exactly as the read view', () => {
      * go after a trailing block — and this is what keeps it off.
      */
     test('a comment ending in a list moves nothing below it', async ({ page }) => {
-        await createBoard(page, `parity-list-end-${Date.now()}`)
+        await createBoard(page, `parity-list-end-${uniqueStamp()}`)
         await addCard(page, 0, 'Parity card')
         await openCard(page, 'Parity card')
 
@@ -540,7 +540,7 @@ test.describe('the editor lays out exactly as the read view', () => {
     })
 
     test('successive paragraphs in a comment', async ({ page }) => {
-        await createBoard(page, `parity-lines-${Date.now()}`)
+        await createBoard(page, `parity-lines-${uniqueStamp()}`)
         await addCard(page, 0, 'Parity card')
         await openCard(page, 'Parity card')
 

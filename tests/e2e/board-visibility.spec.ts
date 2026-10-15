@@ -5,7 +5,7 @@ import {
     signInAsCollaborator,
     TEST_COLLABORATOR_EMAIL,
 } from '@tinycld/core/e2e-helpers'
-import { addCard, createBoard, openBoard, shareBoard } from './helpers'
+import { addCard, createBoard, openBoard, shareBoard, uniqueStamp } from './helpers'
 
 // Live board visibility: a membership granted or revoked while the OTHER
 // person is already signed in and sitting on cards, with no navigation on
@@ -30,7 +30,7 @@ test.describe('Boards — live board visibility', () => {
     }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        const boardName = `livevis-${Date.now()}`
+        const boardName = `livevis-${uniqueStamp()}`
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
 
@@ -63,7 +63,7 @@ test.describe('Boards — live board visibility', () => {
             // screen itself does when access vanishes under it is its own
             // surface, not this spec's — the sidebar entry is. Bob's own
             // board keeps this independent of whatever the seed provisioned.
-            await createBoard(bobPage, `livevis-park-${Date.now()}`)
+            await createBoard(bobPage, `livevis-park-${uniqueStamp()}`)
 
             // --- Revocation: the owner removes bob from the roster ---
             await page.getByRole('button', { name: 'Share board' }).click()

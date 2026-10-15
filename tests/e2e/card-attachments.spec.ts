@@ -6,7 +6,16 @@ import {
     signInAsCollaborator,
     TEST_COLLABORATOR_EMAIL,
 } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard, openBoard, openCard, shareBoard } from './helpers'
+import { chooseFile, pngFile, type UploadFile } from './file-helpers'
+import {
+    addCard,
+    boardCard,
+    createBoard,
+    openBoard,
+    openCard,
+    shareBoard,
+    uniqueStamp,
+} from './helpers'
 
 // Attaching a file to a card, end to end through the UI: pick → upload →
 // the strip lists it → the board face grows a paperclip → preview → delete.
@@ -20,67 +29,30 @@ const CARD_TITLE = 'Ship the release'
 
 let run = 0
 async function freshBoard(page: Page, label: string): Promise<string> {
-    const name = `attach-${label}-${Date.now()}-${run++}`
+    const name = `attach-${label}-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     return name
 }
 
 /**
- * Attaches a file by driving the real picker.
- *
- * Playwright's chooser interception suppresses the native dialog — and with it
- * the window blur → focus round trip a real dialog causes. The picker code
- * runs inside that round trip for every real user, so the spec restores it:
- * blur as the chooser opens, refocus as it closes, and only then deliver the
- * selection — the change event always lands after focus, and how long after
- * is up to the OS, so no grace-period in the picker can be waited out here.
+ * Attaches a file by driving the real picker (see chooseFile for why the
+ * window blur/focus round trip is restored).
  */
-async function attachFile(
-    page: Page,
-    file: { name: string; mimeType: string; buffer: Buffer }
-): Promise<void> {
-    const chooserPromise = page.waitForEvent('filechooser')
+async function attachFile(page: Page, file: UploadFile): Promise<void> {
     // The section is opt-in: with nothing attached yet it is collapsed behind
-    // its chip, and revealing it launches the picker directly — the chip IS the
+    // its chip, and revealing it launches the picker directly - the chip IS the
     // "Attach file" click. Once the card has an attachment the section stays
     // open and the in-section button is the one to press.
     const chip = page
         .getByTestId('boards-section-chips')
         .getByRole('button', { name: 'Attachments' })
     const inSection = page.getByTestId('boards-attach-file')
-    if (await inSection.isVisible().catch(() => false)) {
-        await inSection.click()
-    } else {
-        await chip.click()
-    }
-    const chooser = await chooserPromise
-    await page.evaluate(() => window.dispatchEvent(new Event('blur')))
-    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
-    // The blur/focus pair mimics the OS file dialog opening and closing, which
-    // is what the real picker does around a chooser. Nothing in the app listens
-    // for those events, so there is no app-side signal to await — but the
-    // chooser must be settled before setFiles, and a wall-clock sleep is both
-    // slower than needed and flaky under load. Waiting for the renderer to go
-    // idle (one animation frame after the event loop drains) is the condition
-    // that actually matters.
-    await page.evaluate(
-        () => new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)))
-    )
-    await chooser.setFiles(file)
+    const trigger = (await inSection.count()) > 0 ? inSection : chip
+    await chooseFile(page, trigger, file)
 }
 
 function textFile(name: string, contents = 'hello from the attachment spec') {
     return { name, mimeType: 'text/plain', buffer: Buffer.from(contents) }
-}
-
-/**
- * A real 1x1 PNG. An image is the case the strip treats specially — it draws
- * the picture rather than an icon — so the bytes have to actually decode.
- */
-function pngFile(name: string) {
-    const base64 =
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
-    return { name, mimeType: 'image/png', buffer: Buffer.from(base64, 'base64') }
 }
 
 test.describe('card attachments', () => {

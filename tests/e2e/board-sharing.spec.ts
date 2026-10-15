@@ -6,7 +6,7 @@ import {
     signInAsCollaborator,
     TEST_COLLABORATOR_EMAIL,
 } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard, openBoard } from './helpers'
+import { addCard, boardCard, createBoard, openBoard, uniqueStamp } from './helpers'
 
 // The rendered half of M3b's role gating: share a board through the UI, then
 // verify what each role actually SEES. The rules themselves are proven by the
@@ -47,7 +47,7 @@ test.describe('Boards — board sharing and role gates', () => {
     test('viewer and commentor gates, and the last-owner lock', async ({ page }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        const boardName = `share-${Date.now()}`
+        const boardName = `share-${uniqueStamp()}`
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
 

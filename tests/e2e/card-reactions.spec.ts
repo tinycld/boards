@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, closeCardPeek, createBoard, pickEmoji } from './helpers'
+import { addCard, boardCard, closeCardPeek, createBoard, pickEmoji, uniqueStamp } from './helpers'
 
 // Votes on the card itself, as opposed to on a comment. What is asserted here
 // is the half comment reactions cannot cover: the chip reaching the BOARD TILE
@@ -68,7 +68,7 @@ test.describe('Boards — card votes', () => {
     test('a vote is added, shows on the tile, and is taken back', async ({ page }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        await createBoard(page, `vote-${Date.now()}`)
+        await createBoard(page, `vote-${uniqueStamp()}`)
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
 
@@ -89,7 +89,7 @@ test.describe('Boards — card votes', () => {
     test('a vote is added from the tile, without opening the card', async ({ page }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        await createBoard(page, `vote-tile-${Date.now()}`)
+        await createBoard(page, `vote-tile-${uniqueStamp()}`)
         await addCard(page, 0, CARD_TITLE)
 
         await voteOnTile(page, CARD_TITLE, 'rocket', ROCKET)
@@ -109,7 +109,7 @@ test.describe('Boards — card votes', () => {
     test('a tile vote is the same vote the open card shows', async ({ page }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        await createBoard(page, `vote-tile-same-${Date.now()}`)
+        await createBoard(page, `vote-tile-same-${uniqueStamp()}`)
         await addCard(page, 0, CARD_TITLE)
 
         // Both surfaces write one row through one toggle, so the open card
@@ -128,7 +128,7 @@ test.describe('Boards — card votes', () => {
     test('the compact face shows the vote but not the add button', async ({ page }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        await createBoard(page, `vote-compact-${Date.now()}`)
+        await createBoard(page, `vote-compact-${uniqueStamp()}`)
         await addCard(page, 0, CARD_TITLE)
 
         await voteOnTile(page, CARD_TITLE, 'rocket', ROCKET)
@@ -157,7 +157,7 @@ test.describe('Boards — card votes', () => {
 
         await login(page)
         await navigateToPackage(page, 'boards')
-        await createBoard(page, `vote-nesting-${Date.now()}`)
+        await createBoard(page, `vote-nesting-${uniqueStamp()}`)
         await addCard(page, 0, CARD_TITLE)
 
         // Gate on the button being there, or this asserts nothing.
@@ -172,7 +172,7 @@ test.describe('Boards — card votes', () => {
     test('the chip names who voted', async ({ page }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        await createBoard(page, `vote-who-${Date.now()}`)
+        await createBoard(page, `vote-who-${uniqueStamp()}`)
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
         await voteOnCard(page, 'thumbs up', THUMBS_UP)
@@ -185,7 +185,7 @@ test.describe('Boards — card votes', () => {
     test('a card vote and a comment reaction are counted apart', async ({ page }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        await createBoard(page, `vote-apart-${Date.now()}`)
+        await createBoard(page, `vote-apart-${uniqueStamp()}`)
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
 
@@ -211,7 +211,7 @@ test.describe('Boards — card votes', () => {
         // what falls off; the row wraps now.
         await login(page)
         await navigateToPackage(page, 'boards')
-        await createBoard(page, `vote-loaded-${Date.now()}`)
+        await createBoard(page, `vote-loaded-${uniqueStamp()}`)
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
 
@@ -260,7 +260,7 @@ test.describe('Boards — card votes', () => {
         // steady whether or not anything precedes the chips.
         await login(page)
         await navigateToPackage(page, 'boards')
-        await createBoard(page, `vote-nobody-${Date.now()}`)
+        await createBoard(page, `vote-nobody-${uniqueStamp()}`)
         await addCard(page, 0, CARD_TITLE)
 
         // Deliberately NOT assigned: an empty people stack is the whole point.

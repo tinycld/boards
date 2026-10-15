@@ -62,6 +62,12 @@ export function uniqueStamp(): string {
     return `${Date.now()}-${test.info().workerIndex}`
 }
 
+/** `uniqueStamp` as a number, for names built with arithmetic. The worker
+ * index lives in the last two digits, so a modulus keeps it. */
+export function uniqueNumber(): number {
+    return Date.now() * 100 + test.info().workerIndex
+}
+
 /**
  * A board key that no other spec will pick.
  *
@@ -690,7 +696,7 @@ export async function dragCardToSection(page: Page, row: Locator, sectionTitle: 
  */
 export async function clickBulkAction(page: Page, testID: string, label: string) {
     const onBar = page.getByTestId(testID)
-    if (await onBar.isVisible().catch(() => false)) {
+    if (await onBar.isVisible()) {
         await onBar.click()
         return
     }
@@ -709,7 +715,7 @@ export async function clickBulkAction(page: Page, testID: string, label: string)
  */
 export async function openBulkPicker(page: Page, testID: string, label: string) {
     const onBar = page.getByTestId(testID)
-    if (await onBar.isVisible().catch(() => false)) {
+    if (await onBar.isVisible()) {
         await onBar.click()
         return
     }
@@ -781,7 +787,11 @@ export async function pickCardType(page: Page, name: string) {
     const pill = dialog.getByRole('tab', { name, exact: true })
     const menu = dialog.getByTestId('card-type-menu')
     await expect(pill.or(menu)).toBeVisible()
-    if (await menu.isVisible()) {
+    // The picker's own rule: pills up to four types, a menu beyond. Asserting
+    // it keeps the branch below a fact about the UI, not a guess.
+    const usesMenu = (await menu.count()) > 0
+    expect((await dialog.getByRole('tab').count()) > 0).toBe(!usesMenu)
+    if (usesMenu) {
         await menu.click()
         await page
             .getByTestId(/^card-type-menu-/)

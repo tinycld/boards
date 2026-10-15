@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard } from './helpers'
+import { addCard, boardCard, createBoard, uniqueStamp } from './helpers'
 
 // WIP limits and card aging end to end: the column menu sets a limit, the
 // header reads it back, a filter does NOT relax it, and board settings
@@ -21,7 +21,7 @@ const CHARLIE = 'Charlie task'
 
 let run = 0
 async function freshBoard(page: Page) {
-    await createBoard(page, `wip-${Date.now()}-${run++}`)
+    await createBoard(page, `wip-${uniqueStamp()}-${run++}`)
 }
 
 /** The first column's count badge — "To do", which addCard(0) fills. */

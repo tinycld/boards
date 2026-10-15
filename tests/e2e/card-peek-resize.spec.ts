@@ -1,6 +1,6 @@
 import { expect, type Page, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, cardSurface, closeCardPeek, createBoard, openCard } from './helpers'
+import { addCard, cardSurface, closeCardPeek, createBoard, openCard, uniqueStamp } from './helpers'
 
 // Dragging the peek's left edge to widen it, and the width coming back.
 //
@@ -16,7 +16,7 @@ const MIN_WIDTH = 500
 let run = 0
 
 async function boardWithOpenCard(page: Page, label: string) {
-    await createBoard(page, `resize-${label}-${Date.now()}-${run++}`)
+    await createBoard(page, `resize-${label}-${uniqueStamp()}-${run++}`)
     await addCard(page, 0, 'wide card')
     await openCard(page, 'wide card')
 }
