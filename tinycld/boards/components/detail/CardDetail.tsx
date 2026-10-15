@@ -1,20 +1,25 @@
 import { DropZone } from '@tinycld/core/components/DropZone'
 import { useAuth } from '@tinycld/core/lib/auth'
 import type { CollabDoc, FormHostUi } from '@tinycld/core/lib/forms/host-ui'
-import { FormRenderer } from '@tinycld/core/ui/forms'
+import { FormRenderer, type SectionsScroll } from '@tinycld/core/ui/forms'
 import { type RefObject, useCallback, useMemo, useState } from 'react'
-import { ScrollView, View } from 'react-native'
 import { CardFormProvider, type CardFormValue } from '../../forms/CardFormContext'
 import { useCardForm } from '../../forms/use-card-form'
+import { useCollabDoc } from '../../forms/use-collab-doc'
+import { roomFromCollab, useDescriptionSlots } from '../../forms/use-description-slots'
 import { useFieldVisibility } from '../../forms/use-field-visibility'
 import { useAttachmentMutations } from '../../hooks/useAttachmentMutations'
 import { useCardDetail } from '../../hooks/useCardDetail'
+import { useUpdateCard } from '../../hooks/useCardMutations'
 import { useCommentMutations } from '../../hooks/useCommentMutations'
 import { useProjectRole } from '../../hooks/useProjectRole'
+import { mentionMember } from '../../lib/mention-text'
 import { useCommentReplyStore } from '../../stores/comment-reply-store'
 import type { BoardCardView, BoardEpic, BoardLabel, BoardMember, BoardSprint } from '../../types'
+import { useBoardPresenceContext } from '../BoardPresenceProvider'
 import { LabelManagerDialog } from '../LabelManagerDialog'
 import { CommentComposer } from './CommentComposer'
+import type { DescriptionEditorSlots } from './DescriptionEditor'
 import { filesToPicked } from './DetailAttachments'
 import type { EditableTextHandle } from './EditableText'
 
@@ -72,10 +77,11 @@ const WIDTH_CLASS: Record<DetailVariant, string> = {
  * The card detail content, shared by the side peek, the modal and the
  * full-page screen.
  * The containers own their top bars (stepper, expand/close vs. back); this
- * component owns the frame below them (the drop zone, the scroll view, the
- * content width, the comment composer pinned below the scroll) and renders
- * the card's form inside it: the card's type decides which fields and
- * sections show, and in what order.
+ * component owns the frame below them (the drop zone, the content width, the
+ * comment composer pinned below the scroll) and renders the card's form
+ * inside it: the card's type decides which fields and sections show, and in
+ * what order. The form owns the scroll view, so the description's toolbar can
+ * be one of its rows and pin while the card scrolls.
  */
 export function CardDetail(props: CardDetailProps) {
     const { card, variant, projectId, projectLabels } = props
@@ -90,13 +96,15 @@ export function CardDetail(props: CardDetailProps) {
     const role = useProjectRole(projectId)
     const cardForm = useCardForm(card.id)
     const isFieldVisible = useFieldVisibility(cardForm.edit, cardForm.context)
-    const formValue = useCardFormValue(props, role, openLabelManager, isFieldVisible)
+    const description = useCardDescription(props, role.canEdit)
+    const formValue = useCardFormValue(props, role, openLabelManager, isFieldVisible, description)
     // Non-throwing: a card opened from the PUBLIC board has no session, and
     // the default useAuth() turns that screen into an error boundary.
     const { user } = useAuth({ throwIfAnon: false })
     // Only the drop path needs this here; the attachments section owns the
     // picker and the rows. Both write through the same upload store.
     const { uploadFiles } = useAttachmentMutations(card.id, projectId, user?.id ?? '')
+    const scroll: SectionsScroll = { rowClassName: `px-6 ${widthClass}` }
 
     return (
         <>
@@ -108,17 +116,14 @@ export function CardDetail(props: CardDetailProps) {
                 onDrop={files => uploadFiles(filesToPicked(files))}
                 label="Drop to attach"
             >
-                <ScrollView className="flex-1">
-                    <CardFormProvider value={formValue}>
-                        <View className={`px-6 ${widthClass}`}>
-                            <CardFormBody
-                                cardForm={cardForm}
-                                cardId={card.id}
-                                readOnly={!role.canEdit}
-                            />
-                        </View>
-                    </CardFormProvider>
-                </ScrollView>
+                <CardFormProvider value={formValue}>
+                    <CardFormBody
+                        cardForm={cardForm}
+                        cardId={card.id}
+                        readOnly={!role.canEdit}
+                        scroll={scroll}
+                    />
+                </CardFormProvider>
             </DropZone>
             <CardCommentComposer
                 isVisible={role.canComment && isFieldVisible('activity')}
@@ -181,6 +186,30 @@ function CommentComposerBody({
     )
 }
 
+/**
+ * The description's editor, once per card. Lifted here from the description
+ * field because the form draws its header and its body in separate rows, the
+ * header pinned (DescriptionHeader), and one editor has to drive both.
+ */
+function useCardDescription(props: CardDetailProps, canEdit: boolean): DescriptionEditorSlots {
+    const { card, projectId, projectMembers } = props
+    const { isConnected } = useBoardPresenceContext()
+    const collab = useCollabDoc()
+    const { attachments } = useCardDetail(card.id)
+    const updateCard = useUpdateCard()
+    const mentionMembers = useMemo(() => projectMembers.map(mentionMember), [projectMembers])
+    return useDescriptionSlots({
+        cardId: card.id,
+        projectId,
+        attachments,
+        mentionMembers,
+        description: card.description,
+        onSave: value => updateCard.mutate({ cardId: card.id, description: value }),
+        canEdit,
+        room: roomFromCollab(collab, isConnected),
+    })
+}
+
 type CardRole = Pick<CardFormValue, 'canEdit' | 'canComment' | 'isOwner'>
 
 /**
@@ -192,7 +221,8 @@ function useCardFormValue(
     props: CardDetailProps,
     role: CardRole,
     onManageLabels: () => void,
-    isFieldVisible: (key: string) => boolean
+    isFieldVisible: (key: string) => boolean,
+    description: DescriptionEditorSlots
 ): CardFormValue {
     const {
         card,
@@ -224,6 +254,7 @@ function useCardFormValue(
             titleRef,
             onManageLabels,
             isFieldVisible,
+            description,
         }),
         [
             card,
@@ -241,6 +272,7 @@ function useCardFormValue(
             titleRef,
             onManageLabels,
             isFieldVisible,
+            description,
         ]
     )
 }
@@ -253,6 +285,8 @@ interface CardFormBodyProps {
     cardId: string
     /** Everyone who cannot edit the card; the comment sections gate on the role instead. */
     readOnly: boolean
+    /** The content column each of the form's rows takes; the form owns the scroll view. */
+    scroll: SectionsScroll
 }
 
 /**
@@ -260,9 +294,9 @@ interface CardFormBodyProps {
  * rendered without the components, the card's own fields would show core's
  * placeholder for a kind it cannot render.
  */
-function CardFormBody({ cardForm, cardId, readOnly }: CardFormBodyProps) {
+function CardFormBody({ cardForm, ...props }: CardFormBodyProps) {
     if (!cardForm.isReady || !cardForm.ui) return null
-    return <CardFormView {...cardForm} ui={cardForm.ui} cardId={cardId} readOnly={readOnly} />
+    return <CardFormView {...cardForm} {...props} ui={cardForm.ui} />
 }
 
 const noDoc = (): CollabDoc | null => null
@@ -274,7 +308,7 @@ type CardFormViewProps = Omit<CardFormBodyProps, 'cardForm'> &
  * Split out so `ui` is non-null for this component's whole life, which keeps
  * its `useDoc` call unconditional.
  */
-function CardFormView({ cardId, readOnly, host, ui, edit, context }: CardFormViewProps) {
+function CardFormView({ cardId, readOnly, scroll, host, ui, edit, context }: CardFormViewProps) {
     const useDoc = ui.useDoc ?? noDoc
     const collab = useDoc(cardId)
     if (!edit.definition) return null
@@ -290,6 +324,7 @@ function CardFormView({ cardId, readOnly, host, ui, edit, context }: CardFormVie
             readOnly={readOnly}
             collab={collab}
             schemaRef={edit.schemaRef}
+            scroll={scroll}
             testID="card-form"
         />
     )

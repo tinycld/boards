@@ -126,10 +126,11 @@ const STICKY_HEADER = { position: 'sticky', top: 0, zIndex: 10 } as unknown as V
  * binding lasts for the mount, which is why CardDetail is keyed on the card id
  * rather than this being keyed itself.
  *
- * Returns two slots rather than one tree: the header has to be a DIRECT child
- * of CardDetail's ScrollView for `stickyHeaderIndices` to pin it on native, so
- * the caller places the halves separately. One hook still owns the editor, so
- * there is no second source of `commands` to keep in step.
+ * Returns two slots rather than one tree: the header is the card form's
+ * pinned row (DescriptionHeader), a direct child of the form's ScrollView so
+ * `stickyHeaderIndices` pins it, and the body is the description field's cell,
+ * so the caller places the halves separately. One hook still owns the editor,
+ * so there is no second source of `commands` to keep in step.
  */
 export function useDescriptionEditor({
     cardId,
@@ -341,8 +342,8 @@ function DescriptionHeader({
         // Sticky lives HERE rather than on the toolbar: this row is always
         // present, so there is always a box to pin. `position: sticky` is
         // web-only (RN has no such value), hence the Platform guard —
-        // native pins the same row through CardDetail's
-        // stickyHeaderIndices. Every ancestor must also stay
+        // native pins the same row as the card form's pinned row, through
+        // the form's stickyHeaderIndices. Every ancestor must also stay
         // overflow-visible or RN-Web's default clipping silently kills it.
         <View
             className="justify-center bg-card"

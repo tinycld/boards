@@ -2,6 +2,7 @@ import type { FormHostUi } from '@tinycld/core/lib/forms/host-ui'
 import { checklistMapper } from './checklist-mapper'
 import { AssigneesField } from './fields/AssigneesField'
 import { DescriptionField } from './fields/DescriptionField'
+import { DescriptionHeader } from './fields/DescriptionHeader'
 import { DueField } from './fields/DueField'
 import { EpicField } from './fields/EpicField'
 import { EstimateField } from './fields/EstimateField'
@@ -45,6 +46,8 @@ const ui: FormHostUi = {
         ReactionsSection,
         ActivitySection,
     },
+    // The description's label and toolbar, pinned above its body as the card scrolls.
+    pinned: { DescriptionField: DescriptionHeader },
     mappers: { checklist: checklistMapper },
     // One room per board holds every card, so the record id picks nothing.
     useDoc: () => useCollabDoc(),

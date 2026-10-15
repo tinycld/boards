@@ -417,6 +417,29 @@ describe('CardDetail', () => {
         }
     })
 
+    test("the description's header is a pinned row of its own, above the body", async () => {
+        h.role = { canEdit: true, canComment: true, isOwner: false }
+        const { container } = mountDetail(view('c3', 'Three', 3))
+        await waitFor(() => expect(q(container, 'form-pinned-description')).toBeTruthy())
+        const pinned = q(container, 'form-pinned-description') as HTMLElement
+        const cell = q(container, 'form-field-description') as HTMLElement
+        expect(cell.contains(pinned)).toBe(false)
+        expect(pinned.compareDocumentPosition(cell) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        // Idle, the row shows the label; the toolbar takes its place while editing.
+        expect(pinned.textContent).toBe('Description')
+        expect(cell.textContent).not.toContain('Description')
+        expect(cell.querySelector('[accessibilityLabel="Edit description"]')).toBeTruthy()
+    })
+
+    test('a viewer of a card with no description gets neither its header nor its body', async () => {
+        h.role = { canEdit: false, canComment: false, isOwner: false }
+        const { container } = mountDetail(view('c3', 'Three', 3))
+        await waitFor(() => expect(q(container, 'form-field-activity')).toBeTruthy())
+        expect(q(container, 'form-pinned-description')?.textContent).toBe('')
+        expect(q(container, 'form-field-description')?.textContent).toBe('')
+        expect(container.textContent).not.toContain('Description')
+    })
+
     test('a value whose field left the form keeps no cell', async () => {
         h.role = { canEdit: true, canComment: true, isOwner: false }
         const { container } = mountDetail(view('c3', 'Three', 3))

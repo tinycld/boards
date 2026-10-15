@@ -25,17 +25,14 @@ import {
 //
 //   Snapshot                | Expected delta                                   | Ruling
 //   ------------------------|--------------------------------------------------|-------
-//   peek-scrolled.png       | the description toolbar scrolls with the        | 2
-//                           | description instead of pinning                   |
 //   quick-composer-open.png | one extra icon button (expand) right of the     | 9
 //                           | input                                            |
 //
-// Every other snapshot has an empty delta list. Both delta shots are soft
-// assertions, so a shot taken after one in the same test is still compared.
+// Every other snapshot has an empty delta list. The delta shot is a soft
+// assertion, so a shot taken after it in the same test is still compared.
 //
-// peek-scrolled.png is taken with the description in edit mode (so its toolbar
-// is on screen) and the Activity heading scrolled into view; the toolbar pins
-// at the top of the scroll area today, which is what ruling 2 is about.
+// peek-scrolled.png is taken in edit mode with the Activity heading scrolled
+// into view, so the pinned toolbar is in frame.
 //
 // What is held still, and why it can be:
 //  - Viewport and animations are fixed; the caret is hidden.
@@ -290,7 +287,7 @@ test.describe('Card parity', () => {
             page.getByTestId('boards-description-editor').locator('.ProseMirror')
         ).toBeVisible()
         await peek(page).getByText('Activity', { exact: true }).scrollIntoViewIfNeeded()
-        await expect.soft(peek(page)).toHaveScreenshot('peek-scrolled.png', {
+        await expect(peek(page)).toHaveScreenshot('peek-scrolled.png', {
             ...SHOT,
             mask: masks(page),
         })
