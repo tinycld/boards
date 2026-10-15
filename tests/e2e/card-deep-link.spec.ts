@@ -124,9 +124,23 @@ test('j on the full page pushes, so Back returns to the card it left', async ({ 
     await expect(visibleCardPage(page).getByTestId('boards-detail-key')).toHaveText(`${key}-1`)
 })
 
+// Escape on a page expanded from the peek returns to that peek, as it did
+// before the card pages stacked.
+test('Escape on an expanded page returns to the card’s peek', async ({ page }) => {
+    const key = await boardWithThreeCards(page, 'page-escape')
+    await openFullPage(page, 'Alpha')
+    await expect(page).toHaveURL(new RegExp(`/a/boards/${key}/1$`))
+    await page.keyboard.press('Escape')
+
+    await expect(page).toHaveURL(new RegExp(`/a/boards/${key}-1$`))
+    await expect(visibleCardPage(page)).toHaveCount(0)
+    await expect(cardSurface(page).getByTestId('boards-detail-key')).toHaveText(`${key}-1`)
+})
+
 // However many cards j walked, Escape and "Back to board" leave for the board
-// in one step: they name the board, not the previous card.
-test('j, j, Escape lands on the board', async ({ page }) => {
+// in one step, with the card the reader was on peeked: they name the board,
+// not the previous card.
+test('j, j, Escape lands on the board with the last card peeked', async ({ page }) => {
     const key = await boardWithThreeCards(page, 'page-leave')
     await openFullPage(page, 'Alpha')
 
@@ -136,9 +150,9 @@ test('j, j, Escape lands on the board', async ({ page }) => {
     await expect(page).toHaveURL(new RegExp(`/a/boards/${key}/3$`))
     await page.keyboard.press('Escape')
 
-    await expect(page).toHaveURL(new RegExp(`/a/boards/${key}$`))
+    await expect(page).toHaveURL(new RegExp(`/a/boards/${key}-3$`))
     await expect(visibleCardPage(page)).toHaveCount(0)
-    await expect(cardSurface(page)).toHaveCount(0)
+    await expect(cardSurface(page).getByTestId('boards-detail-key')).toHaveText(`${key}-3`)
 })
 
 async function boardWithThreeCards(page: Page, name: string): Promise<string> {

@@ -18,7 +18,13 @@ import { ProjectWash } from '../../components/ProjectWash'
 import { useBoardRoute } from '../../hooks/useBoardRoute'
 import { useProjectRole } from '../../hooks/useProjectRole'
 import { type CardEntry, findCardEntry, flattenCards, neighborCardId } from '../../lib/board-cards'
-import { boardPath, cardPagePath, paramString, parseCardNumber } from '../../lib/board-route'
+import {
+    boardPath,
+    cardPagePath,
+    paramString,
+    parseCardNumber,
+    peekHref,
+} from '../../lib/board-route'
 import type { BoardProject } from '../../types'
 
 function usePageShortcuts(
@@ -119,7 +125,6 @@ export default function CardDetailScreen() {
     // lands on a card whose board the reader may never have opened, and the
     // bare `/a/boards` would have sent them somewhere else entirely.
     const navigateBack = useNavigateBack(() => orgHref(segment ? boardPath(segment) : 'boards'))
-    const leaveToBoard = useLeaveToBoard(segment)
     const entry = project && cardId ? findCardEntry(project, cardId) : null
     useNumberedPagePath(cardNumber, entry?.card.number ?? 0)
 
@@ -146,27 +151,30 @@ export default function CardDetailScreen() {
                 entry={entry}
                 cardId={cardId}
                 navigateBack={navigateBack}
-                leaveToBoard={leaveToBoard}
             />
         </BoardPresenceProvider>
     )
 }
 
 /**
- * Leave the card pages for this card's board in one step.
+ * Leave the card pages for this card's board in one step, with this card
+ * peeked there.
  *
  * j/k and the sub-task and link rows each push a card page, so `router.back()`
  * would step back ONE card, while Escape and the back button say "Back to
  * board". `dismissTo` pops to the board screen below, or replaces this page
  * with the board when none is below (a link followed straight to a card). The
+ * card stays open in the board's peek: a page expanded from the peek returns
+ * to it, and after j/k the reader lands on the card they were reading. The
  * browser's Back still walks the cards.
  */
-function useLeaveToBoard(segment: string) {
+function useLeaveToBoard(segment: string, card: { key: string; id: string }) {
     const router = useRouter()
     const orgHref = useOrgHref()
+    const { key, id } = card
     return useCallback(
-        () => router.dismissTo(orgHref(boardPath(segment))),
-        [router, orgHref, segment]
+        () => router.dismissTo(peekHref(orgHref, segment, { key, id })),
+        [router, orgHref, segment, key, id]
     )
 }
 
@@ -195,11 +203,11 @@ interface CardPageProps {
     cardId: string
     /** Back one entry: what closing a card that is gone (deleted, moved) does. */
     navigateBack: () => void
-    /** Escape and the back button: straight to the board. */
-    leaveToBoard: () => void
 }
 
-function CardPage({ project, segment, entry, cardId, navigateBack, leaveToBoard }: CardPageProps) {
+function CardPage({ project, segment, entry, cardId, navigateBack }: CardPageProps) {
+    // Escape and the back button: straight to the board, this card peeked.
+    const leaveToBoard = useLeaveToBoard(segment, entry.card)
     const { canEdit } = useProjectRole(project.id)
     const titleRef = useRef<EditableTextHandle>(null)
     usePageShortcuts(project, segment, cardId, leaveToBoard, canEdit, titleRef)
