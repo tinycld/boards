@@ -12,7 +12,8 @@ import { useCardsById } from './use-cards-by-id'
 /**
  * The offer for every optional section the card has not used yet: pressing a
  * chip opens that section with its add action active. Editors only — a reader
- * has nothing to add.
+ * has nothing to add. A section the card's type hides is never offered: the
+ * chip would open a section that cannot show.
  */
 export function SectionChipsSection({ disabled }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
@@ -33,7 +34,7 @@ function Chips({ data }: { data: CardFormValue }) {
  * queries settle an empty result cannot be told from a bare card, and a
  * teammate's realtime insert has to take its chip away on its own.
  */
-function useOfferedChips({ card, projectCards }: CardFormValue): SectionKey[] {
+function useOfferedChips({ card, projectCards, isFieldVisible }: CardFormValue): SectionKey[] {
     const { attachments, checklist, isReady } = useCardDetail(card.id)
     const uploads = useUploadsForScope(card.id)
     const cardsById = useCardsById(projectCards)
@@ -58,5 +59,6 @@ function useOfferedChips({ card, projectCards }: CardFormValue): SectionKey[] {
     })
     // A sub-task cannot have sub-tasks of its own (the server caps the depth
     // at one level), so it is not offered a section it could not fill.
-    return card.parent ? chips.filter(key => key !== 'subtasks') : chips
+    const canFill = (key: SectionKey) => !(card.parent && key === 'subtasks')
+    return chips.filter(key => isFieldVisible(key) && canFill(key))
 }

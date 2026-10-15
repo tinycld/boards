@@ -99,6 +99,7 @@ function cardForm(canEdit: boolean): CardFormValue {
         canComment: canEdit,
         isOwner: false,
         onManageLabels: () => {},
+        isFieldVisible: () => true,
     }
 }
 

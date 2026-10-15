@@ -77,6 +77,27 @@ const h = vi.hoisted(() => {
                 form: '',
                 fields: {},
             },
+            // Typed cards whose type hides one section; no children either.
+            {
+                id: 'c5',
+                project: 'p1',
+                title: 'Five',
+                number: 5,
+                description: '',
+                start: '',
+                form: 'f-no-activity',
+                fields: {},
+            },
+            {
+                id: 'c6',
+                project: 'p1',
+                title: 'Six',
+                number: 6,
+                description: '',
+                start: '',
+                form: 'f-no-attachments',
+                fields: {},
+            },
         ],
         role: { canEdit: true, canComment: true, isOwner: false },
         items: [
@@ -219,6 +240,22 @@ vi.mock('@tinycld/core/lib/pocketbase', async () => {
     const { hostDefListSchema, defaultDefinitionFor } = await import('@tinycld/core/lib/forms/host')
     const { default: hosts } = await import('../tinycld/boards/forms/hosts')
     const [host] = hostDefListSchema.parse(hosts)
+    const hiding = (id: string, key: string) => {
+        const definition = defaultDefinitionFor(host)
+        return {
+            id,
+            host: host.key,
+            name: id,
+            slug: id,
+            is_default: false,
+            archived: false,
+            order: 1,
+            definition: {
+                ...definition,
+                fields: definition.fields.map(f => (f.key === key ? { ...f, hidden: true } : f)),
+            },
+        }
+    }
     const stores: Record<string, unknown> = {
         forms: mk('forms', [
             {
@@ -231,6 +268,8 @@ vi.mock('@tinycld/core/lib/pocketbase', async () => {
                 order: 0,
                 definition: defaultDefinitionFor(host),
             },
+            hiding('f-no-activity', 'activity'),
+            hiding('f-no-attachments', 'attachments'),
         ]),
         boards_cards: mk('boards_cards', h.cards),
         boards_checklist_items: mk('boards_checklist_items', h.items),
@@ -413,5 +452,26 @@ describe('CardDetail', () => {
         expect(q(container, 'boards-comment-composer')).toBeTruthy()
         expect(container.querySelector('[accessibilityLabel="Add reaction"]')).toBeTruthy()
         expect(q(container, 'boards-section-chips')).toBeNull()
+    })
+
+    test('a type that hides activity hides the comment composer', async () => {
+        h.role = { canEdit: true, canComment: true, isOwner: false }
+        const { container } = mountDetail(view('c5', 'Five', 5))
+        await waitFor(() => expect(q(container, 'boards-section-chips')).toBeTruthy())
+        expect(q(container, 'form-field-activity')).toBeNull()
+        expect(q(container, 'boards-comment-composer')).toBeNull()
+    })
+
+    test('a type that hides attachments offers no Attachments chip', async () => {
+        h.role = { canEdit: true, canComment: true, isOwner: false }
+        const { container } = mountDetail(view('c6', 'Six', 6))
+        const chips = await waitFor(() => {
+            const row = q(container, 'boards-section-chips')
+            expect(row).toBeTruthy()
+            return row as HTMLElement
+        })
+        expect(chips.textContent).toContain('Checklist')
+        expect(chips.textContent).not.toContain('Attachments')
+        expect(q(container, 'boards-comment-composer')).toBeTruthy()
     })
 })

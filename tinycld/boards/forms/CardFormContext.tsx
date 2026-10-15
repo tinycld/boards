@@ -25,6 +25,8 @@ export interface CardFormValue {
     /** Lets the container start a title edit for the `e` shortcut. */
     titleRef?: RefObject<EditableTextHandle | null>
     onManageLabels: () => void
+    /** Whether the card's type shows a field now (see useFieldVisibility). */
+    isFieldVisible: (key: string) => boolean
 }
 
 /**

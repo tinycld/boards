@@ -6,6 +6,7 @@ import { type RefObject, useCallback, useMemo, useState } from 'react'
 import { ScrollView, View } from 'react-native'
 import { CardFormProvider, type CardFormValue } from '../../forms/CardFormContext'
 import { useCardForm } from '../../forms/use-card-form'
+import { useFieldVisibility } from '../../forms/use-field-visibility'
 import { useAttachmentMutations } from '../../hooks/useAttachmentMutations'
 import { useCardDetail } from '../../hooks/useCardDetail'
 import { useCommentMutations } from '../../hooks/useCommentMutations'
@@ -87,7 +88,9 @@ export function CardDetail(props: CardDetailProps) {
     const widthClass = WIDTH_CLASS[variant]
     // Resolved here so every surface shares the gates.
     const role = useProjectRole(projectId)
-    const formValue = useCardFormValue(props, role, openLabelManager)
+    const cardForm = useCardForm(card.id)
+    const isFieldVisible = useFieldVisibility(cardForm.edit, cardForm.context)
+    const formValue = useCardFormValue(props, role, openLabelManager, isFieldVisible)
     // Non-throwing: a card opened from the PUBLIC board has no session, and
     // the default useAuth() turns that screen into an error boundary.
     const { user } = useAuth({ throwIfAnon: false })
@@ -108,13 +111,17 @@ export function CardDetail(props: CardDetailProps) {
                 <ScrollView className="flex-1">
                     <CardFormProvider value={formValue}>
                         <View className={`px-6 ${widthClass}`}>
-                            <CardFormBody cardId={card.id} readOnly={!role.canEdit} />
+                            <CardFormBody
+                                cardForm={cardForm}
+                                cardId={card.id}
+                                readOnly={!role.canEdit}
+                            />
                         </View>
                     </CardFormProvider>
                 </ScrollView>
             </DropZone>
             <CardCommentComposer
-                isVisible={role.canComment}
+                isVisible={role.canComment && isFieldVisible('activity')}
                 cardId={card.id}
                 projectId={projectId}
                 widthClass={widthClass}
@@ -139,8 +146,9 @@ interface CardCommentComposerProps {
 /**
  * The comment composer: frame chrome, pinned below the scroll so it is always
  * at hand, rather than a field of the card's form. Commentors keep it — that
- * is what the role means. A reply started in the activity list reaches it
- * through the reply store.
+ * is what the role means — unless the card's type hides the activity section,
+ * where the comments it writes would show. A reply started in the activity
+ * list reaches it through the reply store.
  */
 function CardCommentComposer({ isVisible, ...props }: CardCommentComposerProps) {
     if (!isVisible) return null
@@ -183,7 +191,8 @@ type CardRole = Pick<CardFormValue, 'canEdit' | 'canComment' | 'isOwner'>
 function useCardFormValue(
     props: CardDetailProps,
     role: CardRole,
-    onManageLabels: () => void
+    onManageLabels: () => void,
+    isFieldVisible: (key: string) => boolean
 ): CardFormValue {
     const {
         card,
@@ -214,6 +223,7 @@ function useCardFormValue(
             isOwner,
             titleRef,
             onManageLabels,
+            isFieldVisible,
         }),
         [
             card,
@@ -230,11 +240,16 @@ function useCardFormValue(
             isOwner,
             titleRef,
             onManageLabels,
+            isFieldVisible,
         ]
     )
 }
 
+type CardForm = ReturnType<typeof useCardForm>
+
 interface CardFormBodyProps {
+    /** Lifted to CardDetail: the composer outside the form reads its rules too. */
+    cardForm: CardForm
     cardId: string
     /** Everyone who cannot edit the card; the comment sections gate on the role instead. */
     readOnly: boolean
@@ -245,16 +260,15 @@ interface CardFormBodyProps {
  * rendered without the components, the card's own fields would show core's
  * placeholder for a kind it cannot render.
  */
-function CardFormBody({ cardId, readOnly }: CardFormBodyProps) {
-    const card = useCardForm(cardId)
-    if (!card.isReady || !card.ui) return null
-    return <CardFormView {...card} ui={card.ui} cardId={cardId} readOnly={readOnly} />
+function CardFormBody({ cardForm, cardId, readOnly }: CardFormBodyProps) {
+    if (!cardForm.isReady || !cardForm.ui) return null
+    return <CardFormView {...cardForm} ui={cardForm.ui} cardId={cardId} readOnly={readOnly} />
 }
 
 const noDoc = (): CollabDoc | null => null
 
-type CardFormViewProps = CardFormBodyProps &
-    Omit<ReturnType<typeof useCardForm>, 'ui'> & { ui: FormHostUi }
+type CardFormViewProps = Omit<CardFormBodyProps, 'cardForm'> &
+    Omit<CardForm, 'ui'> & { ui: FormHostUi }
 
 /**
  * Split out so `ui` is non-null for this component's whole life, which keeps
