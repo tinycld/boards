@@ -41,8 +41,16 @@ type boardEntry struct {
 	//     document is evicted (drop forgets it with the rest). The fragment
 	//     lingers in the document, so the entry keeps a stale edit to it from
 	//     looking changed. It must not shape the fingerprint: the records no
-	//     longer hold the card, so a parked or stored document would never
-	//     match them and would re-seed for nothing.
+	//     longer hold the card, so a stored checkpoint would never match them
+	//     and the board would re-seed for nothing.
+	//
+	// A card moved or deleted while the document is parked therefore changes
+	// the fingerprint, and the board re-seeds at reopen. A re-seed discards
+	// any edit not flushed when the room emptied: a park after a failed or
+	// skipped teardown flush, or a client's offline edits to the parked
+	// document. That is accepted: the fingerprint exists to re-seed when the
+	// board changed outside the room, and keeping the card in it only moves
+	// the mismatch to the stored checkpoint once the document is evicted.
 	baseline map[string]string
 }
 
@@ -65,6 +73,13 @@ func (s *boardDocState) drop(projectID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.boards, projectID)
+}
+
+// has reports whether the board has a document (open or parked).
+func (s *boardDocState) has(projectID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.boards[projectID] != nil
 }
 
 // fingerprint summarizes what the document believes is stored for every

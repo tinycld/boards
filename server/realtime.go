@@ -98,14 +98,25 @@ func registerRealtime(app core.App) *boardRealtime {
 // With no document, the rows themselves are hashed per fragment, normalized
 // the way bootstrap normalizes them, so a document seeded from these rows and
 // flushed unchanged matches.
+//
+// A card moved off the board or deleted while the document is parked leaves
+// the fingerprint, so the reopen re-seeds. That discards edits not flushed
+// when the room emptied (a park after a failed or skipped teardown flush, or a
+// client's offline edits to the parked document). It is accepted: re-seeding
+// on a change made outside the room is what the fingerprint is for, and
+// keeping the card in it would only make the stored checkpoint mismatch the
+// records once the document is evicted. See boardEntry.baseline.
 func makeFingerprint(app core.App, state *boardDocState) realtime.FingerprintFn {
 	return func(projectID string) (string, error) {
-		onBoard, err := boardCardIDs(app, projectID)
-		if err != nil {
-			return "", fmt.Errorf("cards: fingerprint of board %s: %w", projectID, err)
-		}
-		if fp, ok := state.fingerprint(projectID, onBoard); ok {
-			return fp, nil
+		if state.has(projectID) {
+			onBoard, err := boardCardIDs(app, projectID)
+			if err != nil {
+				return "", fmt.Errorf("cards: fingerprint of board %s: %w", projectID, err)
+			}
+			// An eviction between the two reads falls through to the rows.
+			if fp, ok := state.fingerprint(projectID, onBoard); ok {
+				return fp, nil
+			}
 		}
 		records, err := seedableCards(app, projectID)
 		if err != nil {
