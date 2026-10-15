@@ -220,6 +220,7 @@ const hosts: FormHostDefInput[] = [
             copyColumns: { project: 'project' },
         },
         collaborative: { fragment: 'card:{record}:{format}:{key}' },
+        insertCustomBefore: 'chips',
     },
 ]
 

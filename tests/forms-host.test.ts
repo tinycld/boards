@@ -43,5 +43,6 @@ describe('boards:card host', () => {
             copyColumns: { project: 'project' },
         })
         expect(host.collaborative?.fragment).toBe('card:{record}:{format}:{key}')
+        expect(host.insertCustomBefore).toBe('chips')
     })
 })
