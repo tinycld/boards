@@ -6,7 +6,7 @@ import { type FormHost, useFormHost } from '@tinycld/core/lib/forms/use-form-hos
 import { useFormsOfHost } from '@tinycld/core/lib/forms/use-forms-of-host'
 import { Dialog } from '@tinycld/core/ui/dialog'
 import { FormRenderer, useFormCreate, useHostUi } from '@tinycld/core/ui/forms'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { CreateCardProvider, type CreateCardValue } from '../forms/CreateCardContext'
 import { CARD_HOST_KEY } from '../forms/hosts'
 import { useBoardPickerData } from '../hooks/useBoardPickerData'
@@ -24,7 +24,10 @@ export function CardCreateDialog({ projectId }: { projectId: string }) {
     const target = useCardCreateStore(s => s.target)
     const close = useCardCreateStore(s => s.close)
     const host = useFormHost(CARD_HOST_KEY)
-    if (!target || !host) return null
+    // The target is global: a dialog leaving the screen (a back, a link) must
+    // not leave it set, or the next board screen would open it unprompted.
+    useEffect(() => close, [close])
+    if (!target || !host || target.projectId !== projectId) return null
     return <CreateBody host={host} projectId={projectId} target={target} onClose={close} />
 }
 
@@ -70,7 +73,10 @@ function useCardCreate({ host, projectId, target, onClose }: CreateBodyProps) {
                 columns: cardColumnsFrom(columns),
                 checklist,
             })
-            .then(onClose, create.onError)
+            .then(() => {
+                target.onCreated?.()
+                onClose()
+            }, create.onError)
     }
 
     return { offered, create, ui, context, createValue, submit }

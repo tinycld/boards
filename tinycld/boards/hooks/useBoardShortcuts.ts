@@ -283,7 +283,12 @@ export function useBoardShortcuts(
             const listId = composerTargetColumnId(project, focusedCardId, focusedColumnId)
             const list = project.lists.find(candidate => candidate.id === listId)
             if (!list) return
-            openCreate({ listId: list.id, position: rankForAppend(list.cards), initialTitle: '' })
+            openCreate({
+                projectId: project.id,
+                listId: list.id,
+                position: rankForAppend(list.cards),
+                initialTitle: '',
+            })
         }
 
         const nav = (id: string, keys: string, description: string, run: () => void): Shortcut => ({

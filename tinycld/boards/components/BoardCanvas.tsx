@@ -49,6 +49,10 @@ export function BoardCanvas({ project }: { project: BoardProject }) {
                 testID="boards-board"
                 ref={dnd.canvasRef}
                 horizontal
+                // A tap on a column's buttons (the composer's expand) acts at
+                // once instead of only dismissing the keyboard, which would
+                // blur — and close — an empty composer first.
+                keyboardShouldPersistTaps="handled"
                 className="flex-1"
                 onScroll={dnd.onCanvasScroll}
                 scrollEventThrottle={32}

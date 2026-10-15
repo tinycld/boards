@@ -179,8 +179,14 @@ export const BoardColumn = memo(function BoardColumn({
     const addCard = (title: string) =>
         createCard.mutate({ listId: list.id, title, position: rankForAppend(list.cards) })
 
-    const expandComposer = (title: string) =>
-        openCreate({ listId: list.id, position: rankForAppend(list.cards), initialTitle: title })
+    const expandComposer = (title: string, clearDraft: () => void) =>
+        openCreate({
+            projectId,
+            listId: list.id,
+            position: rankForAppend(list.cards),
+            initialTitle: title,
+            onCreated: clearDraft,
+        })
 
     const sideFor = (event: DraxDragWithReceiverEventData): DropSide =>
         event.receiver.receiveOffsetRatio.x < 0.5 ? 'before' : 'after'
