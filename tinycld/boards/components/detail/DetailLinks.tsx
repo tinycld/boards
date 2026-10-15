@@ -207,7 +207,11 @@ function ResolvedFar({ link, isOnThisBoard }: { link: CardLinkView; isOnThisBoar
             className="flex-row items-center gap-2 flex-1 active:opacity-60"
         >
             <Link2 size={13} color={isDone ? successColor : mutedColor} strokeWidth={2.2} />
-            {far.key ? <Text className="text-[11px] font-medium text-muted">{far.key}</Text> : null}
+            {far.key ? (
+                <Text testID="boards-card-key" className="text-[11px] font-medium text-muted">
+                    {far.key}
+                </Text>
+            ) : null}
             <Text
                 className={`flex-1 text-[13px] ${isDone ? 'text-muted line-through' : 'text-foreground'}`}
                 numberOfLines={1}

@@ -129,7 +129,9 @@ function SubtaskRow({ card }: { card: BoardCardView }) {
                 <CircleDashed size={14} color={mutedColor} strokeWidth={2.2} />
             )}
             {card.key ? (
-                <Text className="text-[11px] font-medium text-muted">{card.key}</Text>
+                <Text testID="boards-card-key" className="text-[11px] font-medium text-muted">
+                    {card.key}
+                </Text>
             ) : null}
             <Text
                 className={`flex-1 text-[13px] ${isDone ? 'text-muted line-through' : 'text-foreground'}`}

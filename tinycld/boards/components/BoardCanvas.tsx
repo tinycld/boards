@@ -46,6 +46,7 @@ export function BoardCanvas({ project }: { project: BoardProject }) {
             draxViewProps={dnd.monitorProps}
         >
             <ScrollView
+                testID="boards-board"
                 ref={dnd.canvasRef}
                 horizontal
                 className="flex-1"

@@ -157,6 +157,7 @@ function ActivityRow({ item, context }: { item: BoardActivity; context: Activity
             <View className="w-[26px] items-center">
                 {actor ? (
                     <Avatar
+                        testID="boards-avatar"
                         name={`${actor.firstName} ${actor.lastName ?? ''}`.trim()}
                         email={actor.email}
                         colorKey={actor.id}
@@ -172,7 +173,9 @@ function ActivityRow({ item, context }: { item: BoardActivity; context: Activity
             <Text className="flex-1 min-w-0 text-[12.5px] text-muted" numberOfLines={2}>
                 <Text className="font-semibold text-foreground">{who}</Text> {text}
             </Text>
-            <Text className="shrink-0 text-[11.5px] text-muted">{timestamp}</Text>
+            <Text testID="boards-timestamp" className="shrink-0 text-[11.5px] text-muted">
+                {timestamp}
+            </Text>
         </View>
     )
 }
@@ -257,7 +260,9 @@ function CommentRow({
             <Text numberOfLines={1} className="shrink text-[13px] font-semibold text-foreground">
                 {comment.author.firstName} {comment.author.lastName}
             </Text>
-            <Text className="shrink-0 text-[11.5px] text-muted">{timestamp}</Text>
+            <Text testID="boards-timestamp" className="shrink-0 text-[11.5px] text-muted">
+                {timestamp}
+            </Text>
             <EditedMarker comment={comment} />
             <CommentActions
                 color={mutedColor}
@@ -274,6 +279,7 @@ function CommentRow({
     return (
         <View className="flex-row gap-2.5 group">
             <Avatar
+                testID="boards-avatar"
                 name={`${comment.author.firstName} ${comment.author.lastName ?? ''}`.trim()}
                 email={comment.author.email}
                 colorKey={comment.author.id}

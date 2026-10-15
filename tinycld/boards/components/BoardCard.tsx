@@ -942,6 +942,7 @@ function CardAssigneeAvatar({ member, isStacked }: { member: BoardMember; isStac
     return (
         <View className={`rounded-full border-2 border-card ${isStacked ? '-ml-1.5' : ''}`}>
             <Avatar
+                testID="boards-avatar"
                 name={`${member.firstName} ${member.lastName ?? ''}`.trim()}
                 email={member.email}
                 colorKey={member.id}

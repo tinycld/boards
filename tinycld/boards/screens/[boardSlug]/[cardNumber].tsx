@@ -195,7 +195,7 @@ function CardPage({ project, segment, entry, cardId, navigateBack }: CardPagePro
     ]
 
     return (
-        <View className="flex-1 bg-background">
+        <View testID="boards-card-page" className="flex-1 bg-background">
             <DocumentTitle pkg="Boards" title={entry.card.title} />
             <ProjectWash color={project.color} bleedRight={insets.right} />
             <CardHeaderToolbar

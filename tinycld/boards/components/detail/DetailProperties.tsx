@@ -469,6 +469,7 @@ function MemberChip({ member }: { member: BoardMember }) {
     return (
         <View className="flex-row items-center gap-1.5 bg-foreground/[0.06] rounded-full pl-[3px] pr-2.5 py-[2px]">
             <Avatar
+                testID="boards-avatar"
                 name={`${member.firstName} ${member.lastName ?? ''}`.trim()}
                 email={member.email}
                 colorKey={member.id}
