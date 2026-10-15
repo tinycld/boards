@@ -18,15 +18,14 @@ const q = (id: string) =>
     document.body.querySelector(`[testID="${id}"], [data-testid="${id}"]`) as HTMLElement | null
 
 /**
- * The stub hands RN props to DOM hosts, which stringify an object prop, so
- * `accessibilityState` is read from the props React holds for the element.
+ * The stub renders RN hosts as custom elements, where React writes a boolean
+ * `true` as an empty attribute, so `aria-selected` is read from the props React
+ * holds for the element.
  */
 function isSelectedTab(el: Element): boolean {
     const key = Object.keys(el).find(k => k.startsWith('__reactProps$'))
     const props = key ? (el as unknown as Record<string, unknown>)[key] : undefined
-    const state = (props as { accessibilityState?: { selected?: boolean } } | undefined)
-        ?.accessibilityState
-    return state?.selected === true
+    return (props as { 'aria-selected'?: boolean } | undefined)?.['aria-selected'] === true
 }
 
 const types = (count: number) =>

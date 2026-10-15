@@ -38,7 +38,9 @@ function Pill({
     return (
         <Pressable
             accessibilityRole="tab"
-            accessibilityState={{ selected: isSelected }}
+            // aria-selected, not accessibilityState: react-native-web drops
+            // accessibilityState, so on web the tab's state never reached the DOM.
+            aria-selected={isSelected}
             onPress={() => onSelect(form.id)}
             testID={`card-type-${form.id}`}
             className={pillClass(isSelected)}
