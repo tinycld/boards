@@ -9,7 +9,7 @@ const orgHref = (path: string, extra?: Record<string, string>): Href =>
     ({ pathname: appHref(path), params: extra }) as Href
 
 // The board every terse row below sits on; the href shape is pinned once above.
-const onBoard = { number: 1, board: { id: 'p1', slug: 'PL' } }
+const onBoard = { number: 1, board: { id: 'p1', slug: 'PL', archived: false } }
 
 describe('buildDueItems', () => {
     it('maps a due card to a local all-day item with a card href', () => {
@@ -21,7 +21,7 @@ describe('buildDueItems', () => {
                     due: '2026-08-04 00:00:00.000Z',
                     due_has_time: false,
                     number: 7,
-                    board: { id: 'p1', slug: 'PL' },
+                    board: { id: 'p1', slug: 'PL', archived: false },
                 },
             ],
             orgHref
@@ -127,7 +127,7 @@ describe('buildDueItems', () => {
                     due: '2026-08-04',
                     due_has_time: false,
                     number: 0,
-                    board: { id: 'p1', slug: 'PL' },
+                    board: { id: 'p1', slug: 'PL', archived: false },
                 },
             ],
             orgHref

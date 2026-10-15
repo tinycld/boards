@@ -1,10 +1,10 @@
 package boards
 
 import (
-	"bytes"
 	"context"
-	"encoding/hex"
+	"encoding/base64"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -96,67 +96,46 @@ func TestValidateUpdate_TolerationsForGarbage(t *testing.T) {
 	}
 }
 
-// splitParagraphUpdate is a real update captured from the description editor:
-// the Enter that split "Line one here" into a second paragraph of card
-// jao071pc0p3x9iw. y-tiptap writes its position-migration record for the
-// fragment in the same transaction, so the update names that map as its only
-// root — the paragraph itself is filed under the fragment by item id.
-const splitParagraphUpdate = "" +
-	"01029e91d7ea040f879e91d7ea040003097061726167726170682801365f5f74" +
-	"69707461705f706f736974696f6e5f6d6967726174696f6e733a726f6f743a63" +
-	"6172643a6a616f3037317063307033783969770d313239373436373535303a31" +
-	"360176050776657273696f6e7d0106636c69656e747d9ea2aed50905636c6f63" +
-	"6b7d10047365656e750175027d9ea2aed5097d10097472616e73666572737501" +
-	"760206736f75726365760406636c69656e747d9ea2aed50905636c6f636b7d00" +
-	"066c656e6774687d0108626f756e646172797703656e64067461726765747604" +
-	"06636c69656e747d9ea2aed50905636c6f636b7d0f04747970657e08626f756e" +
-	"646172797703656e6400"
+// realYTiptapEnter is a real update from @tiptap/y-tiptap 3.0.10, captured
+// from the description editor: pressing Enter in card "card:1". It inserts the
+// new paragraph AND writes the editor's position-migration record, in one
+// transaction. Rejecting it once dropped the paragraph and stalled every edit
+// after it, so a saved description stopped at its first line.
+const realYTiptapEnter = "AQKBsr30DhGHgbK99A4AAwlwYXJhZ3JhcGgoAShfX3RpcHRhcF9wb3NpdGlvbl9taWdyYXRpb25zOnJvb3Q6Y2FyZDoxDTQwMDIzNzE4NDE6MTgBdgUHdmVyc2lvbn0BBmNsaWVudHtB7dHrICAAAAVjbG9ja30SBHNlZW51AXUCe0Ht0esgIAAAfRIJdHJhbnNmZXJzdQF2AgZzb3VyY2V2BAZjbGllbnR7Qe3R6yAgAAAFY2xvY2t9AAZsZW5ndGh9AQhib3VuZGFyeXcDZW5kBnRhcmdldHYEBmNsaWVudHtB7dHrICAAAAVjbG9ja30RBHR5cGV+CGJvdW5kYXJ5dwNlbmQA"
 
-func capturedSplit(t *testing.T, card string) []byte {
-	t.Helper()
-	update, err := hex.DecodeString(splitParagraphUpdate)
-	if err != nil {
-		t.Fatalf("decode fixture: %v", err)
-	}
-	// Same byte length, so the key's length prefix still holds.
-	original := []byte("card:jao071pc0p3x9iw")
-	if len(card) != len(original) {
-		t.Fatalf("replacement %q must be %d bytes", card, len(original))
-	}
-	return bytes.Replace(update, original, []byte(card), 1)
-}
-
-// Rejecting this dropped the paragraph with the record: the server's copy of
-// a description stopped at its first block, and every later update depended on
-// the dropped one, so nothing the user typed after the first Enter was saved.
 func TestValidateUpdate_AcceptsTheEditorsPositionMigrations(t *testing.T) {
-	update := capturedSplit(t, "card:jao071pc0p3x9iw")
+	update, err := base64.StdEncoding.DecodeString(realYTiptapEnter)
+	if err != nil {
+		t.Fatal(err)
+	}
 	keys, err := yjsdoc.RootKeysOfUpdate("board", update)
 	if err != nil {
-		t.Fatalf("probe: %v", err)
+		t.Fatal(err)
 	}
-	want := "__tiptap_position_migrations:root:card:jao071pc0p3x9iw"
-	if len(keys) != 1 || keys[0] != want {
-		t.Fatalf("fixture no longer names the migrations root: %v", keys)
+	// On a fresh document only the map integrates: the paragraph is anchored
+	// to items from earlier edits. The map root is the one that was rejected.
+	if !slices.Contains(keys, "__tiptap_position_migrations:root:card:1") {
+		t.Fatalf("fixture no longer writes the migration root: %v", keys)
 	}
 	if err := validateUpdate("board", update); err != nil {
-		t.Errorf("a paragraph split was rejected: %v", err)
+		t.Errorf("the editor's Enter was rejected: %v", err)
 	}
 }
 
-// The allowance is for a card's own record only, not a way to write any root
-// that carries the migrations prefix.
-func TestValidateUpdate_RejectsPositionMigrationsOfAForeignRoot(t *testing.T) {
-	for _, root := range []string{
-		"prosemirror:jao071pc",
-		"card:JAO071PC0P3X9IW",
-		"card:jao071pc0p3x9i ",
+func TestValidateUpdate_PositionMigrationsOnlyForCards(t *testing.T) {
+	for _, fragment := range []string{
+		"__tiptap_position_migrations:root:prosemirror",
+		"__tiptap_position_migrations:root:card:",
+		"__tiptap_position_migrations:item:1:2",
+		"__tiptap_position_migrations:root:card:UPPER",
 	} {
-		t.Run(root, func(t *testing.T) {
-			err := validateUpdate("board", capturedSplit(t, root))
-			if err == nil || !strings.Contains(err.Error(), "unexpected root") {
-				t.Errorf("migrations for root %q: got %v, want an unexpected-root error", root, err)
+		t.Run(fragment, func(t *testing.T) {
+			if err := validateUpdate("board", updateWriting(t, fragment)); err == nil {
+				t.Errorf("update writing root %q was accepted", fragment)
 			}
 		})
+	}
+	if err := validateUpdate("board", updateWriting(t, "__tiptap_position_migrations:root:card:abc123")); err != nil {
+		t.Errorf("a card's migration root was rejected: %v", err)
 	}
 }

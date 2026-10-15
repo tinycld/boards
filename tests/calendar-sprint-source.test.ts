@@ -16,7 +16,7 @@ describe('buildSprintItems', () => {
                     name: '',
                     start: '2026-09-01 00:00:00.000Z',
                     end: '2026-09-14 00:00:00.000Z',
-                    boardName: 'Product launch',
+                    board: { name: 'Product launch', archived: false, sprints_enabled: true },
                 },
             ],
             orgHref
@@ -42,7 +42,7 @@ describe('buildSprintItems', () => {
                     name: 'Polish',
                     start: '',
                     end: '2026-09-28 00:00:00.000Z',
-                    boardName: 'B',
+                    board: { name: 'B', archived: false, sprints_enabled: true },
                 },
             ],
             orgHref

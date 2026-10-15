@@ -5,6 +5,7 @@ import type { EventSourceItem, EventSourceRange } from '@tinycld/core/lib/event-
 import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import type { Href } from 'expo-router'
+import { materialize } from 'pbtsdb'
 import { useMemo } from 'react'
 import { parseDayValue } from './lib/due-time'
 import { sprintLabel } from './lib/sprint'
@@ -20,7 +21,8 @@ interface SprintRow {
     name: string
     start: string
     end: string
-    boardName: string
+    // A relation, so undefined until the board row has loaded.
+    board: { name: string; archived: boolean; sprints_enabled: boolean } | undefined
 }
 
 type HrefBuilder = (path: string, extra?: Record<string, string>) => Href
@@ -38,7 +40,10 @@ export function buildSprintItems(
 ): EventSourceItem[] {
     const items: EventSourceItem[] = []
     for (const row of rows) {
-        const label = `${sprintLabel(row)} · ${row.boardName}`
+        // Only boards that are live and use sprints put sprints on the calendar.
+        const board = row.board
+        if (!board || board.archived || !board.sprints_enabled) continue
+        const label = `${sprintLabel(row)} · ${board.name}`
         const href = orgHref('boards')
         const start = parseDayValue(row.start)
         const end = parseDayValue(row.end)
@@ -65,29 +70,29 @@ export function useEventSource({ start, end }: EventSourceRange): {
     const startDay = toDateString(addDays(start, -1))
     const endDay = toDateString(addDays(end, 1))
 
+    // The board is a relation, not a join: a join pushes every board id into
+    // the sprints request, which past ~200 boards exceeds PocketBase's filter
+    // limit. So the board checks (live, sprints on) run in buildSprintItems.
     const { data: rows, isLoading } = useLiveQuery({
         query: query =>
             query
                 .from({ sprint: sprintsCollection })
-                .innerJoin({ project: projectsCollection }, ({ sprint, project }) =>
-                    eq(sprint.project, project.id)
+                .where(({ sprint }) =>
+                    // Dated on at least one end inside the window.
+                    and(gte(sprint.end, startDay), lte(sprint.start, endDay))
                 )
-                .where(({ sprint, project }) =>
-                    and(
-                        eq(project.archived, false),
-                        eq(project.sprints_enabled, true),
-                        // Dated on at least one end inside the window.
-                        gte(sprint.end, startDay),
-                        lte(sprint.start, endDay)
-                    )
-                )
-                .select(({ sprint, project }) => ({
+                .select(({ sprint }) => ({
                     id: sprint.id,
                     number: sprint.number,
                     name: sprint.name,
                     start: sprint.start,
                     end: sprint.end,
-                    boardName: project.name,
+                    board: materialize(
+                        query
+                            .from({ project: projectsCollection })
+                            .where(({ project }) => eq(project.id, sprint.project))
+                            .findOne()
+                    ),
                 })),
     })
 

@@ -5,6 +5,7 @@ import type { EventSourceItem, EventSourceRange } from '@tinycld/core/lib/event-
 import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import type { Href } from 'expo-router'
+import { materialize } from 'pbtsdb'
 import { useMemo } from 'react'
 import { cardHref } from './lib/board-route'
 import { parseDueValue } from './lib/due-time'
@@ -20,7 +21,8 @@ interface DueCardRow {
     due: string
     due_has_time: boolean
     number: number
-    board: { id: string; slug: string }
+    // A relation, so undefined until the board row has loaded.
+    board: { id: string; slug: string; archived: boolean } | undefined
 }
 
 /** A timed deadline lands on the grid as this long a block. */
@@ -43,6 +45,9 @@ export function buildDueItems(
 ): EventSourceItem[] {
     const items: EventSourceItem[] = []
     for (const row of rows) {
+        // Cards on archived boards are left out, matching search's policy.
+        const board = row.board
+        if (!board || board.archived) continue
         const due = parseDueValue(row.due, row.due_has_time)
         if (!due) continue
         const end = row.due_has_time
@@ -54,7 +59,7 @@ export function buildDueItems(
             start: due.toISOString(),
             end: end.toISOString(),
             allDay: !row.due_has_time,
-            href: cardHref(orgHref, row.board, row),
+            href: cardHref(orgHref, board, row),
         })
     }
     return items
@@ -83,29 +88,33 @@ export function useEventSource({ start, end }: EventSourceRange): {
     // No membership filter: the PB rules already scope boards_cards sync to the
     // caller's member projects. Archived cards and cards on archived boards
     // are excluded to match search's policy — someone planning a week wants
-    // active work, not history.
+    // active work, not history. The board is a relation, not a join: a join
+    // pushes every board id into the cards request, which past ~200 boards
+    // exceeds PocketBase's filter limit. So the archived-board check runs in
+    // buildDueItems instead of the query.
     const { data: rows, isLoading } = useLiveQuery({
         query: query =>
             query
                 .from({ card: cardsCollection })
-                .innerJoin({ project: projectsCollection }, ({ card, project }) =>
-                    eq(card.project, project.id)
-                )
-                .where(({ card, project }) =>
+                .where(({ card }) =>
                     and(
                         gte(card.due, startDay),
                         lt(card.due, dayAfterEnd),
-                        eq(card.archived, false),
-                        eq(project.archived, false)
+                        eq(card.archived, false)
                     )
                 )
-                .select(({ card, project }) => ({
+                .select(({ card }) => ({
                     id: card.id,
                     title: card.title,
                     due: card.due,
                     due_has_time: card.due_has_time,
                     number: card.number,
-                    board: { id: project.id, slug: project.slug },
+                    board: materialize(
+                        query
+                            .from({ project: projectsCollection })
+                            .where(({ project }) => eq(project.id, card.project))
+                            .findOne()
+                    ),
                 })),
     })
 

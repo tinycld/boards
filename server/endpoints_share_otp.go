@@ -3,6 +3,7 @@ package boards
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -283,7 +284,13 @@ func handleShareOTPVerify(app core.App, re *core.RequestEvent) error {
 	if err != nil {
 		return re.InternalServerError("failed to load account", err)
 	}
-	token, err := live.NewAuthToken()
+	// An emailed code is the whole sign-in for a guest, but not for an
+	// account with a second factor or a member under required MFA: those
+	// sign in through the normal form instead.
+	token, err := guestauth.NewSessionToken(app, live)
+	if errors.Is(err, guestauth.ErrFullSignInRequired) {
+		return re.ForbiddenError(guestauth.FullSignInMessage, err)
+	}
 	if err != nil {
 		return re.InternalServerError("failed to mint auth token", err)
 	}
