@@ -133,7 +133,7 @@ function NoCardTypes({ isVisible }: { isVisible: boolean }) {
     return (
         <Dialog.Body>
             <Text className="text-muted-foreground">
-                This board has no card types yet. An admin adds them in Settings → Forms.
+                No card types are available. An admin adds or restores them in Settings → Forms.
             </Text>
         </Dialog.Body>
     )

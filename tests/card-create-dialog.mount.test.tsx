@@ -363,6 +363,6 @@ describe('CardCreateDialog', () => {
         forms.delete(h.stores.forms.toArray.map(row => row.id))
         useCardCreateStore.getState().open({ projectId: 'p1', listId: 'l1', position: 'a0' })
         const { getByText } = render(<CardCreateDialog projectId="p1" />, { wrapper })
-        await waitFor(() => expect(getByText(/no card types/)).toBeTruthy())
+        await waitFor(() => expect(getByText(/No card types are available/)).toBeTruthy())
     })
 })
