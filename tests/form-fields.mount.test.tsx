@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import type { BuiltinFieldProps } from '@tinycld/core/lib/forms/host-ui'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -49,6 +49,8 @@ import { CardFormProvider, type CardFormValue } from '../tinycld/boards/forms/Ca
 import { DueField } from '../tinycld/boards/forms/fields/DueField'
 import { PriorityField } from '../tinycld/boards/forms/fields/PriorityField'
 import { AttachmentsSection } from '../tinycld/boards/forms/sections/AttachmentsSection'
+import { ChecklistSection } from '../tinycld/boards/forms/sections/ChecklistSection'
+import { SectionChipsSection } from '../tinycld/boards/forms/sections/SectionChipsSection'
 import { formatSchedule } from '../tinycld/boards/lib/due-time'
 
 const card: BoardCardView = {
@@ -160,14 +162,35 @@ describe('card form fields', () => {
     })
 })
 
-describe('attachments section', () => {
-    it('offers "Add attachment" to an editor when the card has none', async () => {
-        const { container } = mount(<AttachmentsSection {...fieldProps('attachments')} />)
-        await waitFor(() => expect(container.textContent).toContain('Add attachment'))
+describe('optional sections', () => {
+    /** The chip row beside the checklist, as the card's form lays them out. */
+    function ChipsAndChecklist() {
+        return (
+            <>
+                <SectionChipsSection {...fieldProps('chips')} />
+                <ChecklistSection {...fieldProps('checklist')} />
+                <AttachmentsSection {...fieldProps('attachments')} />
+            </>
+        )
+    }
+
+    it('offers an empty section as a chip, and pressing it opens the section', async () => {
+        const { container, getByText } = mount(<ChipsAndChecklist />)
+        await waitFor(() => expect(container.textContent).toContain('Checklist'))
+        expect(container.querySelector('[testID="boards-section-heading-checklist"]')).toBeNull()
+        expect(container.textContent).toContain('Attachments')
+
+        fireEvent.click(getByText('Checklist'))
+        await waitFor(() =>
+            expect(
+                container.querySelector('[testID="boards-section-heading-checklist"]')
+            ).toBeTruthy()
+        )
+        // The opened section takes its chip's place; the others stay offered.
         expect(container.textContent).toContain('Attachments')
     })
 
-    it('renders nothing for a reader when the card has none', async () => {
+    it('offers nothing to a reader when the card has no content', async () => {
         // An editor beside the reader shows when the card's children query
         // has settled, so the reader's empty subtree is the settled answer.
         const queryClient = new QueryClient()
@@ -175,17 +198,17 @@ describe('attachments section', () => {
             <QueryClientProvider client={queryClient}>
                 <div data-testid="editor">
                     <CardFormProvider value={cardForm(true)}>
-                        <AttachmentsSection {...fieldProps('attachments')} />
+                        <ChipsAndChecklist />
                     </CardFormProvider>
                 </div>
                 <div data-testid="reader">
                     <CardFormProvider value={cardForm(false)}>
-                        <AttachmentsSection {...fieldProps('attachments')} />
+                        <ChipsAndChecklist />
                     </CardFormProvider>
                 </div>
             </QueryClientProvider>
         )
-        await waitFor(() => expect(getByTestId('editor').textContent).toContain('Add attachment'))
+        await waitFor(() => expect(getByTestId('editor').textContent).toContain('Attachments'))
         expect(getByTestId('reader').textContent).toBe('')
     })
 })

@@ -7,9 +7,13 @@ import { ScrollView, View } from 'react-native'
 import { CardFormProvider, type CardFormValue } from '../../forms/CardFormContext'
 import { useCardForm } from '../../forms/use-card-form'
 import { useAttachmentMutations } from '../../hooks/useAttachmentMutations'
+import { useCardDetail } from '../../hooks/useCardDetail'
+import { useCommentMutations } from '../../hooks/useCommentMutations'
 import { useProjectRole } from '../../hooks/useProjectRole'
+import { useCommentReplyStore } from '../../stores/comment-reply-store'
 import type { BoardCardView, BoardEpic, BoardLabel, BoardMember, BoardSprint } from '../../types'
 import { LabelManagerDialog } from '../LabelManagerDialog'
+import { CommentComposer } from './CommentComposer'
 import { filesToPicked } from './DetailAttachments'
 import type { EditableTextHandle } from './EditableText'
 
@@ -68,8 +72,9 @@ const WIDTH_CLASS: Record<DetailVariant, string> = {
  * full-page screen.
  * The containers own their top bars (stepper, expand/close vs. back); this
  * component owns the frame below them (the drop zone, the scroll view, the
- * content width) and renders the card's form inside it: the card's type
- * decides which fields and sections show, and in what order.
+ * content width, the comment composer pinned below the scroll) and renders
+ * the card's form inside it: the card's type decides which fields and
+ * sections show, and in what order.
  */
 export function CardDetail(props: CardDetailProps) {
     const { card, variant, projectId, projectLabels } = props
@@ -102,12 +107,18 @@ export function CardDetail(props: CardDetailProps) {
             >
                 <ScrollView className="flex-1">
                     <CardFormProvider value={formValue}>
-                        <View className={`px-6 pb-6 ${widthClass}`}>
+                        <View className={`px-6 ${widthClass}`}>
                             <CardFormBody cardId={card.id} readOnly={!role.canEdit} />
                         </View>
                     </CardFormProvider>
                 </ScrollView>
             </DropZone>
+            <CardCommentComposer
+                isVisible={role.canComment}
+                cardId={card.id}
+                projectId={projectId}
+                widthClass={widthClass}
+            />
             <LabelManagerDialog
                 isVisible={isManagingLabels}
                 onClose={() => setIsManagingLabels(false)}
@@ -115,6 +126,50 @@ export function CardDetail(props: CardDetailProps) {
                 labels={projectLabels}
             />
         </>
+    )
+}
+
+interface CardCommentComposerProps {
+    isVisible: boolean
+    cardId: string
+    projectId: string
+    widthClass: string
+}
+
+/**
+ * The comment composer: frame chrome, pinned below the scroll so it is always
+ * at hand, rather than a field of the card's form. Commentors keep it — that
+ * is what the role means. A reply started in the activity list reaches it
+ * through the reply store.
+ */
+function CardCommentComposer({ isVisible, ...props }: CardCommentComposerProps) {
+    if (!isVisible) return null
+    return <CommentComposerBody {...props} />
+}
+
+function CommentComposerBody({
+    cardId,
+    projectId,
+    widthClass,
+}: Omit<CardCommentComposerProps, 'isVisible'>) {
+    const { attachments } = useCardDetail(cardId)
+    const { createComment } = useCommentMutations(cardId, projectId)
+    const replyTarget = useCommentReplyStore(s => s.replyingTo)
+    const cancelReply = useCommentReplyStore(s => s.cancelReply)
+    const replyingTo = replyTarget?.cardId === cardId ? replyTarget : undefined
+    const submit = (body: string) =>
+        createComment.mutate({ body, parent: replyingTo?.id ?? '' }, { onSuccess: cancelReply })
+    return (
+        <CommentComposer
+            widthClass={widthClass}
+            cardId={cardId}
+            projectId={projectId}
+            attachments={attachments}
+            onSubmit={submit}
+            isPending={createComment.isPending}
+            replyingTo={replyingTo}
+            onCancelReply={cancelReply}
+        />
     )
 }
 

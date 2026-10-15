@@ -15,9 +15,22 @@ interface DetailChecklistProps {
     cardId: string
     projectId: string
     canEdit: boolean
+    /** False while the section is collapsed behind its chip. */
+    isVisible: boolean
+    /** Composer open state — a reveal opens it, closing it un-reveals. */
+    isComposing: boolean
+    onComposingChange: (isOpen: boolean) => void
 }
 
-export function DetailChecklist({ items, cardId, projectId, canEdit }: DetailChecklistProps) {
+export function DetailChecklist({
+    items,
+    cardId,
+    projectId,
+    canEdit,
+    isVisible,
+    isComposing,
+    onComposingChange,
+}: DetailChecklistProps) {
     const { createItem, toggleItem, renameItem, deleteItem, moveItem } = useChecklistMutations(
         cardId,
         projectId
@@ -39,8 +52,11 @@ export function DetailChecklist({ items, cardId, projectId, canEdit }: DetailChe
         })
     }
 
-    // The section owns its empty state: an editor gets the heading and the
-    // "Add item" composer, a reader with nothing to read gets nothing at all.
+    // Collapsed behind its chip — see lib/card-sections.ts.
+    if (!isVisible) return null
+    // The section normally always renders because it owns the composer — but a
+    // read-only card has no composer, so an empty checklist is just a heading
+    // over nothing.
     if (!canEdit && items.length === 0) return null
 
     return (
@@ -86,6 +102,8 @@ export function DetailChecklist({ items, cardId, projectId, canEdit }: DetailChe
             {canEdit ? (
                 <ChecklistComposer
                     onSubmit={title => createItem.mutate({ title, position: rankForAppend(items) })}
+                    isOpen={isComposing}
+                    onOpenChange={onComposingChange}
                 />
             ) : null}
         </View>
@@ -305,11 +323,33 @@ function ChecklistItemInput({
 }
 
 /** Add-item row: same stay-open-on-Enter behaviour as the card composer. */
-function ChecklistComposer({ onSubmit }: { onSubmit: (title: string) => void }) {
-    const [isOpen, setIsOpen] = useState(false)
+function ChecklistComposer({
+    onSubmit,
+    isOpen: controlledOpen,
+    onOpenChange,
+}: {
+    onSubmit: (title: string) => void
+    /**
+     * Open state, when the section owns it — revealing the Checklist opens the
+     * composer with no second click, and closing it un-reveals the section.
+     * Omit both and the composer stays self-contained.
+     */
+    isOpen?: boolean
+    onOpenChange?: (isOpen: boolean) => void
+}) {
+    const [internalOpen, setInternalOpen] = useState(false)
     const [title, setTitle] = useState('')
     const inputRef = useRef<React.ComponentRef<typeof PlainInput>>(null)
     const mutedColor = useThemeColor('muted')
+
+    // Controlled-ness keys on `isOpen` being supplied, not on `onOpenChange` —
+    // the same rule CardComposer follows, and for the same reason: a bare
+    // handler there once left the internal state stuck closed.
+    const isOpen = controlledOpen ?? internalOpen
+    const setIsOpen = (next: boolean) => {
+        if (controlledOpen === undefined) setInternalOpen(next)
+        onOpenChange?.(next)
+    }
 
     const submit = () => {
         const trimmed = title.trim()

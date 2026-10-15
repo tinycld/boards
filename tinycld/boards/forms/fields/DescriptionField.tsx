@@ -79,7 +79,7 @@ function DescriptionCell({ data, collab }: { data: CardFormValue; collab: Collab
     return (
         <View className="overflow-visible">
             {header}
-            {body}
+            <View className="mb-6 overflow-visible">{body}</View>
         </View>
     )
 }

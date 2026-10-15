@@ -14,8 +14,6 @@ interface LinkPickerProps {
     /** The board the subject is on, so the board step can default to it. */
     projectId: string
     isPending: boolean
-    /** The trigger's text: the section offers "Link a card" while it has none. */
-    label?: string
     /**
      * Type-menu open state, when the section owns it — revealing the Links
      * section opens the picker with no second click. Omit both and the picker
@@ -51,7 +49,6 @@ export function LinkPicker({
     subject,
     projectId,
     isPending,
-    label = 'Add link',
     isOpen,
     onOpenChange,
     onSelect,
@@ -110,13 +107,13 @@ export function LinkPicker({
             trigger={
                 <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={label}
+                    accessibilityLabel="Add link"
                     testID="boards-link-add"
                     disabled={isPending}
                     className="flex-row items-center gap-2 px-2.5 py-2 rounded-[10px] hover:bg-foreground/5"
                 >
                     <Plus size={14} color={mutedColor} strokeWidth={2.2} />
-                    <Text className="text-[13px] font-medium text-muted">{label}</Text>
+                    <Text className="text-[13px] font-medium text-muted">Add link</Text>
                 </Pressable>
             }
             isOpen={isOpen}

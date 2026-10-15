@@ -377,19 +377,29 @@ describe('CardDetail', () => {
     test('a viewer sees bare values and nothing to add', async () => {
         h.role = { canEdit: true, canComment: true, isOwner: false }
         const editor = mountDetail(view('c4', 'Four', 4))
-        // The settled answer for an editor first, so the viewer's absence below
-        // is not just a section that has not rendered yet.
-        await waitFor(() => expect(editor.getByText('Add attachment')).toBeTruthy())
-        const dueText = q(editor.container, 'form-field-due')?.textContent ?? ''
-        expect(dueText).not.toBe('')
+        // The settled answer for an editor first (the chip row offering the
+        // empty sections), so the viewer's absence below is not just a
+        // section that has not rendered yet.
+        await waitFor(() => expect(q(editor.container, 'boards-section-chips')).toBeTruthy())
         cleanup()
 
         h.role = { canEdit: false, canComment: false, isOwner: false }
         const viewer = mountDetail(view('c4', 'Four', 4))
         await waitFor(() => expect(q(viewer.container, 'form-field-activity')).toBeTruthy())
-        expect(viewer.queryByText('Add attachment')).toBeNull()
+        expect(q(viewer.container, 'boards-section-chips')).toBeNull()
+        expect(viewer.queryByText('Attach file')).toBeNull()
         const due = q(viewer.container, 'form-field-due') as HTMLElement
         const label = [...due.querySelectorAll('rn-text')].at(-1)?.textContent ?? ''
+        expect(label).not.toBe('')
         expect(pressableAround(due, label)).toBeNull()
+    })
+
+    test('a commenter on a read-only card keeps the composer and the reactions', async () => {
+        h.role = { canEdit: false, canComment: true, isOwner: false }
+        const { container } = mountDetail(view('c4', 'Four', 4))
+        await waitFor(() => expect(q(container, 'form-field-activity')).toBeTruthy())
+        expect(q(container, 'boards-comment-composer')).toBeTruthy()
+        expect(container.querySelector('[accessibilityLabel="Add reaction"]')).toBeTruthy()
+        expect(q(container, 'boards-section-chips')).toBeNull()
     })
 })

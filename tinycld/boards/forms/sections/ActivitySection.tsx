@@ -1,5 +1,6 @@
 import type { BuiltinFieldProps } from '@tinycld/core/lib/forms/host-ui'
 import { useMemo, useRef, useState } from 'react'
+import { View } from 'react-native'
 import { DetailActivity } from '../../components/detail/DetailActivity'
 import { useCardDetail } from '../../hooks/useCardDetail'
 import { useCommentMutations } from '../../hooks/useCommentMutations'
@@ -46,30 +47,32 @@ function Activity({ data }: { data: CardFormValue }) {
         })
 
     return (
-        <DetailActivity
-            comments={comments}
-            activity={activity}
-            activityContext={activityContext}
-            // Not before the children query settles: an empty result then
-            // cannot be told from a card with no comments. The role, not
-            // `disabled`: a read-only card still lets a commenter reply.
-            canComment={canComment && isReady}
-            canModerate={isOwner}
-            reactionsFor={reactionsFor}
-            onToggleReaction={toggleReaction}
-            cardId={card.id}
-            projectId={projectId}
-            attachments={attachments}
-            mentionMembers={mentionMembers}
-            editingCommentId={editingCommentId}
-            isSaving={updateComment.isPending}
-            onStartEdit={startEdit}
-            editStartPoint={editStartPoint}
-            onCancelEdit={cancelEdit}
-            onSaveEdit={saveComment}
-            onReply={reply}
-            onDelete={commentId => deleteComment.mutate(commentId)}
-        />
+        <View className="pb-6">
+            <DetailActivity
+                comments={comments}
+                activity={activity}
+                activityContext={activityContext}
+                // Not before the children query settles: an empty result then
+                // cannot be told from a card with no comments. The role, not
+                // `disabled`: a read-only card still lets a commenter reply.
+                canComment={canComment && isReady}
+                canModerate={isOwner}
+                reactionsFor={reactionsFor}
+                onToggleReaction={toggleReaction}
+                cardId={card.id}
+                projectId={projectId}
+                attachments={attachments}
+                mentionMembers={mentionMembers}
+                editingCommentId={editingCommentId}
+                isSaving={updateComment.isPending}
+                onStartEdit={startEdit}
+                editStartPoint={editStartPoint}
+                onCancelEdit={cancelEdit}
+                onSaveEdit={saveComment}
+                onReply={reply}
+                onDelete={commentId => deleteComment.mutate(commentId)}
+            />
+        </View>
     )
 }
 

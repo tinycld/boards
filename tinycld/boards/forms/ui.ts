@@ -9,13 +9,15 @@ import { LabelsField } from './fields/LabelsField'
 import { PriorityField } from './fields/PriorityField'
 import { ReporterField } from './fields/ReporterField'
 import { SprintField } from './fields/SprintField'
+import { StartField } from './fields/StartField'
 import { TitleField } from './fields/TitleField'
 import { ActivitySection } from './sections/ActivitySection'
 import { AttachmentsSection } from './sections/AttachmentsSection'
-import { CommentsSection } from './sections/CommentsSection'
+import { ChecklistSection } from './sections/ChecklistSection'
 import { LinksSection } from './sections/LinksSection'
 import { PrLinksSection } from './sections/PrLinksSection'
 import { ReactionsSection } from './sections/ReactionsSection'
+import { SectionChipsSection } from './sections/SectionChipsSection'
 import { SubtasksSection } from './sections/SubtasksSection'
 import { useCollabDoc } from './use-collab-doc'
 
@@ -25,6 +27,7 @@ const ui: FormHostUi = {
     components: {
         TitleField,
         DescriptionField,
+        StartField,
         DueField,
         AssigneesField,
         LabelsField,
@@ -33,12 +36,13 @@ const ui: FormHostUi = {
         EpicField,
         SprintField,
         ReporterField,
+        SectionChipsSection,
+        ChecklistSection,
         SubtasksSection,
         AttachmentsSection,
         LinksSection,
         PrLinksSection,
         ReactionsSection,
-        CommentsSection,
         ActivitySection,
     },
     mappers: { checklist: checklistMapper },

@@ -1,7 +1,7 @@
 import type { BuiltinFieldProps } from '@tinycld/core/lib/forms/host-ui'
 import { NumberInput } from '@tinycld/core/ui/form'
 import { EstimatePicker } from '../../components/detail/EstimatePicker'
-import { EstimateValue } from '../../components/detail/property-values'
+import { EstimateValue, PropertyRow } from '../../components/detail/property-values'
 import { useUpdateCard } from '../../hooks/useCardMutations'
 import { useAdapterData } from '../CardFormContext'
 
@@ -23,13 +23,21 @@ export function EstimateField({ disabled, fieldKey, label }: BuiltinFieldProps) 
         )
     }
     const { card, canEdit } = data
-    if (!canEdit) return <EstimateValue estimate={card.estimate} />
+    if (!canEdit) {
+        return (
+            <PropertyRow name={label}>
+                <EstimateValue estimate={card.estimate} />
+            </PropertyRow>
+        )
+    }
     return (
-        <EstimatePicker
-            selected={card.estimate}
-            onSelect={estimate => updateCard.mutate({ cardId: card.id, estimate })}
-        >
-            <EstimateValue estimate={card.estimate} />
-        </EstimatePicker>
+        <PropertyRow name={label}>
+            <EstimatePicker
+                selected={card.estimate}
+                onSelect={estimate => updateCard.mutate({ cardId: card.id, estimate })}
+            >
+                <EstimateValue estimate={card.estimate} />
+            </EstimatePicker>
+        </PropertyRow>
     )
 }

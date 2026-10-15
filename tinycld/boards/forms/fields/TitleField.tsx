@@ -1,5 +1,6 @@
 import type { BuiltinFieldProps } from '@tinycld/core/lib/forms/host-ui'
 import { TextInput } from '@tinycld/core/ui/form'
+import { View } from 'react-native'
 import { EditableText } from '../../components/detail/EditableText'
 import { useUpdateCard } from '../../hooks/useCardMutations'
 import { useAdapterData } from '../CardFormContext'
@@ -27,14 +28,16 @@ export function TitleField({ disabled, fieldKey, label }: BuiltinFieldProps) {
     }
     const { card, canEdit, titleRef } = data
     return (
-        <EditableText
-            ref={titleRef}
-            value={card.title}
-            onSave={title => updateCard.mutate({ cardId: card.id, title })}
-            placeholder="Card title"
-            accessibilityLabel="Edit card title"
-            textClassName="text-[20px] font-semibold leading-[27px] tracking-tight text-foreground"
-            isDisabled={!canEdit}
-        />
+        <View className="mt-1 mb-[18px]">
+            <EditableText
+                ref={titleRef}
+                value={card.title}
+                onSave={title => updateCard.mutate({ cardId: card.id, title })}
+                placeholder="Card title"
+                accessibilityLabel="Edit card title"
+                textClassName="text-[20px] font-semibold leading-[27px] tracking-tight text-foreground"
+                isDisabled={!canEdit}
+            />
+        </View>
     )
 }

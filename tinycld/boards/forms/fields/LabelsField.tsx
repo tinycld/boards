@@ -1,12 +1,12 @@
 import type { BuiltinFieldProps } from '@tinycld/core/lib/forms/host-ui'
 import { LabelPicker } from '../../components/detail/LabelPicker'
-import { LabelsValue } from '../../components/detail/property-values'
+import { LabelsValue, PropertyRow } from '../../components/detail/property-values'
 import { useToggleCardRelation } from '../../hooks/useCardMutations'
 import type { BoardLabel } from '../../types'
 import { useAdapterData } from '../CardFormContext'
 import { stringList } from './form-value'
 
-export function LabelsField({ disabled, value, onChange }: BuiltinFieldProps) {
+export function LabelsField({ disabled, label, value, onChange }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
     const toggleRelation = useToggleCardRelation()
     if (!data) return null
@@ -14,19 +14,27 @@ export function LabelsField({ disabled, value, onChange }: BuiltinFieldProps) {
         return <NewCardLabels labels={data.labels} value={value} onChange={onChange} />
     }
     const { card, canEdit, projectLabels, onManageLabels } = data
-    if (!canEdit) return <LabelsValue card={card} />
-    const selectedIds = card.labels.map(label => label.id)
+    if (!canEdit) {
+        return (
+            <PropertyRow name={label}>
+                <LabelsValue card={card} />
+            </PropertyRow>
+        )
+    }
+    const selectedIds = card.labels.map(each => each.id)
     return (
-        <LabelPicker
-            labels={projectLabels}
-            selectedIds={selectedIds}
-            onToggle={(id, isSelected) =>
-                toggleRelation.mutate({ cardId: card.id, field: 'labels', id, isSelected })
-            }
-            onManage={onManageLabels}
-        >
-            <LabelsValue card={card} />
-        </LabelPicker>
+        <PropertyRow name={label}>
+            <LabelPicker
+                labels={projectLabels}
+                selectedIds={selectedIds}
+                onToggle={(id, isSelected) =>
+                    toggleRelation.mutate({ cardId: card.id, field: 'labels', id, isSelected })
+                }
+                onManage={onManageLabels}
+            >
+                <LabelsValue card={card} />
+            </LabelPicker>
+        </PropertyRow>
     )
 }
 

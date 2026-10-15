@@ -31,6 +31,11 @@ interface DetailLinksProps {
     /** The board the card is on, so the picker's board step defaults to it. */
     projectId: string
     canEdit: boolean
+    /** False while the section is collapsed behind its chip. */
+    isVisible: boolean
+    /** Picker open state — a reveal opens it, closing it un-reveals. */
+    isComposing: boolean
+    onComposingChange: (isOpen: boolean) => void
 }
 
 /**
@@ -61,13 +66,17 @@ export function DetailLinks({
     pickerCards,
     projectId,
     canEdit,
+    isVisible,
+    isComposing,
+    onComposingChange,
 }: DetailLinksProps) {
     const groups = groupLinks(links)
 
-    // The section owns its empty state: an editor gets the heading and one
-    // "Link a card" affordance, a reader with nothing to read gets nothing.
+    // Collapsed behind its chip — see lib/card-sections.ts.
+    if (!isVisible) return null
+    // Like the checklist: the section owns its own composer, so with no
+    // composer an empty list is a heading over nothing.
     if (!canEdit && links.length === 0) return null
-    const addLabel = links.length === 0 ? 'Link a card' : 'Add link'
 
     return (
         <View className="mb-6">
@@ -102,7 +111,8 @@ export function DetailLinks({
                     subject={card}
                     projectId={projectId}
                     isPending={isAddingLink}
-                    label={addLabel}
+                    isOpen={isComposing}
+                    onOpenChange={onComposingChange}
                     onSelect={(targetCardId: string, type: LinkType) => addLink(targetCardId, type)}
                 />
             ) : null}

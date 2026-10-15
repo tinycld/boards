@@ -3,7 +3,7 @@ import { LabelBadge } from '@tinycld/core/components/LabelBadge'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useAvatarUrl } from '@tinycld/core/lib/use-avatar-url'
 import { CalendarDays, Clock, Gauge, Layers, Timer } from 'lucide-react-native'
-import { forwardRef } from 'react'
+import { forwardRef, type ReactNode } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { dueStateFor, formatDueDate } from '../../lib/due-state'
 import { formatSchedule } from '../../lib/due-time'
@@ -14,9 +14,24 @@ import type { BoardCardView, BoardEpic, BoardMember, BoardSprint } from '../../t
 import { PriorityGlyph } from '../PriorityGlyph'
 import { GhostChip } from './GhostChip'
 
-// The card's property values, each doubling as its picker's trigger. Shared by
-// the properties block and the card form's field adapters, so a property reads
-// the same wherever it renders.
+// The card's property values, each doubling as its picker's trigger, and the
+// row that lays one out beside its name. The card form's field adapters render
+// one row each, so the properties read as one block.
+
+/**
+ * One property: its name in a fixed column on the left, the value on the
+ * right. The bottom margin is the gap between rows of the properties block.
+ */
+export function PropertyRow({ name, children }: { name: string; children: ReactNode }) {
+    return (
+        <View className="flex-row items-start gap-3 mb-3">
+            <Text className="w-[92px] shrink-0 text-[12px] font-medium text-muted pt-[3px]">
+                {name}
+            </Text>
+            <View className="flex-1 flex-row flex-wrap items-center gap-1.5">{children}</View>
+        </View>
+    )
+}
 
 /** The sprint chip, and the SprintPicker's trigger — the EpicValue shape. */
 export const SprintValue = forwardRef<View, { sprint: BoardSprint | null; onPress?: () => void }>(

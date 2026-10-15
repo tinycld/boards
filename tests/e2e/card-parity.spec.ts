@@ -25,14 +25,13 @@ import {
 //
 //   Snapshot                | Expected delta                                   | Ruling
 //   ------------------------|--------------------------------------------------|-------
-//   peek-empty.png          | the section chip row is absent; empty sections   | 1
-//                           | show their heading and one "Add ..." affordance  |
 //   peek-scrolled.png       | the description toolbar scrolls with the        | 2
 //                           | description instead of pinning                   |
 //   quick-composer-open.png | one extra icon button (expand) right of the     | 9
 //                           | input                                            |
 //
-// Every other snapshot has an empty delta list.
+// Every other snapshot has an empty delta list. Both delta shots are soft
+// assertions, so a shot taken after one in the same test is still compared.
 //
 // peek-scrolled.png is taken with the description in edit mode (so its toolbar
 // is on screen) and the Activity heading scrolled into view; the toolbar pins
@@ -291,7 +290,7 @@ test.describe('Card parity', () => {
             page.getByTestId('boards-description-editor').locator('.ProseMirror')
         ).toBeVisible()
         await peek(page).getByText('Activity', { exact: true }).scrollIntoViewIfNeeded()
-        await expect(peek(page)).toHaveScreenshot('peek-scrolled.png', {
+        await expect.soft(peek(page)).toHaveScreenshot('peek-scrolled.png', {
             ...SHOT,
             mask: masks(page),
         })
@@ -384,10 +383,12 @@ test.describe('Card parity', () => {
         await freshBoard(page, 'Parity composer')
         await page.getByText('Add card', { exact: true }).first().click()
         await expect(page.getByPlaceholder('What needs doing?')).toBeFocused()
-        await expect(page.getByTestId('boards-board')).toHaveScreenshot('quick-composer-open.png', {
-            ...SHOT,
-            mask: masks(page),
-        })
+        await expect
+            .soft(page.getByTestId('boards-board'))
+            .toHaveScreenshot('quick-composer-open.png', {
+                ...SHOT,
+                mask: masks(page),
+            })
     })
 
     test.describe('dark', () => {

@@ -9,6 +9,7 @@ import { useEffect, useMemo } from 'react'
 import { useUpdateCard } from '../hooks/useCardMutations'
 import { cardColumnsPatch } from '../lib/card-columns'
 import { useCommentReplyStore } from '../stores/comment-reply-store'
+import { useSectionRevealStore } from '../stores/section-reveal-store'
 import { CARD_HOST_KEY } from './hosts'
 
 /**
@@ -54,11 +55,19 @@ export function useCardForm(cardId: string) {
         const fields = Object.keys(split.fields).length > 0 ? split.fields : undefined
         await updateCard.mutateAsync({ cardId, columns, fields })
     })
-    // A reply belongs to the card it was started on: leaving the card drops
-    // it, so coming back starts a fresh comment. Every card surface remounts
-    // its body per card (`key={card.id}`), so unmount is the card changing.
+    // A reply and the sections opened from the chip row belong to the card
+    // they were started on: leaving the card drops them, so coming back starts
+    // fresh. Every card surface remounts its body per card (`key={card.id}`),
+    // so unmount is the card changing.
     const cancelReply = useCommentReplyStore(s => s.cancelReply)
-    useEffect(() => cancelReply, [cancelReply])
+    const clearReveals = useSectionRevealStore(s => s.clear)
+    useEffect(
+        () => () => {
+            cancelReply()
+            clearReveals(cardId)
+        },
+        [cancelReply, clearReveals, cardId]
+    )
     const isReady = edit.isReady && Boolean(ui) && Boolean(record) && Boolean(edit.definition)
     return { host, ui, record, edit, context, isReady }
 }

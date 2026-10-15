@@ -1,7 +1,7 @@
 import type { BuiltinFieldProps } from '@tinycld/core/lib/forms/host-ui'
 import { DateField } from '@tinycld/core/ui/forms/fields/DateField'
 import { DuePicker } from '../../components/detail/DuePicker'
-import { DueValue } from '../../components/detail/property-values'
+import { DueValue, PropertyRow } from '../../components/detail/property-values'
 import { useUpdateCard } from '../../hooks/useCardMutations'
 import { useAdapterData } from '../CardFormContext'
 import { stringValue } from './form-value'
@@ -27,17 +27,29 @@ export function DueField({ disabled, fieldKey, label, value, onChange }: Builtin
         )
     }
     const { card, canEdit } = data
-    if (!canEdit) return <DueValue due={card.due} dueHasTime={card.dueHasTime} />
+    if (!canEdit) {
+        return (
+            <PropertyRow name={label}>
+                <DueValue due={card.due} dueHasTime={card.dueHasTime} />
+            </PropertyRow>
+        )
+    }
     return (
-        <DuePicker
-            value={card.due}
-            hasTime={card.dueHasTime}
-            allowTime
-            onChange={pick =>
-                updateCard.mutate({ cardId: card.id, due: pick.date, dueHasTime: pick.hasTime })
-            }
-        >
-            <DueValue due={card.due} dueHasTime={card.dueHasTime} />
-        </DuePicker>
+        <PropertyRow name={label}>
+            <DuePicker
+                value={card.due}
+                hasTime={card.dueHasTime}
+                allowTime
+                onChange={pick =>
+                    updateCard.mutate({
+                        cardId: card.id,
+                        due: pick.date,
+                        dueHasTime: pick.hasTime,
+                    })
+                }
+            >
+                <DueValue due={card.due} dueHasTime={card.dueHasTime} />
+            </DuePicker>
+        </PropertyRow>
     )
 }

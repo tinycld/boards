@@ -15,6 +15,11 @@ interface DetailSubtasksProps {
     projectCards: BoardCardView[]
     projectId: string
     canEdit: boolean
+    /** False while the section is collapsed behind its chip. */
+    isVisible: boolean
+    /** Composer open state — a reveal opens it, closing it un-reveals. */
+    isComposing: boolean
+    onComposingChange: (isOpen: boolean) => void
 }
 
 /**
@@ -32,7 +37,15 @@ interface DetailSubtasksProps {
  * and the same-board invariant makes the parent's list the only choice that
  * needs no picker.
  */
-export function DetailSubtasks({ card, projectCards, projectId, canEdit }: DetailSubtasksProps) {
+export function DetailSubtasks({
+    card,
+    projectCards,
+    projectId,
+    canEdit,
+    isVisible,
+    isComposing,
+    onComposingChange,
+}: DetailSubtasksProps) {
     const createCard = useCreateCard(projectId)
     const children = childrenOf(projectCards, card)
 
@@ -40,8 +53,11 @@ export function DetailSubtasks({ card, projectCards, projectId, canEdit }: Detai
     // depth at one level), so an open child shows no section at all rather
     // than an empty one that could never be filled.
     if (card.parent) return null
-    // The section owns its empty state: an editor gets the heading and the
-    // composer, a reader with nothing to read gets nothing at all.
+    // Collapsed behind its chip — see lib/card-sections.ts.
+    if (!isVisible) return null
+    // Like the checklist: the section normally always renders because it owns
+    // the composer, so with no composer an empty list is a heading over
+    // nothing.
     if (!canEdit && children.length === 0) return null
 
     // Ranked against the parent's own column, which is where the new sub-task
@@ -79,6 +95,8 @@ export function DetailSubtasks({ card, projectCards, projectId, canEdit }: Detai
                     onSubmit={addSubtask}
                     label="Add sub-task"
                     placeholder="What needs doing?"
+                    isOpen={isComposing}
+                    onOpenChange={onComposingChange}
                 />
             ) : null}
         </View>
