@@ -7,12 +7,29 @@ import (
 	"tinycld.org/core/yjsdoc"
 )
 
-// cardFragmentPattern is the only root key a client may write to. PocketBase
-// ids are 15 lowercase alphanumerics; the bound is loose enough to survive a
-// future id format without being a wildcard.
+// cardFragmentPattern is the root key of a card's editor. PocketBase ids are
+// 15 lowercase alphanumerics; the bound is loose enough to survive a future id
+// format without being a wildcard.
 var cardFragmentPattern = regexp.MustCompile(`^card:[a-z0-9]{1,32}$`)
 
-// validateUpdate rejects any update that writes outside the per-card editors.
+// positionMigrationPattern is the companion root y-tiptap (3.0.10 and later)
+// keeps beside each root fragment: a map of "position migrations", which
+// let other clients remap a cursor after a block is split, merged or retyped.
+// The editor writes it in the SAME transaction as the edit, so rejecting it
+// drops the edit too — and every later edit that depends on it — leaving the
+// server's copy, and so the saved description, stuck at the last edit before
+// the first Enter. Admitted only in the form tied to a card fragment
+// (`root:card:<id>`), so it adds no namespace a card fragment does not
+// already have.
+var positionMigrationPattern = regexp.MustCompile(`^__tiptap_position_migrations:root:card:[a-z0-9]{1,32}$`)
+
+// allowedRoot reports whether a client may write to the root key.
+func allowedRoot(key string) bool {
+	return cardFragmentPattern.MatchString(key) || positionMigrationPattern.MatchString(key)
+}
+
+// validateUpdate rejects any update that writes outside the per-card editors
+// (each card's fragment and the editor's position-migration map beside it).
 //
 // A board's document is one shared namespace: every member of the board can
 // write to it, and the write gate is board-level. Without this check a crafted
@@ -29,7 +46,7 @@ func validateUpdate(projectID string, update []byte) error {
 		return fmt.Errorf("cards: could not inspect update for board %s: %w", projectID, err)
 	}
 	for _, key := range keys {
-		if !cardFragmentPattern.MatchString(key) {
+		if !allowedRoot(key) {
 			return fmt.Errorf("cards: update writes to unexpected root %q in board %s", key, projectID)
 		}
 	}

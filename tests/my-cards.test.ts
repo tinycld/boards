@@ -178,6 +178,25 @@ describe('buildMyCardRows', () => {
         expect(rows[0]?.list.name).toBe('To do')
     })
 
+    // Board and list are relations now: until each has loaded (or if it is
+    // gone) the row carries undefined, and the card waits rather than
+    // rendering without a board or column.
+    it('leaves a card out until its board and list have loaded', () => {
+        const rows = buildMyCardRows({
+            rows: [
+                row(card('ready', 'p1'), p1),
+                { card: card('noBoard', 'p1'), project: undefined, list: list('p1-l', 'p1') },
+                { card: card('noList', 'p1'), project: p1, list: undefined },
+            ],
+            labels: [],
+            users,
+            mode: 'all',
+            userId: 'u1',
+            text: '',
+        })
+        expect(rows.map(r => r.card.id)).toEqual(['ready'])
+    })
+
     it('assigned matches a card with several assignees, not just a sole one', () => {
         // Regression: the vendored PocketBase fork makes plain `=` on a
         // multi-relation column an ALL-match, so pushing `assigned` into the

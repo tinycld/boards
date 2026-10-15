@@ -106,10 +106,12 @@ export function isMine(
     }
 }
 
+// Board and list arrive as relations, so either is undefined until its row
+// has loaded (or if it is gone); such a card is not listed yet.
 export interface JoinedRow {
     card: BoardsCards
-    project: BoardsProjects
-    list: BoardsLists
+    project: BoardsProjects | undefined
+    list: BoardsLists | undefined
 }
 
 export interface BuildMyCardsInput {
@@ -179,6 +181,7 @@ export function buildMyCardRows(input: BuildMyCardsInput): MyCardRow[] {
 
     const out: MyCardRow[] = []
     for (const { card, project, list } of input.rows) {
+        if (!project || !list) continue
         if (card.archived || project.archived) continue
         const category = normalizeListCategory(list.category)
         if (!input.showClosed && isClosedCategory(category)) continue

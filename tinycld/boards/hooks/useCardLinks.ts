@@ -3,6 +3,7 @@ import { useLiveQuery } from '@tanstack/react-db'
 import { useAuth } from '@tinycld/core/lib/auth'
 import { mutation, useMutation } from '@tinycld/core/lib/mutations'
 import { useStore } from '@tinycld/core/lib/pocketbase'
+import { materialize } from 'pbtsdb'
 import { newRecordId } from 'pbtsdb/core'
 import { useMemo } from 'react'
 import { formatCardKey } from '../lib/card-key'
@@ -108,10 +109,12 @@ export function useCardLinks(
         return [...ids].sort()
     }, [rows, cardId, cardsById])
 
-    // The far card joined to its own board and list — the two things a link
-    // row needs beyond the card itself. `key` is `slug-number`, so it needs
-    // the far board's slug; the strike-through needs the far list's category.
-    // Both are to-ONE joins, so they add no rows.
+    // The far card with its own board and list — the two things a link row
+    // needs beyond the card itself. `key` is `slug-number`, so it needs the
+    // far board's slug; the strike-through needs the far list's category.
+    // Relations, not joins: a join pushes every loaded board and list id into
+    // the cards request, which past ~200 boards exceeds PocketBase's filter
+    // limit.
     const [cardsCollection, projectsCollection, listsCollection] = useStore(
         'boards_cards',
         'boards_projects',
@@ -122,19 +125,32 @@ export function useCardLinks(
             if (farIds.length === 0) return null
             return query
                 .from({ card: cardsCollection })
-                .innerJoin({ project: projectsCollection }, ({ card, project }) =>
-                    eq(card.project, project.id)
-                )
-                .innerJoin({ list: listsCollection }, ({ card, list }) => eq(card.list, list.id))
                 .where(({ card }) => inArray(card.id, farIds))
+                .select(({ card }) => ({
+                    card,
+                    project: materialize(
+                        query
+                            .from({ project: projectsCollection })
+                            .where(({ project }) => eq(project.id, card.project))
+                            .findOne()
+                    ),
+                    list: materialize(
+                        query
+                            .from({ list: listsCollection })
+                            .where(({ list }) => eq(list.id, card.list))
+                            .findOne()
+                    ),
+                }))
         },
     })
 
     const resolved = useMemo(() => {
         if (farIds.length === 0) return cardsById
         const merged = new Map(cardsById)
-        for (const row of farRows ?? []) {
-            merged.set(row.card.id, toFarCardView(row))
+        for (const { card, project, list } of farRows ?? []) {
+            // Not resolved until its board and list have loaded.
+            if (!project || !list) continue
+            merged.set(card.id, toFarCardView({ card, project, list }))
         }
         return merged
     }, [cardsById, farRows, farIds])
