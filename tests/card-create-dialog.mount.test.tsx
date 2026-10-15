@@ -73,6 +73,15 @@ vi.mock('@tinycld/core/lib/pocketbase', async () => {
         order,
         definition,
     })
+    const user = (id: string, name: string) => ({
+        id,
+        name,
+        email: `${id}@test.local`,
+        avatar: '',
+        avatar_crop: '',
+        avatar_color: '',
+        avatar_emoji: '',
+    })
     const mk = (id: string, initialData: { id: string }[]) => {
         const collection = createCollection({
             ...localOnlyCollectionOptions({ id, getKey: (r: { id: string }) => r.id, initialData }),
@@ -94,12 +103,26 @@ vi.mock('@tinycld/core/lib/pocketbase', async () => {
         boards_sprints: mk('boards_sprints', []),
         boards_cards: mk('boards_cards', []),
         boards_checklist_items: mk('boards_checklist_items', []),
-        users: mk('users', []),
+        // Two board members, and an org user who is not on the board.
+        users: mk('users', [
+            user('u1', 'Maya Kim'),
+            user('u2', 'Jonas Reyes'),
+            user('u3', 'Org Outsider'),
+        ]),
+        boards_project_members: mk('boards_project_members', [
+            { id: 'm1', project: 'p1', user: 'u1' },
+            { id: 'm2', project: 'p1', user: 'u2' },
+        ]),
     })
     return {
         useStore: (...names: string[]) => names.map(n => h.stores[n]),
         // Core's user picker resolves its collection by name.
         collectionByName: (name: string) => h.stores[name],
+        // A picked member's avatar asks for a file URL; signed out, it asks nothing.
+        pb: {
+            authStore: { isValid: false },
+            files: { getURL: () => '', getToken: async () => '' },
+        },
     }
 })
 
@@ -211,6 +234,38 @@ describe('CardCreateDialog', () => {
         ).toBe(true)
         expect(container.querySelector('rn-textinput')).toBeNull()
         expect(byLabel(container, 'Add card')).toBeTruthy()
+    })
+
+    it("offers the board's members, not the org, as assignees and reporter", async () => {
+        useCardCreateStore
+            .getState()
+            .open({ projectId: 'p1', listId: 'l1', position: 'a0', initialTitle: 'Pick people' })
+        const { container, getByText, queryByText } = render(<CardCreateDialog projectId="p1" />, {
+            wrapper,
+        })
+        const reporter = await waitFor(() => {
+            const cell = q(container, 'form-field-reporter')
+            if (!cell) throw new Error('no reporter cell')
+            return cell
+        })
+        // The reporter menu closes on a pick; the assignee menu stays open for
+        // the next one, so it goes second.
+        fireEvent.click(getByText('Set reporter', { container: reporter }) as HTMLElement)
+        await waitFor(() => expect(queryByText('Jonas Reyes')).toBeTruthy())
+        expect(queryByText('Org Outsider')).toBeNull()
+        fireEvent.click(getByText('Jonas Reyes'))
+        await waitFor(() => expect(queryByText('Maya Kim')).toBeNull())
+
+        const assignees = q(container, 'form-field-assignees') as HTMLElement
+        fireEvent.click(getByText('Assign', { container: assignees }) as HTMLElement)
+        await waitFor(() => expect(queryByText('Maya Kim')).toBeTruthy())
+        expect(queryByText('Org Outsider')).toBeNull()
+        fireEvent.click(getByText('Maya Kim'))
+
+        fireEvent.click(q(container, 'form-wizard-next') as HTMLElement)
+        await waitFor(() => expect(useCardCreateStore.getState().target).toBeNull())
+        const card = h.stores.boards_cards.toArray.find(c => c.title === 'Pick people')
+        expect(card).toMatchObject({ assignees: ['u1'], reporter: 'u2' })
     })
 
     it('creates a card of the picked type with its custom values and checklist rows', async () => {

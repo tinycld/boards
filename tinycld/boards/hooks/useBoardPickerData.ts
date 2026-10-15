@@ -2,9 +2,10 @@ import { eq } from '@tanstack/db'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { materialize } from 'pbtsdb'
 import { useMemo } from 'react'
-import { toBoardEpic, toBoardLabel, toBoardSprint } from '../lib/board-project'
+import { toBoardEpic, toBoardLabel, toBoardMember, toBoardSprint } from '../lib/board-project'
 import { compareSprints } from '../lib/sprint'
-import type { BoardEpic, BoardLabel, BoardSprint } from '../types'
+import { uniqueByUserId } from '../lib/unique-by-user-id'
+import type { BoardEpic, BoardLabel, BoardMember, BoardSprint } from '../types'
 import { useBoardLiveQuery } from './useBoardLiveQuery'
 
 export interface BoardPickerData {
@@ -12,11 +13,13 @@ export interface BoardPickerData {
     epics: BoardEpic[]
     sprints: BoardSprint[]
     sprintsEnabled: boolean
+    /** The board's roster: who a new card can be assigned or reported to. */
+    members: BoardMember[]
 }
 
 /**
- * What a new card's pickers offer: the board's labels, epics and sprints, and
- * whether it plans in sprints.
+ * What a new card's pickers offer: the board's labels, epics, sprints and
+ * members, and whether it plans in sprints.
  *
  * Only those rows rather than the board tree: the create dialog has no use
  * for the cards, and building the tree would redo the board's whole build on
@@ -24,11 +27,20 @@ export interface BoardPickerData {
  * already holds these rows, so they are served from the store.
  */
 export function useBoardPickerData(projectId: string): BoardPickerData {
-    const [projectsCollection, labelsCollection, epicsCollection, sprintsCollection] = useStore(
+    const [
+        projectsCollection,
+        labelsCollection,
+        epicsCollection,
+        sprintsCollection,
+        membersCollection,
+        usersCollection,
+    ] = useStore(
         'boards_projects',
         'boards_labels',
         'boards_epics',
-        'boards_sprints'
+        'boards_sprints',
+        'boards_project_members',
+        'users'
     )
     const { data } = useBoardLiveQuery(query => {
         if (!projectId) return null
@@ -52,6 +64,16 @@ export function useBoardPickerData(projectId: string): BoardPickerData {
                         .from({ sprint: sprintsCollection })
                         .where(({ sprint }) => eq(sprint.project, project.id))
                 ),
+                // The roster the card detail's pickers offer (useActiveBoard):
+                // a card is assigned only to someone who can open the board.
+                members: materialize(
+                    query
+                        .from({ member: membersCollection })
+                        .innerJoin({ user: usersCollection }, ({ member, user }) =>
+                            eq(member.user, user.id)
+                        )
+                        .where(({ member }) => eq(member.project, project.id))
+                ),
             }))
             .findOne()
     })
@@ -66,6 +88,8 @@ export function useBoardPickerData(projectId: string): BoardPickerData {
                 .sort((a, b) => a.position.localeCompare(b.position) || a.id.localeCompare(b.id)),
             sprints: (data?.sprints ?? []).map(toBoardSprint).sort(compareSprints),
             sprintsEnabled: data?.sprintsEnabled ?? false,
+            // A group grant can list one person twice; the picker shows them once.
+            members: uniqueByUserId(data?.members ?? []).map(row => toBoardMember(row.user)),
         }),
         [data]
     )

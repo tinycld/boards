@@ -1,25 +1,17 @@
 import type { BuiltinFieldProps } from '@tinycld/core/lib/forms/host-ui'
-import { UserField } from '@tinycld/core/ui/forms/fields/UserField'
 import { PropertyRow, ReporterValue } from '../../components/detail/property-values'
 import { ReporterPicker } from '../../components/detail/ReporterPicker'
 import { useUpdateCard } from '../../hooks/useCardMutations'
+import type { BoardMember } from '../../types'
 import { useAdapterData } from '../CardFormContext'
 import { stringValue } from './form-value'
 
 /** Left empty in the create dialog, the creator is the reporter (useCreateCard). */
-export function ReporterField({ disabled, fieldKey, label, value, onChange }: BuiltinFieldProps) {
+export function ReporterField({ disabled, label, value, onChange }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
     const updateCard = useUpdateCard()
     if (data.mode === 'create') {
-        return (
-            <UserField
-                value={stringValue(value)}
-                onChange={onChange}
-                multiple={false}
-                testID={`form-input-${fieldKey}`}
-                accessibilityLabel={label}
-            />
-        )
+        return <NewCardReporter members={data.members} value={value} onChange={onChange} />
     }
     const { card, canEdit, projectMembers } = data
     if (!canEdit) {
@@ -39,5 +31,31 @@ export function ReporterField({ disabled, fieldKey, label, value, onChange }: Bu
                 <ReporterValue card={card} />
             </ReporterPicker>
         </PropertyRow>
+    )
+}
+
+/**
+ * The same picker over the form's value, offering the board's members. Clearing
+ * it ('') leaves the value empty, so the creator reports the card.
+ */
+function NewCardReporter({
+    members,
+    value,
+    onChange,
+}: {
+    members: BoardMember[]
+    value: unknown
+    onChange: (value: unknown) => void
+}) {
+    const selectedId = stringValue(value) ?? undefined
+    const reporter = members.find(member => member.id === selectedId)
+    return (
+        <ReporterPicker
+            members={members}
+            selectedId={selectedId}
+            onSelect={id => onChange(id || null)}
+        >
+            <ReporterValue card={{ reporter }} />
+        </ReporterPicker>
     )
 }

@@ -205,36 +205,37 @@ export function EmptyValue() {
  * — so the empty branch here means the card has no creator either, which is
  * only true of bootstrap-written rows.
  */
-export const ReporterValue = forwardRef<View, { card: BoardCardView; onPress?: () => void }>(
-    function ReporterValue({ card, onPress }, ref) {
-        const reporter = card.reporter
+export const ReporterValue = forwardRef<
+    View,
+    { card: Pick<BoardCardView, 'reporter'>; onPress?: () => void }
+>(function ReporterValue({ card, onPress }, ref) {
+    const reporter = card.reporter
 
-        if (!onPress) {
-            if (!reporter) return <EmptyValue />
-            return (
-                <View className="flex-row flex-wrap items-center gap-1.5">
-                    <MemberChip member={reporter} />
-                </View>
-            )
-        }
-
-        if (!reporter) {
-            return <GhostChip ref={ref} label="Set reporter" onPress={onPress} />
-        }
-
+    if (!onPress) {
+        if (!reporter) return <EmptyValue />
         return (
-            <Pressable
-                ref={ref}
-                accessibilityRole="button"
-                accessibilityLabel="Change reporter"
-                onPress={onPress}
-                className="flex-row flex-wrap items-center gap-1.5 rounded-full web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
-            >
+            <View className="flex-row flex-wrap items-center gap-1.5">
                 <MemberChip member={reporter} />
-            </Pressable>
+            </View>
         )
     }
-)
+
+    if (!reporter) {
+        return <GhostChip ref={ref} label="Set reporter" onPress={onPress} />
+    }
+
+    return (
+        <Pressable
+            ref={ref}
+            accessibilityRole="button"
+            accessibilityLabel="Change reporter"
+            onPress={onPress}
+            className="flex-row flex-wrap items-center gap-1.5 rounded-full web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+        >
+            <MemberChip member={reporter} />
+        </Pressable>
+    )
+})
 
 /**
  * The assignee chips, and the AssigneePicker's trigger.
@@ -243,36 +244,37 @@ export const ReporterValue = forwardRef<View, { card: BoardCardView; onPress?: (
  * fragment: the picker clones its single trigger element to inject onPress and
  * a ref, and a fragment has neither.
  */
-export const AssigneesValue = forwardRef<View, { card: BoardCardView; onPress?: () => void }>(
-    function AssigneesValue({ card, onPress }, ref) {
-        // No onPress means no picker wrapped this value (read-only card):
-        // plain content, no button semantics, and no ghost-chip invitation.
-        if (!onPress) {
-            if (!card.assignees?.length) return <EmptyValue />
-            return (
-                <View className="flex-row flex-wrap items-center gap-1.5">
-                    <AssigneeChips card={card} />
-                </View>
-            )
-        }
-
-        if (!card.assignees?.length) {
-            return <GhostChip ref={ref} label="Assign" onPress={onPress} />
-        }
-
+export const AssigneesValue = forwardRef<
+    View,
+    { card: Pick<BoardCardView, 'assignees'>; onPress?: () => void }
+>(function AssigneesValue({ card, onPress }, ref) {
+    // No onPress means no picker wrapped this value (read-only card):
+    // plain content, no button semantics, and no ghost-chip invitation.
+    if (!onPress) {
+        if (!card.assignees?.length) return <EmptyValue />
         return (
-            <Pressable
-                ref={ref}
-                accessibilityRole="button"
-                accessibilityLabel="Change assignees"
-                onPress={onPress}
-                className="flex-row flex-wrap items-center gap-1.5 rounded-full web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
-            >
+            <View className="flex-row flex-wrap items-center gap-1.5">
                 <AssigneeChips card={card} />
-            </Pressable>
+            </View>
         )
     }
-)
+
+    if (!card.assignees?.length) {
+        return <GhostChip ref={ref} label="Assign" onPress={onPress} />
+    }
+
+    return (
+        <Pressable
+            ref={ref}
+            accessibilityRole="button"
+            accessibilityLabel="Change assignees"
+            onPress={onPress}
+            className="flex-row flex-wrap items-center gap-1.5 rounded-full web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+        >
+            <AssigneeChips card={card} />
+        </Pressable>
+    )
+})
 
 /** One person, as a pill. Shared by the Reporter and Assignees rows. */
 export function MemberChip({ member }: { member: BoardMember }) {
@@ -301,7 +303,7 @@ export function MemberChip({ member }: { member: BoardMember }) {
     )
 }
 
-function AssigneeChips({ card }: { card: BoardCardView }) {
+function AssigneeChips({ card }: { card: Pick<BoardCardView, 'assignees'> }) {
     return (
         <>
             {card.assignees.map(member => (

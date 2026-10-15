@@ -82,6 +82,7 @@ const NO_BOARD: CreateCardValue = {
     epics: [],
     sprints: [],
     sprintsEnabled: false,
+    members: [],
 }
 
 export function useAdapterData(disabled: boolean): AdapterData {

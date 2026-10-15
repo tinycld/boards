@@ -1,5 +1,5 @@
 import { createContext, type ReactNode, useContext } from 'react'
-import type { BoardEpic, BoardLabel, BoardSprint } from '../types'
+import type { BoardEpic, BoardLabel, BoardMember, BoardSprint } from '../types'
 
 export interface CreateCardValue {
     /** What the pickers offer, read from the board (see useBoardPickerData). */
@@ -7,6 +7,8 @@ export interface CreateCardValue {
     epics: BoardEpic[]
     sprints: BoardSprint[]
     sprintsEnabled: boolean
+    /** The board's roster, for the assignee and reporter pickers. */
+    members: BoardMember[]
 }
 
 /**
