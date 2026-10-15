@@ -8,10 +8,10 @@ import (
 	"github.com/pocketbase/pocketbase/tests"
 )
 
-// A checklist item and an attachment are created on their card's board
-// (2090000102). Every rule reads the row's own `project`, so without the pin a
-// writer on board A could hang a row stamped project = A off a card of board
-// B: B's card counts it while B's members cannot read it.
+// A checklist item, an attachment and a comment are created on their card's
+// board (2090000102, 2090000103). Every rule reads the row's own `project`, so
+// without the pin a writer on board A could hang a row stamped project = A off
+// a card of board B: B's card counts it while B's members cannot read it.
 //
 // Each refusal is paired with a positive control on the writer's own card, so
 // the pin is what refuses, not the request's shape; and with a re-read, so a
@@ -23,7 +23,7 @@ type childPinEnv struct {
 }
 
 // setupChildPin is cardsEnv's editor (a writer on A) and a card on board B,
-// where the editor holds no membership.
+// where neither the editor nor the commentor holds a membership.
 func setupChildPin(t *testing.T) *childPinEnv {
 	t.Helper()
 	env := setupCardsEnv(t)
@@ -119,4 +119,35 @@ func TestCardsChildPin_WriterCannotAttachToAnotherBoardsCard(t *testing.T) {
 func TestCardsChildPin_WriterAttachesToTheirOwnCard(t *testing.T) {
 	env := setupChildPin(t)
 	attachmentScenario(t, env, env.card.Id, http.StatusOK, []string{`"card":"` + env.card.Id + `"`}, nil)
+}
+
+// A comment carries the same pin (2090000103). The commentor holds the
+// lowest role that may comment on A and no membership on B.
+
+func commentBody(project, card, author string) string {
+	return `{"project":"` + project + `","card":"` + card + `","author":"` + author + `","body":"pinned"}`
+}
+
+func TestCardsChildPin_CommenterCannotCommentOnAnotherBoardsCard(t *testing.T) {
+	env := setupChildPin(t)
+	req{
+		method: http.MethodPost,
+		url:    "/api/collections/boards_comments/records",
+		token:  env.commentorToken,
+		body:   commentBody(env.project.Id, env.foreignCard, env.commentor.Id),
+		want:   http.StatusBadRequest,
+		after:  requireNoChildRows("boards_comments", env.foreignCard),
+	}.run(t, env.cardsEnv)
+}
+
+func TestCardsChildPin_CommenterCommentsOnTheirOwnCard(t *testing.T) {
+	env := setupChildPin(t)
+	req{
+		method:  http.MethodPost,
+		url:     "/api/collections/boards_comments/records",
+		token:   env.commentorToken,
+		body:    commentBody(env.project.Id, env.card.Id, env.commentor.Id),
+		want:    http.StatusOK,
+		content: []string{`"body":"pinned"`},
+	}.run(t, env.cardsEnv)
 }

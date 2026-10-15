@@ -114,6 +114,8 @@ func TestCardsShippedRules_CarryTheirGuards(t *testing.T) {
 			"every rule reads the row's own project, so without it a writer on board A could hang an item stamped project = A off a card of board B: B's card counts it while B's members cannot read it"},
 		{"boards_attachments", "create", `card.project = project`,
 			"the same hole for a file: an attachment stamped with the writer's board on another board's card, counted in that card's attachment_count"},
+		{"boards_comments", "create", `card.project = project`,
+			"the same hole for a comment (2090000103): a comment stamped with the commenter's board on another board's card, counted by that card and run through its mention flow while its members cannot read it"},
 
 		// --- the bootstrap branch ---
 		{"boards_project_members", "create", `project.boards_project_members_via_project.id = ""`,
