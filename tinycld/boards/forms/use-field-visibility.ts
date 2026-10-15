@@ -1,4 +1,4 @@
-import { type EvalContext, evaluate, type FormValues } from '@tinycld/core/lib/forms/logic'
+import { type EvalContext, evaluate, ruleFieldKeys } from '@tinycld/core/lib/forms/logic'
 import { useWatch } from '@tinycld/core/ui/form'
 import { useMemo } from 'react'
 import type { useCardForm } from './use-card-form'
@@ -17,8 +17,15 @@ type CardEdit = ReturnType<typeof useCardForm>['edit']
  * reads it through the card's context.
  */
 export function useFieldVisibility(edit: CardEdit, context: EvalContext) {
-    const values = useWatch({ control: edit.form.control }) as FormValues
     const { definition } = edit
+    // Only the keys the rules read can change the evaluation, so a keystroke in
+    // any other field does not re-run it.
+    const keys = useMemo(() => (definition ? ruleFieldKeys(definition) : []), [definition])
+    const watched = useWatch({ control: edit.form.control, name: keys })
+    const values = useMemo(
+        () => Object.fromEntries(keys.map((k, i) => [k, watched[i]])),
+        [keys, watched]
+    )
     const visibleKeys = useMemo(() => {
         if (!definition) return ''
         const { fields } = evaluate(definition, values, context)
