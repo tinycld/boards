@@ -1,4 +1,4 @@
-import { PickMenu } from '@tinycld/core/components/forms-builder/rule-parts'
+import { PickMenu } from '@tinycld/core/ui/pick-menu'
 import { Pressable, Text, View } from 'react-native'
 
 interface TypeOption {
