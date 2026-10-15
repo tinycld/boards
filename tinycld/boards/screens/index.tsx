@@ -4,6 +4,7 @@ import { LoadingState } from '@tinycld/core/components/LoadingState'
 import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { type Href, Redirect, useLocalSearchParams } from 'expo-router'
+import { materialize } from 'pbtsdb'
 import { useSyncExternalStore } from 'react'
 import { View } from 'react-native'
 import { NoBoards } from '../components/EmptyBoard'
@@ -85,17 +86,25 @@ function useFocusedLink(focused: string): { isLoading: boolean; href: Href | nul
     const orgHref = useOrgHref()
     const [cardsCollection, projectsCollection] = useStore('boards_cards', 'boards_projects')
     const isKey = parseCardKey(focused) !== null
-    // Joined to the board rather than read with `.get()`: both collections
-    // sync on demand, so the join is what fetches a row this client has not
-    // loaded — the card by id, then its board by id.
+    // A query with the board as a relation rather than `.get()`: both
+    // collections sync on demand, so this is what fetches a row this client
+    // has not loaded — the card by id, then its board by id. A relation, not
+    // a join: a join pushes every board id into the card request, which past
+    // ~200 boards exceeds PocketBase's filter limit.
     const { data: rows, isLoading } = useBoardLiveQuery(query => {
         if (!focused || isKey) return null
         return query
             .from({ card: cardsCollection })
-            .innerJoin({ project: projectsCollection }, ({ card, project }) =>
-                eq(card.project, project.id)
-            )
             .where(({ card }) => eq(card.id, focused))
+            .select(({ card }) => ({
+                card,
+                project: materialize(
+                    query
+                        .from({ project: projectsCollection })
+                        .where(({ project }) => eq(project.id, card.project))
+                        .findOne()
+                ),
+            }))
     })
 
     if (!focused) return { isLoading: false, href: null }
@@ -103,6 +112,9 @@ function useFocusedLink(focused: string): { isLoading: boolean; href: Href | nul
     if (isLoading) return { isLoading: true, href: null }
     const row = rows?.[0]
     if (!row) return { isLoading: false, href: null }
+    // Every card has a board; until its row lands, keep waiting rather than
+    // dropping the card and landing on the last board.
+    if (!row.project) return { isLoading: true, href: null }
     const key = formatCardKey(row.project.slug, row.card.number)
     return {
         isLoading: false,

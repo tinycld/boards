@@ -11,6 +11,7 @@ import { type Shortcut, useRegisterShortcuts, useShortcutScope } from '@tinycld/
 import { useMyLiveQuery } from '@tinycld/core/lib/use-my-live-query'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
 import { useRouter } from 'expo-router'
+import { materialize } from 'pbtsdb'
 import { useMemo, useState } from 'react'
 import { Pressable, SectionList, Text, View } from 'react-native'
 import { CardRow } from '../components/table/CardRow'
@@ -101,15 +102,18 @@ export default function MyCardsScreen() {
     // (and therefore not sent) until the watcher rows have settled — and
     // stays null rather than sending an empty `inArray` when the caller is
     // watching nothing, which pbtsdb cannot compile to a valid filter.
+    //
+    // Board and list are relations (`materialize`), not joins. An inner join
+    // makes the engine load every board and list first and push their ids
+    // into the cards request as `project = a || project = b || …`; past ~200
+    // boards that filter exceeds PocketBase's expression limit and the
+    // request fails with a 400 (a blank screen). A relation keeps the cards
+    // request to the conditions below, and looks board and list up by id.
     const { data: joined } = useLiveQuery({
         query: query => {
             if (!myCardsQueryEnabled(mode, userId, watchersLoading, watchedCardIds)) return null
             return query
                 .from({ card: cardsCollection })
-                .innerJoin({ project: projectsCollection }, ({ card, project }) =>
-                    eq(card.project, project.id)
-                )
-                .innerJoin({ list: listsCollection }, ({ card, list }) => eq(card.list, list.id))
                 .where(({ card }) => {
                     const notArchived = eq(card.archived, false)
                     switch (mode) {
@@ -131,6 +135,21 @@ export default function MyCardsScreen() {
                             return and(notArchived, inArray(card.id, [...watchedCardIds]))
                     }
                 })
+                .select(({ card }) => ({
+                    card,
+                    project: materialize(
+                        query
+                            .from({ project: projectsCollection })
+                            .where(({ project }) => eq(project.id, card.project))
+                            .findOne()
+                    ),
+                    list: materialize(
+                        query
+                            .from({ list: listsCollection })
+                            .where(({ list }) => eq(list.id, card.list))
+                            .findOne()
+                    ),
+                }))
         },
     })
     // A row resolves its own board's label, epic and sprint from these, the
