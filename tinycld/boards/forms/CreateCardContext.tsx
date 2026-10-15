@@ -1,13 +1,7 @@
-import type { FormValues } from '@tinycld/core/lib/forms/logic'
-import type { Control } from '@tinycld/core/ui/form'
 import { createContext, type ReactNode, useContext } from 'react'
 import type { BoardEpic, BoardLabel, BoardSprint } from '../types'
 
 export interface CreateCardValue {
-    /** The board the new card goes on. */
-    projectId: string
-    /** The dialog's form: the inputs that need a form binding take it by field key. */
-    control: Control<FormValues>
     /** What the pickers offer, read from the board (see useBoardPickerData). */
     labels: BoardLabel[]
     epics: BoardEpic[]
@@ -18,7 +12,9 @@ export interface CreateCardValue {
 /**
  * What the card's host components render from in the create dialog, where no
  * card exists yet. A React context for the reason CardFormContext gives: the
- * form renderer owns the tree between the dialog and these components.
+ * form renderer owns the tree between the dialog and these components. Each
+ * field edits its own value through the `value`/`onChange` the renderer hands
+ * it, so the context carries only what the pickers offer.
  */
 const CreateCardContext = createContext<CreateCardValue | null>(null)
 

@@ -8,7 +8,7 @@ import { useCardsById } from './use-cards-by-id'
 
 export function LinksSection({ disabled }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
-    if (data?.mode !== 'card') return null
+    if (data.mode !== 'card') return null
     return <Links data={data} />
 }
 

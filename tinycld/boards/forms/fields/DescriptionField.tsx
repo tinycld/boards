@@ -42,7 +42,6 @@ export function DescriptionField({
     onChange,
 }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
-    if (!data) return null
     if (data.mode === 'create') {
         // No card, so no room either: core's editor over the form's value.
         return (

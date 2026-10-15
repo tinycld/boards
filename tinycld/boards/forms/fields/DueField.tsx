@@ -14,7 +14,6 @@ import { stringValue } from './form-value'
 export function DueField({ disabled, fieldKey, label, value, onChange }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
     const updateCard = useUpdateCard()
-    if (!data) return null
     if (data.mode === 'create') {
         return (
             <DateField

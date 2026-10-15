@@ -11,7 +11,6 @@ import { stringValue } from './form-value'
 export function EpicField({ disabled, label, value, onChange }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
     const updateCard = useUpdateCard()
-    if (!data) return null
     if (data.mode === 'create') {
         return <NewCardEpic epics={data.epics} value={value} onChange={onChange} />
     }

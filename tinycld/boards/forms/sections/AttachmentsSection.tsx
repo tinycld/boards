@@ -8,7 +8,7 @@ import { type CardFormValue, useAdapterData } from '../CardFormContext'
 
 export function AttachmentsSection({ disabled }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
-    if (data?.mode !== 'card') return null
+    if (data.mode !== 'card') return null
     return <Attachments data={data} />
 }
 

@@ -20,7 +20,6 @@ export function ChecklistSection({
     onChange,
 }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
-    if (!data) return null
     if (data.mode === 'create') {
         return (
             <ChecklistField

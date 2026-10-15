@@ -9,7 +9,6 @@ import { stringValue } from './form-value'
 export function PriorityField({ disabled, label, value, onChange }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
     const updateCard = useUpdateCard()
-    if (!data) return null
     if (data.mode === 'create') {
         const priority = normalizePriority(stringValue(value) ?? undefined)
         return (

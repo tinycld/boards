@@ -50,13 +50,8 @@ function useCardCreate({ host, projectId, target, onClose }: CreateBodyProps) {
     const offered = forms.filter(form => !form.archived)
     const create = useFormCreate(host, undefined, context, { title: target.initialTitle })
     const ui = useHostUi(host)
-    const picker = useBoardPickerData(projectId)
+    const createValue: CreateCardValue = useBoardPickerData(projectId)
     const createCard = useCreateCard(projectId)
-    const control = create.form.control
-    const createValue = useMemo<CreateCardValue>(
-        () => ({ projectId, control, ...picker }),
-        [projectId, control, picker]
-    )
 
     const submit = async () => {
         const split = await create.submit()

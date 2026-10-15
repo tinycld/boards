@@ -64,9 +64,11 @@ export function useCardFormContextOptional(): CardFormValue | null {
 
 /**
  * What a host component renders from: the open card (`mode: 'card'`), with
- * `canEdit` folded with the field's own `disabled`; the create dialog's board
- * data (`mode: 'create'`), where the field edits the form's value instead of
- * a record; or null outside both, which renders nothing.
+ * `canEdit` folded with the field's own `disabled`; or a form with no card
+ * behind it (`mode: 'create'`), where the field edits the form's value
+ * instead of a record. The create dialog supplies the board's pickers; with
+ * neither provider above it (the form builder's preview, which knows no
+ * board) the pickers offer nothing, but every field still draws its input.
  *
  * Every field and section reads its data through this one helper, so the
  * branch between a card and a form with no card behind it lives in one place.
@@ -75,10 +77,16 @@ export type AdapterData =
     | ({ mode: 'card' } & CardFormValue)
     | ({ mode: 'create' } & CreateCardValue)
 
-export function useAdapterData(disabled: boolean): AdapterData | null {
+const NO_BOARD: CreateCardValue = {
+    labels: [],
+    epics: [],
+    sprints: [],
+    sprintsEnabled: false,
+}
+
+export function useAdapterData(disabled: boolean): AdapterData {
     const card = useCardFormContextOptional()
     const create = useCreateCardContext()
     if (card) return { mode: 'card', ...card, canEdit: card.canEdit && !disabled }
-    if (create) return { mode: 'create', ...create }
-    return null
+    return { mode: 'create', ...(create ?? NO_BOARD) }
 }

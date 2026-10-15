@@ -10,7 +10,6 @@ import { stringValue } from './form-value'
 export function SprintField({ disabled, label, value, onChange }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
     const updateCard = useUpdateCard()
-    if (!data) return null
     if (!data.sprintsEnabled) return null
     if (data.mode === 'create') {
         return <NewCardSprint sprints={data.sprints} value={value} onChange={onChange} />

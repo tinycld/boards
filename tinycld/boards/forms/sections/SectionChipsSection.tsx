@@ -17,7 +17,7 @@ import { useCardsById } from './use-cards-by-id'
  */
 export function SectionChipsSection({ disabled }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
-    if (data?.mode !== 'card' || !data.canEdit) return null
+    if (data.mode !== 'card' || !data.canEdit) return null
     return <Chips data={data} />
 }
 

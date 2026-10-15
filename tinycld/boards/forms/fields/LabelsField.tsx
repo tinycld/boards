@@ -9,7 +9,6 @@ import { stringList } from './form-value'
 export function LabelsField({ disabled, label, value, onChange }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
     const toggleRelation = useToggleCardRelation()
-    if (!data) return null
     if (data.mode === 'create') {
         return <NewCardLabels labels={data.labels} value={value} onChange={onChange} />
     }

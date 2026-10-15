@@ -152,14 +152,15 @@ describe('card form fields', () => {
         expect(bare.container.querySelector('rn-pressable')).toBeNull()
     })
 
-    it('renders nothing with no card behind the form', () => {
+    it('edits the form value with no card or board behind the form', () => {
+        // The form builder's preview: neither provider is above the field.
         const queryClient = new QueryClient()
         const { container } = render(
             <QueryClientProvider client={queryClient}>
-                <PriorityField {...fieldProps('priority')} />
+                <PriorityField {...fieldProps('priority')} value="high" />
             </QueryClientProvider>
         )
-        expect(container.innerHTML).toBe('')
+        expect(pressableAround(container, 'High')).not.toBeNull()
     })
 })
 
