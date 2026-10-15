@@ -34,7 +34,7 @@ export function useFieldVisibility(edit: CardEdit, context: EvalContext) {
             .join(',')
     }, [definition, values, context])
     return useMemo(() => {
-        const keys = new Set(visibleKeys.split(','))
-        return (key: string) => keys.has(key)
+        const visible = new Set(visibleKeys.split(','))
+        return (key: string) => visible.has(key)
     }, [visibleKeys])
 }
