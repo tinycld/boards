@@ -10,7 +10,8 @@ order: 25
 Open a card and click **+ Attachments** in the row of dashed buttons under the
 description — your file browser opens straight away, so one click is the whole
 gesture. Once a card has an attachment the section stays on it, and **Attach
-file** inside the section adds more.
+file** inside the section adds more. A file field on a card type lists its own
+files under that field, not under Attachments.
 
 On a computer you can also drag files straight onto the open card — anywhere on
 it will do, and a dashed outline appears to confirm the card will take them.

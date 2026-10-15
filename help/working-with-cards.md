@@ -562,6 +562,12 @@ With a card open:
 Press **⇧?** anywhere to see every shortcut the app knows, including the ones
 for jumping between apps.
 
+## Card types and custom fields
+
+A card has a type, such as Bug or Feature. The type sets the fields, pages and
+rules the card uses. Admins add types and custom fields in **Settings → Forms**.
+See [Card types and custom fields](help://boards:card-types).
+
 ## Working from a terminal
 
 Boards, lists and cards are all reachable from the `tinycld` command line, which
