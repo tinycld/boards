@@ -8,7 +8,7 @@ import type { FormHost } from '@tinycld/core/lib/packages/derive-form-hosts'
 import { useForm } from '@tinycld/core/ui/form'
 import { FormRenderer, useHostUi, useSchemaRefResolver } from '@tinycld/core/ui/forms'
 import { OverlayProvider } from '@tinycld/core/ui/overlay'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import hosts from '../tinycld/boards/forms/hosts'
 
 afterEach(cleanup)
@@ -80,6 +80,14 @@ function Preview({ onSubmit }: { onSubmit: (values: Record<string, unknown>) => 
 
 const q = (container: ParentNode, id: string) =>
     container.querySelector(`[testID="${id}"]`) as HTMLElement | null
+
+// The host's `ui()` is a dynamic import of forms/ui, whose module graph takes
+// most of a second to load cold when the whole suite runs in parallel: longer
+// than `waitFor`'s default, measured at 0.8-1 s. Loading it once up front
+// leaves the waits below measuring the hook, not the module load.
+beforeAll(async () => {
+    await import('../tinycld/boards/forms/ui')
+})
 
 describe('the card type in the builder preview', () => {
     it('draws the title input and submits what is typed, with no card or board behind it', async () => {

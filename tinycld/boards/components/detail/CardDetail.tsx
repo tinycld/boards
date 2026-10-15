@@ -3,23 +3,18 @@ import { useAuth } from '@tinycld/core/lib/auth'
 import type { CollabDoc, FormHostUi } from '@tinycld/core/lib/forms/host-ui'
 import { FormRenderer, type SectionsScroll } from '@tinycld/core/ui/forms'
 import { type RefObject, useCallback, useMemo, useState } from 'react'
+import { CardDescriptionProvider } from '../../forms/CardDescriptionContext'
 import { CardFormProvider, type CardFormValue } from '../../forms/CardFormContext'
 import { useCardForm } from '../../forms/use-card-form'
-import { useCollabDoc } from '../../forms/use-collab-doc'
-import { roomFromCollab, useDescriptionSlots } from '../../forms/use-description-slots'
 import { useFieldVisibility } from '../../forms/use-field-visibility'
 import { useAttachmentMutations } from '../../hooks/useAttachmentMutations'
 import { useCardDetail } from '../../hooks/useCardDetail'
-import { useUpdateCard } from '../../hooks/useCardMutations'
 import { useCommentMutations } from '../../hooks/useCommentMutations'
 import { useProjectRole } from '../../hooks/useProjectRole'
-import { mentionMember } from '../../lib/mention-text'
 import { useCommentReplyStore } from '../../stores/comment-reply-store'
 import type { BoardCardView, BoardEpic, BoardLabel, BoardMember, BoardSprint } from '../../types'
-import { useBoardPresenceContext } from '../BoardPresenceProvider'
 import { LabelManagerDialog } from '../LabelManagerDialog'
 import { CommentComposer } from './CommentComposer'
-import type { DescriptionEditorSlots } from './DescriptionEditor'
 import { filesToPicked } from './DetailAttachments'
 import type { EditableTextHandle } from './EditableText'
 
@@ -96,8 +91,7 @@ export function CardDetail(props: CardDetailProps) {
     const role = useProjectRole(projectId)
     const cardForm = useCardForm(card.id)
     const isFieldVisible = useFieldVisibility(cardForm.edit, cardForm.context)
-    const description = useCardDescription(props, role.canEdit)
-    const formValue = useCardFormValue(props, role, openLabelManager, isFieldVisible, description)
+    const formValue = useCardFormValue(props, role, openLabelManager, isFieldVisible)
     // Non-throwing: a card opened from the PUBLIC board has no session, and
     // the default useAuth() turns that screen into an error boundary.
     const { user } = useAuth({ throwIfAnon: false })
@@ -117,12 +111,19 @@ export function CardDetail(props: CardDetailProps) {
                 label="Drop to attach"
             >
                 <CardFormProvider value={formValue}>
-                    <CardFormBody
-                        cardForm={cardForm}
-                        cardId={card.id}
-                        readOnly={!role.canEdit}
-                        scroll={scroll}
-                    />
+                    <CardDescriptionProvider
+                        card={card}
+                        projectId={projectId}
+                        projectMembers={props.projectMembers}
+                        canEdit={role.canEdit}
+                    >
+                        <CardFormBody
+                            cardForm={cardForm}
+                            cardId={card.id}
+                            readOnly={!role.canEdit}
+                            scroll={scroll}
+                        />
+                    </CardDescriptionProvider>
                 </CardFormProvider>
             </DropZone>
             <CardCommentComposer
@@ -186,30 +187,6 @@ function CommentComposerBody({
     )
 }
 
-/**
- * The description's editor, once per card. Lifted here from the description
- * field because the form draws its header and its body in separate rows, the
- * header pinned (DescriptionHeader), and one editor has to drive both.
- */
-function useCardDescription(props: CardDetailProps, canEdit: boolean): DescriptionEditorSlots {
-    const { card, projectId, projectMembers } = props
-    const { isConnected } = useBoardPresenceContext()
-    const collab = useCollabDoc()
-    const { attachments } = useCardDetail(card.id)
-    const updateCard = useUpdateCard()
-    const mentionMembers = useMemo(() => projectMembers.map(mentionMember), [projectMembers])
-    return useDescriptionSlots({
-        cardId: card.id,
-        projectId,
-        attachments,
-        mentionMembers,
-        description: card.description,
-        onSave: value => updateCard.mutate({ cardId: card.id, description: value }),
-        canEdit,
-        room: roomFromCollab(collab, isConnected),
-    })
-}
-
 type CardRole = Pick<CardFormValue, 'canEdit' | 'canComment' | 'isOwner'>
 
 /**
@@ -221,8 +198,7 @@ function useCardFormValue(
     props: CardDetailProps,
     role: CardRole,
     onManageLabels: () => void,
-    isFieldVisible: (key: string) => boolean,
-    description: DescriptionEditorSlots
+    isFieldVisible: (key: string) => boolean
 ): CardFormValue {
     const {
         card,
@@ -254,7 +230,6 @@ function useCardFormValue(
             titleRef,
             onManageLabels,
             isFieldVisible,
-            description,
         }),
         [
             card,
@@ -272,7 +247,6 @@ function useCardFormValue(
             titleRef,
             onManageLabels,
             isFieldVisible,
-            description,
         ]
     )
 }

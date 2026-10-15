@@ -1,5 +1,4 @@
 import { createContext, type ReactNode, type RefObject, useContext } from 'react'
-import type { DescriptionEditorSlots } from '../components/detail/DescriptionEditor'
 import type { EditableTextHandle } from '../components/detail/EditableText'
 import type { BoardCardView, BoardEpic, BoardLabel, BoardMember, BoardSprint } from '../types'
 import { type CreateCardValue, useCreateCardContext } from './CreateCardContext'
@@ -28,12 +27,6 @@ export interface CardFormValue {
     onManageLabels: () => void
     /** Whether the card's type shows a field now (see useFieldVisibility). */
     isFieldVisible: (key: string) => boolean
-    /**
-     * The description's editor, as its header and body. One editor per card,
-     * owned by CardDetail, because the form draws the two halves in separate
-     * rows: the header pinned (DescriptionHeader), the body in the field's cell.
-     */
-    description: DescriptionEditorSlots
 }
 
 /**

@@ -100,7 +100,6 @@ function cardForm(canEdit: boolean): CardFormValue {
         isOwner: false,
         onManageLabels: () => {},
         isFieldVisible: () => true,
-        description: { header: null, body: null },
     }
 }
 

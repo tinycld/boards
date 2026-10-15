@@ -153,8 +153,9 @@ export function useDescriptionSlots({
         // The plain-text fallback has no editor commands to drive a toolbar, so
         // this row only ever shows the label. Same fixed height as the
         // collaborative path, so the two modes do not lay out differently.
+        // Opaque because the form pins it: the card scrolls under it.
         header: (
-            <View className="justify-center" style={{ height: DESCRIPTION_HEADER_HEIGHT }}>
+            <View className="justify-center bg-card" style={{ height: DESCRIPTION_HEADER_HEIGHT }}>
                 <Text className="text-[13px] font-semibold text-foreground">Description</Text>
             </View>
         ),

@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { OverlayProvider } from '@tinycld/core/ui/overlay'
 import type { ReactNode } from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 afterEach(() => {
     cleanup()
@@ -167,6 +167,14 @@ function addChecklistItem(container: HTMLElement, text: string) {
 
 const byLabel = (container: ParentNode, label: string) =>
     container.querySelector(`[accessibilityLabel="${label}"]`) as HTMLElement | null
+
+// The host's `ui()` is a dynamic import of forms/ui, whose module graph takes
+// most of a second to load cold when the whole suite runs in parallel: longer
+// than `waitFor`'s default, measured at 0.8-1 s. Loading it once up front
+// leaves the waits below measuring the hook, not the module load.
+beforeAll(async () => {
+    await import('../tinycld/boards/forms/ui')
+})
 
 describe('CardCreateDialog', () => {
     it('renders nothing while no column is targeted', () => {

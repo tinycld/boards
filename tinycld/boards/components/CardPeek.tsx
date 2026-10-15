@@ -128,9 +128,10 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
                         // Remounts on card switch. The description editor binds to
                         // ONE Yjs fragment for its lifetime, so switching cards has
                         // to tear it down and rebind. Keying here rather than on the
-                        // editor is what lets CardDetail own the editor hook, which
-                        // the form's pinned row needs: the toolbar and the body are
-                        // separate rows of the form, driven by one editor.
+                        // editor is what lets CardDetail's description provider own
+                        // the editor hook, which the form's pinned row needs: the
+                        // toolbar and the body are separate rows of the form,
+                        // driven by one editor.
                         key={entry.card.id}
                         card={entry.card}
                         variant="peek"

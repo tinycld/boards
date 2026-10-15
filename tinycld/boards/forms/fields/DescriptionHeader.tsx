@@ -1,4 +1,5 @@
 import type { BuiltinFieldProps } from '@tinycld/core/lib/forms/host-ui'
+import { useCardDescription } from '../CardDescriptionContext'
 import { useAdapterData } from '../CardFormContext'
 
 /**
@@ -10,5 +11,10 @@ import { useAdapterData } from '../CardFormContext'
 export function DescriptionHeader({ disabled }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
     if (data.mode !== 'card') return null
-    return data.description.body ? data.description.header : null
+    return <CardDescriptionHeader />
+}
+
+function CardDescriptionHeader() {
+    const { header, body } = useCardDescription()
+    return body ? header : null
 }

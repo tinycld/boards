@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, renderHook, waitFor } from '@testing-library/react'
+import { act, cleanup, render, renderHook, waitFor } from '@testing-library/react'
 import { OverlayProvider } from '@tinycld/core/ui/overlay'
 import type { ReactNode } from 'react'
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest'
 import type { BoardCardView } from '../tinycld/boards/types'
 
 afterEach(cleanup)
@@ -184,6 +184,9 @@ const h = vi.hoisted(() => {
         ],
         users: [user('u1', 'Maya Kim'), user('u2', 'Jonas Reyes')],
         user,
+        // Renders counted by the probes the host's ui wraps two components in:
+        // a card field, and the description's pinned header.
+        renders: { TitleField: 0, DescriptionHeader: 0 },
     }
 })
 
@@ -218,7 +221,33 @@ vi.mock('@tinycld/core/lib/forms/use-form-hosts', async () => {
     const host = {
         ...def,
         pkgSlug: 'boards',
-        ui: async () => (await import('../tinycld/boards/forms/ui')).default,
+        ui: async () => {
+            const { default: ui } = await import('../tinycld/boards/forms/ui')
+            const { useCardDescription } = await import(
+                '../tinycld/boards/forms/CardDescriptionContext'
+            )
+            const { createElement } = await import('react')
+            type Props = Parameters<typeof ui.components.TitleField>[0]
+            // The real components, each wrapped in a probe that counts its
+            // renders. The header's probe reads the description's context the
+            // way the header does, so it renders whenever the editor does.
+            const TitleProbe = (props: Props) => {
+                h.renders.TitleField += 1
+                return createElement(ui.components.TitleField, props)
+            }
+            const Header = ui.pinned?.DescriptionField
+            if (!Header) throw new Error('the card ui pins no description header')
+            const HeaderProbe = (props: Props) => {
+                useCardDescription()
+                h.renders.DescriptionHeader += 1
+                return createElement(Header, props)
+            }
+            return {
+                ...ui,
+                components: { ...ui.components, TitleField: TitleProbe },
+                pinned: { ...ui.pinned, DescriptionField: HeaderProbe },
+            }
+        },
     }
     return { useFormHost: (key: string | undefined) => (key === host.key ? host : undefined) }
 })
@@ -304,11 +333,20 @@ vi.mock('@tinycld/core/lib/pocketbase', async () => {
     }
 })
 
+import { useStore } from '@tinycld/core/lib/pocketbase'
 import { CardDetail } from '~/tinycld/boards/components/detail/CardDetail'
 import { useCardDetail } from '~/tinycld/boards/hooks/useCardDetail'
 import { useCardWatch } from '~/tinycld/boards/hooks/useCardWatch'
 import { useCommentReactions } from '~/tinycld/boards/hooks/useCommentReactions'
 import { usePrLinks } from '~/tinycld/boards/hooks/usePrLinks'
+
+// The host's `ui()` is a dynamic import of forms/ui, whose module graph takes
+// most of a second to load cold when the whole suite runs in parallel: longer
+// than `waitFor`'s default, measured at 0.8-1 s. Loading it once up front
+// leaves the waits below measuring the hook, not the module load.
+beforeAll(async () => {
+    await import('../tinycld/boards/forms/ui')
+})
 
 test('useCardDetail returns the four sections for one card, in render order', async () => {
     const { result } = renderHook(() => useCardDetail('c1'), { wrapper })
@@ -438,6 +476,32 @@ describe('CardDetail', () => {
         expect(q(container, 'form-pinned-description')?.textContent).toBe('')
         expect(q(container, 'form-field-description')?.textContent).toBe('')
         expect(container.textContent).not.toContain('Description')
+    })
+
+    test("the description's editor re-renders only its own cells", async () => {
+        h.role = { canEdit: true, canComment: true, isOwner: false }
+        const { container } = mountDetail(view('c3', 'Three', 3))
+        await waitFor(() => expect(q(container, 'form-pinned-description')).toBeTruthy())
+        const before = { ...h.renders }
+        // A new attachment re-renders the description's editor (it offers the
+        // card's attachments to insert), and nothing above the form reads it.
+        const [attachments] = useStore('boards_attachments') as unknown as [
+            {
+                insert: (row: (typeof h.attachments)[number]) => unknown
+                delete: (id: string) => unknown
+            },
+        ]
+        await act(async () => {
+            attachments.insert({ ...h.attachments[0], id: 'a9', card: 'c3' })
+        })
+        await waitFor(() =>
+            expect(h.renders.DescriptionHeader).toBeGreaterThan(before.DescriptionHeader)
+        )
+        expect(h.renders.TitleField).toBe(before.TitleField)
+        // The stores outlive the test; later tests expect c3 bare.
+        await act(async () => {
+            attachments.delete('a9')
+        })
     })
 
     test('a value whose field left the form keeps no cell', async () => {

@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { AUTO_PATCH_DELAY_MS } from '@tinycld/core/ui/forms'
 import type { ReactNode } from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 afterEach(cleanup)
 
@@ -123,6 +123,14 @@ import { useCardForm } from '../tinycld/boards/forms/use-card-form'
 function wrapper({ children }: { children: ReactNode }) {
     return <QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider>
 }
+
+// The host's `ui()` is a dynamic import of forms/ui, whose module graph takes
+// most of a second to load cold when the whole suite runs in parallel: longer
+// than `waitFor`'s default, measured at 0.8-1 s. Loading it once up front
+// leaves the waits below measuring the hook, not the module load.
+beforeAll(async () => {
+    await import('../tinycld/boards/forms/ui')
+})
 
 describe('useCardForm', () => {
     it('renders the card with the form it points at, archived or not', async () => {

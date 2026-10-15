@@ -339,12 +339,12 @@ function DescriptionHeader({
         // editor never shifts under the caret. justify-center keeps the
         // 16px label optically centered in the 40px the toolbar needs.
         //
-        // Sticky lives HERE rather than on the toolbar: this row is always
-        // present, so there is always a box to pin. `position: sticky` is
-        // web-only (RN has no such value), hence the Platform guard —
-        // native pins the same row as the card form's pinned row, through
-        // the form's stickyHeaderIndices. Every ancestor must also stay
-        // overflow-visible or RN-Web's default clipping silently kills it.
+        // This row is always present, so there is always a box to pin. The
+        // card form pins it on both platforms: it is the form's pinned row,
+        // a direct child of the form's ScrollView, which `stickyHeaderIndices`
+        // sticks (react-native-web through its own sticky wrapper). The
+        // web-only STICKY_HEADER style is inert inside that row, whose height
+        // is its own; it stays so the pixels match the parity baselines.
         <View
             className="justify-center bg-card"
             style={
