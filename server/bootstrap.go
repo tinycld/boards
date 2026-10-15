@@ -120,14 +120,20 @@ func cardSeeds(record *core.Record, cache *formCache) []fragmentSeed {
 }
 
 // seedableCards loads the cards of a board that have stored text a document
-// would hold: a description, or a type that may declare collaborative fields.
+// would hold: a description, or custom values under a type that may declare
+// collaborative fields. A type alone is not enough: once the forms backfill
+// has run every card names one, and a card with no custom values (stored as
+// NULL, "null" or "{}") has nothing to seed.
 func seedableCards(app core.App, projectID string) ([]*core.Record, error) {
-	return app.FindRecordsByFilter(
-		"boards_cards",
-		"project = {:project} && (description != '' || form != '')",
-		"", 0, 0,
-		dbx.Params{"project": projectID},
-	)
+	var records []*core.Record
+	err := app.RecordQuery("boards_cards").
+		AndWhere(dbx.HashExp{"project": projectID}).
+		AndWhere(dbx.Or(
+			dbx.NewExp("[[description]] != ''"),
+			dbx.NewExp("[[form]] != '' AND json_valid([[fields]]) AND json_type([[fields]]) = 'object' AND [[fields]] != '{}'"),
+		)).
+		All(&records)
+	return records, err
 }
 
 // seedBoardCountWarn is the card count past which a board's full state, sent to
