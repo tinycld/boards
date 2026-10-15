@@ -11,13 +11,22 @@ import { uploadCardFiles } from './useAttachmentMutations'
  * Errors surface as a toast rather than only the upload store's error row —
  * that row renders in DetailAttachments, which is not mounted while the card
  * is closed, so without the toast a failed drop would vanish silently.
+ *
+ * `acceptsFiles` is the board's gate (useFaceAttachmentsGate): a card whose
+ * type hides Attachments takes no drop.
  */
-export function useCardFileDrop(cardId: string, projectId: string, canEdit: boolean) {
+export function useCardFileDrop(
+    cardId: string,
+    projectId: string,
+    canEdit: boolean,
+    acceptsFiles: (cardId: string) => boolean
+) {
     const { user } = useAuth({ throwIfAnon: false })
     const userId = user?.id ?? ''
     const { isDragging, dropRef } = useFileDrop({
         isEnabled: canEdit && userId !== '',
         onFiles: files => {
+            if (!acceptsFiles(cardId)) return
             void attachDroppedFiles(cardId, projectId, userId, files)
         },
     })

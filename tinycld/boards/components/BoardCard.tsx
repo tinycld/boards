@@ -82,6 +82,8 @@ interface BoardCardProps {
     canDrag: boolean
     /** The board's aging threshold in days, 0 when off — see lib/aging.ts. */
     agingDays: number
+    /** The board's file-drop gate, resolved once in BoardCanvas — see useFaceAttachmentsGate. */
+    acceptsFiles: (cardId: string) => boolean
 }
 
 function useCardPress(cardId: string) {
@@ -149,6 +151,7 @@ export function BoardCard({
     category,
     canDrag,
     agingDays,
+    acceptsFiles,
     reactions,
     onToggleReaction,
     reactorName,
@@ -156,7 +159,7 @@ export function BoardCard({
 }: BoardCardProps) {
     const { isOpen, isFocused, isSelected, onPress } = useCardPress(card.id)
     // canDrag doubles as the edit gate: both come from the same role check.
-    const { isDropTarget, dropRef } = useCardFileDrop(card.id, projectId, canDrag)
+    const { isDropTarget, dropRef } = useCardFileDrop(card.id, projectId, canDrag, acceptsFiles)
     // Board-wide, so read here rather than threaded through BoardColumn —
     // ColumnCards is memoized and deliberately state-free, and a prop would
     // re-render it. Every card face re-renders on toggle, which is fine: it

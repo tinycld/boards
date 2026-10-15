@@ -110,6 +110,8 @@ interface BoardColumnProps {
      * a hook would put a board query behind every face.
      */
     agingDays: number
+    /** The board's file-drop gate (useFaceAttachmentsGate). Stable. */
+    acceptsFiles: (cardId: string) => boolean
 }
 
 type DropSide = 'before' | 'after'
@@ -129,6 +131,7 @@ export const BoardColumn = memo(function BoardColumn({
     registerMeasure,
     canEdit,
     agingDays,
+    acceptsFiles,
     reactionsForCard,
     onToggleReaction,
     reactorName,
@@ -321,6 +324,7 @@ export const BoardColumn = memo(function BoardColumn({
                         canEdit={canEdit}
                         isSorted={isSorted}
                         agingDays={agingDays}
+                        acceptsFiles={acceptsFiles}
                         reactionsForCard={reactionsForCard}
                         onToggleReaction={onToggleReaction}
                         reactorName={reactorName}
@@ -796,6 +800,8 @@ interface ColumnCardsProps {
     isSorted: boolean
     /** The board's aging threshold — see BoardColumnProps. */
     agingDays: number
+    /** The board's file-drop gate — see BoardColumnProps. */
+    acceptsFiles: (cardId: string) => boolean
 }
 
 /**
@@ -822,6 +828,7 @@ const ColumnCards = memo(function ColumnCards({
     canEdit,
     isSorted,
     agingDays,
+    acceptsFiles,
     reactionsForCard,
     onToggleReaction,
     reactorName,
@@ -941,6 +948,7 @@ const ColumnCards = memo(function ColumnCards({
                                 category={list.category}
                                 canDrag={canEdit}
                                 agingDays={agingDays}
+                                acceptsFiles={acceptsFiles}
                                 reactions={reactionsForCard(card.id)}
                                 onToggleReaction={onToggleReaction}
                                 reactorName={reactorName}
