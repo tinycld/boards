@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
+import { openEditor } from './editor-helpers'
 import { addCard, boardCard, createBoard, uniqueStamp } from './helpers'
 
 // One editor for the whole app, handed between surfaces.
@@ -74,10 +75,10 @@ async function typeInto(page: Page, editor: ReturnType<Page['locator']>, body: s
 }
 
 async function openComposer(page: Page) {
-    if (!(await composerEditor(page).isVisible())) {
-        await composer(page).getByRole('button', { name: 'Write a comment' }).click()
-    }
-    await expect(composerEditor(page)).toBeVisible()
+    await openEditor(
+        composerEditor(page),
+        composer(page).getByRole('button', { name: 'Write a comment' })
+    )
 }
 
 async function postComment(page: Page, body: string) {

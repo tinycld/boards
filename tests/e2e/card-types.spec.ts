@@ -157,7 +157,6 @@ test.describe('Card types', () => {
             await item.fill('Repro')
             await item.press('Enter')
             await expect(cardSurface(mPage).getByLabel('Edit Repro').first()).toBeVisible()
-            await expect(cardSurface(mPage).getByLabel('Edit Repro').first()).toBeVisible()
             await reopenCard(page, TITLE, async () => {
                 await expect(cardSurface(page).getByLabel('Edit Repro').first()).toBeVisible()
             })

@@ -11,6 +11,9 @@ import { expect } from '@playwright/test'
  * swallow.
  */
 export async function openEditor(editor: Locator, opener: Locator): Promise<Locator> {
+    // One of the two is on screen once the surface has rendered; deciding
+    // before that would read a half-built page.
+    await expect(editor.or(opener).first()).toBeVisible()
     if ((await editor.count()) === 0) await opener.click()
     await expect(editor).toBeVisible()
     return editor

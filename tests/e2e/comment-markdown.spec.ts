@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
+import { openEditor } from './editor-helpers'
 import { addCard, createBoard, openCard, uniqueStamp } from './helpers'
 
 // Comment bodies are stored as Markdown and render as Markdown, matching how
@@ -35,12 +36,10 @@ function composerEditor(page: Page) {
  * for the life of the card.
  */
 async function openComposer(page: Page) {
-    const editor = composerEditor(page)
-    if (!(await editor.isVisible())) {
-        await composer(page).getByRole('button', { name: 'Write a comment' }).click()
-    }
-    await expect(editor).toBeVisible()
-    return editor
+    return openEditor(
+        composerEditor(page),
+        composer(page).getByRole('button', { name: 'Write a comment' })
+    )
 }
 
 /**

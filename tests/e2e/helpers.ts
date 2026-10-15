@@ -201,14 +201,10 @@ export async function addSubtask(page: Page, parentTitle: string, title: string)
     await openCard(page, parentTitle)
     const peek = cardSurface(page)
     const inSection = peek.getByRole('button', { name: 'Add sub-task' })
-    if (await inSection.isVisible()) {
-        await inSection.click()
-    } else {
-        await peek
-            .getByTestId('boards-section-chips')
-            .getByRole('button', { name: 'Sub-tasks' })
-            .click()
-    }
+    const chip = peek.getByTestId('boards-section-chips').getByRole('button', {
+        name: 'Sub-tasks',
+    })
+    await (await sectionControl(inSection, chip)).click()
     await peek.getByPlaceholder('What needs doing?').fill(title)
     await page.keyboard.press('Enter')
     // The row is what proves the card exists, not the composer clearing.
@@ -724,8 +720,8 @@ export async function dragCardToSection(page: Page, row: Locator, sectionTitle: 
  * an icon and a word of room, the menu row a full phrase.
  */
 export async function clickBulkAction(page: Page, testID: string, label: string) {
-    const onBar = page.getByTestId(testID)
-    if (await onBar.isVisible()) {
+    const onBar = await fittedBulkControl(page, testID)
+    if ((await onBar.count()) > 0) {
         await onBar.click()
         return
     }
@@ -743,13 +739,25 @@ export async function clickBulkAction(page: Page, testID: string, label: string)
  * caller ends up looking at the same rows and picks by name.
  */
 export async function openBulkPicker(page: Page, testID: string, label: string) {
-    const onBar = page.getByTestId(testID)
-    if (await onBar.isVisible()) {
+    const onBar = await fittedBulkControl(page, testID)
+    if ((await onBar.count()) > 0) {
         await onBar.click()
         return
     }
     await openBulkMore(page)
     await page.getByRole('menuitem', { name: label, exact: true }).hover()
+}
+
+/**
+ * The bulk bar's control `testID`, once the bar has fitted its items to its
+ * width. Until then every item is rendered at zero opacity (which a visibility
+ * check does not see), and once fitted a folded item leaves the DOM, so the
+ * opacity is the signal that makes "is it on the bar" a settled question.
+ */
+async function fittedBulkControl(page: Page, testID: string) {
+    const bar = page.getByTestId('boards-bulk-bar')
+    await expect(bar.getByTestId('toolbar-row').first()).toHaveCSS('opacity', '1')
+    return bar.getByTestId(testID)
 }
 
 /** The bulk bar's own overflow trigger, scoped so it never matches the header's. */
@@ -789,6 +797,16 @@ export async function openBoardNamed(page: Page, name: string) {
 }
 
 /**
+ * The control that reveals an opt-in section: the in-section button once the
+ * section is open, else its chip. Waits for one of them first, so the choice
+ * is made on a rendered card and not a half-built one.
+ */
+export async function sectionControl(inSection: Locator, chip: Locator): Promise<Locator> {
+    await expect(inSection.or(chip).first()).toBeVisible()
+    return (await inSection.count()) > 0 ? inSection : chip
+}
+
+/**
  * Open the full create form from a column's menu ("New card…"), then type the
  * title into the dialog's own title field.
  */
@@ -816,19 +834,19 @@ export async function pickCardType(page: Page, name: string) {
     const pill = dialog.getByRole('tab', { name, exact: true })
     const menu = dialog.getByTestId('card-type-menu')
     await expect(pill.or(menu)).toBeVisible()
-    // The picker's own rule: pills up to four types, a menu beyond. Asserting
-    // it keeps the branch below a fact about the UI, not a guess.
-    const usesMenu = (await menu.count()) > 0
-    expect((await dialog.getByRole('tab').count()) > 0).toBe(!usesMenu)
-    if (usesMenu) {
+    // Pills and menu are exclusive, and one is rendered by now. The picker's
+    // rule (pills up to four types, a menu beyond) is checked against the
+    // options each one actually offers, not against the branch taken.
+    if ((await menu.count()) > 0) {
         await menu.click()
-        await page
-            .getByTestId(/^card-type-menu-/)
-            .filter({ has: page.getByText(name, { exact: true }) })
-            .click()
+        const rows = page.getByTestId(/^card-type-menu-/)
+        await expect(rows.first()).toBeVisible()
+        expect(await rows.count()).toBeGreaterThan(4)
+        await rows.filter({ has: page.getByText(name, { exact: true }) }).click()
         await expect(menu).toContainText(name)
         return
     }
+    expect(await dialog.getByRole('tab').count()).toBeLessThanOrEqual(4)
     await pill.click()
     await expect(pill).toHaveAttribute('aria-selected', 'true')
 }

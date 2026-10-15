@@ -7,6 +7,7 @@ import {
     TEST_COLLABORATOR_EMAIL,
     TEST_USER_NAME,
 } from '@tinycld/core/e2e-helpers'
+import { openEditor } from './editor-helpers'
 import {
     addCard,
     boardCard,
@@ -100,8 +101,9 @@ let firstKeyWidth: number | undefined
 
 async function expectKeyWidthStable(page: Page, title: string) {
     const box = await boardCard(page, title).getByTestId('boards-card-key').boundingBox()
-    firstKeyWidth ??= box?.width
-    expect(box?.width).toBe(firstKeyWidth)
+    if (!box) throw new Error('the card key has no box to measure')
+    firstKeyWidth ??= box.width
+    expect(box.width).toBe(firstKeyWidth)
 }
 
 async function freshBoard(page: Page, label: string): Promise<string> {
@@ -121,11 +123,16 @@ async function setDueNextJanuary(page: Page) {
     const year = new Date().getFullYear() + 1
     const cell = page.getByRole('button', { name: `${year}-01-15` })
     const next = page.getByRole('button', { name: 'Next month' })
-    for (let i = 0; i < 14; i++) {
-        await expect(cell.or(next).first()).toBeVisible()
-        if ((await cell.count()) > 0) break
-        await next.click()
-    }
+    await expect
+        .poll(
+            async () => {
+                if ((await cell.count()) > 0) return true
+                await next.click()
+                return false
+            },
+            { intervals: [400], timeout: 15_000 }
+        )
+        .toBe(true)
     await cell.click()
     await expect(
         cardSurface(page).getByRole('button', { name: 'Due Jan 15. Change due date' })
@@ -199,10 +206,10 @@ async function addBlocksLink(page: Page, toTitle: string) {
 
 async function postComment(page: Page, body: string) {
     const composer = cardSurface(page).getByTestId('boards-comment-composer')
-    const editor = composer.locator('.ProseMirror')
-    if (!(await editor.isVisible())) {
-        await composer.getByRole('button', { name: 'Write a comment' }).click()
-    }
+    const editor = await openEditor(
+        composer.locator('.ProseMirror'),
+        composer.getByRole('button', { name: 'Write a comment' })
+    )
     await editor.click()
     await expect(editor).toBeFocused()
     await editor.pressSequentially(body, { delay: 20 })

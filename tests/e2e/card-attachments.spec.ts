@@ -13,6 +13,7 @@ import {
     createBoard,
     openBoard,
     openCard,
+    sectionControl,
     shareBoard,
     uniqueStamp,
 } from './helpers'
@@ -47,8 +48,7 @@ async function attachFile(page: Page, file: UploadFile): Promise<void> {
         .getByTestId('boards-section-chips')
         .getByRole('button', { name: 'Attachments' })
     const inSection = page.getByTestId('boards-attach-file')
-    const trigger = (await inSection.count()) > 0 ? inSection : chip
-    await chooseFile(page, trigger, file)
+    await chooseFile(page, await sectionControl(inSection, chip), file)
 }
 
 function textFile(name: string, contents = 'hello from the attachment spec') {

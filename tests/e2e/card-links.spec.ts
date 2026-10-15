@@ -1,7 +1,15 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, closeCardPeek, createBoard, openBoard, uniqueStamp } from './helpers'
+import {
+    addCard,
+    boardCard,
+    closeCardPeek,
+    createBoard,
+    openBoard,
+    sectionControl,
+    uniqueStamp,
+} from './helpers'
 
 // Card links end to end: filing one, reading it from BOTH ends, and removing
 // it.
@@ -54,14 +62,10 @@ async function openCard(page: Page, title: string) {
  */
 async function openLinkPicker(page: Page) {
     const inSection = peek(page).getByTestId('boards-link-add')
-    if (await inSection.isVisible()) {
-        await inSection.click()
-        return
-    }
-    await peek(page)
-        .getByTestId('boards-section-chips')
-        .getByRole('button', { name: 'Links' })
-        .click()
+    const chip = peek(page).getByTestId('boards-section-chips').getByRole('button', {
+        name: 'Links',
+    })
+    await (await sectionControl(inSection, chip)).click()
 }
 
 async function addLink(
