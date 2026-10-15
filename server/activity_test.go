@@ -267,7 +267,7 @@ func TestActivity_ChecklistCompletionAndAttachment(t *testing.T) {
 }
 
 // A file a custom file field uploads is the field's value, not an attachment
-// of the card; the card's own attachment list does not show it either.
+// of the card, so it leaves no activity row.
 func TestActivity_FieldUploadIsNotAnAttachment(t *testing.T) {
 	env := setupActivityEnv(t)
 	cardsFieldAttachment(t, env.app, env.project, env.card, env.owner, "shot.png", "screenshot")

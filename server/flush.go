@@ -89,6 +89,9 @@ func makeFlush(app core.App, state *boardDocState) realtime.FlushFn {
 			return fmt.Errorf("cards: snapshot board %s: %w", projectID, err)
 		}
 
+		// One cache per card: a card's fragments share its type, but a type
+		// edited while the pass runs must not be served stale to later cards.
+		caches := map[string]*formCache{}
 		for _, p := range pending {
 			if state.matchesBaseline(projectID, p.fragment, p.text) {
 				continue
@@ -97,9 +100,12 @@ func makeFlush(app core.App, state *boardDocState) realtime.FlushFn {
 			if p.key == "" {
 				err = saveDescription(app, state, projectID, p.cardID, p.text)
 			} else {
-				// A cache per card: a type edited while the loop runs must
-				// not be served stale to the cards after it.
-				err = saveCustomField(app, state, newFormCache(app), projectID, p)
+				cache := caches[p.cardID]
+				if cache == nil {
+					cache = newFormCache(app)
+					caches[p.cardID] = cache
+				}
+				err = saveCustomField(app, state, cache, projectID, p)
 			}
 			if err != nil {
 				return err

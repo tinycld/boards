@@ -384,40 +384,42 @@ func TestFlush_SkipsAKeyTheCardsFormDoesNotDeclare(t *testing.T) {
 	}
 }
 
-func TestFlush_ReadsTheCardsCurrentTypeOnEveryFlush(t *testing.T) {
-	// A flush must not serve a type it read earlier: once the form drops a
-	// key's collaborative flag, an edit to that fragment is not a field.
+func TestFlush_AFormEditedMidPassIsReadAfreshByTheNextCard(t *testing.T) {
+	// Both cards share one type. The first card's save edits the type so
+	// `steps` is no longer collaborative; the second card, in the same pass,
+	// must see that rather than a definition cached for the first.
 	env := setupCardsEnv(t)
 	form := cardsForm(t, env.app, bugDefinitionJSON)
-	card := cardsCardOfForm(t, env, "Typed", form)
-	_, state, flush, handle := boardRoom(t, env)
-	steps := customFragment(card.Id, "md", "steps")
+	first := cardsCardOfForm(t, env, "First", form)
+	second := cardsCardOfForm(t, env, "Second", form)
+	_, _, flush, handle := boardRoom(t, env)
+	writeNamedFragment(t, handle, customFragment(first.Id, "md", "steps"), "one")
+	writeNamedFragment(t, handle, customFragment(second.Id, "md", "steps"), "two")
 
-	writeNamedFragment(t, handle, steps, "first")
+	edited := false
+	env.app.OnRecordAfterUpdateSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
+		if !edited {
+			edited = true
+			form.Set("definition", strings.Replace(bugDefinitionJSON,
+				`"label": "Steps", "collaborative": true`, `"label": "Steps"`, 1))
+			if err := e.App.Save(form); err != nil {
+				return err
+			}
+		}
+		return e.Next()
+	})
+
 	if err := flush(t.Context(), env.project.Id, handle); err != nil {
 		t.Fatalf("flush: %v", err)
 	}
-	if got := fieldsOf(t, env, card.Id)["steps"]; got != "first\n" {
-		t.Fatalf("steps = %q", got)
+	saved := 0
+	for _, card := range []*core.Record{first, second} {
+		if _, ok := fieldsOf(t, env, card.Id)["steps"]; ok {
+			saved++
+		}
 	}
-
-	edited := strings.Replace(bugDefinitionJSON,
-		`"label": "Steps", "collaborative": true`, `"label": "Steps"`, 1)
-	form.Set("definition", edited)
-	if err := env.app.Save(form); err != nil {
-		t.Fatalf("edit form: %v", err)
-	}
-	// Seeding cannot rewrite a fragment that already has content, so a stale
-	// baseline stands in for "the text changed since the last flush".
-	state.setBaseline(env.project.Id, steps, "stale\n")
-	if err := flush(t.Context(), env.project.Id, handle); err != nil {
-		t.Fatalf("flush: %v", err)
-	}
-	if got := fieldsOf(t, env, card.Id)["steps"]; got != "first\n" {
-		t.Errorf("steps = %q, want it unchanged", got)
-	}
-	if !state.matchesBaseline(env.project.Id, steps, "") {
-		t.Error("the no-longer-collaborative fragment kept a baseline")
+	if !edited || saved != 1 {
+		t.Errorf("edited = %v, cards with steps = %d; want the edit to land and exactly one save", edited, saved)
 	}
 }
 

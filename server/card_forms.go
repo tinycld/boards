@@ -12,10 +12,11 @@ import (
 // CARD_HOST_KEY in tinycld/boards/forms/hosts.ts.
 const cardFormHost = "boards:card"
 
-// formCache reads card types for one pass over a board. A board's cards share
-// a handful of types, so a seed loads each one once rather than once per card.
-// A cache lives for one pass only and is never kept between them: it has no
-// invalidation, so a longer-lived one would serve a type edited since.
+// formCache reads card types within one pass. It has no invalidation, so its
+// lifetime is the staleness window, and it is never kept between passes. A
+// seed shares one cache across every card on the board, so each type loads
+// once; a flush builds one cache per card, so a type edited mid-flush is read
+// afresh by the next card.
 type formCache struct {
 	app  core.App
 	defs map[string]*forms.Definition
