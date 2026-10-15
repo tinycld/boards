@@ -46,7 +46,10 @@ import {
 //    would change the baseline every day.
 //  - Hidden by card-parity.screenshot.css: relative timestamps in the activity
 //    feed and on comments. Their text AND width change, so a mask over them
-//    would change size between runs.
+//    would change size between runs. KNOWN BLIND SPOT: hidden text paints
+//    nothing, so the screenshots cannot see a timestamp's font or colour
+//    change. The populated-peek test therefore pins its computed font-size,
+//    font-weight and color explicitly.
 //  - Masked, because their pixels differ run to run: the card key (board keys
 //    are globally unique, so each run gets a new one; see boardKey for how
 //    its width is held constant), and avatars (an
@@ -75,8 +78,6 @@ function masks(page: Page): Locator[] {
         page.getByTestId('boards-card-key'),
         page.getByTestId('boards-detail-key'),
         page.getByTestId('boards-parent-chip'),
-        // "linked this as blocking <KEY>" spells the other card's key.
-        page.getByTestId('boards-activity-link_added'),
         page.getByTestId('boards-avatar'),
     ]
 }
@@ -266,6 +267,18 @@ async function mintViewerLink(page: Page, board: string): Promise<string> {
 test.describe('Card parity', () => {
     test('peek, scrolled peek and the board, populated', async ({ page }) => {
         await populatedCard(page)
+        const style = await peek(page)
+            .getByTestId('boards-timestamp')
+            .first()
+            .evaluate(node => {
+                const { fontSize, fontWeight, color } = getComputedStyle(node)
+                return { fontSize, fontWeight, color }
+            })
+        expect(style).toEqual({
+            fontSize: '11.5px',
+            fontWeight: '400',
+            color: 'rgb(100, 116, 139)',
+        })
         await expect(peek(page)).toHaveScreenshot('peek-populated.png', {
             ...SHOT,
             mask: masks(page),

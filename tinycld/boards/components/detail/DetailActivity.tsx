@@ -149,6 +149,10 @@ function ActivityRow({ item, context }: { item: BoardActivity; context: Activity
     const avatar = useAvatarUrl(
         actor ? { id: actor.id, avatar: actor.avatar, avatar_crop: actor.avatarCrop } : null
     )
+    // A link row ends in the other card's key; it gets its own span so the key
+    // can be told apart from the rest of the sentence.
+    const linkedKey = linkedCardKey(item, context, text)
+    const leadText = linkedKey ? text.slice(0, -linkedKey.length) : text
     const who = actor ? `${actor.firstName} ${actor.lastName}`.trim() : 'Automatically'
     const timestamp = item.created ? formatRelativeDate(item.created) : 'Just now'
 
@@ -171,13 +175,20 @@ function ActivityRow({ item, context }: { item: BoardActivity; context: Activity
                 )}
             </View>
             <Text className="flex-1 min-w-0 text-[12.5px] text-muted" numberOfLines={2}>
-                <Text className="font-semibold text-foreground">{who}</Text> {text}
+                <Text className="font-semibold text-foreground">{who}</Text> {leadText}
+                <Text testID="boards-card-key">{linkedKey}</Text>
             </Text>
             <Text testID="boards-timestamp" className="shrink-0 text-[11.5px] text-muted">
                 {timestamp}
             </Text>
         </View>
     )
+}
+
+function linkedCardKey(item: BoardActivity, context: ActivityContext, text: string): string {
+    if (item.kind !== 'link_added' && item.kind !== 'link_removed') return ''
+    const key = context.cards.find(card => card.id === item.to)?.key ?? ''
+    return key && text.endsWith(key) ? key : ''
 }
 
 function CommentCount({ count }: { count: number }) {
