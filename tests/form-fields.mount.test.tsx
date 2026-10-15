@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { BuiltinFieldProps } from '@tinycld/core/lib/forms/host-ui'
+import { OverlayProvider } from '@tinycld/core/ui/overlay'
 import type { ReactNode } from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { BoardCardView } from '../tinycld/boards/types'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { BoardCardView, BoardEpic } from '../tinycld/boards/types'
 
 afterEach(cleanup)
 
@@ -14,6 +15,16 @@ afterEach(cleanup)
 
 vi.mock('@tinycld/core/lib/auth', () => ({
     useAuth: () => ({ user: { id: 'u1' }, isLoggedIn: true }),
+}))
+
+// The card row the priority field writes, kept to read back what it wrote.
+const held = vi.hoisted(() => ({
+    cards: undefined as
+        | {
+              get: (id: string) => { priority?: string } | undefined
+              update: (id: string, change: (draft: { priority: string }) => void) => unknown
+          }
+        | undefined,
 }))
 
 vi.mock('@tinycld/core/lib/pocketbase', async () => {
@@ -42,15 +53,20 @@ vi.mock('@tinycld/core/lib/pocketbase', async () => {
         boards_pr_links: mk('boards_pr_links', []),
         users: mk('users', []),
     }
+    held.cards = stores.boards_cards as typeof held.cards
     return { useStore: (...names: string[]) => names.map(n => stores[n]) }
 })
 
 import { CardFormProvider, type CardFormValue } from '../tinycld/boards/forms/CardFormContext'
+import { CreateCardProvider, type CreateCardValue } from '../tinycld/boards/forms/CreateCardContext'
 import { DueField } from '../tinycld/boards/forms/fields/DueField'
+import { EpicField } from '../tinycld/boards/forms/fields/EpicField'
 import { PriorityField } from '../tinycld/boards/forms/fields/PriorityField'
+import { SprintField } from '../tinycld/boards/forms/fields/SprintField'
 import { AttachmentsSection } from '../tinycld/boards/forms/sections/AttachmentsSection'
 import { ChecklistSection } from '../tinycld/boards/forms/sections/ChecklistSection'
 import { SectionChipsSection } from '../tinycld/boards/forms/sections/SectionChipsSection'
+import * as cardMutations from '../tinycld/boards/hooks/useCardMutations'
 import { formatSchedule } from '../tinycld/boards/lib/due-time'
 
 const card: BoardCardView = {
@@ -84,7 +100,7 @@ const card: BoardCardView = {
 // Formatted the way the chip formats it, so the test holds in any locale.
 const dueLabel = formatSchedule(undefined, card.due, false)
 
-function cardForm(canEdit: boolean): CardFormValue {
+function cardForm(canEdit: boolean, overrides: Partial<CardFormValue> = {}): CardFormValue {
     return {
         card,
         projectId: 'p1',
@@ -100,6 +116,7 @@ function cardForm(canEdit: boolean): CardFormValue {
         isOwner: false,
         onManageLabels: () => {},
         isFieldVisible: () => true,
+        ...overrides,
     }
 }
 
@@ -120,6 +137,34 @@ function mount(ui: ReactNode, canEdit = true) {
     return render(
         <QueryClientProvider client={queryClient}>
             <CardFormProvider value={cardForm(canEdit)}>{ui}</CardFormProvider>
+        </QueryClientProvider>
+    )
+}
+
+function mountCard(ui: ReactNode, overrides: Partial<CardFormValue> = {}) {
+    const queryClient = new QueryClient()
+    return render(
+        <QueryClientProvider client={queryClient}>
+            <OverlayProvider>
+                <CardFormProvider value={cardForm(true, overrides)}>{ui}</CardFormProvider>
+            </OverlayProvider>
+        </QueryClientProvider>
+    )
+}
+
+function mountCreate(ui: ReactNode, overrides: Partial<CreateCardValue> = {}) {
+    const queryClient = new QueryClient()
+    const value: CreateCardValue = {
+        labels: [],
+        epics: [],
+        sprints: [],
+        sprintsEnabled: false,
+        members: [],
+        ...overrides,
+    }
+    return render(
+        <QueryClientProvider client={queryClient}>
+            <CreateCardProvider value={value}>{ui}</CreateCardProvider>
         </QueryClientProvider>
     )
 }
@@ -161,6 +206,55 @@ describe('card form fields', () => {
             </QueryClientProvider>
         )
         expect(pressableAround(container, 'High')).not.toBeNull()
+    })
+})
+
+describe('card mutations', () => {
+    beforeEach(() => {
+        held.cards?.update('c1', draft => {
+            draft.priority = 'low'
+        })
+    })
+
+    it('create mode mounts no card mutation', () => {
+        const spy = vi.spyOn(cardMutations, 'useUpdateCard')
+        mountCreate(<PriorityField {...fieldProps('priority')} />)
+        expect(spy).not.toHaveBeenCalled()
+        spy.mockRestore()
+    })
+
+    it('pressing a priority option writes the card row', async () => {
+        mountCard(<PriorityField {...fieldProps('priority')} />, {
+            card: { ...card, priority: 'low' },
+        })
+        fireEvent.click(screen.getByText('Low'))
+        fireEvent.click(await screen.findByText('High'))
+        await waitFor(() => expect(held.cards?.get('c1')?.priority).toBe('high'))
+    })
+
+    it('a disabled field ignores presses', async () => {
+        mountCard(<PriorityField {...fieldProps('priority', true)} />, {
+            card: { ...card, priority: 'low' },
+        })
+        fireEvent.click(screen.getByText('Low'))
+        await new Promise(resolve => setTimeout(resolve, 0))
+        expect(screen.queryByText('High')).toBeNull()
+        expect(held.cards?.get('c1')?.priority).not.toBe('high')
+    })
+
+    it('EpicField renders nothing without epics and a picker with them', () => {
+        const none = mountCreate(<EpicField {...fieldProps('epic')} />)
+        expect(none.container.textContent).toBe('')
+        cleanup()
+
+        const epics = [{ id: 'e1', title: 'Launch' }] as unknown as BoardEpic[]
+        mountCreate(<EpicField {...fieldProps('epic')} />, { epics })
+        expect(screen.getByText('Add to epic')).toBeTruthy()
+    })
+
+    it('SprintField renders nothing when sprints are off', () => {
+        const { container } = mountCreate(<SprintField {...fieldProps('sprint')} />)
+        expect(container.textContent).toBe('')
     })
 })
 

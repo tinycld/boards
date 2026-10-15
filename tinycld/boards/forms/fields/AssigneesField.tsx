@@ -3,15 +3,21 @@ import { AssigneePicker } from '../../components/detail/AssigneePicker'
 import { AssigneesValue, PropertyRow } from '../../components/detail/property-values'
 import { useToggleCardRelation } from '../../hooks/useCardMutations'
 import type { BoardMember } from '../../types'
-import { useAdapterData } from '../CardFormContext'
+import { type AdapterData, useAdapterData } from '../CardFormContext'
 import { stringList } from './form-value'
+
+type CardData = Extract<AdapterData, { mode: 'card' }>
 
 export function AssigneesField({ disabled, label, value, onChange }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
-    const toggleRelation = useToggleCardRelation()
     if (data.mode === 'create') {
         return <NewCardAssignees members={data.members} value={value} onChange={onChange} />
     }
+    return <CardAssignees label={label} data={data} />
+}
+
+function CardAssignees({ label, data }: { label: string; data: CardData }) {
+    const toggleRelation = useToggleCardRelation()
     const { card, canEdit, projectMembers } = data
     if (!canEdit) {
         return (

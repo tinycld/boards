@@ -3,16 +3,22 @@ import { PropertyRow, ReporterValue } from '../../components/detail/property-val
 import { ReporterPicker } from '../../components/detail/ReporterPicker'
 import { useUpdateCard } from '../../hooks/useCardMutations'
 import type { BoardMember } from '../../types'
-import { useAdapterData } from '../CardFormContext'
+import { type AdapterData, useAdapterData } from '../CardFormContext'
 import { stringValue } from './form-value'
+
+type CardData = Extract<AdapterData, { mode: 'card' }>
 
 /** Left empty in the create dialog, the creator is the reporter (useCreateCard). */
 export function ReporterField({ disabled, label, value, onChange }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
-    const updateCard = useUpdateCard()
     if (data.mode === 'create') {
         return <NewCardReporter members={data.members} value={value} onChange={onChange} />
     }
+    return <CardReporter label={label} data={data} />
+}
+
+function CardReporter({ label, data }: { label: string; data: CardData }) {
+    const updateCard = useUpdateCard()
     const { card, canEdit, projectMembers } = data
     if (!canEdit) {
         return (

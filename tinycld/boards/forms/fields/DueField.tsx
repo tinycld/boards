@@ -3,28 +3,36 @@ import { DateField } from '@tinycld/core/ui/forms/fields/DateField'
 import { DuePicker } from '../../components/detail/DuePicker'
 import { DueValue, PropertyRow } from '../../components/detail/property-values'
 import { useUpdateCard } from '../../hooks/useCardMutations'
-import { useAdapterData } from '../CardFormContext'
+import { type AdapterData, useAdapterData } from '../CardFormContext'
 import { stringValue } from './form-value'
+
+type CardData = Extract<AdapterData, { mode: 'card' }>
 
 /**
  * The due date. On a card the form's value is ignored: the live card row is
  * the truth. Before the card exists it is core's date input over the form
  * value, a plain day.
  */
-export function DueField({ disabled, fieldKey, label, value, onChange }: BuiltinFieldProps) {
-    const data = useAdapterData(disabled)
+export function DueField(props: BuiltinFieldProps) {
+    const data = useAdapterData(props.disabled)
+    if (data.mode === 'create') return <NewCardDue {...props} />
+    return <CardDue label={props.label} data={data} />
+}
+
+function NewCardDue({ fieldKey, label, value, onChange }: BuiltinFieldProps) {
+    return (
+        <DateField
+            value={stringValue(value)}
+            onChange={onChange}
+            withTime={false}
+            testID={`form-input-${fieldKey}`}
+            accessibilityLabel={label}
+        />
+    )
+}
+
+function CardDue({ label, data }: { label: string; data: CardData }) {
     const updateCard = useUpdateCard()
-    if (data.mode === 'create') {
-        return (
-            <DateField
-                value={stringValue(value)}
-                onChange={onChange}
-                withTime={false}
-                testID={`form-input-${fieldKey}`}
-                accessibilityLabel={label}
-            />
-        )
-    }
     const { card, canEdit } = data
     if (!canEdit) {
         return (

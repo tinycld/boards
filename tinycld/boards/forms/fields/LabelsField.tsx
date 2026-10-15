@@ -3,15 +3,21 @@ import { LabelPicker } from '../../components/detail/LabelPicker'
 import { LabelsValue, PropertyRow } from '../../components/detail/property-values'
 import { useToggleCardRelation } from '../../hooks/useCardMutations'
 import type { BoardLabel } from '../../types'
-import { useAdapterData } from '../CardFormContext'
+import { type AdapterData, useAdapterData } from '../CardFormContext'
 import { stringList } from './form-value'
+
+type CardData = Extract<AdapterData, { mode: 'card' }>
 
 export function LabelsField({ disabled, label, value, onChange }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
-    const toggleRelation = useToggleCardRelation()
     if (data.mode === 'create') {
         return <NewCardLabels labels={data.labels} value={value} onChange={onChange} />
     }
+    return <CardLabels label={label} data={data} />
+}
+
+function CardLabels({ label, data }: { label: string; data: CardData }) {
+    const toggleRelation = useToggleCardRelation()
     const { card, canEdit, projectLabels, onManageLabels } = data
     if (!canEdit) {
         return (

@@ -3,17 +3,23 @@ import { PropertyRow, SprintValue } from '../../components/detail/property-value
 import { SprintPicker } from '../../components/detail/SprintPicker'
 import { useUpdateCard } from '../../hooks/useCardMutations'
 import type { BoardSprint } from '../../types'
-import { useAdapterData } from '../CardFormContext'
-import { stringValue } from './form-value'
+import { type AdapterData, useAdapterData } from '../CardFormContext'
+import { NewCardPicker } from './NewCardPicker'
+
+type CardData = Extract<AdapterData, { mode: 'card' }>
 
 /** Only on a board that plans in sprints, as in the properties block. */
-export function SprintField({ disabled, label, value, onChange }: BuiltinFieldProps) {
-    const data = useAdapterData(disabled)
-    const updateCard = useUpdateCard()
+export function SprintField(props: BuiltinFieldProps) {
+    const data = useAdapterData(props.disabled)
     if (!data.sprintsEnabled) return null
     if (data.mode === 'create') {
-        return <NewCardSprint sprints={data.sprints} value={value} onChange={onChange} />
+        return <NewCardSprint sprints={data.sprints} {...props} />
     }
+    return <CardSprint label={props.label} data={data} />
+}
+
+function CardSprint({ label, data }: { label: string; data: CardData }) {
+    const updateCard = useUpdateCard()
     const { card, canEdit, projectSprints } = data
     if (!canEdit) {
         return (
@@ -39,15 +45,18 @@ function NewCardSprint({
     sprints,
     value,
     onChange,
-}: {
-    sprints: BoardSprint[]
-    value: unknown
-    onChange: (value: unknown) => void
-}) {
-    const sprint = sprints.find(s => s.id === stringValue(value)) ?? null
+}: { sprints: BoardSprint[] } & Pick<BuiltinFieldProps, 'value' | 'onChange'>) {
     return (
-        <SprintPicker sprints={sprints} selectedId={sprint?.id ?? ''} onSelect={onChange}>
-            <SprintValue sprint={sprint} />
-        </SprintPicker>
+        <NewCardPicker
+            value={value}
+            onChange={onChange}
+            items={sprints}
+            renderPicker={(selected, pick, trigger) => (
+                <SprintPicker sprints={sprints} selectedId={selected?.id ?? ''} onSelect={pick}>
+                    {trigger}
+                </SprintPicker>
+            )}
+            renderValue={selected => <SprintValue sprint={selected ?? null} />}
+        />
     )
 }

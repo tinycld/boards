@@ -74,7 +74,7 @@ export const SprintValue = forwardRef<View, { sprint: BoardSprint | null; onPres
     }
 )
 
-/** The estimate chip, and the EstimatePicker's trigger — the PriorityValue shape. */
+/** The epic chip, and the EpicPicker's trigger — the SprintValue shape. */
 export const EpicValue = forwardRef<View, { epic: BoardEpic | null; onPress?: () => void }>(
     function EpicValue({ epic, onPress }, ref) {
         const mutedColor = useThemeColor('muted')

@@ -3,20 +3,28 @@ import { PriorityPicker } from '../../components/detail/PriorityPicker'
 import { PriorityValue, PropertyRow } from '../../components/detail/property-values'
 import { useUpdateCard } from '../../hooks/useCardMutations'
 import { normalizePriority } from '../../lib/priority'
-import { useAdapterData } from '../CardFormContext'
+import { type AdapterData, useAdapterData } from '../CardFormContext'
 import { stringValue } from './form-value'
 
-export function PriorityField({ disabled, label, value, onChange }: BuiltinFieldProps) {
-    const data = useAdapterData(disabled)
+type CardData = Extract<AdapterData, { mode: 'card' }>
+
+export function PriorityField(props: BuiltinFieldProps) {
+    const data = useAdapterData(props.disabled)
+    if (data.mode === 'create') return <NewCardPriority {...props} />
+    return <CardPriority label={props.label} data={data} />
+}
+
+function NewCardPriority({ value, onChange }: BuiltinFieldProps) {
+    const priority = normalizePriority(stringValue(value) ?? undefined)
+    return (
+        <PriorityPicker selected={priority} onSelect={onChange}>
+            <PriorityValue priority={priority} />
+        </PriorityPicker>
+    )
+}
+
+function CardPriority({ label, data }: { label: string; data: CardData }) {
     const updateCard = useUpdateCard()
-    if (data.mode === 'create') {
-        const priority = normalizePriority(stringValue(value) ?? undefined)
-        return (
-            <PriorityPicker selected={priority} onSelect={onChange}>
-                <PriorityValue priority={priority} />
-            </PriorityPicker>
-        )
-    }
     const { card, canEdit } = data
     if (!canEdit) {
         return (
