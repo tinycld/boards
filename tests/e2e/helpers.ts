@@ -188,6 +188,35 @@ export async function closeCardPeek(page: Page, mode: CardSurfaceMode = 'peek') 
 }
 
 /**
+ * File `title` as a sub-task of `parentTitle` through the parent's peek, and
+ * close the peek again.
+ *
+ * The section is opt-in: on a card with NO sub-tasks yet it is collapsed
+ * behind its chip, and revealing it opens the composer in the same click. A
+ * card that already has one keeps the section open, so the in-section
+ * composer button is the one to press. This helper files both the first
+ * sub-task and the second.
+ */
+export async function addSubtask(page: Page, parentTitle: string, title: string) {
+    await openCard(page, parentTitle)
+    const peek = cardSurface(page)
+    const inSection = peek.getByRole('button', { name: 'Add sub-task' })
+    if (await inSection.isVisible()) {
+        await inSection.click()
+    } else {
+        await peek
+            .getByTestId('boards-section-chips')
+            .getByRole('button', { name: 'Sub-tasks' })
+            .click()
+    }
+    await peek.getByPlaceholder('What needs doing?').fill(title)
+    await page.keyboard.press('Enter')
+    // The row is what proves the card exists, not the composer clearing.
+    await expect(peek.getByTestId('boards-subtask-row').filter({ hasText: title })).toBeVisible()
+    await closeCardPeek(page)
+}
+
+/**
  * Share `boardName` with `email` at `role`, through the real dialog.
  *
  * One implementation for every spec that needs "the collaborator is on this

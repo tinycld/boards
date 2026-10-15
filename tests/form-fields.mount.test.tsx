@@ -2,7 +2,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { BuiltinFieldProps } from '@tinycld/core/lib/forms/host-ui'
+import { appHref } from '@tinycld/core/lib/org-routes'
 import { OverlayProvider } from '@tinycld/core/ui/overlay'
+import { router } from 'expo-router'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BoardCardView, BoardEpic } from '../tinycld/boards/types'
@@ -57,6 +59,7 @@ vi.mock('@tinycld/core/lib/pocketbase', async () => {
     return { useStore: (...names: string[]) => names.map(n => stores[n]) }
 })
 
+import { DetailLinks } from '../tinycld/boards/components/detail/DetailLinks'
 import { CardFormProvider, type CardFormValue } from '../tinycld/boards/forms/CardFormContext'
 import { CreateCardProvider, type CreateCardValue } from '../tinycld/boards/forms/CreateCardContext'
 import { DueField } from '../tinycld/boards/forms/fields/DueField'
@@ -67,7 +70,9 @@ import { AttachmentsSection } from '../tinycld/boards/forms/sections/Attachments
 import { ChecklistSection } from '../tinycld/boards/forms/sections/ChecklistSection'
 import { SectionChipsSection } from '../tinycld/boards/forms/sections/SectionChipsSection'
 import * as cardMutations from '../tinycld/boards/hooks/useCardMutations'
+import type { CardLinkView } from '../tinycld/boards/lib/card-links'
 import { formatSchedule } from '../tinycld/boards/lib/due-time'
+import { useBoardsUIStore } from '../tinycld/boards/stores/boards-ui-store'
 
 const card: BoardCardView = {
     id: 'c1',
@@ -103,7 +108,9 @@ const dueLabel = formatSchedule(undefined, card.due, false)
 function cardForm(canEdit: boolean, overrides: Partial<CardFormValue> = {}): CardFormValue {
     return {
         card,
+        variant: 'peek',
         projectId: 'p1',
+        projectSlug: 'OTTER',
         projectLabels: [],
         projectEpics: [],
         projectSprints: [],
@@ -306,5 +313,59 @@ describe('optional sections', () => {
         )
         await waitFor(() => expect(getByTestId('editor').textContent).toContain('Attachments'))
         expect(getByTestId('reader').textContent).toBe('')
+    })
+})
+
+// A row inside an open card opens its card where the reader is: on the full
+// page as the next card's page, stacked so Back returns; on the peek through
+// the store. Sub-task rows share the opener; a link row is the one mounted
+// here because its icons are in the shared lucide stub.
+describe('opening a linked card', () => {
+    const far: BoardCardView = { ...card, id: 'c2', key: 'OTTER-8', number: 8, title: 'Far card' }
+    const link: CardLinkView = {
+        id: 'k1',
+        type: 'related',
+        label: 'Related to',
+        far: { state: 'resolved', card: far },
+        farCardId: far.id,
+    }
+
+    function mountLinks(variant: CardFormValue['variant']) {
+        mountCard(
+            <DetailLinks
+                card={card}
+                links={[link]}
+                addLink={() => {}}
+                removeLink={() => {}}
+                isAddingLink={false}
+                cardsById={new Map([[far.id, far]])}
+                pickerCards={[card, far]}
+                projectId="p1"
+                canEdit={false}
+                isVisible
+                isComposing={false}
+                onComposingChange={() => {}}
+            />,
+            { variant, canEdit: false }
+        )
+    }
+
+    afterEach(() => {
+        useBoardsUIStore.getState().closeCard()
+        vi.mocked(router.push).mockClear()
+    })
+
+    it('pushes the far card’s page from the full page', () => {
+        mountLinks('page')
+        fireEvent.click(screen.getByText('Far card'))
+        expect(router.push).toHaveBeenCalledWith(appHref('boards/OTTER/8'))
+        expect(useBoardsUIStore.getState().openCardId).toBeNull()
+    })
+
+    it('opens the far card through the store from the peek', () => {
+        mountLinks('peek')
+        fireEvent.click(screen.getByText('Far card'))
+        expect(useBoardsUIStore.getState().openCardId).toBe('c2')
+        expect(router.push).not.toHaveBeenCalled()
     })
 })

@@ -4,7 +4,7 @@ import type { CollabDoc, FormHostUi } from '@tinycld/core/lib/forms/host-ui'
 import { FormRenderer, type SectionsScroll } from '@tinycld/core/ui/forms'
 import { type RefObject, useCallback, useMemo, useState } from 'react'
 import { CardDescriptionProvider } from '../../forms/CardDescriptionContext'
-import { CardFormProvider, type CardFormValue } from '../../forms/CardFormContext'
+import { CardFormProvider, type CardFormValue, type CardSurface } from '../../forms/CardFormContext'
 import { useCardForm } from '../../forms/use-card-form'
 import { useFieldVisibility } from '../../forms/use-field-visibility'
 import { useAttachmentMutations } from '../../hooks/useAttachmentMutations'
@@ -18,11 +18,9 @@ import { CommentComposer } from './CommentComposer'
 import { filesToPicked } from './DetailAttachments'
 import type { EditableTextHandle } from './EditableText'
 
-type DetailVariant = 'peek' | 'modal' | 'page'
-
 interface CardDetailProps {
     card: BoardCardView
-    variant: DetailVariant
+    variant: CardSurface
     /**
      * The board the card belongs to. Threaded in rather than read off the card:
      * every child collection's access rule resolves membership through its own
@@ -31,6 +29,8 @@ interface CardDetailProps {
      * board that already knows).
      */
     projectId: string
+    /** The board's slug, so a row can link to another card's page. */
+    projectSlug: string
     /** The board's labels and roster — what the pickers offer. */
     projectLabels: BoardLabel[]
     projectEpics: BoardEpic[]
@@ -62,7 +62,7 @@ interface CardDetailProps {
 }
 
 /** How wide the content column runs on each surface — see `widthClass`. */
-const WIDTH_CLASS: Record<DetailVariant, string> = {
+const WIDTH_CLASS: Record<CardSurface, string> = {
     peek: '',
     modal: 'w-full max-w-[1100px] self-center',
     page: 'w-full max-w-[1200px] self-center',
@@ -203,7 +203,9 @@ function useCardFormValue(
 ): CardFormValue {
     const {
         card,
+        variant,
         projectId,
+        projectSlug,
         projectLabels,
         projectEpics,
         projectSprints,
@@ -217,7 +219,9 @@ function useCardFormValue(
     return useMemo(
         () => ({
             card,
+            variant,
             projectId,
+            projectSlug,
             projectLabels,
             projectEpics,
             projectSprints,
@@ -234,7 +238,9 @@ function useCardFormValue(
         }),
         [
             card,
+            variant,
             projectId,
+            projectSlug,
             projectLabels,
             projectEpics,
             projectSprints,

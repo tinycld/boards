@@ -42,7 +42,8 @@ function usePageShortcuts(
             const next = neighborCardId(project, cardId, delta)
             const entry = next ? findCardEntry(project, next) : null
             if (!entry) return
-            router.replace(orgHref(cardPagePath(segment, entry.card)))
+            // A push, so Back steps back through the cards j/k walked.
+            router.push(orgHref(cardPagePath(segment, entry.card)))
         }
         // Mirrors the peek's binding at this scope, so `e` means the same thing
         // whichever surface the card is open on.
@@ -212,6 +213,7 @@ function CardPage({ project, segment, entry, cardId, navigateBack }: CardPagePro
                 card={entry.card}
                 variant="page"
                 projectId={project.id}
+                projectSlug={project.slug}
                 projectLabels={project.labels}
                 projectEpics={project.epics}
                 projectSprints={project.sprints}

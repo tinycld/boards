@@ -112,6 +112,7 @@ function CardModalWindow({ project, entry }: { project: BoardProject; entry: Car
                         card={entry.card}
                         variant="modal"
                         projectId={project.id}
+                        projectSlug={project.slug}
                         projectLabels={project.labels}
                         projectEpics={project.epics}
                         projectSprints={project.sprints}

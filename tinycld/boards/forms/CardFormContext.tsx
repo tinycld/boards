@@ -3,10 +3,20 @@ import type { EditableTextHandle } from '../components/detail/EditableText'
 import type { BoardCardView, BoardEpic, BoardLabel, BoardMember, BoardSprint } from '../types'
 import { type CreateCardValue, useCreateCardContext } from './CreateCardContext'
 
+/** The surface a card is open on. */
+export type CardSurface = 'peek' | 'modal' | 'page'
+
 export interface CardFormValue {
     card: BoardCardView
+    /**
+     * Where the card is open. A card opened from a row on the full page gets
+     * a page of its own, stacked on this one, so Back returns here.
+     */
+    variant: CardSurface
     /** The board; child rows carry it for their access rules. */
     projectId: string
+    /** The board's slug, which spells another card's page path. */
+    projectSlug: string
     projectLabels: BoardLabel[]
     projectEpics: BoardEpic[]
     projectSprints: BoardSprint[]

@@ -1,6 +1,6 @@
 import { expect, type Page, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, createBoard, uniqueNumber, uniqueStamp } from './helpers'
+import { addCard, addSubtask, createBoard, openCard, uniqueNumber, uniqueStamp } from './helpers'
 
 // A pasted card link opened cold: the card's peek opens and the address bar
 // keeps the card. Two spellings are covered — the canonical /a/boards/KEY-1,
@@ -73,3 +73,31 @@ for (const spelling of ['path', 'focused'] as const) {
         ).toEqual([])
     })
 }
+
+// Opening a card from a row on the full page is a navigation: the next card's
+// page stacks on this one rather than dropping back to the board's peek, so
+// the browser's Back returns to the page it was opened from. `page.goBack()`
+// is the browser's own Back, not an in-app `goto`.
+test('Back from a sub-task’s page returns to its parent’s page', async ({ page }) => {
+    await login(page)
+    await navigateToPackage(page, 'boards')
+    const key = `PAGE${uniqueNumber() % 100000}`
+    await createBoard(page, `back-page-${uniqueStamp()}`, key)
+    await addCard(page, 0, 'Parent')
+    await addSubtask(page, 'Parent', 'Child')
+
+    await openCard(page, 'Parent')
+    await page.getByLabel('Open full page').click()
+    // The page a card was opened from stays mounted under the next one.
+    const cardPage = page.getByTestId('boards-card-page').filter({ visible: true })
+    await expect(cardPage.getByText('Description', { exact: true })).toBeVisible()
+    await expect(page).toHaveURL(new RegExp(`/a/boards/${key}/1$`))
+
+    await cardPage.getByTestId('boards-subtask-row').getByText('Child').click()
+    await expect(page).toHaveURL(new RegExp(`/a/boards/${key}/2$`))
+    await expect(cardPage.getByTestId('boards-detail-key')).toHaveText(`${key}-2`)
+
+    await page.goBack()
+    await expect(page).toHaveURL(new RegExp(`/a/boards/${key}/1$`))
+    await expect(cardPage.getByTestId('boards-detail-key')).toHaveText(`${key}-1`)
+})

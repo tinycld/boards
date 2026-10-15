@@ -444,6 +444,7 @@ function mountDetail(card: BoardCardView) {
                     card={card}
                     variant="peek"
                     projectId="p1"
+                    projectSlug="PL"
                     projectLabels={[]}
                     projectEpics={[]}
                     projectSprints={[]}

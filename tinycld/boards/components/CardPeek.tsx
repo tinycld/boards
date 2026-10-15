@@ -136,6 +136,7 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
                         card={entry.card}
                         variant="peek"
                         projectId={project.id}
+                        projectSlug={project.slug}
                         projectLabels={project.labels}
                         projectEpics={project.epics}
                         projectSprints={project.sprints}
