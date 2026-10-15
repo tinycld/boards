@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
+import { log } from '@tinycld/core/lib/logger'
 import { AUTO_PATCH_DELAY_MS } from '@tinycld/core/ui/forms'
 import type { ReactNode } from 'react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -114,6 +115,7 @@ vi.mock('@tinycld/core/lib/pocketbase', async () => {
         boards_cards: mk('boards_cards', [
             card('c1', 'f-bug', { severity: 'high' }),
             card('c2', '', {}),
+            card('c3', 'gone', {}),
         ]),
     })
     return { useStore: (...names: string[]) => names.map(n => h.stores[n]) }
@@ -145,6 +147,19 @@ describe('useCardForm', () => {
         const { result } = renderHook(() => useCardForm('c2'), { wrapper })
         await waitFor(() => expect(result.current.isReady).toBe(true))
         expect(result.current.edit.definition?.fields.some(f => f.key === 'severity')).toBe(false)
+    })
+
+    it('opens a card whose form is gone on the default and logs once', async () => {
+        const warn = vi.spyOn(log, 'warn')
+        try {
+            const { result } = renderHook(() => useCardForm('c3'), { wrapper })
+            await waitFor(() => expect(result.current.isReady).toBe(true))
+            const fallbackWarns = warn.mock.calls.filter(c => c[0] === 'boards.card-form')
+            expect(fallbackWarns).toHaveLength(1)
+            expect(fallbackWarns[0][2]).toEqual({ cardId: 'c3', form: 'gone' })
+        } finally {
+            warn.mockRestore()
+        }
     })
 
     it('saves a custom field change through the card update and marks it clean', async () => {

@@ -48,6 +48,15 @@ export function useCardForm(cardId: string) {
     // nothing renders from it. Spread, because the engine reads the row as a
     // plain record and a generated row interface carries no index signature.
     const edit = useFormEdit(host, record ? { ...record } : { id: cardId }, context)
+    // Logs only; it sets no state.
+    const fallback = edit.fallback
+    useEffect(() => {
+        if (!fallback) return
+        log.warn('boards.card-form', 'card form not found; showing the default type', {
+            cardId,
+            form: fallback,
+        })
+    }, [fallback, cardId])
     useAutoPatch(edit, async split => {
         const columnKeys = Object.keys(split.columns)
         if (columnKeys.length > 0) {
