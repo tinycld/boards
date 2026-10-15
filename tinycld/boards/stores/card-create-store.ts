@@ -9,12 +9,9 @@ export interface CardCreateTarget {
     listId: string
     /** Computed by lib/move.ts against that column when the dialog opens. */
     position: string
-    /** What the quick composer held when it was expanded. */
-    initialTitle: string
-    /**
-     * Runs once the card exists. The composer that opened the dialog keeps its
-     * draft until then, so cancelling the dialog loses nothing.
-     */
+    /** Pre-filled title, when the opener has one. */
+    initialTitle?: string
+    /** Runs once the card exists. */
     onCreated?: () => void
 }
 

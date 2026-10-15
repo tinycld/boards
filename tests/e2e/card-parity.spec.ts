@@ -20,16 +20,8 @@ import {
 // Visual parity baselines: how every card surface looks BEFORE the card detail
 // and create flow are rewritten to render through the forms engine. Later
 // tasks run this same spec against the new UI and must match pixel for pixel
-// (`--update-snapshots` is forbidden), except for the deltas below. The user
-// accepts or rejects each delta at review; a rejected row becomes a fix.
-//
-//   Snapshot                | Expected delta                                   | Ruling
-//   ------------------------|--------------------------------------------------|-------
-//   quick-composer-open.png | one extra icon button (expand) right of the     | 9
-//                           | input                                            |
-//
-// Every other snapshot has an empty delta list. The delta shot is a soft
-// assertion, so a shot taken after it in the same test is still compared.
+// (`--update-snapshots` is forbidden). Every snapshot must match its
+// baseline.
 //
 // peek-scrolled.png is taken in edit mode with the Activity heading scrolled
 // into view, so the pinned toolbar is in frame.
@@ -380,12 +372,10 @@ test.describe('Card parity', () => {
         await freshBoard(page, 'Parity composer')
         await page.getByText('Add card', { exact: true }).first().click()
         await expect(page.getByPlaceholder('What needs doing?')).toBeFocused()
-        await expect
-            .soft(page.getByTestId('boards-board'))
-            .toHaveScreenshot('quick-composer-open.png', {
-                ...SHOT,
-                mask: masks(page),
-            })
+        await expect(page.getByTestId('boards-board')).toHaveScreenshot('quick-composer-open.png', {
+            ...SHOT,
+            mask: masks(page),
+        })
     })
 
     test.describe('dark', () => {

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { OverlayProvider } from '@tinycld/core/ui/overlay'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -133,7 +133,6 @@ vi.mock('@tinycld/core/lib/pocketbase', async () => {
 })
 
 import { log } from '@tinycld/core/lib/logger'
-import { CardComposer } from '../tinycld/boards/components/CardComposer'
 import { CardCreateDialog } from '../tinycld/boards/components/CardCreateDialog'
 import { useCardCreateStore } from '../tinycld/boards/stores/card-create-store'
 
@@ -169,28 +168,6 @@ function addChecklistItem(container: HTMLElement, text: string) {
 const byLabel = (container: ParentNode, label: string) =>
     container.querySelector(`[accessibilityLabel="${label}"]`) as HTMLElement | null
 
-/** A column's composer wired to the dialog the way BoardColumn wires it. */
-function ComposerWithDialog() {
-    const openCreate = useCardCreateStore(s => s.open)
-    return (
-        <>
-            <CardComposer
-                onSubmit={() => {}}
-                onExpand={(title, clearDraft) =>
-                    openCreate({
-                        projectId: 'p1',
-                        listId: 'l1',
-                        position: 'a1',
-                        initialTitle: title,
-                        onCreated: clearDraft,
-                    })
-                }
-            />
-            <CardCreateDialog projectId="p1" />
-        </>
-    )
-}
-
 describe('CardCreateDialog', () => {
     it('renders nothing while no column is targeted', () => {
         useCardCreateStore.getState().close()
@@ -215,22 +192,25 @@ describe('CardCreateDialog', () => {
         expect(useCardCreateStore.getState().target).toBeNull()
     })
 
-    it('hands the composer draft back when the dialog is cancelled, and drops it once created', async () => {
+    it('closes on cancel, and again once the card is created', async () => {
         useCardCreateStore.getState().close()
-        const { container } = render(<ComposerWithDialog />, { wrapper })
-        fireEvent.click(byLabel(container, 'Add card') as HTMLElement)
-        const input = container.querySelector('rn-textinput') as HTMLInputElement
-        fireEvent.input(input, { target: { value: 'Signup fails' } })
-        fireEvent.click(q(container, 'card-composer-expand') as HTMLElement)
+        const { container } = render(<CardCreateDialog projectId="p1" />, { wrapper })
+        act(() =>
+            useCardCreateStore.getState().open({ projectId: 'p1', listId: 'l1', position: 'a1' })
+        )
         await waitFor(() => expect(q(container, 'form-input-title')).toBeTruthy())
-        expect((q(container, 'form-input-title') as HTMLInputElement).value).toBe('Signup fails')
+        expect((q(container, 'form-input-title') as HTMLInputElement).value).toBe('')
 
         fireEvent.click(byLabel(container, 'Close') as HTMLElement)
         await waitFor(() => expect(q(container, 'card-create-dialog')).toBeNull())
-        const composerInput = container.querySelector('rn-textinput') as HTMLInputElement
-        expect(composerInput.value).toBe('Signup fails')
 
-        fireEvent.click(q(container, 'card-composer-expand') as HTMLElement)
+        act(() =>
+            useCardCreateStore.getState().open({ projectId: 'p1', listId: 'l1', position: 'a1' })
+        )
+        await waitFor(() => expect(q(container, 'form-input-title')).toBeTruthy())
+        fireEvent.input(q(container, 'form-input-title') as HTMLElement, {
+            target: { value: 'Signup fails' },
+        })
         await waitFor(() => expect(q(container, 'form-wizard-next')).toBeTruthy())
         fireEvent.click(q(container, 'form-wizard-next') as HTMLElement)
         await waitFor(() => expect(useCardCreateStore.getState().target).toBeNull())
@@ -239,8 +219,6 @@ describe('CardCreateDialog', () => {
                 c => c.title === 'Signup fails' && c.position === 'a1'
             )
         ).toBe(true)
-        expect(container.querySelector('rn-textinput')).toBeNull()
-        expect(byLabel(container, 'Add card')).toBeTruthy()
     })
 
     it("offers the board's members, not the org, as assignees and reporter", async () => {

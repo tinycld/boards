@@ -179,15 +179,6 @@ export const BoardColumn = memo(function BoardColumn({
     const addCard = (title: string) =>
         createCard.mutate({ listId: list.id, title, position: rankForAppend(list.cards) })
 
-    const expandComposer = (title: string, clearDraft: () => void) =>
-        openCreate({
-            projectId,
-            listId: list.id,
-            position: rankForAppend(list.cards),
-            initialTitle: title,
-            onCreated: clearDraft,
-        })
-
     const sideFor = (event: DraxDragWithReceiverEventData): DropSide =>
         event.receiver.receiveOffsetRatio.x < 0.5 ? 'before' : 'after'
 
@@ -298,6 +289,13 @@ export const BoardColumn = memo(function BoardColumn({
                                 list={list}
                                 listOrder={listOrder}
                                 onRename={() => setIsRenaming(true)}
+                                onNewCard={() =>
+                                    openCreate({
+                                        projectId,
+                                        listId: list.id,
+                                        position: rankForAppend(list.cards),
+                                    })
+                                }
                             />
                         ) : null}
                     </View>
@@ -334,7 +332,6 @@ export const BoardColumn = memo(function BoardColumn({
                         onSubmit={addCard}
                         isOpen={isComposerOpen}
                         onOpenChange={next => openComposer(next ? list.id : null)}
-                        onExpand={expandComposer}
                     />
                 ) : null}
                 {isReceiving ? <View testID="boards-column-receiving" /> : null}

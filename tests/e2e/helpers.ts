@@ -693,17 +693,18 @@ export async function openBoardNamed(page: Page, name: string) {
 }
 
 /**
- * Open the full create form from a column's composer: "Add card", the title,
- * then the composer's "Open full form" button. The title carries over into the
- * dialog's form.
+ * Open the full create form from a column's menu ("New card…"), then type the
+ * title into the dialog's own title field.
  */
 export async function openCreateDialog(page: Page, columnIndex: number, title: string) {
-    const input = page.getByPlaceholder('What needs doing?')
-    await page.getByText('Add card', { exact: true }).nth(columnIndex).click()
-    await expect(input).toBeFocused()
-    await input.fill(title)
-    await page.getByTestId('card-composer-expand').click()
-    await expect(page.getByTestId('card-create-dialog')).toBeVisible()
+    await page
+        .getByRole('button', { name: / list actions$/ })
+        .nth(columnIndex)
+        .click()
+    await page.getByTestId('boards-column-new-card').click()
+    const dialog = page.getByTestId('card-create-dialog')
+    await expect(dialog).toBeVisible()
+    await dialog.getByTestId('form-input-title').fill(title)
 }
 
 /**

@@ -4,6 +4,7 @@ import { Menu } from '@tinycld/core/ui/menu'
 import {
     ArrowLeft,
     ArrowRight,
+    FilePlus,
     FoldHorizontal,
     Gauge,
     MoreHorizontal,
@@ -26,16 +27,18 @@ interface ColumnMenuProps {
     /** Every column's rank, in render order — the reorder needs siblings. */
     listOrder: BoardListRank[]
     onRename: () => void
+    /** Opens the full create form for this column. */
+    onNewCard: () => void
 }
 
 /**
- * The column header menu: rename, move, set the list's status, delete.
+ * The column header menu: new card, rename, move, set the list's status, delete.
  *
  * Reorder lives here rather than behind a drag because the stepper/menu pair is
  * the accessible path — drag-and-drop is a later task and an addition, never the
  * only way to do something.
  */
-export function ColumnMenu({ list, listOrder, onRename }: ColumnMenuProps) {
+export function ColumnMenu({ list, listOrder, onRename, onNewCard }: ColumnMenuProps) {
     const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
     const [isEditingLimit, setIsEditingLimit] = useState(false)
     const mutedColor = useThemeColor('muted')
@@ -78,6 +81,12 @@ export function ColumnMenu({ list, listOrder, onRename }: ColumnMenuProps) {
                 placement="bottom-end"
                 title={`${list.name} list`}
             >
+                <Menu.Item
+                    label="New card…"
+                    icon={FilePlus}
+                    testID="boards-column-new-card"
+                    onSelect={onNewCard}
+                />
                 <Menu.Item label="Rename list" icon={Pencil} onSelect={onRename} />
                 <Menu.Item
                     label="Collapse list"
