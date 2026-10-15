@@ -273,6 +273,4 @@ jobs:
           path: |
             ws/${{ env.PACKAGE }}/test-results/
             ws/${{ env.PACKAGE }}/playwright-report/
-            ws/${{ env.PACKAGE }}/tests/e2e/**/*-snapshots/*-linux.png
-          if-no-files-found: ignore
           retention-days: 14
