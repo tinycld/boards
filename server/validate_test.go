@@ -2,7 +2,9 @@ package boards
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -91,5 +93,49 @@ func TestValidateUpdate_TolerationsForGarbage(t *testing.T) {
 	}
 	if err := validateUpdate("board", nil); err != nil {
 		t.Errorf("an empty update should be a harmless no-op, got %v", err)
+	}
+}
+
+// realYTiptapEnter is a real update from @tiptap/y-tiptap 3.0.10, captured
+// from the description editor: pressing Enter in card "card:1". It inserts the
+// new paragraph AND writes the editor's position-migration record, in one
+// transaction. Rejecting it once dropped the paragraph and stalled every edit
+// after it, so a saved description stopped at its first line.
+const realYTiptapEnter = "AQKBsr30DhGHgbK99A4AAwlwYXJhZ3JhcGgoAShfX3RpcHRhcF9wb3NpdGlvbl9taWdyYXRpb25zOnJvb3Q6Y2FyZDoxDTQwMDIzNzE4NDE6MTgBdgUHdmVyc2lvbn0BBmNsaWVudHtB7dHrICAAAAVjbG9ja30SBHNlZW51AXUCe0Ht0esgIAAAfRIJdHJhbnNmZXJzdQF2AgZzb3VyY2V2BAZjbGllbnR7Qe3R6yAgAAAFY2xvY2t9AAZsZW5ndGh9AQhib3VuZGFyeXcDZW5kBnRhcmdldHYEBmNsaWVudHtB7dHrICAAAAVjbG9ja30RBHR5cGV+CGJvdW5kYXJ5dwNlbmQA"
+
+func TestValidateUpdate_AcceptsTheEditorsPositionMigrations(t *testing.T) {
+	update, err := base64.StdEncoding.DecodeString(realYTiptapEnter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys, err := yjsdoc.RootKeysOfUpdate("board", update)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// On a fresh document only the map integrates: the paragraph is anchored
+	// to items from earlier edits. The map root is the one that was rejected.
+	if !slices.Contains(keys, "__tiptap_position_migrations:root:card:1") {
+		t.Fatalf("fixture no longer writes the migration root: %v", keys)
+	}
+	if err := validateUpdate("board", update); err != nil {
+		t.Errorf("the editor's Enter was rejected: %v", err)
+	}
+}
+
+func TestValidateUpdate_PositionMigrationsOnlyForCards(t *testing.T) {
+	for _, fragment := range []string{
+		"__tiptap_position_migrations:root:prosemirror",
+		"__tiptap_position_migrations:root:card:",
+		"__tiptap_position_migrations:item:1:2",
+		"__tiptap_position_migrations:root:card:UPPER",
+	} {
+		t.Run(fragment, func(t *testing.T) {
+			if err := validateUpdate("board", updateWriting(t, fragment)); err == nil {
+				t.Errorf("update writing root %q was accepted", fragment)
+			}
+		})
+	}
+	if err := validateUpdate("board", updateWriting(t, "__tiptap_position_migrations:root:card:abc123")); err != nil {
+		t.Errorf("a card's migration root was rejected: %v", err)
 	}
 }
