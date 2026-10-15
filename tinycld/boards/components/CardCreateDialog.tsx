@@ -77,10 +77,7 @@ function useCardCreate({ host, projectId, target, onClose }: CreateBodyProps) {
                 columns: columns.columns,
                 checklist,
             })
-            .then(() => {
-                target.onCreated?.()
-                onClose()
-            }, create.onError)
+            .then(onClose, create.onError)
     }
 
     return { offered, create, ui, context, createValue, submit }

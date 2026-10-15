@@ -11,24 +11,6 @@ vi.mock('@tinycld/core/lib/pocketbase', () => ({
     useStore: (...names: string[]) => names.map(() => ({})),
 }))
 
-// The shared lucide stub lacks some of the icons this menu draws, and a missing
-// one is an undefined element type.
-vi.mock('lucide-react-native', async importOriginal => {
-    const Icon = () => null
-    return {
-        ...(await importOriginal<Record<string, unknown>>()),
-        ArrowLeft: Icon,
-        ArrowRight: Icon,
-        FilePlus: Icon,
-        FoldHorizontal: Icon,
-        Gauge: Icon,
-        MoreHorizontal: Icon,
-        Pencil: Icon,
-        Plus: Icon,
-        Trash2: Icon,
-    }
-})
-
 import { ColumnMenu } from '../tinycld/boards/components/ColumnMenu'
 import type { BoardListView } from '../tinycld/boards/types'
 

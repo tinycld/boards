@@ -287,7 +287,6 @@ export function useBoardShortcuts(
                 projectId: project.id,
                 listId: list.id,
                 position: rankForAppend(list.cards),
-                initialTitle: '',
             })
         }
 

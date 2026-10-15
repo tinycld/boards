@@ -11,8 +11,6 @@ export interface CardCreateTarget {
     position: string
     /** Pre-filled title, when the opener has one. */
     initialTitle?: string
-    /** Runs once the card exists. */
-    onCreated?: () => void
 }
 
 interface CardCreateState {
@@ -24,7 +22,7 @@ interface CardCreateState {
 /**
  * Which column the full-form dialog creates into; null while it is closed.
  *
- * A store rather than state on the board screen: the composer that opens it
+ * A store rather than state on the board screen: the column menu that opens it
  * sits inside a memoized column, and the shortcut that opens it lives in the
  * board's shortcut hook, neither of which holds a reference to the dialog.
  */
