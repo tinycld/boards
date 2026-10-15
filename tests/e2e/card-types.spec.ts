@@ -157,8 +157,8 @@ test.describe('Card types', () => {
             await changeType(mPage, bug)
             await expect(selectedOption(cell(mPage, 'severity'), 'severity')).toHaveText('Low')
 
-            // The checklist is a built-in whose rows travel through the host's
-            // mapper; an item added on a typed card is kept.
+            // The checklist is a built-in whose rows live in the host's own
+            // table; an item added on a typed card is kept.
             await cardSurface(mPage)
                 .getByTestId('boards-section-chips')
                 .getByRole('button', { name: 'Checklist' })

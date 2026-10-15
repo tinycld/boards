@@ -23,18 +23,6 @@ vi.mock('@tinycld/core/lib/auth', () => ({
     useAuth: () => ({ user: { id: 'u1' }, isLoggedIn: true }),
 }))
 
-// The shared lucide stub draws every icon as nothing, so a selected row would
-// look like any other; the check mark is drawn here so the test can see it.
-vi.mock('lucide-react-native', async importOriginal => {
-    const actual = await importOriginal<Record<string, unknown>>()
-    const { createElement } = await import('react')
-    const Check = () => createElement('span', { 'data-check': 'true' })
-    return new Proxy(actual, {
-        get: (target, prop) => (prop === 'Check' ? Check : Reflect.get(target, prop)),
-        has: () => true,
-    })
-})
-
 vi.mock('@tinycld/core/lib/pocketbase', async () => {
     const { BasicIndex, createCollection, localOnlyCollectionOptions } = await import(
         '@tanstack/db'

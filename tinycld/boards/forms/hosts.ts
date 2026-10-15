@@ -175,7 +175,6 @@ const hosts: FormHostDefInput[] = [
                 label: 'Checklist',
                 kind: 'checklist',
                 storage: 'rows',
-                mapper: 'checklist',
                 component: 'ChecklistSection',
                 chrome: 'bare',
             },

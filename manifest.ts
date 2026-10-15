@@ -78,7 +78,7 @@ const manifest = {
     },
     collections: { register: 'collections', types: 'types' },
     // Cards are a forms host: `forms` is the data the generator reads in Node
-    // (server/form_hosts.json), `forms-ui` the components and mapper the form
+    // (server/form_hosts.json), `forms-ui` the components the form
     // renderer mounts. Settings → Forms lists "Card" under Boards.
     forms: { hosts: 'forms', ui: 'forms-ui' },
     // Trigger + action catalog for workflow rules. The Go side

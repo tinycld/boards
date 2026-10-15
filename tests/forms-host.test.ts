@@ -33,10 +33,9 @@ describe('boards:card host', () => {
             collaborative: true,
             component: 'DescriptionField',
         })
-        expect(host.builtin.find(b => b.key === 'checklist')).toMatchObject({
-            storage: 'rows',
-            mapper: 'checklist',
-        })
+        const checklist = host.builtin.find(b => b.key === 'checklist')
+        expect(checklist).toMatchObject({ storage: 'rows' })
+        expect(checklist).not.toHaveProperty('mapper')
         expect(host.files).toMatchObject({
             collection: 'boards_attachments',
             recordColumn: 'card',
