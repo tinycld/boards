@@ -7,7 +7,16 @@ import {
     TEST_COLLABORATOR_EMAIL,
     TEST_COLLABORATOR_NAME,
 } from '@tinycld/core/e2e-helpers'
-import { addCard, createBoard, openBoard, openCard, shareBoard } from './helpers'
+import {
+    addCard,
+    createBoard,
+    expectCollabText,
+    openBoard,
+    openCard,
+    shareBoard,
+    typeIntoCollab,
+    uniqueStamp,
+} from './helpers'
 
 // Collaborative description editing, which needs TWO live sessions: one types
 // and the OTHER must see it without reloading. A single-session spec could not
@@ -18,9 +27,17 @@ import { addCard, createBoard, openBoard, openCard, shareBoard } from './helpers
 
 const CARD_TITLE = 'Ship the release'
 
-/** The description editor's typing surface. */
+/** The container the description's editor renders into while someone edits. */
 function descriptionEditor(page: Page) {
-    return page.getByTestId('boards-description-editor').locator('.ProseMirror')
+    return page.getByTestId('boards-description-editor')
+}
+
+/**
+ * The description as a reader sees it: the editor while one is open, else the
+ * markdown read view that stands in for it. A viewer never sees an editor.
+ */
+function description(page: Page) {
+    return descriptionEditor(page).or(page.getByTestId('boards-description-read'))
 }
 
 /**
@@ -33,78 +50,15 @@ function descriptionEditor(page: Page) {
  * that is already placed.
  */
 async function openDescription(page: Page) {
-    const editor = descriptionEditor(page)
-    if (await editor.isVisible().catch(() => false)) return editor
+    const editor = descriptionEditor(page).locator('.ProseMirror')
+    if (await editor.isVisible().catch(() => false)) return
     await page.getByRole('button', { name: 'Edit description' }).click()
     await expect(editor).toBeVisible()
-    return editor
-}
-
-/**
- * The description's text, with collaborator-caret decorations removed.
- *
- * CollaborationCaret injects each remote user's NAME into the document as a
- * widget, so reading `innerText` returns things like "Confirmed." split around
- * "Test User". Those spans carry the caret classes, which is what makes them
- * removable — asserting on raw innerText instead would make every assertion
- * depend on who else happens to be connected.
- */
-async function descriptionText(page: Page): Promise<string> {
-    return page.evaluate(() => {
-        // Either surface: a description renders as MARKDOWN until someone
-        // edits it, and only then is there a .ProseMirror to read. A viewer
-        // never sees an editor at all.
-        const editor =
-            document.querySelector('[data-testid="boards-description-editor"] .ProseMirror') ??
-            document.querySelector('[data-testid="boards-description-read"]')
-        if (!editor) return ''
-        const clone = editor.cloneNode(true) as HTMLElement
-        for (const caret of clone.querySelectorAll(
-            '[class*="collaboration-carets"], [class*="collaboration-cursor"]'
-        )) {
-            caret.remove()
-        }
-        return clone.textContent ?? ''
-    })
-}
-
-/** Wait for the description to contain `text`, ignoring caret decorations. */
-async function expectDescriptionToContain(page: Page, text: string, timeout = 15_000) {
-    await expect(async () => {
-        expect(await descriptionText(page)).toContain(text)
-    }).toPass({ timeout })
-}
-
-/**
- * Type into the description, with the caret at the very end.
- *
- * Clicking alone lands the caret wherever the pointer fell — mid-word if the
- * text already reaches that far — so the first characters end up interleaved.
- * Moving to the end first makes the appended text contiguous and the assertion
- * about replication rather than about pointer coordinates.
- */
-async function typeDescription(page: Page, text: string) {
-    const editor = await openDescription(page)
-    await expect(editor).toBeVisible()
-    await editor.click()
-    await page.keyboard.press('ControlOrMeta+End')
-    // ProseMirror drops keystrokes that arrive while it is still settling
-    // focus, and a remote caret arriving mid-burst can steal one too. Retrying
-    // the whole type keeps the spec about replication rather than about
-    // input timing; the editor is idempotent for this because each attempt
-    // starts from the end of whatever is already there.
-    await expect(async () => {
-        if (!(await descriptionText(page)).includes(text)) {
-            await page.keyboard.press('ControlOrMeta+End')
-            await page.keyboard.type(text, { delay: 20 })
-        }
-        expect(await descriptionText(page)).toContain(text)
-    }).toPass({ timeout: 15_000 })
 }
 
 test.describe('Boards — collaborative descriptions', () => {
     test('one person types and the other sees it, then it persists', async ({ page }) => {
-        const boardName = `collab-${Date.now()}`
+        const boardName = `collab-${uniqueStamp()}`
         await login(page)
         await navigateToPackage(page, 'boards')
         await createBoard(page, boardName)
@@ -132,12 +86,13 @@ test.describe('Boards — collaborative descriptions', () => {
             await openDescription(bobPage)
 
             // The owner types; bob must see it arrive over the socket.
-            await typeDescription(page, 'Shipping on Friday.')
-            await expectDescriptionToContain(bobPage, 'Shipping on Friday.')
+            await openDescription(page)
+            await typeIntoCollab(page, descriptionEditor(page), 'Shipping on Friday.')
+            await expectCollabText(description(bobPage), 'Shipping on Friday.')
 
             // ...and the other direction, so this is not a one-way pipe.
-            await typeDescription(bobPage, ' Confirmed.')
-            await expectDescriptionToContain(page, 'Confirmed.')
+            await typeIntoCollab(bobPage, descriptionEditor(bobPage), ' Confirmed.')
+            await expectCollabText(description(page), 'Confirmed.')
 
             // The server flushes the shared document back to the stored field.
             // Proving it PERSISTED (rather than being relayed between two live
@@ -154,7 +109,7 @@ test.describe('Boards — collaborative descriptions', () => {
             await navigateToPackage(page, 'boards')
             await openBoard(page, boardName, CARD_TITLE)
             await openCard(page, CARD_TITLE)
-            await expectDescriptionToContain(page, 'Shipping on Friday.', 20_000)
+            await expectCollabText(description(page), 'Shipping on Friday.', 20_000)
         } finally {
             await close()
         }
@@ -164,12 +119,12 @@ test.describe('Boards — collaborative descriptions', () => {
         // Carets were shipped, wired correctly, and completely invisible: the
         // extension's spans reached the DOM with no CSS behind them, so they
         // rendered as a zero-width, zero-height nothing. Nothing failed, because
-        // nothing asserted they were DRAWN — the helper above even strips them
+        // nothing asserted they were DRAWN — collabText even strips them
         // out to read text.
         //
         // Hence the geometry assertion. Presence in the DOM is not the property
         // that matters here.
-        const boardName = `carets-${Date.now()}`
+        const boardName = `carets-${uniqueStamp()}`
         await login(page)
         await navigateToPackage(page, 'boards')
         await createBoard(page, boardName)
@@ -195,8 +150,9 @@ test.describe('Boards — collaborative descriptions', () => {
             // Bob types, which both seeds the document and puts his caret in it.
             // His editor must KEEP focus from here on: y-tiptap nulls the cursor
             // field on blur, and a blurred peer correctly has no caret to draw.
-            await typeDescription(bobPage, 'Bob was here.')
-            await expectDescriptionToContain(page, 'Bob was here.')
+            await openDescription(bobPage)
+            await typeIntoCollab(bobPage, descriptionEditor(bobPage), 'Bob was here.')
+            await expectCollabText(description(page), 'Bob was here.')
 
             const caret = page.locator('.collaboration-carets__caret').first()
             await expect(caret).toHaveCount(1)
@@ -247,7 +203,7 @@ test.describe('Boards — collaborative descriptions', () => {
         // This is the DEFAULT way a card opens on a phone, where there is no
         // peek, so the regression took the whole feature out on mobile while
         // every existing spec (all peek-based) stayed green.
-        const boardName = `collab-page-${Date.now()}`
+        const boardName = `collab-page-${uniqueStamp()}`
         await login(page)
         await navigateToPackage(page, 'boards')
         await createBoard(page, boardName)
@@ -293,12 +249,10 @@ test.describe('Boards — collaborative descriptions', () => {
     }
 
     test('an edit on the full page reaches the peek', async ({ page }) => {
-        const { bobPage, pageEditor, close } = await openFullPageWithBob(page)
+        const { bobPage, close } = await openFullPageWithBob(page)
         try {
-            await pageEditor.click()
-            await page.keyboard.press('ControlOrMeta+End')
-            await page.keyboard.type('Written from the full page.')
-            await expectDescriptionToContain(bobPage, 'Written from the full page.')
+            await typeIntoCollab(page, descriptionEditor(page), 'Written from the full page.')
+            await expectCollabText(description(bobPage), 'Written from the full page.')
         } finally {
             await close()
         }
@@ -307,10 +261,9 @@ test.describe('Boards — collaborative descriptions', () => {
     test('an edit in the peek reaches the full page', async ({ page }) => {
         const { bobPage, pageEditor, close } = await openFullPageWithBob(page)
         try {
-            await typeDescription(bobPage, 'Answered from the peek.')
-            await expect(async () => {
-                expect(await pageEditor.innerText()).toContain('Answered from the peek.')
-            }).toPass({ timeout: 15_000 })
+            await openDescription(bobPage)
+            await typeIntoCollab(bobPage, descriptionEditor(bobPage), 'Answered from the peek.')
+            await expectCollabText(pageEditor, 'Answered from the peek.')
         } finally {
             await close()
         }

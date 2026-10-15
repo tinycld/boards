@@ -18,11 +18,14 @@ import {
     boardCard,
     cardSurface,
     createBoard,
+    expectCollabText,
     openBoard,
     openCard,
     openCreateDialog,
     pickCardType,
     shareBoard,
+    typeIntoCollab,
+    uniqueStamp,
 } from './helpers'
 
 // A custom collaborative markdown field on a card type, with TWO live
@@ -47,63 +50,16 @@ function notesCell(page: Page) {
  */
 async function openNotes(page: Page) {
     const editor = notesCell(page).locator('.ProseMirror')
-    if (await editor.isVisible().catch(() => false)) return editor
+    if (await editor.isVisible().catch(() => false)) return
     await notesCell(page).getByTestId('form-input-notes').click()
     await expect(editor).toBeVisible()
-    return editor
-}
-
-/**
- * The field's text, with collaborator-caret decorations removed: the caret
- * extension injects each remote user's NAME into the document as a widget, so
- * raw text would depend on who else is connected. Reads the editor when one is
- * open, else the read view.
- */
-async function notesText(page: Page): Promise<string> {
-    return page.evaluate(() => {
-        const cell = document.querySelector(
-            '[data-testid="boards-card-peek"] [data-testid="form-field-notes"]'
-        )
-        const surface = cell?.querySelector('.ProseMirror') ?? cell
-        if (!surface) return ''
-        const clone = surface.cloneNode(true) as HTMLElement
-        for (const caret of clone.querySelectorAll(
-            '[class*="collaboration-carets"], [class*="collaboration-cursor"]'
-        )) {
-            caret.remove()
-        }
-        return clone.textContent ?? ''
-    })
-}
-
-async function expectNotesToContain(page: Page, text: string, timeout = 15_000) {
-    await expect(async () => {
-        expect(await notesText(page)).toContain(text)
-    }).toPass({ timeout })
-}
-
-/**
- * Type at the very end of the field. ProseMirror drops keystrokes that arrive
- * while it is still settling focus, so the type is retried until the text is
- * there; each attempt starts from the end of whatever is already written.
- */
-async function typeNotes(page: Page, text: string) {
-    const editor = await openNotes(page)
-    await editor.click()
-    await expect(async () => {
-        if (!(await notesText(page)).includes(text)) {
-            await page.keyboard.press('ControlOrMeta+End')
-            await page.keyboard.type(text, { delay: 20 })
-        }
-        expect(await notesText(page)).toContain(text)
-    }).toPass({ timeout: 15_000 })
 }
 
 test.describe('Card types — collaborative fields', () => {
     test('one person types in a custom field and the other sees it, then it persists', async ({
         page,
     }) => {
-        const id = Date.now()
+        const id = uniqueStamp()
         const typeName = `Doc ${id}`
         const board = `typed-collab-${id}`
 
@@ -133,8 +89,9 @@ test.describe('Card types — collaborative fields', () => {
             await openCard(page, TITLE)
             await openNotes(bobPage)
 
-            await typeNotes(page, 'Restart the worker first.')
-            await expectNotesToContain(bobPage, 'Restart the worker first.')
+            await openNotes(page)
+            await typeIntoCollab(page, notesCell(page), 'Restart the worker first.')
+            await expectCollabText(notesCell(bobPage), 'Restart the worker first.')
 
             // Persisted, not relayed: with every editor closed the room
             // empties and flushes, and a fresh mount reads the stored field.
@@ -148,7 +105,7 @@ test.describe('Card types — collaborative fields', () => {
             await openBoard(bobPage, board, TITLE)
             await openCard(bobPage, TITLE)
             await expect(notesCell(bobPage).locator('.ProseMirror')).toHaveCount(0)
-            await expectNotesToContain(bobPage, 'Restart the worker first.', 20_000)
+            await expectCollabText(notesCell(bobPage), 'Restart the worker first.', 20_000)
         } finally {
             await bob.close()
         }

@@ -1,5 +1,66 @@
 import type { Locator, Page } from '@playwright/test'
-import { expect } from '@playwright/test'
+import { expect, test } from '@playwright/test'
+
+/**
+ * Type `text` at the very end of a collaborative editor inside `surface`.
+ *
+ * Gated on the editor being BOUND and EDITABLE: `data-collab-ready` is set on
+ * an instance built with the shared document, and `contenteditable` is
+ * ProseMirror's own word on whether it takes input. Typing before both hold
+ * sends keys to a surface that drops them, which is what the retry loops this
+ * replaced were papering over. Moving to the end first keeps the typed text
+ * contiguous whatever the click landed on.
+ */
+export async function typeIntoCollab(page: Page, surface: Locator, text: string) {
+    const editor = surface.locator('.ProseMirror[data-collab-ready="true"][contenteditable="true"]')
+    await expect(editor).toBeVisible()
+    await editor.click()
+    await page.keyboard.press('ControlOrMeta+End')
+    await page.keyboard.type(text)
+}
+
+/**
+ * The text of a collaborative surface: its editor when one is open, else
+ * whatever `surface` renders in its place.
+ *
+ * Collaborator carets are removed first. The caret extension injects each
+ * remote user's NAME into the document as a widget, so raw text would read
+ * "Confirmed." split around "Test User" and every assertion would depend on who
+ * else happens to be connected.
+ */
+export async function collabText(surface: Locator): Promise<string> {
+    return surface.first().evaluate(element => {
+        const root = element.querySelector('.ProseMirror') ?? element
+        const clone = root.cloneNode(true) as HTMLElement
+        for (const caret of clone.querySelectorAll(
+            '[class*="collaboration-carets"], [class*="collaboration-cursor"]'
+        )) {
+            caret.remove()
+        }
+        return clone.textContent ?? ''
+    })
+}
+
+/**
+ * Wait for a collaborative surface to contain `text`. Edits arrive over a
+ * WebSocket, so this polls the read rather than asserting once.
+ */
+export async function expectCollabText(surface: Locator, text: string, timeout = 15_000) {
+    await expect.poll(() => collabText(surface), { timeout }).toContain(text)
+}
+
+/**
+ * A suffix no concurrently running test shares.
+ *
+ * `Date.now()` alone is not unique: under `--repeat-each`, two workers start
+ * the same test in the same millisecond and mint the same board name, and so
+ * the same key, which the database rejects as a duplicate. The worker index
+ * separates the copies that run at the same time; the clock separates the ones
+ * one worker runs in turn.
+ */
+export function uniqueStamp(): string {
+    return `${Date.now()}-${test.info().workerIndex}`
+}
 
 /**
  * A board key that no other spec will pick.
