@@ -231,6 +231,10 @@ back into a plain day. Both dates appear in the card's history and in the
 
 To add a file, see [Attaching files to cards](help://boards:attaching-files).
 
+A card also has a type, such as Bug or Feature. The type sets the fields,
+pages and rules the card uses. Admins add types and custom fields in
+**Settings → Forms**. See [Card types and custom fields](help://boards:card-types).
+
 ## Adding a checklist, sub-tasks, files or links
 
 Most cards never need all four, so a card starts without them. Below the
@@ -525,6 +529,7 @@ To add something:
 - **N** — add a card to the highlighted column. If nothing is highlighted the
   first column takes it, and a collapsed column opens first.
 - **⇧N** — add a list
+- **C** — create a card with the full form and pick its type.
 
 The composer stays open after you press Enter, so you can type several cards in
 a row without reaching for the mouse.
@@ -561,12 +566,6 @@ With a card open:
 
 Press **⇧?** anywhere to see every shortcut the app knows, including the ones
 for jumping between apps.
-
-## Card types and custom fields
-
-A card has a type, such as Bug or Feature. The type sets the fields, pages and
-rules the card uses. Admins add types and custom fields in **Settings → Forms**.
-See [Card types and custom fields](help://boards:card-types).
 
 ## Working from a terminal
 
