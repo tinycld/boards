@@ -176,13 +176,18 @@ function ActivityRow({ item, context }: { item: BoardActivity; context: Activity
             </View>
             <Text className="flex-1 min-w-0 text-[12.5px] text-muted" numberOfLines={2}>
                 <Text className="font-semibold text-foreground">{who}</Text> {leadText}
-                <Text testID="boards-card-key">{linkedKey}</Text>
+                <LinkedKey value={linkedKey} />
             </Text>
             <Text testID="boards-timestamp" className="shrink-0 text-[11.5px] text-muted">
                 {timestamp}
             </Text>
         </View>
     )
+}
+
+function LinkedKey({ value }: { value: string }) {
+    if (!value) return null
+    return <Text testID="boards-card-key">{value}</Text>
 }
 
 function linkedCardKey(item: BoardActivity, context: ActivityContext, text: string): string {

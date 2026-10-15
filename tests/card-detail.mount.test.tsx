@@ -34,8 +34,8 @@ const h = vi.hoisted(() => {
     })
     return {
         // c3 still carries a value for `retired`, a custom field its type no
-        // longer has. c3 and c4 have no children, so the card body mounts
-        // with empty sections.
+        // longer has. c3 has only activity rows and c4 has no children, so
+        // the card body mounts with near-empty sections.
         cards: [
             {
                 id: 'c1',
@@ -158,6 +158,26 @@ const h = vi.hoisted(() => {
                 to: 'b',
                 created: '2026-01-03',
             },
+            // c3's history: a moved row has no key; a link row ends in the other
+            // card's key, so it is the one row with a key span.
+            {
+                id: 'e3',
+                card: 'c3',
+                actor: 'u1',
+                kind: 'moved',
+                from: 'a',
+                to: 'b',
+                created: '2026-01-05',
+            },
+            {
+                id: 'e4',
+                card: 'c3',
+                actor: 'u1',
+                kind: 'link_added',
+                from: 'blocks',
+                to: 'c4',
+                created: '2026-01-06',
+            },
             // A system row with no actor must survive the left join.
             {
                 id: 'e0',
@@ -221,6 +241,7 @@ vi.mock('@tinycld/core/lib/forms/use-form-hosts', async () => {
     const host = {
         ...def,
         pkgSlug: 'boards',
+        pkgName: 'Boards',
         ui: async () => {
             const { default: ui } = await import('../tinycld/boards/forms/ui')
             const { useCardDescription } = await import(
@@ -467,6 +488,16 @@ describe('CardDetail', () => {
         expect(pinned.textContent).toBe('Description')
         expect(cell.textContent).not.toContain('Description')
         expect(cell.querySelector('[accessibilityLabel="Edit description"]')).toBeTruthy()
+    })
+
+    test('only a link row carries a key span; a moved row has none', async () => {
+        h.role = { canEdit: true, canComment: true, isOwner: false }
+        const { container } = mountDetail(view('c3', 'Three', 3))
+        await waitFor(() => expect(q(container, 'boards-activity-link_added')).toBeTruthy())
+        const moved = q(container, 'boards-activity-moved') as HTMLElement
+        const link = q(container, 'boards-activity-link_added') as HTMLElement
+        expect(q(moved, 'boards-card-key')).toBeNull()
+        expect(q(link, 'boards-card-key')?.textContent).toBe('OTTER-4')
     })
 
     test('a viewer of a card with no description gets neither its header nor its body', async () => {
