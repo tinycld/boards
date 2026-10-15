@@ -155,6 +155,25 @@ test('j, j, Escape lands on the board with the last card peeked', async ({ page 
     await expect(cardSurface(page).getByTestId('boards-detail-key')).toHaveText(`${key}-3`)
 })
 
+// Each stacked page owns its keys. The page j pushed shared its shortcut ids
+// with the page under it, and unmounting on Back deleted them, so the page
+// Back returned to answered no key at all.
+test('j, goBack, Escape lands on the board with the card peeked', async ({ page }) => {
+    const key = await boardWithThreeCards(page, 'page-keys')
+    await openFullPage(page, 'Alpha')
+
+    await page.keyboard.press('j')
+    await expect(page).toHaveURL(new RegExp(`/a/boards/${key}/2$`))
+    await page.goBack()
+    await expect(page).toHaveURL(new RegExp(`/a/boards/${key}/1$`))
+    await expect(visibleCardPage(page).getByTestId('boards-detail-key')).toHaveText(`${key}-1`)
+    await page.keyboard.press('Escape')
+
+    await expect(page).toHaveURL(new RegExp(`/a/boards/${key}-1$`))
+    await expect(visibleCardPage(page)).toHaveCount(0)
+    await expect(cardSurface(page).getByTestId('boards-detail-key')).toHaveText(`${key}-1`)
+})
+
 async function boardWithThreeCards(page: Page, name: string): Promise<string> {
     await login(page)
     await navigateToPackage(page, 'boards')

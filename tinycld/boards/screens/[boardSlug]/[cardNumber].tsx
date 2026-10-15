@@ -8,7 +8,7 @@ import { useNavigateBack } from '@tinycld/core/lib/use-navigate-back'
 import { useDeviceInsets } from '@tinycld/core/lib/use-safe-area'
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router'
 import { ChevronLeft } from 'lucide-react-native'
-import { type RefObject, useCallback, useEffect, useMemo, useRef } from 'react'
+import { type RefObject, useCallback, useEffect, useId, useMemo, useRef } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { BoardPresenceProvider } from '../../components/BoardPresenceProvider'
 import { CardDetail } from '../../components/detail/CardDetail'
@@ -42,8 +42,16 @@ function usePageShortcuts(
     // leave at most once per mounted card page.
     const leavingRef = useRef(false)
     const scopeOwner = useShortcutScope('thread')
+    // One id per page INSTANCE. j/k and the rows stack card pages, and the
+    // registry keys shortcuts by id: with shared ids the page on top replaced
+    // the page under it, and its unmount on Back deleted them, so the page
+    // Back returned to answered no key. Separate ids leave each page its own
+    // entries; the matcher and the help overlay already pick the focused one
+    // by its scope id.
+    const instance = useId()
 
     const shortcuts = useMemo<Shortcut[]>(() => {
+        const idOf = (name: string) => `boards.page.${name}#${instance}`
         const step = (delta: number) => {
             const next = neighborCardId(project, cardId, delta)
             const entry = next ? findCardEntry(project, next) : null
@@ -56,7 +64,7 @@ function usePageShortcuts(
         const editTitle: Shortcut[] = canEdit
             ? [
                   {
-                      id: 'boards.page.editTitle',
+                      id: idOf('editTitle'),
                       keys: 'e',
                       scope: 'thread',
                       group: 'Boards',
@@ -68,7 +76,7 @@ function usePageShortcuts(
         return [
             ...editTitle,
             {
-                id: 'boards.page.back',
+                id: idOf('back'),
                 keys: 'Escape',
                 scope: 'thread',
                 group: 'Boards',
@@ -80,7 +88,7 @@ function usePageShortcuts(
                 },
             },
             {
-                id: 'boards.page.next',
+                id: idOf('next'),
                 keys: 'j',
                 scope: 'thread',
                 group: 'Boards',
@@ -88,7 +96,7 @@ function usePageShortcuts(
                 run: () => step(1),
             },
             {
-                id: 'boards.page.prev',
+                id: idOf('prev'),
                 keys: 'k',
                 scope: 'thread',
                 group: 'Boards',
@@ -96,7 +104,7 @@ function usePageShortcuts(
                 run: () => step(-1),
             },
         ]
-    }, [project, segment, cardId, leaveToBoard, router, orgHref, canEdit, titleRef])
+    }, [project, segment, cardId, leaveToBoard, router, orgHref, canEdit, titleRef, instance])
     useRegisterShortcuts(shortcuts, scopeOwner)
 }
 
@@ -160,9 +168,9 @@ export default function CardDetailScreen() {
  * Leave the card pages for this card's board in one step, with this card
  * peeked there.
  *
- * j/k and the sub-task and link rows each push a card page, so `router.back()`
- * would step back ONE card, while Escape and the back button say "Back to
- * board". `dismissTo` pops to the board screen below, or replaces this page
+ * On the card pages, j/k and the sub-task and link rows each push a card page,
+ * so `router.back()` would step back ONE card, while Escape and the back
+ * button say "Back to board". `dismissTo` pops to the board screen below, or replaces this page
  * with the board when none is below (a link followed straight to a card). The
  * card stays open in the board's peek: a page expanded from the peek returns
  * to it, and after j/k the reader lands on the card they were reading. The
