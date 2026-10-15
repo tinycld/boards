@@ -92,11 +92,15 @@ export function cardSurface(page: Page, mode: CardSurfaceMode = 'peek'): Locator
 }
 
 /** Open a card and wait for its body — the click alone proves nothing
- *  about the detail having mounted. */
+ *  about the detail having mounted.
+ *
+ *  The heading is looked for inside the card's surface: a screen visited
+ *  earlier can stay mounted behind the board (the forms builder's canvas has a
+ *  "Description" cell of its own), and a page-wide match would find it too. */
 export async function openCard(page: Page, title: string, mode: CardSurfaceMode = 'peek') {
     await boardCard(page, title).click()
     await expect(cardSurface(page, mode)).toBeVisible()
-    await expect(page.getByText('Description', { exact: true })).toBeVisible()
+    await expect(cardSurface(page, mode).getByText('Description', { exact: true })).toBeVisible()
 }
 
 /**
@@ -677,4 +681,113 @@ export async function pickEmoji(page: Page, unified: string, query?: string) {
     const cell = page.getByTestId(`emoji-pick-${unified}`)
     await cell.waitFor({ state: 'visible' })
     await cell.click()
+}
+
+/**
+ * Open a board from the sidebar by name and wait for its header to name it.
+ * For a board with no cards yet, which `openBoard` cannot gate on.
+ */
+export async function openBoardNamed(page: Page, name: string) {
+    await page.getByTestId('package-sidebar-mounted').getByText(name, { exact: true }).click()
+    await expect(page.getByTestId('boards-board-name').filter({ visible: true })).toHaveText(name)
+}
+
+/**
+ * Open the full create form from a column's composer: "Add card", the title,
+ * then the composer's "Open full form" button. The title carries over into the
+ * dialog's form.
+ */
+export async function openCreateDialog(page: Page, columnIndex: number, title: string) {
+    const input = page.getByPlaceholder('What needs doing?')
+    await page.getByText('Add card', { exact: true }).nth(columnIndex).click()
+    await expect(input).toBeFocused()
+    await input.fill(title)
+    await page.getByTestId('card-composer-expand').click()
+    await expect(page.getByTestId('card-create-dialog')).toBeVisible()
+}
+
+/**
+ * Pick a card type in the open create dialog.
+ *
+ * The dialog shows pills for up to four types and a menu past that. Types are
+ * org-wide and every spec that builds one adds to them, so which of the two
+ * renders depends on what else ran first; both are waited for, then whichever
+ * rendered is used.
+ */
+export async function pickCardType(page: Page, name: string) {
+    const dialog = page.getByTestId('card-create-dialog')
+    const pill = dialog.getByRole('tab', { name, exact: true })
+    const menu = dialog.getByTestId('card-type-menu')
+    await expect(pill.or(menu)).toBeVisible()
+    if (await menu.isVisible()) {
+        await menu.click()
+        await page
+            .getByTestId(/^card-type-menu-/)
+            .filter({ has: page.getByText(name, { exact: true }) })
+            .click()
+        await expect(menu).toContainText(name)
+        return
+    }
+    await pill.click()
+    await expect(pill).toHaveAttribute('aria-selected', 'true')
+}
+
+/** A choice field's options, in a form cell. */
+function choiceInput(scope: Page | Locator, key: string): Locator {
+    return scope.getByTestId(`form-input-${key}`)
+}
+
+/** Choose the option labelled `label` on a choice field. */
+export async function pickOption(scope: Page | Locator, key: string, label: string) {
+    await choiceInput(scope, key).getByText(label, { exact: true }).click()
+}
+
+/**
+ * The option a choice field has selected; its text is the option's label.
+ *
+ * Read from the fill, because that is the only place the state reaches the
+ * DOM: core's SelectInput marks the choice with `accessibilityState`, which
+ * react-native-web drops, so there is no `aria-selected` to read.
+ */
+export function selectedOption(scope: Page | Locator, key: string): Locator {
+    return choiceInput(scope, key).locator('.bg-primary')
+}
+
+/** Change the open card's type from its actions menu. */
+export async function changeType(page: Page, name: string, mode: CardSurfaceMode = 'peek') {
+    await cardSurface(page, mode).getByRole('button', { name: 'Card actions' }).click()
+    await page.getByTestId('card-change-type').hover()
+    await page
+        .getByTestId(/^card-change-type-/)
+        .filter({ has: page.getByText(name, { exact: true }) })
+        .click()
+}
+
+export async function openShareDialog(page: Page, boardName: string) {
+    await page.getByRole('button', { name: 'Share board' }).click()
+    await expect(page.getByText(`Share “${boardName}”`)).toBeVisible()
+}
+
+/**
+ * Mint a link at `role` and return the URL the dialog offers.
+ *
+ * Reads the URL from the panel rather than the clipboard: clipboard access
+ * needs a permission grant that differs per browser, and the text the dialog
+ * shows IS what a person would copy. Leaves the dialog open.
+ */
+export async function mintShareLink(page: Page, boardName: string, role: string): Promise<string> {
+    await openShareDialog(page, boardName)
+
+    await expect(page.getByText('General access')).toBeVisible()
+    if (role !== 'Viewer') {
+        await page.getByRole('button', { name: 'Change what the link allows' }).click()
+        await page.getByRole('menuitem', { name: role }).click()
+    }
+    await page.getByRole('button', { name: 'Create share link' }).click()
+
+    const url = page.getByText(/\/p\/boards\//)
+    await expect(url).toBeVisible()
+    const text = (await url.textContent())?.trim()
+    if (!text) throw new Error('the dialog rendered no share URL')
+    return text
 }
