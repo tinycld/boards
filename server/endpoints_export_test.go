@@ -145,6 +145,40 @@ func TestExportEndpoint_JSONCarriesChildren(t *testing.T) {
 	}
 }
 
+func TestExportEndpoint_CarriesTheCardFormAndFields(t *testing.T) {
+	env := setupCardsEnv(t)
+	seedExportBoard(t, env)
+
+	forms, err := env.app.FindCollectionByNameOrId("forms")
+	if err != nil {
+		t.Fatalf("find forms: %v", err)
+	}
+	form := core.NewRecord(forms)
+	form.Set("host", "boards_cards")
+	form.Set("name", "Bug")
+	form.Set("slug", "bug")
+	if err := env.app.Save(form); err != nil {
+		t.Fatalf("save form: %v", err)
+	}
+	env.card.Set("form", form.Id)
+	env.card.Set("fields", map[string]any{"severity": "high"})
+	if err := env.app.Save(env.card); err != nil {
+		t.Fatalf("type card: %v", err)
+	}
+
+	var board exportedBoard
+	if err := json.Unmarshal([]byte(exportBody(t, env, "json")), &board); err != nil {
+		t.Fatalf("decode export: %v", err)
+	}
+	typed, untyped := board.Cards[0], board.Cards[1]
+	if typed.Type != "bug" || typed.Fields["severity"] != "high" {
+		t.Errorf("form did not travel: type=%q fields=%v", typed.Type, typed.Fields)
+	}
+	if untyped.Type != "" || untyped.Fields != nil {
+		t.Errorf("an untyped card must export neither: %+v", untyped)
+	}
+}
+
 // A list written before the category column existed, or by a client that
 // omitted it, stores ”. It means an ordinary working list, and the export must
 // say so rather than emitting a blank a re-import would have to guess at.

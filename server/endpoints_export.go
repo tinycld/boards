@@ -112,6 +112,10 @@ type exportedCard struct {
 	Archived  bool                    `json:"archived,omitempty"`
 	Checklist []exportedChecklistItem `json:"checklist,omitempty"`
 	Comments  []exportedComment       `json:"comments,omitempty"`
+	// Type is the slug of the card's form; empty for a card with none.
+	Type string `json:"type,omitempty"`
+	// Fields are the form's custom values, keyed by field key.
+	Fields map[string]any `json:"fields,omitempty"`
 }
 
 type exportedChecklistItem struct {

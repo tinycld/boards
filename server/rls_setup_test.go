@@ -152,6 +152,7 @@ func buildCardsTemplate(t *testing.T) string {
 	}
 
 	stubGroupsCollection(t, app)
+	stubFormsCollection(t, app)
 
 	rlstest.Apply(t, app, rlstest.MigrationsDir(t, "../pb-migrations"))
 
@@ -180,6 +181,26 @@ func stubGroupsCollection(t *testing.T, app core.App) {
 	groups.Fields.Add(&core.TextField{Name: "name", Required: true})
 	if err := app.Save(groups); err != nil {
 		t.Fatalf("stub groups collection: %v", err)
+	}
+}
+
+// stubFormsCollection creates core's forms collection, which the card
+// form column (2090000100) names as its relation target. Only the columns
+// boards reads are stubbed.
+func stubFormsCollection(t *testing.T, app core.App) {
+	t.Helper()
+	forms := core.NewBaseCollection("forms")
+	forms.Fields.Add(
+		&core.TextField{Name: "host"},
+		&core.TextField{Name: "name"},
+		&core.TextField{Name: "slug"},
+		&core.JSONField{Name: "definition"},
+		&core.BoolField{Name: "is_default"},
+		&core.BoolField{Name: "archived"},
+		&core.NumberField{Name: "order"},
+	)
+	if err := app.Save(forms); err != nil {
+		t.Fatalf("stub forms collection: %v", err)
 	}
 }
 

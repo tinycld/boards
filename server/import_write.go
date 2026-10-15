@@ -25,6 +25,9 @@ import (
 // `archived_at` follows the archived flag; the six counters are recomputed from
 // the child rows. Setting any of them here would be ignored at best and, for
 // `number`, would fight the allocator.
+//
+// A card's exported `type` and `fields` are ignored on import in this phase:
+// imported cards land untyped, with no custom values.
 
 func writeImportedBoard(
 	app core.App,
