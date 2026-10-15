@@ -26,6 +26,10 @@ func customFieldsText(app core.App) func(*core.Record) string {
 		}
 		fields, err := cardFields(record)
 		if err != nil {
+			// The card is still indexed by its own columns; only its custom
+			// values are missing from search until the next good write.
+			activityLog.Warn("unreadable custom fields; not indexed for search",
+				"cardID", record.Id, "err", err)
 			return ""
 		}
 		var parts []string

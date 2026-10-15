@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"maps"
 	"slices"
 	"strings"
@@ -105,7 +104,7 @@ func cardSeeds(record *core.Record, cache *formCache) []fragmentSeed {
 	}
 	fields, err := cardFields(record)
 	if err != nil {
-		slog.Warn("cards: unreadable custom fields; collaborative fields start empty",
+		activityLog.Warn("unreadable custom fields; collaborative fields start empty",
 			"cardID", record.Id, "err", err)
 		return seeds
 	}
@@ -148,7 +147,7 @@ const seedBoardCountWarn = 200
 // the first edit of an untouched card correct: the fragment already holds the
 // stored prose, so a keystroke appends to it instead of replacing it.
 func makeBootstrap(app core.App, state *boardDocState) yjsdoc.BootstrapFn {
-	return func(_ context.Context, projectID string, doc *yjsdoc.Doc) error {
+	return func(ctx context.Context, projectID string, doc *yjsdoc.Doc) error {
 		state.open(projectID)
 
 		records, err := seedableCards(app, projectID)
@@ -157,7 +156,7 @@ func makeBootstrap(app core.App, state *boardDocState) yjsdoc.BootstrapFn {
 		}
 
 		if len(records) > seedBoardCountWarn {
-			slog.Warn("cards: large board seeded into one realtime document",
+			activityLog.WarnContext(ctx, "large board seeded into one realtime document",
 				"projectID", projectID, "cards", len(records))
 		}
 
@@ -170,12 +169,12 @@ func makeBootstrap(app core.App, state *boardDocState) yjsdoc.BootstrapFn {
 					// One unparseable fragment must not cost the whole board
 					// its document; it simply starts empty and the next edit
 					// replaces it.
-					slog.Warn("cards: could not convert stored text for seeding",
+					activityLog.WarnContext(ctx, "could not convert stored text for seeding",
 						"projectID", projectID, "cardID", record.Id, "fragment", seed.fragment, "err", err)
 					continue
 				}
 				if err := yjsdoc.SeedFragmentFromPMJSON(doc, seed.fragment, pmJSON); err != nil {
-					slog.Warn("cards: could not seed a card fragment",
+					activityLog.WarnContext(ctx, "could not seed a card fragment",
 						"projectID", projectID, "cardID", record.Id, "fragment", seed.fragment, "err", err)
 					continue
 				}

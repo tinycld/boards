@@ -158,7 +158,11 @@ func collectBoard(app core.App, project *core.Record) (exportedBoard, error) {
 			Type:        formSlugs[c.GetString("form")],
 		}
 		var fields map[string]any
-		if err := c.UnmarshalJSONField("fields", &fields); err == nil && len(fields) > 0 {
+		if err := c.UnmarshalJSONField("fields", &fields); err != nil {
+			// The card still exports; only its custom values are left out.
+			activityLog.Warn("unreadable custom fields; exporting the card without them",
+				"projectID", project.Id, "cardID", c.Id, "err", err)
+		} else if len(fields) > 0 {
 			card.Fields = fields
 		}
 		board.Cards = append(board.Cards, card)
@@ -175,7 +179,8 @@ func collectBoard(app core.App, project *core.Record) (exportedBoard, error) {
 
 // resolveFormSlugs maps the form ids the cards name to their slugs in ONE
 // query, so a board of many cards costs one lookup. An unresolvable id (a
-// deleted form) maps to nothing and the card exports untyped.
+// deleted form) maps to nothing and the card exports untyped; so does every
+// card when the lookup itself fails, which is logged.
 func resolveFormSlugs(app core.App, cards []*core.Record) map[string]string {
 	ids := make([]any, 0)
 	seen := map[string]bool{}
@@ -193,6 +198,7 @@ func resolveFormSlugs(app core.App, cards []*core.Record) map[string]string {
 	}
 	forms, err := app.FindAllRecords("forms", dbx.In("id", ids...))
 	if err != nil {
+		activityLog.Warn("could not read the card types; cards export untyped", "err", err)
 		return slugs
 	}
 	for _, f := range forms {

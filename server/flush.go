@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 
 	"github.com/pocketbase/pocketbase/core"
 
@@ -40,7 +39,7 @@ const descriptionRuneLimit = 32767
 // so an update that has not reached a record is still replayable. Any fragment
 // that did save advanced its baseline, so the retry is a no-op for it.
 func makeFlush(app core.App, state *boardDocState) realtime.FlushFn {
-	return func(_ context.Context, projectID string, handle realtime.DocHandle) (returnedErr error) {
+	return func(ctx context.Context, projectID string, handle realtime.DocHandle) (returnedErr error) {
 		defer func() {
 			// A panic here would take down the coordinator's goroutine and
 			// with it every board's persistence, not just this one.
@@ -65,7 +64,7 @@ func makeFlush(app core.App, state *boardDocState) realtime.FlushFn {
 					// The validator admits no other shape, so this is a
 					// document from before it, or a bug; neither is a card's
 					// text.
-					slog.Debug("cards: skipping an unrecognised fragment",
+					activityLog.DebugContext(ctx, "skipping an unrecognised fragment",
 						"projectID", projectID, "fragment", fragment)
 					continue
 				}
@@ -127,7 +126,7 @@ func loadBoardCard(app core.App, state *boardDocState, projectID, cardID, fragme
 		// The card was deleted while the room was open. Its fragment lingers
 		// in the document until the room closes, which is bounded and
 		// harmless; forgetting the baseline stops the retry loop.
-		slog.Debug("cards: skipping flush for a card that no longer exists",
+		activityLog.Debug("skipping flush for a card that no longer exists",
 			"projectID", projectID, "cardID", cardID)
 		state.forget(projectID, fragment)
 		return nil, false
@@ -138,7 +137,7 @@ func loadBoardCard(app core.App, state *boardDocState, projectID, cardID, fragme
 	// a card on ANOTHER board. Without this check, that would make this board's
 	// flush write to it.
 	if record.GetString("project") != projectID {
-		slog.Warn("cards: refusing to flush a card that belongs to another board",
+		activityLog.Warn("refusing to flush a card that belongs to another board",
 			"projectID", projectID, "cardID", cardID, "owner", record.GetString("project"))
 		state.forget(projectID, fragment)
 		return nil, false
@@ -155,7 +154,7 @@ func saveDescription(app core.App, state *boardDocState, projectID, cardID, text
 
 	stored := clampRunes(text, descriptionRuneLimit)
 	if stored != text {
-		slog.Warn("cards: clamped an oversize description on flush",
+		activityLog.Warn("clamped an oversize description on flush",
 			"projectID", projectID, "cardID", cardID, "limit", descriptionRuneLimit)
 	}
 
@@ -196,7 +195,7 @@ func saveCustomField(app core.App, state *boardDocState, cache *formCache, proje
 	// rejects — failing this board's flush on every retry.
 	field, declared := cache.collaborativeKeys(record.GetString("form"))[p.key]
 	if !declared || field.format != p.format {
-		slog.Debug("cards: skipping a fragment that is not a field of the card's type",
+		activityLog.Debug("skipping a fragment that is not a field of the card's type",
 			"projectID", projectID, "cardID", p.cardID, "fragment", p.fragment)
 		state.forget(projectID, p.fragment)
 		return nil
@@ -207,7 +206,7 @@ func saveCustomField(app core.App, state *boardDocState, cache *formCache, proje
 		// Overwriting an unreadable column would destroy every other value
 		// in it; leaving the fragment unsaved loses only this edit's text,
 		// which the document still holds.
-		slog.Warn("cards: refusing to merge into unreadable custom fields",
+		activityLog.Warn("refusing to merge into unreadable custom fields",
 			"projectID", projectID, "cardID", p.cardID, "err", err)
 		state.forget(projectID, p.fragment)
 		return nil
@@ -215,7 +214,7 @@ func saveCustomField(app core.App, state *boardDocState, cache *formCache, proje
 
 	stored := clampRunes(p.text, field.maxRunes)
 	if stored != p.text {
-		slog.Warn("cards: clamped an oversize custom field on flush",
+		activityLog.Warn("clamped an oversize custom field on flush",
 			"projectID", projectID, "cardID", p.cardID, "key", p.key, "limit", field.maxRunes)
 	}
 

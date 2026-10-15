@@ -2,7 +2,6 @@ package boards
 
 import (
 	"encoding/json"
-	"log/slog"
 
 	"github.com/pocketbase/pocketbase/core"
 
@@ -43,18 +42,18 @@ func (c *formCache) definition(formID string) *forms.Definition {
 func (c *formCache) load(formID string) *forms.Definition {
 	record, err := c.app.FindRecordById("forms", formID)
 	if err != nil {
-		slog.Debug("cards: a card names a type that no longer exists", "formID", formID)
+		activityLog.Debug("a card names a type that no longer exists", "formID", formID)
 		return nil
 	}
 	// The relation names any forms row; only a card type describes a card.
 	if record.GetString("host") != cardFormHost {
-		slog.Warn("cards: a card's type belongs to another host",
+		activityLog.Warn("a card's type belongs to another host",
 			"formID", formID, "host", record.GetString("host"))
 		return nil
 	}
 	def, err := forms.ParseDefinition([]byte(record.GetString("definition")))
 	if err != nil {
-		slog.Warn("cards: could not read a card type's definition", "formID", formID, "err", err)
+		activityLog.Warn("could not read a card type's definition", "formID", formID, "err", err)
 		return nil
 	}
 	return def

@@ -2,7 +2,6 @@ package boards
 
 import (
 	"fmt"
-	"log/slog"
 
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
@@ -83,7 +82,7 @@ func registerRealtime(app core.App) *boardRealtime {
 	// and its checkpoint row removed.
 	app.OnRecordAfterDeleteSuccess("boards_projects").BindFunc(func(e *core.RecordEvent) error {
 		if err := realtime.DropRoom(roomKindBoards, e.Record.Id); err != nil {
-			slog.Warn("cards: could not drop the document of a deleted board",
+			activityLog.Warn("could not drop the document of a deleted board",
 				"projectID", e.Record.Id, "err", err)
 		}
 		return e.Next()
