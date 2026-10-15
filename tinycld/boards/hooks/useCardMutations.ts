@@ -1,10 +1,13 @@
 import { useAuth } from '@tinycld/core/lib/auth'
 import { toDateString } from '@tinycld/core/lib/dates'
+import { useFormsOfHost } from '@tinycld/core/lib/forms/use-forms-of-host'
 import { mutation, useMutation } from '@tinycld/core/lib/mutations'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { newRecordId } from 'pbtsdb/core'
+import { CARD_HOST_KEY } from '../forms/hosts'
 import type { CardPriority } from '../lib/priority'
 import { rankBetween } from '../lib/rank'
+import { stripFileFields } from '../lib/strip-file-fields'
 import type { BoardCardView, BoardsCards } from '../types'
 
 export type CardFormColumns = Pick<
@@ -220,12 +223,15 @@ export interface DuplicateCardInput {
 export function useDuplicateCard(projectId: string) {
     const { user } = useAuth({ throwIfAnon: false })
     const [cardsCollection, itemsCollection] = useStore('boards_cards', 'boards_checklist_items')
+    const { forms, defaultForm } = useFormsOfHost(CARD_HOST_KEY)
 
     return useMutation<string, Error, DuplicateCardInput>({
         mutationKey: ['boards', 'card', 'duplicate'],
         mutationFn: mutation(function* ({ card, position }: DuplicateCardInput) {
             const cardId = newRecordId()
             const source = cardsCollection.get(card.id)
+            const formId = source?.form || defaultForm?.id
+            const def = forms.find(f => f.id === formId)?.definition
             yield cardsCollection.insert({
                 id: cardId,
                 project: projectId,
@@ -263,7 +269,7 @@ export function useDuplicateCard(projectId: string) {
                 // Read from the row: the card view does not carry them. The
                 // source is the open card, so its row is in the store.
                 form: source?.form ?? '',
-                fields: source?.fields ?? {},
+                fields: stripFileFields(source?.fields ?? {}, def),
                 // pr_state / pr_review_state are omitted (collections.ts), so
                 // PR links are NOT copied: a duplicate is a new card with no
                 // pull request of its own, the same reasoning that excludes

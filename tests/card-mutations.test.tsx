@@ -45,7 +45,26 @@ const h = vi.hoisted(() => {
         ...extra,
     })
     return {
-        cards: [card('c1', {}), card('c2', { form: 'f1', fields: { x: 1 }, title: 'Typed' })],
+        cards: [
+            card('c1', {}),
+            card('c2', { form: 'f1', fields: { x: 1, shot: ['a1'] }, title: 'Typed' }),
+        ],
+        forms: [
+            {
+                id: 'f1',
+                host: 'boards:card',
+                is_default: true,
+                order: 0,
+                definition: {
+                    version: 1,
+                    pages: [{ key: 'main', title: 'Main' }],
+                    fields: [
+                        { key: 'x', kind: 'number', label: 'X', page: 'main', width: 'full' },
+                        { key: 'shot', kind: 'file', label: 'Shot', page: 'main', width: 'full' },
+                    ],
+                },
+            },
+        ],
         stores: {} as Record<
             string,
             { get: (id: string) => StoreRow | undefined; toArray: StoreRow[] }
@@ -65,6 +84,7 @@ vi.mock('@tinycld/core/lib/pocketbase', async () => {
         )
     h.stores.boards_cards = mk('boards_cards', h.cards)
     h.stores.boards_checklist_items = mk('boards_checklist_items', [])
+    h.stores.forms = mk('forms', h.forms)
     return {
         useStore: (...names: string[]) => names.map(n => h.stores[n]),
     }
@@ -142,7 +162,7 @@ describe('useUpdateCard', () => {
 })
 
 describe('useDuplicateCard', () => {
-    it('copies the form and the custom fields', async () => {
+    it('copies the form and the custom fields, minus file fields', async () => {
         const { result } = renderHook(() => useDuplicateCard('p1'), { wrapper })
         const source: BoardCardView = {
             id: 'c2',
@@ -162,6 +182,7 @@ describe('useDuplicateCard', () => {
         await act(async () => {
             id = await result.current.mutateAsync({ card: source, position: 'a1' })
         })
-        expect(h.stores.boards_cards.get(id)).toMatchObject({ form: 'f1', fields: { x: 1 } })
+        expect(h.stores.boards_cards.get(id)).toMatchObject({ form: 'f1' })
+        expect(h.stores.boards_cards.get(id)?.fields).toEqual({ x: 1 })
     })
 })
