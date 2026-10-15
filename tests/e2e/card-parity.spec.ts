@@ -1,10 +1,11 @@
 import path from 'node:path'
-import { expect, type Locator, type Page, test } from '@playwright/test'
+import { expect, type Locator, type Page, type PageScreenshotOptions, test } from '@playwright/test'
 import {
     login,
     navigateToPackage,
     signInAsCollaborator,
     TEST_COLLABORATOR_EMAIL,
+    TEST_USER_NAME,
 } from '@tinycld/core/e2e-helpers'
 import {
     addCard,
@@ -40,9 +41,9 @@ import {
 //    font-weight and color explicitly.
 //  - Masked, because their pixels differ run to run: the card key (board keys
 //    are globally unique, so each run gets a new one; see boardKey for how
-//    its width is held constant), and avatars (an
-//    avatar's colour derives from the user id, which a reset e2e database
-//    reissues).
+//    its width is held constant), the parent chip (it carries the parent's
+//    card key), and avatars (an avatar's colour derives from the user id,
+//    which a reset e2e database reissues).
 //  - The full-page card masks its "Back to board" button, which carries the
 //    per-run board name.
 //
@@ -60,6 +61,13 @@ const SHOT = {
 
 const TITLE = 'Fully loaded card'
 const LINK_TARGET = 'Link target'
+
+/** Every screenshot's options: the shared settings plus the masks that hide what varies run to run. */
+const shot = (page: Page, extra?: Partial<PageScreenshotOptions>) => ({
+    ...SHOT,
+    mask: masks(page),
+    ...extra,
+})
 
 function masks(page: Page): Locator[] {
     return [
@@ -85,6 +93,17 @@ function boardKey(): string {
     return Array.from({ length: 10 }, (_, i) => KEY_GLYPH_PAIRS[i % 4][(bits >> i) & 1]).join('')
 }
 
+// The masks hide the keys' pixels, so their widths are asserted instead: the
+// first card of every board is number 1, so its key must measure the same on
+// every board this worker makes, or boardKey's glyph pairs have drifted.
+let firstKeyWidth: number | undefined
+
+async function expectKeyWidthStable(page: Page, title: string) {
+    const box = await boardCard(page, title).getByTestId('boards-card-key').boundingBox()
+    firstKeyWidth ??= box?.width
+    expect(box?.width).toBe(firstKeyWidth)
+}
+
 async function freshBoard(page: Page, label: string): Promise<string> {
     await login(page)
     await navigateToPackage(page, 'boards')
@@ -97,34 +116,33 @@ async function freshBoard(page: Page, label: string): Promise<string> {
     return name
 }
 
-function peek(page: Page) {
-    return cardSurface(page)
-}
-
 async function setDueNextJanuary(page: Page) {
-    await peek(page).getByRole('button', { name: 'Set due date' }).click()
+    await cardSurface(page).getByRole('button', { name: 'Set due date' }).click()
     const year = new Date().getFullYear() + 1
     const cell = page.getByRole('button', { name: `${year}-01-15` })
-    for (let i = 0; i < 14 && !(await cell.isVisible()); i++) {
-        await page.getByRole('button', { name: 'Next month' }).click()
+    const next = page.getByRole('button', { name: 'Next month' })
+    for (let i = 0; i < 14; i++) {
+        await expect(cell.or(next).first()).toBeVisible()
+        if ((await cell.count()) > 0) break
+        await next.click()
     }
     await cell.click()
     await expect(
-        peek(page).getByRole('button', { name: 'Due Jan 15. Change due date' })
+        cardSurface(page).getByRole('button', { name: 'Due Jan 15. Change due date' })
     ).toBeVisible()
 }
 
-async function assignFirstMember(page: Page) {
-    await peek(page).getByRole('button', { name: 'Assign' }).click()
-    await page.getByRole('menuitemcheckbox').first().click()
-    await expect(peek(page).getByRole('button', { name: 'Change assignees' })).toBeVisible()
+async function assignTestUser(page: Page) {
+    await cardSurface(page).getByRole('button', { name: 'Assign' }).click()
+    await page.getByRole('menuitemcheckbox', { name: TEST_USER_NAME }).click()
+    await expect(cardSurface(page).getByRole('button', { name: 'Change assignees' })).toBeVisible()
     // The multi-select stays open after a pick; Escape closes it.
     if ((await page.getByRole('menuitemcheckbox').count()) > 0) await page.keyboard.press('Escape')
     await expect(page.getByRole('menuitemcheckbox')).toHaveCount(0)
 }
 
 async function addLabel(page: Page) {
-    await peek(page).getByRole('button', { name: 'Add label' }).click()
+    await cardSurface(page).getByRole('button', { name: 'Add label' }).click()
     await page.getByText('Manage labels…', { exact: true }).click()
     await page.getByRole('button', { name: 'New label' }).click()
     await page.getByPlaceholder('Label name').fill('blocked')
@@ -132,7 +150,7 @@ async function addLabel(page: Page) {
     await expect(page.getByRole('button', { name: 'Edit blocked' })).toBeVisible()
     await page.getByRole('button', { name: 'Close' }).last().click()
     await expect(page.getByRole('button', { name: 'New label' })).toHaveCount(0)
-    await peek(page).getByRole('button', { name: 'Add label' }).click()
+    await cardSurface(page).getByRole('button', { name: 'Add label' }).click()
     await page.getByRole('menuitemcheckbox', { name: 'blocked' }).click()
     await expect(page.getByRole('button', { name: 'Change labels' })).toContainText('blocked')
     await page.keyboard.press('Escape')
@@ -140,7 +158,7 @@ async function addLabel(page: Page) {
 }
 
 async function addChecklistItems(page: Page, titles: string[]) {
-    await peek(page)
+    await cardSurface(page)
         .getByTestId('boards-section-chips')
         .getByRole('button', { name: 'Checklist' })
         .click()
@@ -149,35 +167,38 @@ async function addChecklistItems(page: Page, titles: string[]) {
         await page.keyboard.press('Enter')
     }
     await page.keyboard.press('Escape')
-    await expect(peek(page)).toBeVisible()
+    await expect(cardSurface(page)).toBeVisible()
 }
 
 async function addSubtask(page: Page, title: string) {
-    await peek(page)
+    await cardSurface(page)
         .getByTestId('boards-section-chips')
         .getByRole('button', { name: 'Sub-tasks' })
         .click()
-    await peek(page).getByPlaceholder('What needs doing?').fill(title)
+    await cardSurface(page).getByPlaceholder('What needs doing?').fill(title)
     await page.keyboard.press('Enter')
     await expect(
-        peek(page).getByTestId('boards-subtask-row').filter({ hasText: title })
+        cardSurface(page).getByTestId('boards-subtask-row').filter({ hasText: title })
     ).toBeVisible()
 }
 
 async function addBlocksLink(page: Page, toTitle: string) {
-    await peek(page)
+    await cardSurface(page)
         .getByTestId('boards-section-chips')
         .getByRole('button', { name: 'Links' })
         .click()
     await page.getByRole('menuitem', { name: 'Blocks', exact: true }).click()
-    await peek(page).getByTestId('boards-link-candidate').filter({ hasText: toTitle }).click()
+    await cardSurface(page)
+        .getByTestId('boards-link-candidate')
+        .filter({ hasText: toTitle })
+        .click()
     await expect(
-        peek(page).getByTestId('boards-link-row').filter({ hasText: toTitle })
+        cardSurface(page).getByTestId('boards-link-row').filter({ hasText: toTitle })
     ).toBeVisible()
 }
 
 async function postComment(page: Page, body: string) {
-    const composer = peek(page).getByTestId('boards-comment-composer')
+    const composer = cardSurface(page).getByTestId('boards-comment-composer')
     const editor = composer.locator('.ProseMirror')
     if (!(await editor.isVisible())) {
         await composer.getByRole('button', { name: 'Write a comment' }).click()
@@ -211,18 +232,19 @@ async function writeDescription(page: Page, text: string) {
 async function populatedCard(page: Page, label = 'Parity') {
     const name = await freshBoard(page, label)
     await addCard(page, 0, LINK_TARGET)
+    await expectKeyWidthStable(page, LINK_TARGET)
     await addCard(page, 0, TITLE)
     await openCard(page, TITLE)
     await writeDescription(page, 'Ship the release notes before Friday.')
     await setDueNextJanuary(page)
-    await assignFirstMember(page)
+    await assignTestUser(page)
     await addLabel(page)
-    await peek(page).getByRole('button', { name: 'Set priority' }).click()
+    await cardSurface(page).getByRole('button', { name: 'Set priority' }).click()
     await page.getByRole('menuitem', { name: 'High' }).click()
-    await expect(peek(page).getByRole('button', { name: /Priority High/ })).toBeVisible()
-    await peek(page).getByRole('button', { name: 'Set estimate' }).click()
+    await expect(cardSurface(page).getByRole('button', { name: /Priority High/ })).toBeVisible()
+    await cardSurface(page).getByRole('button', { name: 'Set estimate' }).click()
     await page.getByRole('menuitem', { name: '5 pts', exact: true }).click()
-    await expect(peek(page).getByRole('button', { name: /Estimate 5 pts/ })).toBeVisible()
+    await expect(cardSurface(page).getByRole('button', { name: /Estimate 5 pts/ })).toBeVisible()
     await addChecklistItems(page, ['write the migration', 'run the gate'])
     await addSubtask(page, 'Write the headline')
     await addBlocksLink(page, LINK_TARGET)
@@ -255,7 +277,7 @@ async function mintViewerLink(page: Page, board: string): Promise<string> {
 test.describe('Card parity', () => {
     test('peek, scrolled peek and the board, populated', async ({ page }) => {
         await populatedCard(page)
-        const style = await peek(page)
+        const style = await cardSurface(page)
             .getByTestId('boards-timestamp')
             .first()
             .evaluate(node => {
@@ -267,10 +289,7 @@ test.describe('Card parity', () => {
             fontWeight: '400',
             color: 'rgb(100, 116, 139)',
         })
-        await expect(peek(page)).toHaveScreenshot('peek-populated.png', {
-            ...SHOT,
-            mask: masks(page),
-        })
+        await expect(cardSurface(page)).toHaveScreenshot('peek-populated.png', shot(page))
 
         // The description is in edit mode, so its toolbar is on screen to show
         // whether it pins or scrolls away.
@@ -278,24 +297,18 @@ test.describe('Card parity', () => {
         await expect(
             page.getByTestId('boards-description-editor').locator('.ProseMirror')
         ).toBeVisible()
-        await peek(page).getByText('Activity', { exact: true }).scrollIntoViewIfNeeded()
-        await expect(peek(page)).toHaveScreenshot('peek-scrolled.png', {
-            ...SHOT,
-            mask: masks(page),
-        })
+        await cardSurface(page).getByText('Activity', { exact: true }).scrollIntoViewIfNeeded()
+        await expect(cardSurface(page)).toHaveScreenshot('peek-scrolled.png', shot(page))
 
         await closeCardPeek(page)
-        await expect(page.getByTestId('boards-board')).toHaveScreenshot('board.png', {
-            ...SHOT,
-            mask: masks(page),
-        })
+        await expect(page.getByTestId('boards-board')).toHaveScreenshot('board.png', shot(page))
     })
 
     test('peek, empty new card', async ({ page }) => {
         await freshBoard(page, 'Parity empty')
         await addCard(page, 0, 'Bare card')
         await openCard(page, 'Bare card')
-        await expect(peek(page)).toHaveScreenshot('peek-empty.png', { ...SHOT, mask: masks(page) })
+        await expect(cardSurface(page)).toHaveScreenshot('peek-empty.png', shot(page))
     })
 
     // The display mode is a persisted preference shared by every spec on this
@@ -304,10 +317,10 @@ test.describe('Card parity', () => {
         await populatedCard(page)
         await toggleSurface(page, 'modal')
         try {
-            await expect(cardSurface(page, 'modal')).toHaveScreenshot('modal-populated.png', {
-                ...SHOT,
-                mask: masks(page),
-            })
+            await expect(cardSurface(page, 'modal')).toHaveScreenshot(
+                'modal-populated.png',
+                shot(page)
+            )
         } finally {
             await toggleSurface(page, 'peek')
         }
@@ -317,10 +330,12 @@ test.describe('Card parity', () => {
         await expect(
             page.getByTestId('boards-card-page').getByText('Description', { exact: true })
         ).toBeVisible()
-        await expect(page.getByTestId('boards-card-page')).toHaveScreenshot('page-populated.png', {
-            ...SHOT,
-            mask: [...masks(page), page.getByRole('button', { name: 'Back to board' })],
-        })
+        await expect(page.getByTestId('boards-card-page')).toHaveScreenshot(
+            'page-populated.png',
+            shot(page, {
+                mask: [...masks(page), page.getByRole('button', { name: 'Back to board' })],
+            })
+        )
     })
 
     test('viewer, read-only', async ({ page }) => {
@@ -336,10 +351,7 @@ test.describe('Card parity', () => {
             await openBoard(viewer, name, TITLE)
             await openCard(viewer, TITLE)
             await expect(viewer.getByTestId('boards-role-chip')).toHaveText('Viewer')
-            await expect(cardSurface(viewer)).toHaveScreenshot('peek-viewer.png', {
-                ...SHOT,
-                mask: masks(viewer),
-            })
+            await expect(cardSurface(viewer)).toHaveScreenshot('peek-viewer.png', shot(viewer))
         } finally {
             await close()
         }
@@ -359,10 +371,7 @@ test.describe('Card parity', () => {
             await boardCard(visitor, TITLE).click()
             await expect(cardSurface(visitor)).toBeVisible()
             await expect(visitor.getByText('Description', { exact: true })).toBeVisible()
-            await expect(cardSurface(visitor)).toHaveScreenshot('peek-public.png', {
-                ...SHOT,
-                mask: masks(visitor),
-            })
+            await expect(cardSurface(visitor)).toHaveScreenshot('peek-public.png', shot(visitor))
         } finally {
             await context.close()
         }
@@ -372,10 +381,10 @@ test.describe('Card parity', () => {
         await freshBoard(page, 'Parity composer')
         await page.getByText('Add card', { exact: true }).first().click()
         await expect(page.getByPlaceholder('What needs doing?')).toBeFocused()
-        await expect(page.getByTestId('boards-board')).toHaveScreenshot('quick-composer-open.png', {
-            ...SHOT,
-            mask: masks(page),
-        })
+        await expect(page.getByTestId('boards-board')).toHaveScreenshot(
+            'quick-composer-open.png',
+            shot(page)
+        )
     })
 
     test.describe('dark', () => {
@@ -386,10 +395,7 @@ test.describe('Card parity', () => {
             expect(
                 await page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches)
             ).toBe(true)
-            await expect(peek(page)).toHaveScreenshot('peek-populated-dark.png', {
-                ...SHOT,
-                mask: masks(page),
-            })
+            await expect(cardSurface(page)).toHaveScreenshot('peek-populated-dark.png', shot(page))
         })
     })
 })
