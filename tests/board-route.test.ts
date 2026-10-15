@@ -3,16 +3,17 @@ import type { Href } from 'expo-router'
 import { describe, expect, it } from 'vitest'
 import {
     activeBoardIdFromPath,
+    boardHref,
     boardPath,
     boardSegment,
     cardHref,
     cardPagePath,
     parseBoardSegment,
     parseCardNumber,
+    parseCardSegment,
     peekHref,
-    peekParams,
+    peekSegment,
     resolveCardOnBoard,
-    urlCardParam,
 } from '../tinycld/boards/lib/board-route'
 import type { BoardProject } from '../tinycld/boards/types'
 
@@ -84,32 +85,38 @@ describe('paths', () => {
         expect(cardHref(orgHref, board, { id: 'c0', number: 0 })).toEqual(appHref('boards/PL/c0'))
     })
 
-    it('puts a keyed card in the path and a keyless one in ?focused=', () => {
-        expect(peekParams('PL', { key: 'PL-12', id: 'c1' })).toEqual({
-            boardSlug: 'PL-12',
-            focused: undefined,
-        })
-        expect(peekParams('p1', { key: '', id: 'c1' })).toEqual({ boardSlug: 'p1', focused: 'c1' })
-        // Closing names both params so setParams clears whichever was set.
-        expect(peekParams('PL', null)).toEqual({ boardSlug: 'PL', focused: undefined })
+    it('peeks by key, else by record id', () => {
+        const org = (path: string): Href => `/a/${path}` as Href
+        expect(peekHref(org, 'PL', { key: 'PL-12', id: 'x' })).toBe('/a/boards/PL/PL-12')
+        expect(peekHref(org, 'PL', { key: '', id: 'abcdefghijklmno' })).toBe(
+            '/a/boards/PL/abcdefghijklmno'
+        )
+        expect(peekSegment({ key: '', id: 'abcdefghijklmno' })).toBe('abcdefghijklmno')
+        expect(boardHref(org, 'PL')).toBe('/a/boards/PL')
     })
 
-    it('builds the matching href', () => {
-        const orgHref = (path: string, extra?: Record<string, string>): Href =>
-            (extra ? { pathname: appHref(path), params: extra } : appHref(path)) as Href
-        expect(peekHref(orgHref, 'PL', { key: 'PL-12', id: 'c1' })).toBe('/a/boards/PL-12')
-        expect(peekHref(orgHref, 'p1', { key: '', id: 'c1' })).toEqual({
-            pathname: '/a/boards/p1',
-            params: { focused: 'c1' },
-        })
+    it('pages by number, else by id', () => {
+        const org = (path: string): Href => `/a/${path}` as Href
+        expect(cardHref(org, { id: 'b', slug: 'pl' }, { id: 'x', number: 12 })).toBe(
+            '/a/boards/pl/12'
+        )
+        expect(cardHref(org, { id: 'b', slug: '' }, { id: 'abcdefghijklmno', number: 0 })).toBe(
+            '/a/boards/b/abcdefghijklmno'
+        )
     })
 })
 
-describe('urlCardParam', () => {
-    it('prefers a key in the segment over ?focused=', () => {
-        expect(urlCardParam('PL-3', 'PL-9')).toBe('PL-3')
-        expect(urlCardParam('PL', 'PL-9')).toBe('PL-9')
-        expect(urlCardParam('PL', '')).toBe('')
+describe('parseCardSegment', () => {
+    it('reads a key', () =>
+        expect(parseCardSegment('pl-12')).toEqual({ kind: 'key', slug: 'PL', number: 12 }))
+    it('reads a number', () =>
+        expect(parseCardSegment('12')).toEqual({ kind: 'number', number: 12 }))
+    it('reads a record id', () =>
+        expect(parseCardSegment('abcdefghijklmno')).toEqual({ kind: 'id', id: 'abcdefghijklmno' }))
+    it('rejects leading zeros, blanks and junk', () => {
+        for (const s of ['012', '', 'PL-012', 'my-cards', 'abc']) {
+            expect(parseCardSegment(s)).toEqual({ kind: 'none' })
+        }
     })
 })
 

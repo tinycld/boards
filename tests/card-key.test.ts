@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
     deriveSlug,
     formatCardKey,
+    isRecordId,
     MAX_SLUG_LENGTH,
     parseCardKey,
 } from '../tinycld/boards/lib/card-key'
@@ -118,5 +119,14 @@ describe('deriveSlug', () => {
             const slug = deriveSlug(name)
             expect(parseCardKey(`${slug}-1`)).toEqual({ slug, number: 1 })
         }
+    })
+})
+
+describe('isRecordId', () => {
+    it('accepts 15 lowercase alphanumerics only', () => {
+        expect(isRecordId('abcdefghijklmno')).toBe(true)
+        expect(isRecordId('abcdefghijklmn')).toBe(false)
+        expect(isRecordId('ABCDEFGHIJKLMNO')).toBe(false)
+        expect(isRecordId('PL-12')).toBe(false)
     })
 })

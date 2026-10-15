@@ -17,7 +17,7 @@ import (
 // redirect to survive.
 //
 // The client twin is boards/tinycld/boards/lib/board-route.ts (boardPath,
-// peekParams). Keep the two in step; there is no fixture holding them
+// peekHref). Keep the two in step; there is no fixture holding them
 // together, the same bargain search.go's formatCardKey already makes.
 
 // appBase returns the deployment's origin with any trailing slash removed.
@@ -26,12 +26,13 @@ func appBase(app core.App) string {
 }
 
 // cardURL deep-links to a card on its board, with the card open in the peek —
-// "/a/boards/PL-12". The peek rather than the full page because a notification
-// should land the reader on the board, which is the view carrying context.
+// "/a/boards/PL/PL-12". The peek rather than the full page because a
+// notification should land the reader on the board, which is the view carrying
+// context.
 //
 // A card with no key — its board has no slug, or the server has not numbered
-// it — is spelled "/a/boards/<board>?focused=<id>", which is also the shape
-// core's own mention notifications use. Falls back to the package root rather
+// it — is spelled "/a/boards/<board>/<id>"; the client peeks it and respells
+// it to the key once the number arrives. Falls back to the package root rather
 // than ever returning a URL that will not resolve.
 func cardURL(app core.App, cardID string) string {
 	card, err := app.FindRecordById("boards_cards", cardID)
@@ -42,10 +43,11 @@ func cardURL(app core.App, cardID string) string {
 	if err != nil {
 		return packageURL(app)
 	}
+	child := card.Id
 	if key := formatCardKey(project.GetString("slug"), card.GetInt("number")); key != "" {
-		return appBase(app) + approutes.Href("boards/"+key)
+		child = key
 	}
-	return boardURL(app, project) + "?focused=" + card.Id
+	return boardURL(app, project) + "/" + child
 }
 
 // boardURL links to a board — "/a/boards/PL".

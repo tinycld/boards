@@ -38,6 +38,11 @@ export function formatCardKey(slug: string, number: number): string {
     return `${slug}-${number}`
 }
 
+/** A PocketBase record id: 15 lowercase alphanumerics. */
+export function isRecordId(input: string): boolean {
+    return /^[a-z0-9]{15}$/.test(input)
+}
+
 export interface ParsedCardKey {
     slug: string
     number: number
