@@ -22,8 +22,9 @@ import (
 // would have accepted; set higher, the flush fails validation and retries
 // forever.
 //
-// A collaborative custom field is clamped to the same limit: it is the same
-// editor, and one value must not be able to fill the 1 MB `fields` column.
+// A collaborative custom field is clamped to the same limit, or to its own
+// maxLength when tighter (see collaborativeKeys): it is the same editor, and
+// one value must not be able to fill the 1 MB `fields` column.
 const descriptionRuneLimit = 32767
 
 // makeFlush returns the SaveCoordinator hook that writes a board's live
@@ -193,7 +194,8 @@ func saveCustomField(app core.App, state *boardDocState, cache *formCache, proje
 	// a crafted client can name any key; saving either would put a value the
 	// type does not declare into `fields`, which the host's write gate
 	// rejects — failing this board's flush on every retry.
-	if cache.collaborativeKeys(record.GetString("form"))[p.key] != p.format {
+	field, declared := cache.collaborativeKeys(record.GetString("form"))[p.key]
+	if !declared || field.format != p.format {
 		slog.Debug("cards: skipping a fragment that is not a field of the card's type",
 			"projectID", projectID, "cardID", p.cardID, "fragment", p.fragment)
 		state.forget(projectID, p.fragment)
@@ -211,10 +213,10 @@ func saveCustomField(app core.App, state *boardDocState, cache *formCache, proje
 		return nil
 	}
 
-	stored := clampRunes(p.text, descriptionRuneLimit)
+	stored := clampRunes(p.text, field.maxRunes)
 	if stored != p.text {
 		slog.Warn("cards: clamped an oversize custom field on flush",
-			"projectID", projectID, "cardID", p.cardID, "key", p.key, "limit", descriptionRuneLimit)
+			"projectID", projectID, "cardID", p.cardID, "key", p.key, "limit", field.maxRunes)
 	}
 
 	fields[p.key] = stored

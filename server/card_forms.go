@@ -60,24 +60,43 @@ func (c *formCache) load(formID string) *forms.Definition {
 	return def
 }
 
-// collaborativeKeys maps each collaborative field of a card type to the format
-// its fragment carries.
-func (c *formCache) collaborativeKeys(formID string) map[string]string {
+// collabField is how a collaborative field of a card type is persisted: the
+// format its fragment carries and the most runes its value may hold.
+type collabField struct {
+	format   string
+	maxRunes int
+}
+
+// collaborativeKeys maps each collaborative field of a card type to how it is
+// persisted.
+//
+// maxRunes is the field's own maxLength when it has a tighter one than the
+// editor's limit: the host's write gate rejects a longer value, and a rejected
+// save fails the board's flush on every retry, stranding every fragment the
+// walk had not reached yet.
+func (c *formCache) collaborativeKeys(formID string) map[string]collabField {
 	def := c.definition(formID)
 	if def == nil {
 		return nil
 	}
-	keys := map[string]string{}
+	keys := map[string]collabField{}
 	for _, f := range def.Fields {
 		if !f.Collaborative {
 			continue
 		}
+		field := collabField{maxRunes: descriptionRuneLimit}
 		switch f.Kind {
 		case "markdown":
-			keys[f.Key] = formatMarkdown
+			field.format = formatMarkdown
 		case "richtext":
-			keys[f.Key] = formatHTML
+			field.format = formatHTML
+		default:
+			continue
 		}
+		if f.MaxLength != nil && *f.MaxLength < field.maxRunes {
+			field.maxRunes = max(*f.MaxLength, 0)
+		}
+		keys[f.Key] = field
 	}
 	return keys
 }

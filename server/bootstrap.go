@@ -114,7 +114,7 @@ func cardSeeds(record *core.Record, cache *formCache) []fragmentSeed {
 		if value == "" {
 			continue
 		}
-		format := keys[key]
+		format := keys[key].format
 		seeds = append(seeds, fragmentSeed{fragment: customFragment(record.Id, format, key), format: format, text: value})
 	}
 	return seeds

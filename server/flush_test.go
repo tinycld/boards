@@ -3,6 +3,7 @@ package boards
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -603,5 +604,47 @@ func TestParseCardFragment(t *testing.T) {
 	}
 	if got := customFragment("abc", "md", "steps"); got != "card:abc:md:steps" {
 		t.Errorf("customFragment = %q", got)
+	}
+}
+
+func TestFlush_ClampsToTheFieldsMaxLength(t *testing.T) {
+	// The host's write gate rejects a value past the field's maxLength. An
+	// unclamped value would fail the save on every retry, and the flush stops
+	// at its first error, so every fragment after it on the board would never
+	// be saved either.
+	env := setupCardsEnv(t)
+	limited := strings.Replace(bugDefinitionJSON,
+		`{ "key": "steps",`,
+		`{ "key": "abstract", "kind": "markdown", "page": "main", "label": "Abstract", "collaborative": true, "maxLength": 20 },
+		{ "key": "steps",`, 1)
+	form := cardsForm(t, env.app, limited)
+	card := cardsCardOfForm(t, env, "Typed", form)
+	_, _, flush, handle := boardRoom(t, env)
+
+	// Stands in for core's gate, which this fixture does not bind.
+	env.app.OnRecordUpdate("boards_cards").BindFunc(func(e *core.RecordEvent) error {
+		fields, err := cardFields(e.Record)
+		if err != nil {
+			return err
+		}
+		if s, _ := fields["abstract"].(string); len([]rune(s)) > 20 {
+			return errors.New("abstract: too long")
+		}
+		return e.Next()
+	})
+
+	// `abstract` sorts before `steps`, so the flush reaches it first.
+	writeNamedFragment(t, handle, customFragment(card.Id, "md", "abstract"), strings.Repeat("x", 40))
+	writeNamedFragment(t, handle, customFragment(card.Id, "md", "steps"), "Later steps.")
+	if err := flush(t.Context(), env.project.Id, handle); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	fields := fieldsOf(t, env, card.Id)
+	abstract, _ := fields["abstract"].(string)
+	if got := len([]rune(abstract)); got != 20 {
+		t.Errorf("abstract stored %d runes, want 20", got)
+	}
+	if fields["steps"] != "Later steps.\n" {
+		t.Errorf("the fragment after the long one was not saved: %v", fields["steps"])
 	}
 }
