@@ -35,7 +35,8 @@ func shareReaderForm(t *testing.T, app core.App, slug string, isDefault bool) *c
 	})
 }
 
-// shareReaderBoard is a board whose one card uses form, plus one share link.
+// shareReaderBoard is a board whose one card uses form, plus one share link
+// unless link is nil.
 func shareReaderBoard(t *testing.T, app core.App, owner, form *core.Record, name string, link map[string]any) {
 	t.Helper()
 	project := cardsProject(t, app, name, owner)
@@ -45,6 +46,9 @@ func shareReaderBoard(t *testing.T, app core.App, owner, form *core.Record, name
 	card.Set("form", form.Id)
 	if err := app.Save(card); err != nil {
 		t.Fatalf("set the card's form: %v", err)
+	}
+	if link == nil {
+		return
 	}
 	fields := map[string]any{"project": project.Id, "role": "viewer", "created_by": owner.Id}
 	for k, v := range link {
@@ -68,6 +72,10 @@ type formsShareEnv struct {
 	switchedOff *core.Record
 	// expired: on a board whose only link (tokExpired) has expired.
 	expired *core.Record
+	// future: on a board whose only link (tokFuture) expires in the future.
+	future *core.Record
+	// private: on a board with no share link at all.
+	private *core.Record
 	// unused: no card uses it.
 	unused      *core.Record
 	memberToken string
@@ -78,6 +86,7 @@ var (
 	tokOff     = tokenOf('b')
 	tokOn      = tokenOf('c')
 	tokExpired = tokenOf('d')
+	tokFuture  = tokenOf('e')
 )
 
 func setupFormsShareEnv(t *testing.T) *formsShareEnv {
@@ -90,6 +99,8 @@ func setupFormsShareEnv(t *testing.T) *formsShareEnv {
 		shared:      shareReaderForm(t, app, "card", true),
 		switchedOff: shareReaderForm(t, app, "bug", false),
 		expired:     shareReaderForm(t, app, "chore", false),
+		future:      shareReaderForm(t, app, "story", false),
+		private:     shareReaderForm(t, app, "secret", false),
 		unused:      shareReaderForm(t, app, "spike", false),
 		memberToken: cardsToken(t, loner),
 	}
@@ -98,6 +109,10 @@ func setupFormsShareEnv(t *testing.T) *formsShareEnv {
 	shareReaderBoard(t, app, owner, env.expired, "Expired", map[string]any{
 		"token": tokExpired, "is_active": true, "expires_at": "2020-01-01 00:00:00.000Z",
 	})
+	shareReaderBoard(t, app, owner, env.future, "Future", map[string]any{
+		"token": tokFuture, "is_active": true, "expires_at": "2099-01-01 00:00:00.000Z",
+	})
+	shareReaderBoard(t, app, owner, env.private, "Private", nil)
 	// The switched-off board's second, active link: the same board, another
 	// token. With it, the inactive link's token admits only if the three
 	// checks could land on different link rows.
@@ -135,17 +150,30 @@ func TestFormsShareReader_TokenReadsItsBoardsCardTypes(t *testing.T) {
 	env := setupFormsShareEnv(t)
 	env.read(t, "list", formsURL, share(tokShared), http.StatusOK,
 		[]string{`"totalItems":1`, env.shared.Id},
-		[]string{env.unused.Id, env.switchedOff.Id, env.expired.Id})
+		[]string{env.unused.Id, env.switchedOff.Id, env.expired.Id, env.private.Id})
 	env.read(t, "view", formsURL+"/"+env.shared.Id, share(tokShared), http.StatusOK,
 		[]string{`"slug":"card"`}, nil)
 	env.read(t, "view of a type no shared card uses", formsURL+"/"+env.unused.Id, share(tokShared), http.StatusNotFound,
 		[]string{`"data":{}`}, nil)
 }
 
+// With no header, the token term compares against NULL, which also matches
+// the missing link row of a board that has no link (the private board's type)
+// and of a form no card uses. The header guard in the clause refuses both.
 func TestFormsShareReader_NoTokenReadsNothing(t *testing.T) {
 	env := setupFormsShareEnv(t)
-	env.read(t, "list", formsURL, nil, http.StatusOK, []string{`"totalItems":0`}, []string{env.shared.Id})
-	env.read(t, "view", formsURL+"/"+env.shared.Id, nil, http.StatusNotFound, []string{`"data":{}`}, nil)
+	for name, headers := range map[string]map[string]string{"no header": nil, "empty header": share("")} {
+		env.read(t, name+" list", formsURL, headers, http.StatusOK, []string{`"totalItems":0`},
+			[]string{env.shared.Id, env.private.Id, env.unused.Id})
+		env.read(t, name+" view of a shared type", formsURL+"/"+env.shared.Id, headers, http.StatusNotFound, []string{`"data":{}`}, nil)
+		env.read(t, name+" view of an unshared board's type", formsURL+"/"+env.private.Id, headers, http.StatusNotFound, []string{`"data":{}`}, nil)
+	}
+}
+
+func TestFormsShareReader_LinkExpiringLaterReadsItsType(t *testing.T) {
+	env := setupFormsShareEnv(t)
+	env.read(t, "list", formsURL, share(tokFuture), http.StatusOK,
+		[]string{`"totalItems":1`, env.future.Id}, []string{env.private.Id})
 }
 
 func TestFormsShareReader_InactiveOrExpiredLinkReadsNothing(t *testing.T) {
@@ -165,5 +193,5 @@ func TestFormsShareReader_InactiveOrExpiredLinkReadsNothing(t *testing.T) {
 func TestFormsShareReader_SignedInUserOfNoBoardLists(t *testing.T) {
 	env := setupFormsShareEnv(t)
 	env.read(t, "list", formsURL, map[string]string{"Authorization": env.memberToken}, http.StatusOK,
-		[]string{`"totalItems":4`, env.unused.Id}, nil)
+		[]string{`"totalItems":6`, env.unused.Id, env.private.Id}, nil)
 }

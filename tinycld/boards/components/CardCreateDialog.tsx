@@ -49,7 +49,7 @@ function useCardCreate({ host, projectId, target, onClose }: CreateBodyProps) {
     )
     const { forms } = useFormsOfHost(host.key)
     const offered = forms.filter(form => !form.archived)
-    const create = useFormCreate(host, undefined, context, { title: target.initialTitle ?? '' })
+    const create = useFormCreate(host, undefined, context, { title: '' })
     const ui = useHostUi(host)
     const createValue: CreateCardValue = useBoardPickerData(projectId)
     const createCard = useCreateCard(projectId)

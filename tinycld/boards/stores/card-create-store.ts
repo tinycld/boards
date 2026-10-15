@@ -9,8 +9,6 @@ export interface CardCreateTarget {
     listId: string
     /** Computed by lib/move.ts against that column when the dialog opens. */
     position: string
-    /** Pre-filled title, when the opener has one. */
-    initialTitle?: string
 }
 
 interface CardCreateState {

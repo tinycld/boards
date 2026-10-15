@@ -61,16 +61,22 @@ func ftsConfigFor(app core.App) fts.Config {
 // board uses it. A shared board's card renders through its type, so the
 // visitor needs that type's labels and rules, and no other form.
 //
-// It is written from the forms record's side, and each term walks the same
-// path to one share link, so PocketBase evaluates all three on the same joined
+// It is written from the forms record's side, and each link term walks the
+// same path to one share link, so PocketBase evaluates them on the same joined
 // row (an inactive link with the right token beside an active one with another
-// token admits no one). The terms are 1980000003's token check, as the token()
-// helper in pb-migrations/2040000001 writes it:
-//   - token: the visitor carries this link's token (lib/share-token.ts sends it
-//     as X-Share-Token on every request);
-//   - is_active: the owner has not turned the link off;
-//   - expires_at: the link has no expiry, or it has not passed.
-const shareVisitorFormsClause = `boards_cards_via_form.project.boards_share_links_via_project.token ?= @request.headers.x_share_token` +
+// token admits no one). The terms:
+//   - the header is set. Without it the token term compares a link's token
+//     with NULL, which PocketBase rewrites to also match a missing value, and
+//     a form no shared card uses joins only missing link rows. is_active would
+//     refuse that row as well, but the clause must not rest on a side effect
+//     of another term;
+//   - then 1980000003's token check, as the token() helper in
+//     pb-migrations/2040000001 writes it. token: the visitor carries this
+//     link's token (lib/share-token.ts sends it as X-Share-Token on every
+//     request); is_active: the owner has not turned the link off; expires_at:
+//     the link has no expiry, or it has not passed.
+const shareVisitorFormsClause = `@request.headers.x_share_token != ""` +
+	` && boards_cards_via_form.project.boards_share_links_via_project.token ?= @request.headers.x_share_token` +
 	` && boards_cards_via_form.project.boards_share_links_via_project.is_active ?= true` +
 	` && (boards_cards_via_form.project.boards_share_links_via_project.expires_at ?= "" || boards_cards_via_form.project.boards_share_links_via_project.expires_at ?> @now)`
 

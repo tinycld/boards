@@ -165,6 +165,10 @@ function addChecklistItem(container: HTMLElement, text: string) {
     fireEvent(input, new Event('SubmitEditing'))
 }
 
+function typeTitle(container: HTMLElement, title: string) {
+    fireEvent.input(q(container, 'form-input-title') as HTMLElement, { target: { value: title } })
+}
+
 const byLabel = (container: ParentNode, label: string) =>
     container.querySelector(`[accessibilityLabel="${label}"]`) as HTMLElement | null
 
@@ -184,17 +188,13 @@ describe('CardCreateDialog', () => {
     })
 
     it('stays closed on a board other than the one the target names', () => {
-        useCardCreateStore
-            .getState()
-            .open({ projectId: 'pA', listId: 'lA', position: 'a0', initialTitle: '' })
+        useCardCreateStore.getState().open({ projectId: 'pA', listId: 'lA', position: 'a0' })
         const { container } = render(<CardCreateDialog projectId="p1" />, { wrapper })
         expect(q(container, 'card-create-dialog')).toBeNull()
     })
 
     it('clears the target when it leaves the screen', () => {
-        useCardCreateStore
-            .getState()
-            .open({ projectId: 'p1', listId: 'l1', position: 'a0', initialTitle: '' })
+        useCardCreateStore.getState().open({ projectId: 'p1', listId: 'l1', position: 'a0' })
         const { unmount } = render(<CardCreateDialog projectId="p1" />, { wrapper })
         unmount()
         expect(useCardCreateStore.getState().target).toBeNull()
@@ -230,9 +230,7 @@ describe('CardCreateDialog', () => {
     })
 
     it("offers the board's members, not the org, as assignees and reporter", async () => {
-        useCardCreateStore
-            .getState()
-            .open({ projectId: 'p1', listId: 'l1', position: 'a0', initialTitle: 'Pick people' })
+        useCardCreateStore.getState().open({ projectId: 'p1', listId: 'l1', position: 'a0' })
         const { container, getByText, queryByText } = render(<CardCreateDialog projectId="p1" />, {
             wrapper,
         })
@@ -241,6 +239,7 @@ describe('CardCreateDialog', () => {
             if (!cell) throw new Error('no reporter cell')
             return cell
         })
+        typeTitle(container, 'Pick people')
         // The reporter menu closes on a pick; the assignee menu stays open for
         // the next one, so it goes second.
         fireEvent.click(getByText('Set reporter', { container: reporter }) as HTMLElement)
@@ -262,15 +261,13 @@ describe('CardCreateDialog', () => {
     })
 
     it('creates a card of the picked type with its custom values and checklist rows', async () => {
-        useCardCreateStore
-            .getState()
-            .open({ projectId: 'p1', listId: 'l1', position: 'a0', initialTitle: 'Login fails' })
+        useCardCreateStore.getState().open({ projectId: 'p1', listId: 'l1', position: 'a0' })
         const { container, getByText, queryAllByText } = render(
             <CardCreateDialog projectId="p1" />,
             { wrapper }
         )
         await waitFor(() => expect(q(container, 'form-field-title')).toBeTruthy())
-        expect((q(container, 'form-input-title') as HTMLInputElement).value).toBe('Login fails')
+        typeTitle(container, 'Login fails')
 
         fireEvent.click(getByText('Bug'))
         await waitFor(() => expect(q(container, 'form-field-severity')).toBeTruthy())
@@ -309,13 +306,12 @@ describe('CardCreateDialog', () => {
 
     it('logs a column value the card cannot store and keeps the dialog open', async () => {
         const logError = vi.spyOn(log, 'error').mockImplementation(() => {})
-        useCardCreateStore
-            .getState()
-            .open({ projectId: 'p1', listId: 'l1', position: 'a0', initialTitle: 'Odd one' })
+        useCardCreateStore.getState().open({ projectId: 'p1', listId: 'l1', position: 'a0' })
         const { container, getByText } = render(<CardCreateDialog projectId="p1" />, {
             wrapper,
         })
         await waitFor(() => expect(q(container, 'form-field-title')).toBeTruthy())
+        typeTitle(container, 'Odd one')
         fireEvent.click(getByText('Odd'))
         // The DOM writes a true aria-selected as a bare attribute and a false one as "false".
         const selected = (id: string) => q(container, id)?.getAttribute('aria-selected') !== 'false'
