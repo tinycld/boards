@@ -25,13 +25,19 @@ func boardsPublicPaths() []rlstest.PublicPath {
 			})
 		}
 	}
+	for _, kind := range []string{"list", "view"} {
+		paths = append(paths, rlstest.PublicPath{
+			Collection: "forms", Kind: kind,
+			Reason: "a share-link visitor reads the types of a shared board's cards; the token is checked in the clause boards registers with core",
+		})
+	}
 	return paths
 }
 
 // Every access path in every rule of an install with boards — core's rules
-// included, since comment_mentions' create rule gains a boards branch — must
-// need a login, except the share-link reads named above.
+// included, since comment_mentions' create rule gains a boards branch and the
+// forms read rules gain the clause boards registers — must need a login,
+// except the share-link reads named above.
 func TestAccessRules_EveryPathRequiresLogin(t *testing.T) {
-	app := rlstest.NewAssembledApp(t, rlstest.MigrationsDir(t, "../pb-migrations"))
-	rlstest.RequireAuthGuardOnAccessRules(t, app, boardsPublicPaths()...)
+	rlstest.RequireAuthGuardOnAccessRules(t, servedFormsApp(t), boardsPublicPaths()...)
 }

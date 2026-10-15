@@ -4,6 +4,7 @@ import (
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
 
+	"tinycld.org/core/forms"
 	"tinycld.org/core/fts"
 	"tinycld.org/core/groups"
 	"tinycld.org/core/oauth"
@@ -53,6 +54,30 @@ func ftsConfigFor(app core.App) fts.Config {
 		// Someone typing `/` wants active work, not history.
 		ExcludeField: "archived",
 	}
+}
+
+// shareVisitorFormsClause vouches, to core's forms read rules, for an
+// anonymous share-link visitor: a form is readable when a card of a shared
+// board uses it. A shared board's card renders through its type, so the
+// visitor needs that type's labels and rules, and no other form.
+//
+// It is written from the forms record's side, and each term walks the same
+// path to one share link, so PocketBase evaluates all three on the same joined
+// row (an inactive link with the right token beside an active one with another
+// token admits no one). The terms are 1980000003's token check, as the token()
+// helper in pb-migrations/2040000001 writes it:
+//   - token: the visitor carries this link's token (lib/share-token.ts sends it
+//     as X-Share-Token on every request);
+//   - is_active: the owner has not turned the link off;
+//   - expires_at: the link has no expiry, or it has not passed.
+const shareVisitorFormsClause = `boards_cards_via_form.project.boards_share_links_via_project.token ?= @request.headers.x_share_token` +
+	` && boards_cards_via_form.project.boards_share_links_via_project.is_active ?= true` +
+	` && (boards_cards_via_form.project.boards_share_links_via_project.expires_at ?= "" || boards_cards_via_form.project.boards_share_links_via_project.expires_at ?> @now)`
+
+// registerFormReaders is the one place boards vouches for anonymous form
+// readers, so the tests that compose the rules register what Register does.
+func registerFormReaders() {
+	forms.RegisterPublicReader(shareVisitorFormsClause)
 }
 
 // Register wires server-side behavior for the Boards package. Core's generator
@@ -112,6 +137,11 @@ func registerShared(app *pocketbase.PocketBase) {
 	}); err != nil {
 		shareLog.Error("could not register the attachment download meter", "err", err)
 	}
+
+	// A share-link visitor reads the types of the shared board's cards. Core's
+	// forms rules need a session and cannot name us, so we hand it the clause
+	// that vouches for the visitor; it is composed in on serve.
+	registerFormReaders()
 
 	// What happens to a departing user's boards data: authorship reassigns,
 	// and a board the leaver alone owns gets a new owner. See offboard.go.
