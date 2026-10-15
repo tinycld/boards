@@ -1,13 +1,26 @@
 import type { BuiltinFieldProps } from '@tinycld/core/lib/forms/host-ui'
+import { UserField } from '@tinycld/core/ui/forms/fields/UserField'
 import { AssigneePicker } from '../../components/detail/AssigneePicker'
 import { AssigneesValue } from '../../components/detail/property-values'
 import { useToggleCardRelation } from '../../hooks/useCardMutations'
 import { useAdapterData } from '../CardFormContext'
+import { stringList } from './form-value'
 
-export function AssigneesField({ disabled }: BuiltinFieldProps) {
+export function AssigneesField({ disabled, fieldKey, label, value, onChange }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
     const toggleRelation = useToggleCardRelation()
     if (!data) return null
+    if (data.mode === 'create') {
+        return (
+            <UserField
+                value={stringList(value)}
+                onChange={onChange}
+                multiple
+                testID={`form-input-${fieldKey}`}
+                accessibilityLabel={label}
+            />
+        )
+    }
     const { card, canEdit, projectMembers } = data
     if (!canEdit) return <AssigneesValue card={card} />
     const assignedIds = card.assignees.map(member => member.id)

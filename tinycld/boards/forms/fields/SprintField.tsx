@@ -2,15 +2,20 @@ import type { BuiltinFieldProps } from '@tinycld/core/lib/forms/host-ui'
 import { SprintValue } from '../../components/detail/property-values'
 import { SprintPicker } from '../../components/detail/SprintPicker'
 import { useUpdateCard } from '../../hooks/useCardMutations'
+import type { BoardSprint } from '../../types'
 import { useAdapterData } from '../CardFormContext'
+import { stringValue } from './form-value'
 
 /** Only on a board that plans in sprints, as in the properties block. */
-export function SprintField({ disabled }: BuiltinFieldProps) {
+export function SprintField({ disabled, value, onChange }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
     const updateCard = useUpdateCard()
     if (!data) return null
-    const { card, canEdit, projectSprints, sprintsEnabled } = data
-    if (!sprintsEnabled) return null
+    if (!data.sprintsEnabled) return null
+    if (data.mode === 'create') {
+        return <NewCardSprint sprints={data.sprints} value={value} onChange={onChange} />
+    }
+    const { card, canEdit, projectSprints } = data
     if (!canEdit) return <SprintValue sprint={card.sprint} />
     return (
         <SprintPicker
@@ -19,6 +24,23 @@ export function SprintField({ disabled }: BuiltinFieldProps) {
             onSelect={sprint => updateCard.mutate({ cardId: card.id, sprint })}
         >
             <SprintValue sprint={card.sprint} />
+        </SprintPicker>
+    )
+}
+
+function NewCardSprint({
+    sprints,
+    value,
+    onChange,
+}: {
+    sprints: BoardSprint[]
+    value: unknown
+    onChange: (value: unknown) => void
+}) {
+    const sprint = sprints.find(s => s.id === stringValue(value)) ?? null
+    return (
+        <SprintPicker sprints={sprints} selectedId={sprint?.id ?? ''} onSelect={onChange}>
+            <SprintValue sprint={sprint} />
         </SprintPicker>
     )
 }

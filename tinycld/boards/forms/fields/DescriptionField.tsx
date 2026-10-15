@@ -1,5 +1,6 @@
 import { MARKDOWN_TRAILING_SPACE } from '@tinycld/core/components/help/MarkdownRenderer'
 import type { BuiltinFieldProps, CollabDoc } from '@tinycld/core/lib/forms/host-ui'
+import { RichTextField } from '@tinycld/core/ui/forms/fields/RichTextField'
 import { useMemo, useRef } from 'react'
 import { Text, View } from 'react-native'
 import type { Awareness } from 'y-protocols/awareness'
@@ -21,6 +22,7 @@ import { type DescriptionMode, descriptionMode } from '../../lib/description-mod
 import { type MentionName, mentionMember } from '../../lib/mention-text'
 import type { BoardAttachment } from '../../types'
 import { type CardFormValue, useAdapterData } from '../CardFormContext'
+import { stringValue } from './form-value'
 
 /**
  * The card description inside the card's form.
@@ -31,9 +33,29 @@ import { type CardFormValue, useAdapterData } from '../CardFormContext'
  * card surface already reads and writes it under that name. Without one it is
  * the plain-text editor over the record.
  */
-export function DescriptionField({ disabled, collab }: BuiltinFieldProps) {
+export function DescriptionField({
+    disabled,
+    collab,
+    fieldKey,
+    label,
+    value,
+    onChange,
+}: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
     if (!data) return null
+    if (data.mode === 'create') {
+        // No card, so no room either: core's editor over the form's value.
+        return (
+            <RichTextField
+                fieldKey={fieldKey}
+                value={stringValue(value)}
+                onChange={onChange}
+                format="markdown"
+                testID={`form-input-${fieldKey}`}
+                accessibilityLabel={label}
+            />
+        )
+    }
     return <DescriptionCell data={data} collab={collab ?? null} />
 }
 

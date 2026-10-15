@@ -8,6 +8,7 @@ import { resolveSelection } from '../lib/board-selection'
 import { focusedCardRect } from '../lib/card-rect'
 import { rankForAppend, rankForReorder } from '../lib/move'
 import { type CanvasPickerKind, selectBoardSort, useBoardsUIStore } from '../stores/boards-ui-store'
+import { useCardCreateStore } from '../stores/card-create-store'
 import type { BoardProject } from '../types'
 import { useArchiveCard, useMoveCard } from './useCardMutations'
 
@@ -66,6 +67,7 @@ export function useBoardShortcuts(
     const setFilterPanelOpen = useBoardsUIStore(s => s.setFilterPanelOpen)
     const setViewMode = useBoardsUIStore(s => s.setViewMode)
     const toggleColumnCollapsed = useBoardsUIStore(s => s.toggleColumnCollapsed)
+    const openCreate = useCardCreateStore(s => s.open)
     const moveCard = useMoveCard()
     const archiveCard = useArchiveCard()
 
@@ -271,6 +273,19 @@ export function useBoardShortcuts(
             openComposer(listId)
         }
 
+        /**
+         * The full form, into the column `n` would open a composer in. The
+         * dialog needs no mounted composer, so a collapsed column stays
+         * collapsed.
+         */
+        const addCardWithForm = () => {
+            const { focusedCardId, focusedColumnId } = focus()
+            const listId = composerTargetColumnId(project, focusedCardId, focusedColumnId)
+            const list = project.lists.find(candidate => candidate.id === listId)
+            if (!list) return
+            openCreate({ listId: list.id, position: rankForAppend(list.cards), initialTitle: '' })
+        }
+
         const nav = (id: string, keys: string, description: string, run: () => void): Shortcut => ({
             id,
             keys,
@@ -364,6 +379,8 @@ export function useBoardShortcuts(
             nav('boards.board.moveDown', 'Shift+ArrowDown', 'Move card down', () => moveWithin(1)),
             ...pickers,
             nav('boards.board.addCard', 'n', 'Add card to this column', addCard),
+            // ⇧N is taken by Add list, so the full form takes `c` (create).
+            nav('boards.board.addCardForm', 'c', 'Create card with the full form', addCardWithForm),
             // Shift+N is a no-op on an empty board, where BoardCanvas renders
             // EmptyBoard and mounts no AddListColumn to open.
             nav('boards.board.addList', 'Shift+N', 'Add list', () => {
@@ -383,6 +400,7 @@ export function useBoardShortcuts(
         moveCard,
         archiveCard,
         openComposer,
+        openCreate,
         setAddListSlot,
         toggleColumnCollapsed,
         openCanvasPicker,

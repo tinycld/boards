@@ -1,6 +1,7 @@
 import { createContext, type ReactNode, type RefObject, useContext } from 'react'
 import type { EditableTextHandle } from '../components/detail/EditableText'
 import type { BoardCardView, BoardEpic, BoardLabel, BoardMember, BoardSprint } from '../types'
+import { type CreateCardValue, useCreateCardContext } from './CreateCardContext'
 
 export interface CardFormValue {
     card: BoardCardView
@@ -55,14 +56,22 @@ export function useCardFormContextOptional(): CardFormValue | null {
 }
 
 /**
- * The card data a host component renders from, with `canEdit` folded with the
- * field's own `disabled`; null where no card exists yet, which renders nothing.
+ * What a host component renders from: the open card (`mode: 'card'`), with
+ * `canEdit` folded with the field's own `disabled`; the create dialog's board
+ * data (`mode: 'create'`), where the field edits the form's value instead of
+ * a record; or null outside both, which renders nothing.
  *
  * Every field and section reads its data through this one helper, so the
- * branch for a form with no card behind it lives in one place.
+ * branch between a card and a form with no card behind it lives in one place.
  */
-export function useAdapterData(disabled: boolean): CardFormValue | null {
-    const value = useCardFormContextOptional()
-    if (!value) return null
-    return { ...value, canEdit: value.canEdit && !disabled }
+export type AdapterData =
+    | ({ mode: 'card' } & CardFormValue)
+    | ({ mode: 'create' } & CreateCardValue)
+
+export function useAdapterData(disabled: boolean): AdapterData | null {
+    const card = useCardFormContextOptional()
+    const create = useCreateCardContext()
+    if (card) return { mode: 'card', ...card, canEdit: card.canEdit && !disabled }
+    if (create) return { mode: 'create', ...create }
+    return null
 }

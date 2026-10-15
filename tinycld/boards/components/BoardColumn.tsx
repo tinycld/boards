@@ -22,6 +22,7 @@ import { rankForAppend, rankForReorder } from '../lib/move'
 import type { ReactionGroup } from '../lib/reactions'
 import { formatWipCount, type WipState, wipState } from '../lib/wip'
 import { selectBoardSort, useBoardsUIStore } from '../stores/boards-ui-store'
+import { useCardCreateStore } from '../stores/card-create-store'
 import type { BoardCardView, BoardListRank, BoardListView } from '../types'
 import { BoardCard } from './BoardCard'
 import { CardComposer } from './CardComposer'
@@ -152,6 +153,7 @@ export const BoardColumn = memo(function BoardColumn({
     // only that column re-renders.
     const isComposerOpen = useBoardsUIStore(s => s.composerOpenListId === list.id)
     const openComposer = useBoardsUIStore(s => s.openComposer)
+    const openCreate = useCardCreateStore(s => s.open)
 
     // This outer DraxView is the column-drag receiver, so its bounds go stale
     // the same way the card container's do when the canvas scrolls mid-drag.
@@ -176,6 +178,9 @@ export const BoardColumn = memo(function BoardColumn({
 
     const addCard = (title: string) =>
         createCard.mutate({ listId: list.id, title, position: rankForAppend(list.cards) })
+
+    const expandComposer = (title: string) =>
+        openCreate({ listId: list.id, position: rankForAppend(list.cards), initialTitle: title })
 
     const sideFor = (event: DraxDragWithReceiverEventData): DropSide =>
         event.receiver.receiveOffsetRatio.x < 0.5 ? 'before' : 'after'
@@ -323,6 +328,7 @@ export const BoardColumn = memo(function BoardColumn({
                         onSubmit={addCard}
                         isOpen={isComposerOpen}
                         onOpenChange={next => openComposer(next ? list.id : null)}
+                        onExpand={expandComposer}
                     />
                 ) : null}
                 {isReceiving ? <View testID="boards-column-receiving" /> : null}

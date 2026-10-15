@@ -13,7 +13,7 @@ import { type CardFormValue, useAdapterData } from '../CardFormContext'
 /** The card's comments and history, interleaved. */
 export function ActivitySection({ disabled }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
-    if (!data) return null
+    if (data?.mode !== 'card') return null
     return <Activity data={data} disabled={disabled} />
 }
 

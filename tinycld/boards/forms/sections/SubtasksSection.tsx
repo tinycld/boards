@@ -8,7 +8,7 @@ import { useAdapterData } from '../CardFormContext'
  */
 export function SubtasksSection({ disabled }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
-    if (!data) return null
+    if (data?.mode !== 'card') return null
     return (
         <DetailSubtasks
             card={data.card}

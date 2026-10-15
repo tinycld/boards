@@ -6,7 +6,7 @@ import { type CardFormValue, useAdapterData } from '../CardFormContext'
 
 export function LinksSection({ disabled }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
-    if (!data) return null
+    if (data?.mode !== 'card') return null
     return <Links data={data} />
 }
 

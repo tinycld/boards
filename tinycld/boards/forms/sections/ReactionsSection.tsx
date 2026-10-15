@@ -9,7 +9,7 @@ import { type CardFormValue, useAdapterData } from '../CardFormContext'
 /** Votes on the card itself, counted apart from the reactions on its comments. */
 export function ReactionsSection({ disabled }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
-    if (!data) return null
+    if (data?.mode !== 'card') return null
     return <Reactions data={data} disabled={disabled} />
 }
 

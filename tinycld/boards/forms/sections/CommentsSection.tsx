@@ -9,7 +9,7 @@ import { type CardFormValue, useAdapterData } from '../CardFormContext'
 /** The comment composer. Commentors keep it — that is what the role means. */
 export function CommentsSection({ disabled }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
-    if (!data || disabled) return null
+    if (data?.mode !== 'card' || disabled) return null
     return <Comments data={data} />
 }
 

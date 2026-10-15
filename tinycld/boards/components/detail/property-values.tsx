@@ -297,36 +297,37 @@ function AssigneeChips({ card }: { card: BoardCardView }) {
 }
 
 /** The label chips, and the LabelPicker's trigger. See AssigneesValue. */
-export const LabelsValue = forwardRef<View, { card: BoardCardView; onPress?: () => void }>(
-    function LabelsValue({ card, onPress }, ref) {
-        if (!onPress) {
-            if (!card.labels?.length) return <EmptyValue />
-            return (
-                <View className="flex-row flex-wrap items-center gap-1.5">
-                    <LabelChips card={card} />
-                </View>
-            )
-        }
-
-        if (!card.labels?.length) {
-            return <GhostChip ref={ref} label="Add label" onPress={onPress} />
-        }
-
+export const LabelsValue = forwardRef<
+    View,
+    { card: Pick<BoardCardView, 'labels'>; onPress?: () => void }
+>(function LabelsValue({ card, onPress }, ref) {
+    if (!onPress) {
+        if (!card.labels?.length) return <EmptyValue />
         return (
-            <Pressable
-                ref={ref}
-                accessibilityRole="button"
-                accessibilityLabel="Change labels"
-                onPress={onPress}
-                className="flex-row flex-wrap items-center gap-1.5 rounded-full web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
-            >
+            <View className="flex-row flex-wrap items-center gap-1.5">
                 <LabelChips card={card} />
-            </Pressable>
+            </View>
         )
     }
-)
 
-function LabelChips({ card }: { card: BoardCardView }) {
+    if (!card.labels?.length) {
+        return <GhostChip ref={ref} label="Add label" onPress={onPress} />
+    }
+
+    return (
+        <Pressable
+            ref={ref}
+            accessibilityRole="button"
+            accessibilityLabel="Change labels"
+            onPress={onPress}
+            className="flex-row flex-wrap items-center gap-1.5 rounded-full web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+        >
+            <LabelChips card={card} />
+        </Pressable>
+    )
+})
+
+function LabelChips({ card }: { card: Pick<BoardCardView, 'labels'> }) {
     return (
         <>
             {card.labels.map(label => (

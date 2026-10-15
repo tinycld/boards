@@ -9,8 +9,11 @@ type LabelPickerProps = {
     labels: BoardLabel[]
     selectedIds: string[]
     onToggle: (labelId: string, isSelected: boolean) => void
-    /** Opens the manager, where labels are created, renamed and deleted. */
-    onManage: () => void
+    /**
+     * Opens the manager, where labels are created, renamed and deleted.
+     * Omitted where the manager cannot open (the create dialog).
+     */
+    onManage?: () => void
 } & PickerAnchor
 
 /**
@@ -56,9 +59,14 @@ export function LabelPickerRows({
                     onToggle={() => onToggle(label.id, selected.has(label.id))}
                 />
             ))}
-            <Menu.Item label="Manage labels…" icon={Settings2} onSelect={onManage} />
+            <ManageItem onManage={onManage} />
         </>
     )
+}
+
+function ManageItem({ onManage }: { onManage?: () => void }) {
+    if (!onManage) return null
+    return <Menu.Item label="Manage labels…" icon={Settings2} onSelect={onManage} />
 }
 
 function EmptyState({ isVisible }: { isVisible: boolean }) {

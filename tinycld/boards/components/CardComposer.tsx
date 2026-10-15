@@ -1,6 +1,6 @@
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
-import { Plus } from 'lucide-react-native'
+import { Maximize2, Plus } from 'lucide-react-native'
 import { useRef, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 
@@ -17,6 +17,11 @@ interface CardComposerProps {
      */
     isOpen?: boolean
     onOpenChange?: (isOpen: boolean) => void
+    /**
+     * Opens the full form with the title typed so far. Omit it and the
+     * composer offers no way out to the form.
+     */
+    onExpand?: (draftTitle: string) => void
 }
 
 /**
@@ -43,6 +48,7 @@ export function CardComposer({
     placeholder = 'What needs doing?',
     isOpen: controlledOpen,
     onOpenChange,
+    onExpand,
 }: CardComposerProps) {
     const [internalOpen, setInternalOpen] = useState(false)
     const [title, setTitle] = useState('')
@@ -70,6 +76,20 @@ export function CardComposer({
         inputRef.current?.focus()
     }
 
+    // Pressing the expand button blurs the input first (on web the button
+    // takes focus on pointer-down), and an empty composer closes on blur —
+    // which would unmount the button before its press lands. Pointer-down on
+    // the button arms this so that one blur leaves the composer open;
+    // focusing the input again disarms it.
+    const isExpandArmed = useRef(false)
+    const expand = onExpand
+        ? () => {
+              onExpand(title.trim())
+              setTitle('')
+              setIsOpen(false)
+          }
+        : undefined
+
     if (!isOpen) {
         return (
             <Pressable
@@ -90,7 +110,7 @@ export function CardComposer({
 
     return (
         <View className="shrink-0 p-0.5">
-            <View className="bg-background rounded-[10px] px-2.5 py-2 border border-foreground/10">
+            <View className="flex-row items-center gap-1.5 bg-background rounded-[10px] px-2.5 py-2 border border-foreground/10">
                 <PlainInput
                     ref={inputRef}
                     value={title}
@@ -104,15 +124,44 @@ export function CardComposer({
                     // without it RN dismisses the keyboard on every Enter.
                     blurOnSubmit={false}
                     onSubmitEditing={submit}
+                    onFocus={() => {
+                        isExpandArmed.current = false
+                    }}
                     onBlur={() => {
-                        if (!title.trim()) setIsOpen(false)
+                        if (!title.trim() && !isExpandArmed.current) setIsOpen(false)
                     }}
                     onKeyPress={e => {
                         if (e.nativeEvent.key === 'Escape') setIsOpen(false)
                     }}
-                    className="text-[13px] text-foreground"
+                    className="flex-1 text-[13px] text-foreground"
+                />
+                <ExpandButton
+                    onPress={expand}
+                    onArm={() => {
+                        isExpandArmed.current = true
+                    }}
                 />
             </View>
         </View>
+    )
+}
+
+function ExpandButton({ onPress, onArm }: { onPress?: () => void; onArm: () => void }) {
+    const mutedColor = useThemeColor('muted')
+    if (!onPress) return null
+    return (
+        <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open full form"
+            testID="card-composer-expand"
+            // Pointer-down runs before the browser moves focus, so the arm
+            // lands before the input's blur.
+            onPointerDown={onArm}
+            onPress={onPress}
+            hitSlop={6}
+            className="rounded-md p-0.5 hover:bg-foreground/5 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+        >
+            <Maximize2 size={14} color={mutedColor} strokeWidth={2.2} />
+        </Pressable>
     )
 }
