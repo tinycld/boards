@@ -601,7 +601,10 @@ describe('CardDetail', () => {
             expect(el).toBeTruthy()
             return el as HTMLElement
         })
-        expect(zone.getAttribute('aria-disabled')).toBe('true')
+        expect(zone.getAttribute('data-enabled')).toBe('false')
+        // Not aria-disabled: that is inherited, so it would mark every control
+        // in the card disabled for a reader who can still comment and react.
+        expect(zone.getAttribute('aria-disabled')).toBeNull()
         cleanup()
 
         const shown = mountDetail(view('c3', 'Three', 3))
@@ -610,6 +613,6 @@ describe('CardDetail', () => {
             expect(el).toBeTruthy()
             return el as HTMLElement
         })
-        expect(open.getAttribute('aria-disabled')).toBe('false')
+        expect(open.getAttribute('data-enabled')).toBe('true')
     })
 })
