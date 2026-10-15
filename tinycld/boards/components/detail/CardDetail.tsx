@@ -106,7 +106,8 @@ export function CardDetail(props: CardDetailProps) {
                 effect — DropZone renders a plain View on native, where there
                 is no drag source to begin with. */}
             <DropZone
-                isEnabled={role.canEdit}
+                testID="card-drop-zone"
+                isEnabled={role.canEdit && isFieldVisible('attachments')}
                 onDrop={files => uploadFiles(filesToPicked(files))}
                 label="Drop to attach"
             >

@@ -378,7 +378,7 @@ test('useCardDetail returns the four sections for one card, in render order', as
         'k0:Jonas',
         'k1:Maya',
     ])
-    expect(result.current.attachments.map(a => a.uploadedBy.firstName)).toEqual(['Maya'])
+    expect(result.current.attachments.map(a => a.id)).toEqual(['a1'])
     expect(result.current.activity.map(e => e.actor?.firstName ?? '-')).toEqual(['-', 'Maya'])
 })
 
@@ -591,5 +591,25 @@ describe('CardDetail', () => {
         expect(chips.textContent).toContain('Checklist')
         expect(chips.textContent).not.toContain('Attachments')
         expect(q(container, 'boards-comment-composer')).toBeTruthy()
+    })
+
+    test('dropping a file is enabled only while the type shows Attachments', async () => {
+        h.role = { canEdit: true, canComment: true, isOwner: false }
+        const hidden = mountDetail(view('c6', 'Six', 6))
+        const zone = await waitFor(() => {
+            const el = hidden.container.querySelector('[data-testid="card-drop-zone"]')
+            expect(el).toBeTruthy()
+            return el as HTMLElement
+        })
+        expect(zone.getAttribute('aria-disabled')).toBe('true')
+        cleanup()
+
+        const shown = mountDetail(view('c3', 'Three', 3))
+        const open = await waitFor(() => {
+            const el = shown.container.querySelector('[data-testid="card-drop-zone"]')
+            expect(el).toBeTruthy()
+            return el as HTMLElement
+        })
+        expect(open.getAttribute('aria-disabled')).toBe('false')
     })
 })
