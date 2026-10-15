@@ -1,7 +1,8 @@
 import type { FormDefinition } from '@tinycld/core/lib/forms/definition'
 
 /**
- * A copy must not point at the source card's attachment rows: file values are ids of rows keyed by card.
+ * A copy must not point at the source card's attachment rows: file values are ids
+ * of rows keyed by card.
  * Written against the definition only; a host built-in of kind `file` would need its key added
  * (boards declares none today).
  */

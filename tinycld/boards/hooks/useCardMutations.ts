@@ -1,6 +1,6 @@
 import { useAuth } from '@tinycld/core/lib/auth'
 import { toDateString } from '@tinycld/core/lib/dates'
-import { useFormsOfHost } from '@tinycld/core/lib/forms/use-forms-of-host'
+import { parseFormRows } from '@tinycld/core/lib/forms/use-forms-of-host'
 import { mutation, useMutation } from '@tinycld/core/lib/mutations'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { newRecordId } from 'pbtsdb/core'
@@ -222,16 +222,29 @@ export interface DuplicateCardInput {
  */
 export function useDuplicateCard(projectId: string) {
     const { user } = useAuth({ throwIfAnon: false })
-    const [cardsCollection, itemsCollection] = useStore('boards_cards', 'boards_checklist_items')
-    const { forms, defaultForm } = useFormsOfHost(CARD_HOST_KEY)
+    const [cardsCollection, itemsCollection, formsCollection] = useStore(
+        'boards_cards',
+        'boards_checklist_items',
+        'forms'
+    )
 
     return useMutation<string, Error, DuplicateCardInput>({
         mutationKey: ['boards', 'card', 'duplicate'],
         mutationFn: mutation(function* ({ card, position }: DuplicateCardInput) {
             const cardId = newRecordId()
             const source = cardsCollection.get(card.id)
-            const formId = source?.form || defaultForm?.id
+            const fields = source?.fields ?? {}
+            // Read at call time: a render-time snapshot could be empty while
+            // the forms load, and falling back to "copy every field" would
+            // keep the source card's attachment ids. Refuse instead.
+            const forms = parseFormRows(
+                formsCollection.toArray.filter(f => f.host === CARD_HOST_KEY)
+            )
+            const formId = source?.form || forms.find(f => f.is_default)?.id
             const def = forms.find(f => f.id === formId)?.definition
+            if (!def && Object.keys(fields).length > 0) {
+                throw new Error('Cannot duplicate this card until its form has loaded')
+            }
             yield cardsCollection.insert({
                 id: cardId,
                 project: projectId,
@@ -269,7 +282,7 @@ export function useDuplicateCard(projectId: string) {
                 // Read from the row: the card view does not carry them. The
                 // source is the open card, so its row is in the store.
                 form: source?.form ?? '',
-                fields: stripFileFields(source?.fields ?? {}, def),
+                fields: stripFileFields(fields, def),
                 // pr_state / pr_review_state are omitted (collections.ts), so
                 // PR links are NOT copied: a duplicate is a new card with no
                 // pull request of its own, the same reasoning that excludes

@@ -185,4 +185,22 @@ describe('useDuplicateCard', () => {
         expect(h.stores.boards_cards.get(id)).toMatchObject({ form: 'f1' })
         expect(h.stores.boards_cards.get(id)?.fields).toEqual({ x: 1 })
     })
+
+    it('refuses to copy a card with fields while its form is not loaded', async () => {
+        const saved = h.stores.forms.toArray.map(r => r.id)
+        for (const id of saved) h.stores.forms.delete(id)
+        const { result } = renderHook(() => useDuplicateCard('p1'), { wrapper })
+        const source = { id: 'c2', listId: 'l1', labels: [], assignees: [], title: 'Typed' }
+        const before = h.stores.boards_cards.toArray.length
+        await act(async () => {
+            await expect(
+                result.current.mutateAsync({
+                    card: source as unknown as BoardCardView,
+                    position: 'a1',
+                })
+            ).rejects.toThrow('form has loaded')
+        })
+        expect(h.stores.boards_cards.toArray.length).toBe(before)
+        for (const row of h.forms) h.stores.forms.insert(row)
+    })
 })
