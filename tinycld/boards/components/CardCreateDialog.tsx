@@ -4,6 +4,7 @@ import type { FormHostUi } from '@tinycld/core/lib/forms/host-ui'
 import type { EvalContext } from '@tinycld/core/lib/forms/logic'
 import { type FormHost, useFormHost } from '@tinycld/core/lib/forms/use-form-hosts'
 import { useFormsOfHost } from '@tinycld/core/lib/forms/use-forms-of-host'
+import { log } from '@tinycld/core/lib/logger'
 import { Dialog } from '@tinycld/core/ui/dialog'
 import { FormRenderer, useFormCreate, useHostUi } from '@tinycld/core/ui/forms'
 import { useEffect, useMemo } from 'react'
@@ -56,7 +57,15 @@ function useCardCreate({ host, projectId, target, onClose }: CreateBodyProps) {
     const submit = async () => {
         const split = await create.submit()
         if (!split) return
-        const { title, ...columns } = split.columns
+        const { title, ...raw } = split.columns
+        const columns = cardColumnsFrom(raw)
+        // Every input writes a value its column stores, so a refusal here is
+        // a bug (a type's default, a field's onChange): it is reported, and
+        // the dialog stays open with the user's input rather than dropping it.
+        if (!columns.success) {
+            log.error('boards.create', columns.error, { formId: create.formId })
+            return
+        }
         const checklist = (split.rows.checklist ?? []).map(({ text, done }) => ({ text, done }))
         await createCard
             .mutateAsync({
@@ -65,7 +74,7 @@ function useCardCreate({ host, projectId, target, onClose }: CreateBodyProps) {
                 title: String(title ?? ''),
                 formId: create.formId,
                 fields: split.fields,
-                columns: cardColumnsFrom(columns),
+                columns: columns.columns,
                 checklist,
             })
             .then(() => {

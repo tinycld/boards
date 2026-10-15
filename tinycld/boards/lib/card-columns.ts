@@ -19,49 +19,22 @@ const cardColumnsSchema = z.object({
     sprint: z.string().nullish(),
 })
 
+export type CardColumnsResult =
+    | { success: true; columns: Partial<CardFormColumns> }
+    | { success: false; error: z.ZodError }
+
 /**
  * The card columns a form collected (`SplitValues.columns`, untyped), as the
  * typed overrides useCreateCard lays over its defaults. Keys that are not
- * card form columns (the title, which has its own input) are left out.
+ * card form columns (the title, which has its own input) are left out. A
+ * value the row cannot store is refused, never written.
  */
-export function cardColumnsFrom(raw: Record<string, unknown>): Partial<CardFormColumns> {
-    const parsed = cardColumnsSchema.parse(raw)
-    const out: Partial<CardFormColumns> = {}
-    for (const [key, value] of Object.entries(parsed)) {
-        if (value !== null && value !== undefined) Object.assign(out, { [key]: value })
+export function cardColumnsFrom(raw: Record<string, unknown>): CardColumnsResult {
+    const parsed = cardColumnsSchema.safeParse(raw)
+    if (!parsed.success) return { success: false, error: parsed.error }
+    const columns: Partial<CardFormColumns> = {}
+    for (const [key, value] of Object.entries(parsed.data)) {
+        if (value !== null && value !== undefined) Object.assign(columns, { [key]: value })
     }
-    return out
-}
-
-// What a cleared input writes on an existing card: the value the row stores
-// for "unset". An insert can leave such a column out; an edit cannot, or the
-// clear would never reach the row.
-const EMPTY_COLUMNS: CardFormColumns = {
-    description: '',
-    due: '',
-    due_has_time: false,
-    start: '',
-    assignees: [],
-    labels: [],
-    reporter: '',
-    priority: 'none',
-    estimate: 0,
-    epic: '',
-    sprint: '',
-}
-
-/**
- * The card columns an edit form changed, as the typed patch useUpdateCard
- * assigns. A column the form cleared (null) is written as its empty value;
- * keys that are not card form columns (the title) are left out.
- */
-export function cardColumnsPatch(raw: Record<string, unknown>): Partial<CardFormColumns> {
-    const parsed = cardColumnsSchema.parse(raw)
-    const out: Partial<CardFormColumns> = {}
-    for (const [key, value] of Object.entries(parsed)) {
-        if (value === undefined) continue
-        const column = key as keyof CardFormColumns
-        Object.assign(out, { [column]: value ?? EMPTY_COLUMNS[column] })
-    }
-    return out
+    return { success: true, columns }
 }

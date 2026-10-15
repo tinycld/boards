@@ -100,8 +100,6 @@ export interface UpdateCardInput {
     form?: string
     /** Custom field values, written whole. */
     fields?: Record<string, unknown>
-    /** Built-in columns edited through a form, assigned as listed. */
-    columns?: Partial<CardFormColumns>
 }
 
 /**
@@ -321,7 +319,6 @@ export function useUpdateCard() {
                 if (input.parent !== undefined) draft.parent = input.parent
                 if (input.epic !== undefined) draft.epic = input.epic
                 if (input.sprint !== undefined) draft.sprint = input.sprint
-                Object.assign(draft, input.columns)
                 if (input.form !== undefined) draft.form = input.form
                 if (input.fields !== undefined) draft.fields = input.fields
             })

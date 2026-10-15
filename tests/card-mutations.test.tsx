@@ -121,14 +121,14 @@ describe('useCreateCard', () => {
 })
 
 describe('useUpdateCard', () => {
-    it('patches form, fields and listed columns and nothing else', async () => {
+    it('patches form, fields and the listed columns and nothing else', async () => {
         const { result } = renderHook(() => useUpdateCard(), { wrapper })
         await act(async () => {
             await result.current.mutateAsync({
                 cardId: 'c1',
                 form: 'f2',
                 fields: { a: 1 },
-                columns: { start: '2026-01-01 00:00:00.000Z' },
+                start: '2026-01-01 00:00:00.000Z',
             })
         })
         expect(h.stores.boards_cards.get('c1')).toMatchObject({

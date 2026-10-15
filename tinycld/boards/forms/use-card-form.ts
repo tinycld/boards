@@ -2,12 +2,12 @@ import { useAuth } from '@tinycld/core/lib/auth'
 import { toDateString } from '@tinycld/core/lib/dates'
 import type { EvalContext } from '@tinycld/core/lib/forms/logic'
 import { type FormHost, useFormHost } from '@tinycld/core/lib/forms/use-form-hosts'
+import { log } from '@tinycld/core/lib/logger'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { useRecord } from '@tinycld/core/lib/use-record'
 import { useAutoPatch, useFormEdit, useHostUi } from '@tinycld/core/ui/forms'
 import { useEffect, useMemo } from 'react'
 import { useUpdateCard } from '../hooks/useCardMutations'
-import { cardColumnsPatch } from '../lib/card-columns'
 import { useCommentReplyStore } from '../stores/comment-reply-store'
 import { useSectionRevealStore } from '../stores/section-reveal-store'
 import { CARD_HOST_KEY } from './hosts'
@@ -24,10 +24,10 @@ export function useCardHost(): FormHost {
 
 /**
  * The open card's edit form: the live row, the type it points at (the
- * host's default while the row has none), and the auto-save of what core
- * renders itself, `start` and the custom fields. The card's own fields write
- * through their existing mutations (see the host components), so they never
- * dirty this form.
+ * host's default while the row has none), and the auto-save of the custom
+ * fields core renders itself. The auto-save sends `fields` only: every
+ * built-in draws its own component and writes through its own mutation (see
+ * the host components), so a built-in never dirties this form.
  */
 export function useCardForm(cardId: string) {
     const host = useCardHost()
@@ -49,11 +49,14 @@ export function useCardForm(cardId: string) {
     // plain record and a generated row interface carries no index signature.
     const edit = useFormEdit(host, record ? { ...record } : { id: cardId }, context)
     useAutoPatch(edit, async split => {
-        const columns = cardColumnsPatch(split.columns)
+        const columnKeys = Object.keys(split.columns)
+        if (columnKeys.length > 0) {
+            log.warn('boards.card-form', 'a built-in reached the auto-save', { columnKeys })
+        }
         // `fields` comes back empty when no custom key changed; writing it then
         // would wipe the stored values.
-        const fields = Object.keys(split.fields).length > 0 ? split.fields : undefined
-        await updateCard.mutateAsync({ cardId, columns, fields })
+        if (Object.keys(split.fields).length === 0) return
+        await updateCard.mutateAsync({ cardId, fields: split.fields })
     })
     // A reply and the sections opened from the chip row belong to the card
     // they were started on: leaving the card drops them, so coming back starts

@@ -5,7 +5,10 @@ import { OverlayProvider } from '@tinycld/core/ui/overlay'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-afterEach(cleanup)
+afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+})
 
 // The full-form dialog over local-only collections: the forms store offers a
 // default "Card" type and a "Bug" type that adds a required Severity select,
@@ -94,6 +97,9 @@ vi.mock('@tinycld/core/lib/pocketbase', async () => {
         forms: mk('forms', [
             form('f-card', 'Card', 0, base),
             form('f-bug', 'Bug', 1, { ...base, fields: [...base.fields, severity] }),
+            // A default the card's priority column does not store: the form
+            // accepts it (priority is a custom built-in), the card row cannot.
+            form('f-odd', 'Odd', 2, { ...base, defaults: { priority: 'critical' } }),
         ]),
         boards_projects: mk('boards_projects', [
             { id: 'p1', name: 'Otters', slug: 'OTTER', sprints_enabled: false },
@@ -126,6 +132,7 @@ vi.mock('@tinycld/core/lib/pocketbase', async () => {
     }
 })
 
+import { log } from '@tinycld/core/lib/logger'
 import { CardComposer } from '../tinycld/boards/components/CardComposer'
 import { CardCreateDialog } from '../tinycld/boards/components/CardCreateDialog'
 import { useCardCreateStore } from '../tinycld/boards/stores/card-create-store'
@@ -312,5 +319,28 @@ describe('CardCreateDialog', () => {
                 is_done: false,
             }),
         ])
+    })
+
+    it('logs a column value the card cannot store and keeps the dialog open', async () => {
+        const logError = vi.spyOn(log, 'error').mockImplementation(() => {})
+        useCardCreateStore
+            .getState()
+            .open({ projectId: 'p1', listId: 'l1', position: 'a0', initialTitle: 'Odd one' })
+        const { container, getByText } = render(<CardCreateDialog projectId="p1" />, {
+            wrapper,
+        })
+        await waitFor(() => expect(q(container, 'form-field-title')).toBeTruthy())
+        fireEvent.click(getByText('Odd'))
+        // The DOM writes a true aria-selected as a bare attribute and a false one as "false".
+        const selected = (id: string) => q(container, id)?.getAttribute('aria-selected') !== 'false'
+        await waitFor(() => expect(selected('card-type-f-odd')).toBe(true))
+        expect(selected('card-type-f-card')).toBe(false)
+
+        fireEvent.click(q(container, 'form-wizard-next') as HTMLElement)
+        await waitFor(() => expect(logError).toHaveBeenCalledTimes(1))
+        expect(logError.mock.calls[0][0]).toBe('boards.create')
+        expect(useCardCreateStore.getState().target).not.toBeNull()
+        expect(q(container, 'card-create-dialog')).toBeTruthy()
+        expect(h.stores.boards_cards.toArray.some(c => c.title === 'Odd one')).toBe(false)
     })
 })
