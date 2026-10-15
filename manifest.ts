@@ -77,6 +77,10 @@ const manifest = {
         module: 'tinycld.org/packages/boards/cli',
     },
     collections: { register: 'collections', types: 'types' },
+    // Cards are a forms host: `forms` is the data the generator reads in Node
+    // (server/form_hosts.json), `forms-ui` the components and mapper the form
+    // renderer mounts. Settings → Forms lists "Card" under Boards.
+    forms: { hosts: 'forms', ui: 'forms-ui' },
     // Trigger + action catalog for workflow rules. The Go side
     // (server/automation.go) resolves owners through board membership and
     // gates card-completed to a list marked done.
