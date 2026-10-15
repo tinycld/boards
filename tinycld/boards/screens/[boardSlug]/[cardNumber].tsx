@@ -8,7 +8,7 @@ import { useNavigateBack } from '@tinycld/core/lib/use-navigate-back'
 import { useDeviceInsets } from '@tinycld/core/lib/use-safe-area'
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router'
 import { ChevronLeft } from 'lucide-react-native'
-import { type RefObject, useEffect, useMemo, useRef } from 'react'
+import { type RefObject, useCallback, useEffect, useMemo, useRef } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { BoardPresenceProvider } from '../../components/BoardPresenceProvider'
 import { CardDetail } from '../../components/detail/CardDetail'
@@ -25,15 +25,15 @@ function usePageShortcuts(
     project: BoardProject,
     segment: string,
     cardId: string,
-    goBack: () => void,
+    leaveToBoard: () => void,
     canEdit: boolean,
     titleRef: RefObject<EditableTextHandle | null>
 ) {
     const router = useRouter()
     const orgHref = useOrgHref()
-    // A second Escape while the back navigation is in flight slips past
-    // router.canGoBack() and surfaces a GO_BACK error toast — leave at most
-    // once per mounted card page.
+    // A second Escape while the navigation is in flight would act on a page
+    // already leaving (with router.back() it surfaced a GO_BACK error toast);
+    // leave at most once per mounted card page.
     const leavingRef = useRef(false)
     const scopeOwner = useShortcutScope('thread')
 
@@ -70,7 +70,7 @@ function usePageShortcuts(
                 run: () => {
                     if (leavingRef.current) return
                     leavingRef.current = true
-                    goBack()
+                    leaveToBoard()
                 },
             },
             {
@@ -90,7 +90,7 @@ function usePageShortcuts(
                 run: () => step(-1),
             },
         ]
-    }, [project, segment, cardId, goBack, router, orgHref, canEdit, titleRef])
+    }, [project, segment, cardId, leaveToBoard, router, orgHref, canEdit, titleRef])
     useRegisterShortcuts(shortcuts, scopeOwner)
 }
 
@@ -119,6 +119,7 @@ export default function CardDetailScreen() {
     // lands on a card whose board the reader may never have opened, and the
     // bare `/a/boards` would have sent them somewhere else entirely.
     const navigateBack = useNavigateBack(() => orgHref(segment ? boardPath(segment) : 'boards'))
+    const leaveToBoard = useLeaveToBoard(segment)
     const entry = project && cardId ? findCardEntry(project, cardId) : null
     useNumberedPagePath(cardNumber, entry?.card.number ?? 0)
 
@@ -145,8 +146,27 @@ export default function CardDetailScreen() {
                 entry={entry}
                 cardId={cardId}
                 navigateBack={navigateBack}
+                leaveToBoard={leaveToBoard}
             />
         </BoardPresenceProvider>
+    )
+}
+
+/**
+ * Leave the card pages for this card's board in one step.
+ *
+ * j/k and the sub-task and link rows each push a card page, so `router.back()`
+ * would step back ONE card, while Escape and the back button say "Back to
+ * board". `dismissTo` pops to the board screen below, or replaces this page
+ * with the board when none is below (a link followed straight to a card). The
+ * browser's Back still walks the cards.
+ */
+function useLeaveToBoard(segment: string) {
+    const router = useRouter()
+    const orgHref = useOrgHref()
+    return useCallback(
+        () => router.dismissTo(orgHref(boardPath(segment))),
+        [router, orgHref, segment]
     )
 }
 
@@ -173,13 +193,16 @@ interface CardPageProps {
     segment: string
     entry: CardEntry
     cardId: string
+    /** Back one entry: what closing a card that is gone (deleted, moved) does. */
     navigateBack: () => void
+    /** Escape and the back button: straight to the board. */
+    leaveToBoard: () => void
 }
 
-function CardPage({ project, segment, entry, cardId, navigateBack }: CardPageProps) {
+function CardPage({ project, segment, entry, cardId, navigateBack, leaveToBoard }: CardPageProps) {
     const { canEdit } = useProjectRole(project.id)
     const titleRef = useRef<EditableTextHandle>(null)
-    usePageShortcuts(project, segment, cardId, navigateBack, canEdit, titleRef)
+    usePageShortcuts(project, segment, cardId, leaveToBoard, canEdit, titleRef)
     const insets = useDeviceInsets()
     // Board order — see CardPeek.
     const boardCards = useMemo(
@@ -191,7 +214,7 @@ function CardPage({ project, segment, entry, cardId, navigateBack }: CardPagePro
         {
             type: 'custom',
             key: 'back',
-            element: <BackButton label={project.name} onPress={navigateBack} />,
+            element: <BackButton label={project.name} onPress={leaveToBoard} />,
         },
     ]
 

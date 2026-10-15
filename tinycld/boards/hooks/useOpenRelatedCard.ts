@@ -6,12 +6,17 @@ import { useBoardsUIStore } from '../stores/boards-ui-store'
 
 /**
  * Open a card on this board from a row inside the open card (a sub-task, a
- * link), so that Back returns to the card it was opened from.
+ * link).
  *
- * On the full page the next card gets its own page, pushed on top. The board
- * stays mounted under the page, so opening through the store there would
- * navigate back to the board's peek and lose the page. On the peek and the
- * modal the store is the opener, and usePeekUrl turns the change into a push.
+ * On the full page the next card gets its own page, pushed on top, so Back
+ * returns to the card it was opened from. The board stays mounted under the
+ * page, so opening through the store there would navigate back to the board's
+ * peek and lose the page.
+ *
+ * On the peek and the modal the store is the opener, and usePeekUrl writes the
+ * change as a history REPLACE: the board route is singular
+ * (screens/_layout.tsx), so even a push of it replaces the entry on web. Back
+ * walking the cards opened on the peek is an open follow-up.
  */
 export function useOpenRelatedCard() {
     const { variant, projectId, projectSlug } = useCardFormContext()

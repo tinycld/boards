@@ -242,7 +242,6 @@ async function populatedCard(page: Page, label = 'Parity') {
     await expectKeyWidthStable(page, LINK_TARGET)
     await addCard(page, 0, TITLE)
     await openCard(page, TITLE)
-    await writeDescription(page, 'Ship the release notes before Friday.')
     await setDueNextJanuary(page)
     await assignTestUser(page)
     await addLabel(page)
@@ -256,6 +255,12 @@ async function populatedCard(page: Page, label = 'Parity') {
     await addSubtask(page, 'Write the headline')
     await addBlocksLink(page, LINK_TARGET)
     await postComment(page, 'Looks good to me.')
+    // Written LAST: the server saves the description about 3s after the last
+    // keystroke, and that save is the "edited the description" activity. Typed
+    // first, it raced the steps above and landed before or after the comment
+    // depending on how fast they ran, so the activity order in the shot moved.
+    // Typed after the comment, the save can only come after it.
+    await writeDescription(page, 'Ship the release notes before Friday.')
     await closeCardPeek(page)
     await openCard(page, TITLE)
     return name

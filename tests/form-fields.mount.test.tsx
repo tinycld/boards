@@ -69,6 +69,7 @@ import { SprintField } from '../tinycld/boards/forms/fields/SprintField'
 import { AttachmentsSection } from '../tinycld/boards/forms/sections/AttachmentsSection'
 import { ChecklistSection } from '../tinycld/boards/forms/sections/ChecklistSection'
 import { SectionChipsSection } from '../tinycld/boards/forms/sections/SectionChipsSection'
+import { SubtasksSection } from '../tinycld/boards/forms/sections/SubtasksSection'
 import * as cardMutations from '../tinycld/boards/hooks/useCardMutations'
 import type { CardLinkView } from '../tinycld/boards/lib/card-links'
 import { formatSchedule } from '../tinycld/boards/lib/due-time'
@@ -318,8 +319,47 @@ describe('optional sections', () => {
 
 // A row inside an open card opens its card where the reader is: on the full
 // page as the next card's page, stacked so Back returns; on the peek through
-// the store. Sub-task rows share the opener; a link row is the one mounted
-// here because its icons are in the shared lucide stub.
+// the store. Sub-task and link rows share the opener; both are pinned.
+describe('opening a sub-task', () => {
+    const child: BoardCardView = {
+        ...card,
+        id: 'c2',
+        key: 'OTTER-8',
+        number: 8,
+        title: 'Child',
+        parent: 'c1',
+    }
+    const parent: BoardCardView = { ...card, subtaskTotal: 1 }
+
+    function mountSubtasks(variant: CardFormValue['variant']) {
+        mountCard(<SubtasksSection {...fieldProps('subtasks')} />, {
+            variant,
+            card: parent,
+            projectCards: [parent, child],
+            canEdit: false,
+        })
+    }
+
+    afterEach(() => {
+        useBoardsUIStore.getState().closeCard()
+        vi.mocked(router.push).mockClear()
+    })
+
+    it('pushes the sub-task’s page from the full page', () => {
+        mountSubtasks('page')
+        fireEvent.click(screen.getByText('Child'))
+        expect(router.push).toHaveBeenCalledWith(appHref('boards/OTTER/8'))
+        expect(useBoardsUIStore.getState().openCardId).toBeNull()
+    })
+
+    it('opens the sub-task through the store from the peek', () => {
+        mountSubtasks('peek')
+        fireEvent.click(screen.getByText('Child'))
+        expect(useBoardsUIStore.getState().openCardId).toBe('c2')
+        expect(router.push).not.toHaveBeenCalled()
+    })
+})
+
 describe('opening a linked card', () => {
     const far: BoardCardView = { ...card, id: 'c2', key: 'OTTER-8', number: 8, title: 'Far card' }
     const link: CardLinkView = {
