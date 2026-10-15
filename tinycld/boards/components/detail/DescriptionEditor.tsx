@@ -242,10 +242,11 @@ export function useDescriptionEditor({
             },
             onSubmitShortcut: () => cancelRef.current(),
             onImageDrop,
-            // Undefined before the room is ready: useRichEditor treats a missing
-            // collab option as a plain local editor, which is exactly the
-            // non-collaborative fallback, and it starts collaborating the moment a
-            // doc arrives (the extension list rebuilds on the document identity).
+            // Undefined while the room has no doc: useRichEditor treats a missing
+            // collab option as a plain local editor, the non-collaborative
+            // fallback. The shared editor reads these options when a surface
+            // acquires it, not as they change, so a doc that arrives during an
+            // open session binds at the next acquire, not mid-session.
             //
             // `awareness` and `identity` resolve on their own schedules and are
             // deliberately NOT rebuild inputs — useRichEditor reads them live at

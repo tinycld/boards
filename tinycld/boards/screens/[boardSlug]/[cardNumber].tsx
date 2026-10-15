@@ -168,13 +168,13 @@ export default function CardDetailScreen() {
  * Leave the card pages for this card's board in one step, with this card
  * peeked there.
  *
- * On the card pages, j/k and the sub-task and link rows each push a card page,
- * so `router.back()` would step back ONE card, while Escape and the back
- * button say "Back to board". `dismissTo` pops to the board screen below, or replaces this page
+ * j/k and the sub-task and link rows each push a card page, so `router.back()`
+ * would step back ONE card, while Escape and the back button say "Back to
+ * board". `dismissTo` pops to the board screen below, or replaces this page
  * with the board when none is below (a link followed straight to a card). The
  * card stays open in the board's peek: a page expanded from the peek returns
- * to it, and after j/k the reader lands on the card they were reading. The
- * browser's Back still walks the cards.
+ * to it, and after j/k the reader lands on the card they were reading. On the
+ * card pages, the browser's Back still walks the cards.
  */
 function useLeaveToBoard(segment: string, card: { key: string; id: string }) {
     const router = useRouter()
