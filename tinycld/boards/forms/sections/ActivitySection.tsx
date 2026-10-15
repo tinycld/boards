@@ -4,7 +4,6 @@ import { DetailActivity } from '../../components/detail/DetailActivity'
 import { useCardDetail } from '../../hooks/useCardDetail'
 import { useCommentMutations } from '../../hooks/useCommentMutations'
 import { useCommentReactions } from '../../hooks/useCommentReactions'
-import { useProjectRole } from '../../hooks/useProjectRole'
 import { mentionMember } from '../../lib/mention-text'
 import { useCommentReplyStore } from '../../stores/comment-reply-store'
 import type { BoardComment } from '../../types'
@@ -14,13 +13,12 @@ import { type CardFormValue, useAdapterData } from '../CardFormContext'
 export function ActivitySection({ disabled }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
     if (data?.mode !== 'card') return null
-    return <Activity data={data} disabled={disabled} />
+    return <Activity data={data} />
 }
 
-function Activity({ data, disabled }: { data: CardFormValue; disabled: boolean }) {
-    const { card, projectId, isOwner } = data
+function Activity({ data }: { data: CardFormValue }) {
+    const { card, projectId, isOwner, canComment } = data
     const { comments, activity, attachments, isReady } = useCardDetail(card.id)
-    const { canComment } = useProjectRole(projectId)
     const { updateComment, deleteComment } = useCommentMutations(card.id, projectId)
     // Read out of the card's one query (useCardChildren) — see the hook.
     const { reactionsFor, toggleReaction } = useCommentReactions(projectId, card.id)
@@ -53,8 +51,9 @@ function Activity({ data, disabled }: { data: CardFormValue; disabled: boolean }
             activity={activity}
             activityContext={activityContext}
             // Not before the children query settles: an empty result then
-            // cannot be told from a card with no comments.
-            canComment={canComment && isReady && !disabled}
+            // cannot be told from a card with no comments. The role, not
+            // `disabled`: a read-only card still lets a commenter reply.
+            canComment={canComment && isReady}
             canModerate={isOwner}
             reactionsFor={reactionsFor}
             onToggleReaction={toggleReaction}

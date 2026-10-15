@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cardColumnsFrom } from '../tinycld/boards/lib/card-columns'
+import { cardColumnsFrom, cardColumnsPatch } from '../tinycld/boards/lib/card-columns'
 
 describe('cardColumnsFrom', () => {
     it('keeps the filled columns as typed overrides and leaves out the title', () => {
@@ -21,5 +21,21 @@ describe('cardColumnsFrom', () => {
     it('refuses a value of the wrong shape rather than writing it', () => {
         expect(() => cardColumnsFrom({ priority: 'critical' })).toThrow()
         expect(() => cardColumnsFrom({ labels: 'lb1' })).toThrow()
+    })
+})
+
+describe('cardColumnsPatch', () => {
+    it('writes a cleared column as the empty value the row stores', () => {
+        expect(cardColumnsPatch({ start: null, assignees: null, estimate: null })).toEqual({
+            start: '',
+            assignees: [],
+            estimate: 0,
+        })
+    })
+
+    it('keeps a filled column and leaves out the title', () => {
+        expect(cardColumnsPatch({ title: 'Renamed', start: '2030-01-15' })).toEqual({
+            start: '2030-01-15',
+        })
     })
 })

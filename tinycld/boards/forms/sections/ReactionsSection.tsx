@@ -2,7 +2,6 @@ import { useAuth } from '@tinycld/core/lib/auth'
 import type { BuiltinFieldProps } from '@tinycld/core/lib/forms/host-ui'
 import { ReactionBar } from '@tinycld/core/ui/reactions'
 import { useCardReactions } from '../../hooks/useCardReactions'
-import { useProjectRole } from '../../hooks/useProjectRole'
 import { useReactorNames } from '../../hooks/useReactorNames'
 import { type CardFormValue, useAdapterData } from '../CardFormContext'
 
@@ -10,12 +9,12 @@ import { type CardFormValue, useAdapterData } from '../CardFormContext'
 export function ReactionsSection({ disabled }: BuiltinFieldProps) {
     const data = useAdapterData(disabled)
     if (data?.mode !== 'card') return null
-    return <Reactions data={data} disabled={disabled} />
+    return <Reactions data={data} />
 }
 
-function Reactions({ data, disabled }: { data: CardFormValue; disabled: boolean }) {
-    const { card, projectId } = data
-    const { canComment } = useProjectRole(projectId)
+/** Gated on the role, never on `disabled`: a commenter reacts on a read-only card. */
+function Reactions({ data }: { data: CardFormValue }) {
+    const { card, projectId, canComment } = data
     const { reactions, toggleReaction } = useCardReactions(projectId, card.id)
     const reactorName = useReactorNames()
     // Non-throwing: a card opened from the public board has no session.
@@ -24,7 +23,7 @@ function Reactions({ data, disabled }: { data: CardFormValue; disabled: boolean 
         <ReactionBar
             groups={reactions}
             targetId={card.id}
-            canReact={canComment && !disabled}
+            canReact={canComment}
             onToggle={toggleReaction}
             nameFor={reactorName}
             currentUserId={user?.id ?? ''}

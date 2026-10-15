@@ -12,7 +12,7 @@ import { Pressable, Text, type View } from 'react-native'
  * this styling would drift and the equivalence would stop reading.
  *
  * Forwards its ref because the property pickers CLONE their trigger to inject
- * `onPress` and a ref — see DetailProperties' Value components.
+ * `onPress` and a ref — see the Value components in property-values.tsx.
  */
 export const GhostChip = forwardRef<
     View,

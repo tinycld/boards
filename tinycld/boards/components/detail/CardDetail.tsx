@@ -1,48 +1,19 @@
 import { DropZone } from '@tinycld/core/components/DropZone'
-import { useUploadsForScope } from '@tinycld/core/file-viewer/upload-store'
 import { useAuth } from '@tinycld/core/lib/auth'
-import { ReactionBar } from '@tinycld/core/ui/reactions'
-import { type RefObject, useMemo, useRef, useState } from 'react'
+import type { CollabDoc, FormHostUi } from '@tinycld/core/lib/forms/host-ui'
+import { FormRenderer } from '@tinycld/core/ui/forms'
+import { type RefObject, useCallback, useMemo, useState } from 'react'
 import { ScrollView, View } from 'react-native'
-import { useDescriptionSection } from '../../forms/fields/DescriptionField'
+import { CardFormProvider, type CardFormValue } from '../../forms/CardFormContext'
+import { useCardForm } from '../../forms/use-card-form'
 import { useAttachmentMutations } from '../../hooks/useAttachmentMutations'
-import { useCardDetail } from '../../hooks/useCardDetail'
-import { useCardLinks } from '../../hooks/useCardLinks'
-import { useUpdateCard } from '../../hooks/useCardMutations'
-import { useCardReactions } from '../../hooks/useCardReactions'
-import { useCommentMutations } from '../../hooks/useCommentMutations'
-import { useCommentReactions } from '../../hooks/useCommentReactions'
-import { usePrLinks } from '../../hooks/usePrLinks'
 import { useProjectRole } from '../../hooks/useProjectRole'
-import { useReactorNames } from '../../hooks/useReactorNames'
-import { type SectionKey, visibleSections } from '../../lib/card-sections'
-import { mentionMember } from '../../lib/mention-text'
-import { childrenOf } from '../../lib/subtasks'
 import type { BoardCardView, BoardEpic, BoardLabel, BoardMember, BoardSprint } from '../../types'
 import { LabelManagerDialog } from '../LabelManagerDialog'
-import { PrLinkList } from '../PrLinkChip'
-import { CommentComposer } from './CommentComposer'
-import { DetailActivity } from './DetailActivity'
-import { DetailAttachments, filesToPicked } from './DetailAttachments'
-import { DetailChecklist } from './DetailChecklist'
-import { DetailLinks } from './DetailLinks'
-import { DetailProperties } from './DetailProperties'
-import { DetailSectionChips } from './DetailSectionChips'
-import { DetailSubtasks } from './DetailSubtasks'
-import { EditableText, type EditableTextHandle } from './EditableText'
+import { filesToPicked } from './DetailAttachments'
+import type { EditableTextHandle } from './EditableText'
 
 type DetailVariant = 'peek' | 'modal' | 'page'
-
-/**
- * Which ScrollView child the description header is, counting from zero:
- * title, properties, REACTIONS, HEADER (label / toolbar), editor, attachments,
- * checklist, sub-tasks, activity.
- *
- * Keep in step with the JSX below. React Native pins by index, so a section
- * inserted above it silently pins the wrong thing rather than failing — which
- * is why adding the reaction row moved this from 2 to 3.
- */
-const TOOLBAR_INDEX = 3
 
 interface CardDetailProps {
     card: BoardCardView
@@ -96,216 +67,28 @@ const WIDTH_CLASS: Record<DetailVariant, string> = {
  * The card detail content, shared by the side peek, the modal and the
  * full-page screen.
  * The containers own their top bars (stepper, expand/close vs. back); this
- * component owns everything below: title, properties, description, checklist,
- * activity, and the comment composer.
+ * component owns the frame below them (the drop zone, the scroll view, the
+ * content width) and renders the card's form inside it: the card's type
+ * decides which fields and sections show, and in what order.
  */
-export function CardDetail({
-    card,
-    variant,
-    projectId,
-    projectLabels,
-    projectEpics,
-    projectSprints,
-    sprintsEnabled,
-    projectMembers,
-    projectLists,
-    projectCards,
-    titleRef,
-}: CardDetailProps) {
+export function CardDetail(props: CardDetailProps) {
+    const { card, variant, projectId, projectLabels } = props
     const [isManagingLabels, setIsManagingLabels] = useState(false)
+    const openLabelManager = useCallback(() => setIsManagingLabels(true), [])
     // The peek is already as narrow as its panel, so it needs no cap; the
     // page and the modal are both wide surfaces whose text would otherwise run
     // the full width. The modal's own frame caps at 1400px, so its measure is
     // set a little narrower than the page's.
     const widthClass = WIDTH_CLASS[variant]
-    // Fetched here rather than threaded in as props, so the peek and the page
-    // both get it without either container knowing about on-demand collections.
-    const { checklist, comments, attachments, activity, isReady } = useCardDetail(card.id)
-    // The board's cards by id, for resolving a link's far end. Only THIS
-    // board's, which is the point: a cross-board link's far card is absent
-    // here and renders redacted (lib/card-links.ts).
-    const cardsById = useMemo(
-        () => new Map(projectCards.map(entry => [entry.id, entry])),
-        [projectCards]
-    )
-    // The roster as mention labels, once for every comment and the
-    // description — MarkdownText renders per comment and must not query.
-    const mentionMembers = useMemo(() => projectMembers.map(mentionMember), [projectMembers])
-    const activityContext = useMemo(
-        () => ({
-            lists: projectLists,
-            labels: projectLabels,
-            members: projectMembers,
-            cards: projectCards,
-            epics: projectEpics,
-            sprints: projectSprints,
-        }),
-        [projectLists, projectLabels, projectMembers, projectCards, projectEpics, projectSprints]
-    )
-    // Resolved here for the same reason — both containers share the gates.
-    const { canEdit, canComment, isOwner } = useProjectRole(projectId)
-    const { reactions: cardReactions, toggleReaction: toggleCardReaction } = useCardReactions(
-        projectId,
-        card.id
-    )
-    const reactorName = useReactorNames()
-    // The card's CHILDREN are not editable until the detail query has SETTLED,
-    // and this is a correctness gate rather than a cosmetic one: before it
-    // settles, an empty result is indistinguishable from a card that genuinely
-    // has no checklist, comments or attachments, so a live composer invites the
-    // user to re-add items they already have and end up with duplicates.
-    //
-    // Scoped to the children DELIBERATELY. The title, description and labels
-    // live on the card record itself, which both containers already resolved
-    // before mounting this component — they have nothing to wait for, and
-    // gating them on the children's query made the description render blank and
-    // uneditable for the life of that fetch.
-    const canEditChildren = canEdit && isReady
-    const canCommentNow = canComment && isReady
-    const updateCard = useUpdateCard()
-    // Only the drop path needs this here — the strip owns the picker and the
-    // rows. Both write through the same store, so the two callers of
-    // useAttachmentMutations cannot disagree about what is in flight.
+    // Resolved here so every surface shares the gates.
+    const role = useProjectRole(projectId)
+    const formValue = useCardFormValue(props, role, openLabelManager)
     // Non-throwing: a card opened from the PUBLIC board has no session, and
-    // the default useAuth() turns that screen into an error boundary. Every
-    // read below already tolerates a null user.
+    // the default useAuth() turns that screen into an error boundary.
     const { user } = useAuth({ throwIfAnon: false })
-    const currentUserId = user?.id ?? ''
+    // Only the drop path needs this here; the attachments section owns the
+    // picker and the rows. Both write through the same upload store.
     const { uploadFiles } = useAttachmentMutations(card.id, projectId, user?.id ?? '')
-    const { createComment, updateComment, deleteComment } = useCommentMutations(card.id, projectId)
-    // Read out of the card's one query (useCardChildren) — see the hook.
-    const { reactionsFor, toggleReaction } = useCommentReactions(projectId, card.id)
-    // Which comment the composer is replying to. Local because it is transient
-    // UI state that dies with the open card, and it lives HERE rather than in
-    // the composer because the activity list is what sets it.
-    const [replyingTo, setReplyingTo] = useState<{ id: string; authorName: string } | null>(null)
-    // Which comment is open for inline editing — at most one; starting a new
-    // edit closes the previous one.
-    const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
-    // Where the press that opened the current inline edit landed, handed to the
-    // editor so the caret lands there rather than at the end of the comment.
-    //
-    // A ref, not state: it is read once by the editor as it mounts and would
-    // otherwise re-render the whole card panel for a value nothing displays.
-    const editStartPointRef = useRef<{ x: number; y: number } | undefined>(undefined)
-    const startEditingComment = (commentId: string, at?: { x: number; y: number }) => {
-        editStartPointRef.current = at
-        setEditingCommentId(commentId)
-    }
-
-    const submitComment = (body: string) => {
-        createComment.mutate(
-            { body, parent: replyingTo?.id ?? '' },
-            { onSuccess: () => setReplyingTo(null) }
-        )
-    }
-
-    const saveComment = (commentId: string, body: string) => {
-        // Close immediately — the pbtsdb update is optimistic, so the new
-        // body renders at once; failures surface through the mutation.
-        updateComment.mutate({ commentId, body })
-        // Close THIS comment, not whichever one happens to be open.
-        //
-        // A save can land after the editor has moved on: clicking a second
-        // comment hands the editor over and the first commits on its way out,
-        // and that commit reads its content asynchronously. A bare
-        // `setEditingCommentId(null)` then closes the comment the user just
-        // clicked into — the edit saved correctly, but the new editor vanished
-        // as it opened.
-        setEditingCommentId(current => (current === commentId ? null : current))
-    }
-
-    // Which chips the reader has pressed. The sections own their empty state
-    // now (each renders its heading and one add affordance), so this only
-    // drives the chip row, which goes when the body becomes the card's form.
-    //
-    // Never persisted, and cleared by the `key={card.id}` remount both
-    // containers do.
-    const [revealed, setRevealed] = useState<ReadonlySet<SectionKey>>(() => new Set())
-    const setRevealedFor = (key: SectionKey, isOpen: boolean) =>
-        setRevealed(current => {
-            if (current.has(key) === isOpen) return current
-            const next = new Set(current)
-            if (isOpen) next.add(key)
-            else next.delete(key)
-            return next
-        })
-
-    // An upload is content before its attachment record exists, so a dropped
-    // file opens the section immediately rather than when the upload settles —
-    // otherwise the progress row it draws has nowhere to render.
-    const uploads = useUploadsForScope(card.id)
-    // Lifted out of DetailLinks so the count is readable here; the section still
-    // owns adding and removing. One query either way — the hook is not run twice.
-    //
-    // The card set is always ready by this point, by construction rather than by
-    // luck: the peek renders nothing until it finds the open card inside an
-    // already-built BoardProject, and the full-page screen returns
-    // <LoadingState/> while its query is in flight. Either way this board's
-    // cards ARE loaded by the time we render, so a far card still missing is
-    // genuinely unreadable rather than late — the distinction the redacted row
-    // depends on.
-    const {
-        links,
-        addLink,
-        removeLink,
-        isAdding: isAddingLink,
-        isReady: areLinksReady,
-    } = useCardLinks(card.id, cardsById, true)
-
-    // Server-derived from GitHub, not composed by the reader, so it sits
-    // outside the reveal/chip machinery below: there is no "add a PR" action
-    // on this card, only a row that shows up once the webhook links one.
-    const { data: prLinks } = usePrLinks(card.id)
-
-    // Derived every render, never sampled at mount: useCardDetail is on-demand,
-    // so before it settles an empty result is indistinguishable from a card that
-    // genuinely has nothing — and a teammate's realtime insert has to open the
-    // section on its own.
-    //
-    // A card that IS a sub-task can never have sub-tasks of its own (the server
-    // caps the depth at one level), so it is excluded from the chip row rather
-    // than offered a section it could not fill.
-    const { chips } = visibleSections({
-        has: {
-            attachments: attachments.length > 0 || uploads.length > 0,
-            checklist: checklist.length > 0,
-            // The SERVER'S count, not the children visible here. `projectCards`
-            // is the board's cards as this surface sees them — filtered by the
-            // reader's board filter, and on a cold load not necessarily
-            // delivered yet — so a card whose children are absent from that
-            // array still has sub-tasks, and hiding the section loses them.
-            // `subtask_total` rides on the card record itself and is authoritative.
-            subtasks: card.subtaskTotal > 0 || childrenOf(projectCards, card).length > 0,
-            links: links.length > 0,
-        },
-        // Emptiness only counts once the query behind it has SETTLED. Without
-        // this, every fresh load and every reload reads all four as empty while
-        // their queries are in flight and hides sections the card really has —
-        // the reader sees a chip claiming the card is bare, and a link or
-        // checklist they filed a moment ago appears to have vanished.
-        isReady: {
-            attachments: isReady,
-            checklist: isReady,
-            // Sub-tasks need no settle gate: `subtaskTotal` is a field on the
-            // card record, which both containers resolved before mounting this
-            // component, so it is never an unsettled zero.
-            subtasks: true,
-            links: areLinksReady,
-        },
-        revealed,
-    })
-    const offeredChips = card.parent ? chips.filter(key => key !== 'subtasks') : chips
-
-    const description = useDescriptionSection({
-        cardId: card.id,
-        projectId,
-        attachments,
-        mentionMembers,
-        description: card.description,
-        onSave: value => updateCard.mutate({ cardId: card.id, description: value }),
-        canEdit,
-    })
 
     return (
         <>
@@ -313,180 +96,18 @@ export function CardDetail({
                 effect — DropZone renders a plain View on native, where there
                 is no drag source to begin with. */}
             <DropZone
-                isEnabled={canEdit}
+                isEnabled={role.canEdit}
                 onDrop={files => uploadFiles(filesToPicked(files))}
                 label="Drop to attach"
             >
-                {/* Flat children, not one padded wrapper: `stickyHeaderIndices`
-                only pins a DIRECT child of the ScrollView, so the toolbar has
-                to sit at this level. The section padding therefore lives on
-                each child. TOOLBAR_INDEX below must match the toolbar's
-                position in this list. */}
-                <ScrollView className="flex-1" stickyHeaderIndices={[TOOLBAR_INDEX]}>
-                    <View className={`px-6 mt-1 mb-[18px] ${widthClass}`}>
-                        <EditableText
-                            ref={titleRef}
-                            value={card.title}
-                            onSave={title => updateCard.mutate({ cardId: card.id, title })}
-                            placeholder="Card title"
-                            accessibilityLabel="Edit card title"
-                            textClassName="text-[20px] font-semibold leading-[27px] tracking-tight text-foreground"
-                            isDisabled={!canEdit}
-                        />
-                    </View>
-                    <View className={`px-6 ${widthClass}`}>
-                        <DetailProperties
-                            card={card}
-                            projectLabels={projectLabels}
-                            projectEpics={projectEpics}
-                            projectSprints={projectSprints}
-                            sprintsEnabled={sprintsEnabled}
-                            projectMembers={projectMembers}
-                            onManageLabels={() => setIsManagingLabels(true)}
-                            canEdit={canEdit}
-                        />
-                    </View>
-                    {/* Votes on the card itself, directly above the
-                    description. Counted separately from the reactions on
-                    individual comments further down — this is the card. */}
-                    <View className={`px-6 pb-3 ${widthClass}`}>
-                        <ReactionBar
-                            groups={cardReactions}
-                            targetId={card.id}
-                            canReact={canComment}
-                            onToggle={toggleCardReaction}
-                            nameFor={reactorName}
-                            currentUserId={currentUserId}
-                            testIDPrefix="boards-card-reaction"
-                        />
-                    </View>
-                    {/* Index TOOLBAR_INDEX — the sticky one. Always rendered, at a
-                    FIXED height: the label and the toolbar take turns in this
-                    one row, so focusing the editor swaps what is drawn without
-                    changing what the row occupies. Reserving the space is also
-                    what keeps sticky working — an out-of-flow overlay has no
-                    box for either platform to pin. */}
-                    <View className={`px-6 ${widthClass}`}>
-                        {description.body ? description.header : null}
-                    </View>
-                    <View className={`px-6 mb-6 overflow-visible ${widthClass}`}>
-                        {description.body}
-                    </View>
-                    {/* Directly under the description, and ABOVE the sections
-                        themselves: the row is a fixed landmark, so it does not
-                        wander down the card as sections open. Revealing one
-                        inserts it below this row rather than moving the row.
-                        Editors only — a reader has nothing to add. */}
-                    {canEdit ? (
-                        <View className={`px-6 ${widthClass}`}>
-                            <DetailSectionChips
-                                chips={offeredChips}
-                                onReveal={key => setRevealedFor(key, true)}
-                            />
+                <ScrollView className="flex-1">
+                    <CardFormProvider value={formValue}>
+                        <View className={`px-6 pb-6 ${widthClass}`}>
+                            <CardFormBody cardId={card.id} readOnly={!role.canEdit} />
                         </View>
-                    ) : null}
-                    <View className={`px-6 ${widthClass}`}>
-                        <DetailAttachments
-                            attachments={attachments}
-                            cardId={card.id}
-                            projectId={projectId}
-                            canEdit={canEditChildren}
-                            isOwner={isOwner}
-                        />
-                    </View>
-                    <View className={`px-6 ${widthClass}`}>
-                        <DetailChecklist
-                            items={checklist}
-                            cardId={card.id}
-                            projectId={projectId}
-                            canEdit={canEditChildren}
-                        />
-                    </View>
-                    <View className={`px-6 ${widthClass}`}>
-                        {/* Below TOOLBAR_INDEX, so the sticky header keeps its
-                            position — see the constant's comment. Gated on
-                            `canEdit`, not `canEditChildren`: a sub-task is a
-                            card of its own, so filing one needs card-write, and
-                            it does not wait on the on-demand children query the
-                            way the checklist and comments do. */}
-                        <DetailSubtasks
-                            card={card}
-                            projectCards={projectCards}
-                            projectId={projectId}
-                            canEdit={canEdit}
-                        />
-                    </View>
-                    <View className={`px-6 ${widthClass}`}>
-                        {/* Below TOOLBAR_INDEX, so the sticky header keeps its
-                            position. Server-derived and read-only here, unlike
-                            the sections above — see the usePrLinks call. */}
-                        <PrLinkList
-                            links={prLinks ?? []}
-                            canEdit={canEdit}
-                            isVisible={(prLinks ?? []).length > 0}
-                        />
-                    </View>
-                    <View className={`px-6 ${widthClass}`}>
-                        {/* Below TOOLBAR_INDEX, so the sticky header keeps its
-                            position. `cardsById` is this board's cards only:
-                            the far end of a CROSS-BOARD link is deliberately
-                            unresolvable here, which is what the redacted row
-                            renders. */}
-                        <DetailLinks
-                            card={card}
-                            links={links}
-                            addLink={addLink}
-                            removeLink={removeLink}
-                            isAddingLink={isAddingLink}
-                            cardsById={cardsById}
-                            pickerCards={projectCards}
-                            projectId={projectId}
-                            canEdit={canEdit}
-                        />
-                    </View>
-                    <View className={`px-6 pb-6 ${widthClass}`}>
-                        <DetailActivity
-                            comments={comments}
-                            activity={activity}
-                            activityContext={activityContext}
-                            canComment={canCommentNow}
-                            canModerate={isOwner}
-                            reactionsFor={reactionsFor}
-                            onToggleReaction={toggleReaction}
-                            cardId={card.id}
-                            projectId={projectId}
-                            attachments={attachments}
-                            mentionMembers={mentionMembers}
-                            editingCommentId={editingCommentId}
-                            isSaving={updateComment.isPending}
-                            onStartEdit={startEditingComment}
-                            editStartPoint={editStartPointRef.current}
-                            onCancelEdit={() => setEditingCommentId(null)}
-                            onSaveEdit={saveComment}
-                            onReply={comment =>
-                                setReplyingTo({
-                                    id: comment.id,
-                                    authorName: comment.author.firstName || 'this comment',
-                                })
-                            }
-                            onDelete={commentId => deleteComment.mutate(commentId)}
-                        />
-                    </View>
+                    </CardFormProvider>
                 </ScrollView>
             </DropZone>
-            {/* Commentors keep the composer — that is what the role means. */}
-            {canComment ? (
-                <CommentComposer
-                    widthClass={widthClass}
-                    cardId={card.id}
-                    projectId={projectId}
-                    attachments={attachments}
-                    onSubmit={submitComment}
-                    isPending={createComment.isPending}
-                    replyingTo={replyingTo ?? undefined}
-                    onCancelReply={() => setReplyingTo(null)}
-                />
-            ) : null}
             <LabelManagerDialog
                 isVisible={isManagingLabels}
                 onClose={() => setIsManagingLabels(false)}
@@ -497,6 +118,110 @@ export function CardDetail({
     )
 }
 
-// ChecklistSection used to hide the whole section when empty. It is gone: the
-// section now owns an "Add item" composer, and hiding it would mean a card with
-// no checklist offers no way to start one.
+type CardRole = Pick<CardFormValue, 'canEdit' | 'canComment' | 'isOwner'>
+
+/**
+ * What the card's host components render from. Memoized on its parts: every
+ * field and section reads this context, so a new object each render would
+ * re-render all of them.
+ */
+function useCardFormValue(
+    props: CardDetailProps,
+    role: CardRole,
+    onManageLabels: () => void
+): CardFormValue {
+    const {
+        card,
+        projectId,
+        projectLabels,
+        projectEpics,
+        projectSprints,
+        sprintsEnabled,
+        projectMembers,
+        projectLists,
+        projectCards,
+        titleRef,
+    } = props
+    const { canEdit, canComment, isOwner } = role
+    return useMemo(
+        () => ({
+            card,
+            projectId,
+            projectLabels,
+            projectEpics,
+            projectSprints,
+            sprintsEnabled,
+            projectMembers,
+            projectLists,
+            projectCards,
+            canEdit,
+            canComment,
+            isOwner,
+            titleRef,
+            onManageLabels,
+        }),
+        [
+            card,
+            projectId,
+            projectLabels,
+            projectEpics,
+            projectSprints,
+            sprintsEnabled,
+            projectMembers,
+            projectLists,
+            projectCards,
+            canEdit,
+            canComment,
+            isOwner,
+            titleRef,
+            onManageLabels,
+        ]
+    )
+}
+
+interface CardFormBodyProps {
+    cardId: string
+    /** Everyone who cannot edit the card; the comment sections gate on the role instead. */
+    readOnly: boolean
+}
+
+/**
+ * The card's form. Waits for the row, the type and the host's components:
+ * rendered without the components, the card's own fields would show core's
+ * placeholder for a kind it cannot render.
+ */
+function CardFormBody({ cardId, readOnly }: CardFormBodyProps) {
+    const card = useCardForm(cardId)
+    if (!card.isReady || !card.ui) return null
+    return <CardFormView {...card} ui={card.ui} cardId={cardId} readOnly={readOnly} />
+}
+
+const noDoc = (): CollabDoc | null => null
+
+type CardFormViewProps = CardFormBodyProps &
+    Omit<ReturnType<typeof useCardForm>, 'ui'> & { ui: FormHostUi }
+
+/**
+ * Split out so `ui` is non-null for this component's whole life, which keeps
+ * its `useDoc` call unconditional.
+ */
+function CardFormView({ cardId, readOnly, host, ui, edit, context }: CardFormViewProps) {
+    const useDoc = ui.useDoc ?? noDoc
+    const collab = useDoc(cardId)
+    if (!edit.definition) return null
+    return (
+        <FormRenderer
+            host={host}
+            ui={ui}
+            definition={edit.definition}
+            layout="sections"
+            form={edit.form}
+            context={context}
+            recordId={cardId}
+            readOnly={readOnly}
+            collab={collab}
+            schemaRef={edit.schemaRef}
+            testID="card-form"
+        />
+    )
+}

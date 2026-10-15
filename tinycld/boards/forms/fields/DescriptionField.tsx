@@ -116,7 +116,7 @@ function roomFromCollab(collab: CollabDoc | null, isConnected: boolean): Descrip
     }
 }
 
-interface DescriptionSectionArgs {
+interface DescriptionSlotsArgs {
     cardId: string
     projectId: string
     attachments: BoardAttachment[]
@@ -124,22 +124,18 @@ interface DescriptionSectionArgs {
     description?: string
     onSave: (value: string) => void
     canEdit: boolean
+    room: DescriptionRoom
 }
 
 /**
- * The description, stored as Markdown (see types.ts) and rendered as such,
- * over the board's presence room.
+ * The description, stored as Markdown (see types.ts) and rendered as such.
  *
- * Editing stays plain-text: the source is what you edit, the rendering is what
- * you read. `EditableText` renders `renderValue` in place of its own <Text>
- * while idle and swaps back to a raw input the moment an edit starts, so the
- * markdown never has to round-trip through a rich-text model.
+ * With a room it is the collaborative editor; without one, editing stays
+ * plain-text: the source is what you edit, the rendering is what you read.
+ * `EditableText` renders `renderValue` in place of its own <Text> while idle
+ * and swaps back to a raw input the moment an edit starts, so the markdown
+ * never has to round-trip through a rich-text model.
  */
-export function useDescriptionSection(args: DescriptionSectionArgs): DescriptionEditorSlots {
-    const room = useBoardPresenceContext()
-    return useDescriptionSlots({ ...args, room })
-}
-
 function useDescriptionSlots({
     cardId,
     projectId,
@@ -149,7 +145,7 @@ function useDescriptionSlots({
     onSave,
     canEdit,
     room,
-}: DescriptionSectionArgs & { room: DescriptionRoom }): DescriptionEditorSlots {
+}: DescriptionSlotsArgs): DescriptionEditorSlots {
     const { doc, isReady, isConnected, canEditDoc, awareness, identity } = room
 
     // Latched, not sampled: once collaborative it stays collaborative for this

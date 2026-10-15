@@ -16,6 +16,11 @@ export interface CardFormValue {
     projectCards: BoardCardView[]
     projectLists: { id: string; name: string }[]
     canEdit: boolean
+    /**
+     * The reader's role, for the comment and reaction sections. Never folded
+     * with a field's `disabled`: a read-only form still lets a commenter comment.
+     */
+    canComment: boolean
     isOwner: boolean
     /** Lets the container start a title edit for the `e` shortcut. */
     titleRef?: RefObject<EditableTextHandle | null>

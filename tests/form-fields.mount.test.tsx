@@ -94,6 +94,7 @@ function cardForm(canEdit: boolean): CardFormValue {
         projectCards: [card],
         projectLists: [{ id: 'l1', name: 'To do' }],
         canEdit,
+        canComment: canEdit,
         isOwner: false,
         onManageLabels: () => {},
     }
