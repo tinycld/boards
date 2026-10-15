@@ -861,15 +861,9 @@ export async function pickOption(scope: Page | Locator, key: string, label: stri
     await choiceInput(scope, key).getByText(label, { exact: true }).click()
 }
 
-/**
- * The option a choice field has selected; its text is the option's label.
- *
- * Read from the fill, because that is the only place the state reaches the
- * DOM: core's SelectInput marks the choice with `accessibilityState`, which
- * react-native-web drops, so there is no `aria-selected` to read.
- */
+/** The option a choice field has checked; its text is the option's label. */
 export function selectedOption(scope: Page | Locator, key: string): Locator {
-    return choiceInput(scope, key).locator('.bg-primary')
+    return choiceInput(scope, key).locator('[aria-checked="true"]')
 }
 
 /** Change the open card's type from its actions menu. */
