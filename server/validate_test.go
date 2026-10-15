@@ -1,7 +1,9 @@
 package boards
 
 import (
+	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -91,5 +93,70 @@ func TestValidateUpdate_TolerationsForGarbage(t *testing.T) {
 	}
 	if err := validateUpdate("board", nil); err != nil {
 		t.Errorf("an empty update should be a harmless no-op, got %v", err)
+	}
+}
+
+// splitParagraphUpdate is a real update captured from the description editor:
+// the Enter that split "Line one here" into a second paragraph of card
+// jao071pc0p3x9iw. y-tiptap writes its position-migration record for the
+// fragment in the same transaction, so the update names that map as its only
+// root — the paragraph itself is filed under the fragment by item id.
+const splitParagraphUpdate = "" +
+	"01029e91d7ea040f879e91d7ea040003097061726167726170682801365f5f74" +
+	"69707461705f706f736974696f6e5f6d6967726174696f6e733a726f6f743a63" +
+	"6172643a6a616f3037317063307033783969770d313239373436373535303a31" +
+	"360176050776657273696f6e7d0106636c69656e747d9ea2aed50905636c6f63" +
+	"6b7d10047365656e750175027d9ea2aed5097d10097472616e73666572737501" +
+	"760206736f75726365760406636c69656e747d9ea2aed50905636c6f636b7d00" +
+	"066c656e6774687d0108626f756e646172797703656e64067461726765747604" +
+	"06636c69656e747d9ea2aed50905636c6f636b7d0f04747970657e08626f756e" +
+	"646172797703656e6400"
+
+func capturedSplit(t *testing.T, card string) []byte {
+	t.Helper()
+	update, err := hex.DecodeString(splitParagraphUpdate)
+	if err != nil {
+		t.Fatalf("decode fixture: %v", err)
+	}
+	// Same byte length, so the key's length prefix still holds.
+	original := []byte("card:jao071pc0p3x9iw")
+	if len(card) != len(original) {
+		t.Fatalf("replacement %q must be %d bytes", card, len(original))
+	}
+	return bytes.Replace(update, original, []byte(card), 1)
+}
+
+// Rejecting this dropped the paragraph with the record: the server's copy of
+// a description stopped at its first block, and every later update depended on
+// the dropped one, so nothing the user typed after the first Enter was saved.
+func TestValidateUpdate_AcceptsTheEditorsPositionMigrations(t *testing.T) {
+	update := capturedSplit(t, "card:jao071pc0p3x9iw")
+	keys, err := yjsdoc.RootKeysOfUpdate("board", update)
+	if err != nil {
+		t.Fatalf("probe: %v", err)
+	}
+	want := "__tiptap_position_migrations:root:card:jao071pc0p3x9iw"
+	if len(keys) != 1 || keys[0] != want {
+		t.Fatalf("fixture no longer names the migrations root: %v", keys)
+	}
+	if err := validateUpdate("board", update); err != nil {
+		t.Errorf("a paragraph split was rejected: %v", err)
+	}
+}
+
+// The allowance is for a card's own record only, not a way to write any root
+// that carries the migrations prefix.
+func TestValidateUpdate_RejectsPositionMigrationsOfAForeignRoot(t *testing.T) {
+	for _, root := range []string{
+		"prosemirror:jao071pc",
+		"card:JAO071PC0P3X9IW",
+		"card:jao071pc0p3x9i ",
+	} {
+		t.Run(root, func(t *testing.T) {
+			err := validateUpdate("board", capturedSplit(t, root))
+			if err == nil || !strings.Contains(err.Error(), "unexpected root") {
+				t.Errorf("migrations for root %q: got %v, want an unexpected-root error", root, err)
+			}
+		})
 	}
 }
