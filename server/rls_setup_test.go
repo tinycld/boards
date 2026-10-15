@@ -411,6 +411,14 @@ func cardsChecklistItem(t *testing.T, app core.App, project, card *core.Record, 
 // validation rather than landing with an empty file.
 func cardsAttachment(t *testing.T, app core.App, project, card, uploader *core.Record, name string) *core.Record {
 	t.Helper()
+	return cardsFieldAttachment(t, app, project, card, uploader, name, "")
+}
+
+// cardsFieldAttachment is cardsAttachment for a file a custom file field
+// uploaded: `field` names the key it belongs to, and is empty for a plain
+// attachment.
+func cardsFieldAttachment(t *testing.T, app core.App, project, card, uploader *core.Record, name, field string) *core.Record {
+	t.Helper()
 	col, err := app.FindCollectionByNameOrId("boards_attachments")
 	if err != nil {
 		t.Fatalf("find boards_attachments: %v", err)
@@ -426,6 +434,7 @@ func cardsAttachment(t *testing.T, app core.App, project, card, uploader *core.R
 	r.Set("file", f)
 	r.Set("size", len(body))
 	r.Set("uploaded_by", uploader.Id)
+	r.Set("field", field)
 	if err := app.Save(r); err != nil {
 		t.Fatalf("save attachment %s: %v", name, err)
 	}

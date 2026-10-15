@@ -796,6 +796,8 @@ func TestMoveCard_HandsCustomFragmentsToTheTargetRoom(t *testing.T) {
 	// An edit to the card in the stale source room after the move.
 	notes := customFragment(card.Id, "html", "notes")
 	writeNamedFragment(t, source, notes, "<p>Typed in the old room.</p>")
+	// Seeded so the final check is true only if the flush forgot it.
+	state.setBaseline(env.project.Id, notes, "stale\n")
 	if err := makeFlush(env.app, state)(t.Context(), env.project.Id, source); err != nil {
 		t.Fatalf("source flush: %v", err)
 	}

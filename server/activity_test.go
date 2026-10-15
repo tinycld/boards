@@ -266,6 +266,17 @@ func TestActivity_ChecklistCompletionAndAttachment(t *testing.T) {
 	}
 }
 
+// A file a custom file field uploads is the field's value, not an attachment
+// of the card; the card's own attachment list does not show it either.
+func TestActivity_FieldUploadIsNotAnAttachment(t *testing.T) {
+	env := setupActivityEnv(t)
+	cardsFieldAttachment(t, env.app, env.project, env.card, env.owner, "shot.png", "screenshot")
+	requireKinds(t, activityRows(t, env.app, env.card.Id))
+
+	cardsAttachment(t, env.app, env.project, env.card, env.owner, "spec.pdf")
+	requireKinds(t, activityRows(t, env.app, env.card.Id), "attachment_added")
+}
+
 // A plain app.Save — automation, a seed, the description flush — has no
 // request and therefore no actor.
 func TestActivity_ServerWriteHasNoActor(t *testing.T) {

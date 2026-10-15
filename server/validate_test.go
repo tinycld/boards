@@ -170,6 +170,10 @@ func TestValidateUpdate_RejectsOtherKeyedShapes(t *testing.T) {
 		"__tiptap_position_migrations:root:card:abc123:pdf:steps",
 		"__tiptap_position_migrations:root:card:abc123:md:",
 		"__tiptap_position_migrations:root:card:abc123:md:Steps",
+		"card:abc123\n",
+		"card:abc123:md:steps\n",
+		"__tiptap_position_migrations:item:1:2:md:steps",
+		"__tiptap_position_migrations:root:card:abc123:md:steps\n",
 	} {
 		t.Run(fragment, func(t *testing.T) {
 			if err := validateUpdate("board", updateWriting(t, fragment)); err == nil {

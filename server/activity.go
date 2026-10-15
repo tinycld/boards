@@ -77,7 +77,9 @@ func registerCardActivity(app core.App) {
 	})
 	app.OnRecordAfterCreateSuccess("boards_attachments").BindFunc(func(e *core.RecordEvent) error {
 		actor := actorOf(e.Record)
-		if card := parentCard(e.App, e.Record.GetString("card")); card != nil {
+		// A file a custom file field uploaded is that field's value, not an
+		// attachment of the card.
+		if card := parentCard(e.App, e.Record.GetString("card")); card != nil && e.Record.GetString("field") == "" {
 			name := e.Record.GetString("name")
 			if name == "" {
 				name = e.Record.GetString("file")

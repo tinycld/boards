@@ -360,6 +360,8 @@ func TestFlush_SkipsAKeyTheCardsFormDoesNotDeclare(t *testing.T) {
 
 	ghost := customFragment(card.Id, "md", "ghost")
 	writeNamedFragment(t, handle, ghost, "Not a field of this type.")
+	// Seeded so the final check is true only if the flush forgot it.
+	state.setBaseline(env.project.Id, ghost, "stale\n")
 	if err := flush(t.Context(), env.project.Id, handle); err != nil {
 		t.Fatalf("flush: %v", err)
 	}
@@ -379,6 +381,43 @@ func TestFlush_SkipsAKeyTheCardsFormDoesNotDeclare(t *testing.T) {
 	}
 	if _, ok := fieldsOf(t, env, card.Id)["steps"]; ok {
 		t.Error("a fragment in the wrong format was saved into steps")
+	}
+}
+
+func TestFlush_ReadsTheCardsCurrentTypeOnEveryFlush(t *testing.T) {
+	// A flush must not serve a type it read earlier: once the form drops a
+	// key's collaborative flag, an edit to that fragment is not a field.
+	env := setupCardsEnv(t)
+	form := cardsForm(t, env.app, bugDefinitionJSON)
+	card := cardsCardOfForm(t, env, "Typed", form)
+	_, state, flush, handle := boardRoom(t, env)
+	steps := customFragment(card.Id, "md", "steps")
+
+	writeNamedFragment(t, handle, steps, "first")
+	if err := flush(t.Context(), env.project.Id, handle); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	if got := fieldsOf(t, env, card.Id)["steps"]; got != "first\n" {
+		t.Fatalf("steps = %q", got)
+	}
+
+	edited := strings.Replace(bugDefinitionJSON,
+		`"label": "Steps", "collaborative": true`, `"label": "Steps"`, 1)
+	form.Set("definition", edited)
+	if err := env.app.Save(form); err != nil {
+		t.Fatalf("edit form: %v", err)
+	}
+	// Seeding cannot rewrite a fragment that already has content, so a stale
+	// baseline stands in for "the text changed since the last flush".
+	state.setBaseline(env.project.Id, steps, "stale\n")
+	if err := flush(t.Context(), env.project.Id, handle); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	if got := fieldsOf(t, env, card.Id)["steps"]; got != "first\n" {
+		t.Errorf("steps = %q, want it unchanged", got)
+	}
+	if !state.matchesBaseline(env.project.Id, steps, "") {
+		t.Error("the no-longer-collaborative fragment kept a baseline")
 	}
 }
 
