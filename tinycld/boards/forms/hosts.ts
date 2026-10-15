@@ -52,11 +52,8 @@ const hosts: FormHostDefInput[] = [
             'created',
             'updated',
         ],
-        // The old card body's render order. Every built-in draws its own chrome
-        // on a card (`bare`): the property rows, the section headings and the
-        // spacing between them are the card's, not the form engine's. The
-        // comment composer is not here: it is the card frame's, pinned below
-        // the scroll (CardDetail).
+        // A bare built-in's host component draws everything; core passes it no error,
+        // required mark or description, so it must validate and label itself.
         builtin: [
             {
                 key: 'title',

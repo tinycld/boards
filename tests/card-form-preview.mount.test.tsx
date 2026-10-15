@@ -49,6 +49,7 @@ const [def] = hostDefListSchema.parse(hosts)
 const host: FormHost = {
     ...def,
     pkgSlug: 'boards',
+    pkgName: 'Boards',
     ui: async () => (await import('../tinycld/boards/forms/ui')).default,
 }
 const definition = defaultDefinitionFor(def)

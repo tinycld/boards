@@ -23,18 +23,6 @@ vi.mock('@tinycld/core/lib/auth', () => ({
     useAuth: () => ({ user: { id: 'u1' }, isLoggedIn: true }),
 }))
 
-// The shared lucide stub only binds the icons it lists by name; this toolbar
-// draws a few it does not, so any unlisted icon draws nothing.
-vi.mock('lucide-react-native', async importOriginal => {
-    const actual = await importOriginal<Record<string, unknown>>()
-    const Icon = () => null
-    return new Proxy(actual, {
-        get: (target, prop) =>
-            Reflect.get(target, prop) ?? (/^[A-Z]/.test(String(prop)) ? Icon : undefined),
-        has: () => true,
-    })
-})
-
 vi.mock('@tinycld/core/lib/pocketbase', async () => {
     const { BasicIndex, createCollection, localOnlyCollectionOptions } = await import(
         '@tanstack/db'

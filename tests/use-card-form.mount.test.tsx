@@ -45,6 +45,7 @@ vi.mock('@tinycld/core/lib/forms/use-form-hosts', async () => {
     const host = {
         ...def,
         pkgSlug: 'boards',
+        pkgName: 'Boards',
         ui: async () => (await import('../tinycld/boards/forms/ui')).default,
     }
     return { useFormHost: (key: string | undefined) => (key === host.key ? host : undefined) }
