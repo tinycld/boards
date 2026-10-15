@@ -199,9 +199,6 @@ func registerShared(app *pocketbase.PocketBase) {
 	// Self-links and contradictory blocks-both-ways pairs: what the unique
 	// index and the rules cannot say. See card_links.go.
 	registerCardLinkGuard(app)
-	// A plain file on a card whose type hides Attachments: the board face
-	// takes a drop without knowing the type. See attachment_type_guard.go.
-	registerAttachmentTypeGuard(app)
 	// The sprint invariants — created planned, forward-only, one active per
 	// board, a card joins only an open sprint — then the server-owned
 	// columns and the number. Guard first so a refused row never reaches the

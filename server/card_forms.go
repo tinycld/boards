@@ -61,63 +61,6 @@ func (c *formCache) load(formID string) *forms.Definition {
 	return def
 }
 
-// showsField reports whether a card's type shows a field for the card's stored
-// values: the static `hidden` flag, then the type's rules, as the card detail
-// evaluates them. A card without a type, or whose type is gone, opens on the
-// default type, so it is judged by that one. With no readable type at all,
-// nothing is hidden.
-func (c *formCache) showsField(card *core.Record, key string, ctx forms.Context) (bool, error) {
-	def := c.definition(card.GetString("form"))
-	if def == nil {
-		id, err := forms.DefaultFormID(c.app, cardFormHost)
-		if err != nil {
-			return false, err
-		}
-		def = c.definition(id)
-	}
-	if def == nil {
-		return true, nil
-	}
-	values, err := cardRuleValues(card, def)
-	if err != nil {
-		return false, err
-	}
-	state, err := forms.Evaluate(def, values, ctx)
-	if err != nil {
-		return false, err
-	}
-	return state.Fields[key].Visible, nil
-}
-
-// cardRuleValues assembles what a type's rules read: built-ins from the card's
-// own columns, custom keys from `fields`. A built-in kept elsewhere (checklist
-// rows, sections) has no value here. Evaluate needs JSON-decoded types, so the
-// map is round-tripped through JSON.
-func cardRuleValues(card *core.Record, def *forms.Definition) (map[string]any, error) {
-	fields, err := cardFields(card)
-	if err != nil {
-		return nil, err
-	}
-	columns := card.Collection().Fields
-	values := map[string]any{}
-	for _, f := range def.Fields {
-		if f.Kind != "builtin" {
-			values[f.Key] = fields[f.Key]
-		} else if columns.GetByName(f.Key) != nil {
-			values[f.Key] = card.Get(f.Key)
-		}
-	}
-	raw, err := json.Marshal(values)
-	if err != nil {
-		return nil, err
-	}
-	normalized := map[string]any{}
-	if err := json.Unmarshal(raw, &normalized); err != nil {
-		return nil, err
-	}
-	return normalized, nil
-}
-
 // collabField is how a collaborative field of a card type is persisted: the
 // format its fragment carries and the most runes its value may hold.
 type collabField struct {
