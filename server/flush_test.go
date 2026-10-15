@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pocketbase/pocketbase/core"
+
 	"tinycld.org/core/markdown"
 	"tinycld.org/core/realtime"
 	"tinycld.org/core/yjsdoc"
@@ -39,19 +41,49 @@ func boardRoom(t *testing.T, env *cardsEnv) (*yjsdoc.Runtime, *boardDocState, re
 // client's update would.
 func writeFragment(t *testing.T, handle realtime.DocHandle, cardID, text string) {
 	t.Helper()
+	writeNamedFragment(t, handle, cardFragment(cardID), text)
+}
+
+// writeNamedFragment fills any card fragment, parsing text with the format its
+// name declares (markdown for a description or an `md` field, HTML for an
+// `html` field).
+func writeNamedFragment(t *testing.T, handle realtime.DocHandle, fragment, text string) {
+	t.Helper()
 	docHandle, ok := handle.(*yjsdoc.Handle)
 	if !ok {
 		t.Fatalf("unexpected handle type %T", handle)
 	}
-	pmJSON, err := json.Marshal(markdown.ToPM(text))
+	_, format, _, ok := parseCardFragment(fragment)
+	if !ok {
+		t.Fatalf("not a card fragment: %q", fragment)
+	}
+	pmJSON, err := json.Marshal(fragmentPM(format, text))
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
 	if err := docHandle.WithDoc(func(doc *yjsdoc.Doc) error {
-		return yjsdoc.SeedFragmentFromPMJSON(doc, cardFragment(cardID), pmJSON)
+		return yjsdoc.SeedFragmentFromPMJSON(doc, fragment, pmJSON)
 	}); err != nil {
 		t.Fatalf("write fragment: %v", err)
 	}
+}
+
+// readNamedFragment returns a fragment's content as ProseMirror JSON.
+func readNamedFragment(t *testing.T, handle realtime.DocHandle, fragment string) []byte {
+	t.Helper()
+	docHandle, ok := handle.(*yjsdoc.Handle)
+	if !ok {
+		t.Fatalf("unexpected handle type %T", handle)
+	}
+	var pmJSON []byte
+	if err := docHandle.WithDoc(func(doc *yjsdoc.Doc) error {
+		var err error
+		pmJSON, err = yjsdoc.PMJSONFromFragment(doc, fragment)
+		return err
+	}); err != nil {
+		t.Fatalf("read fragment %s: %v", fragment, err)
+	}
+	return pmJSON
 }
 
 func description(t *testing.T, env *cardsEnv, cardID string) string {
@@ -288,5 +320,288 @@ func TestBootstrap_ThenFlushIsANoOp(t *testing.T) {
 	}
 	if !after.GetDateTime("updated").Equal(stamp) {
 		t.Errorf("opening a board rewrote a card nobody edited: %q", after.GetString("description"))
+	}
+}
+
+// Custom collaborative fields share the board's document with descriptions:
+// `card:<id>:md:<key>` and `card:<id>:html:<key>`, persisted into the card's
+// `fields` column. These cases hold the same lines the description cases
+// above hold, plus the one only a keyed fragment has: the card's type decides
+// which keys exist.
+
+func TestFlush_WritesACustomMarkdownFragmentIntoFields(t *testing.T) {
+	env := setupCardsEnv(t)
+	form := cardsForm(t, env.app, bugDefinitionJSON)
+	card := cardsCardOfForm(t, env, "Typed", form)
+	_, _, flush, handle := boardRoom(t, env)
+
+	writeNamedFragment(t, handle, customFragment(card.Id, "md", "steps"), "1. open\n2. click")
+	if err := flush(t.Context(), env.project.Id, handle); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	// Stored as the markdown serializer writes it, trailing newline and all,
+	// exactly as a description is.
+	if got := fieldsOf(t, env, card.Id)["steps"]; got != "1. open\n2. click\n" {
+		t.Fatalf("steps = %q", got)
+	}
+}
+
+func TestFlush_SkipsAKeyTheCardsFormDoesNotDeclare(t *testing.T) {
+	// A fragment outlives a type change, and a crafted client can name any
+	// key. Saving it would put a value the form does not know into `fields`,
+	// which the host's write gate rejects — failing the whole board's flush
+	// on every retry.
+	env := setupCardsEnv(t)
+	form := cardsForm(t, env.app, bugDefinitionJSON)
+	card := cardsCardOfForm(t, env, "Typed", form)
+	setFields(t, env.app, card, map[string]any{"severity": "high"})
+	_, state, flush, handle := boardRoom(t, env)
+
+	ghost := customFragment(card.Id, "md", "ghost")
+	writeNamedFragment(t, handle, ghost, "Not a field of this type.")
+	if err := flush(t.Context(), env.project.Id, handle); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	fields := fieldsOf(t, env, card.Id)
+	if _, ok := fields["ghost"]; ok || fields["severity"] != "high" || len(fields) != 1 {
+		t.Errorf("fields changed: %v", fields)
+	}
+	if !state.matchesBaseline(env.project.Id, ghost, "") {
+		t.Error("the undeclared fragment kept a baseline")
+	}
+
+	// The same key in the wrong format is not the declared field either.
+	wrongFormat := customFragment(card.Id, "html", "steps")
+	writeNamedFragment(t, handle, wrongFormat, "<p>Steps as HTML.</p>")
+	if err := flush(t.Context(), env.project.Id, handle); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	if _, ok := fieldsOf(t, env, card.Id)["steps"]; ok {
+		t.Error("a fragment in the wrong format was saved into steps")
+	}
+}
+
+func TestFlush_SkipsCustomFragmentsOfACardWithNoType(t *testing.T) {
+	env := setupCardsEnv(t)
+	_, _, flush, handle := boardRoom(t, env)
+
+	writeNamedFragment(t, handle, customFragment(env.card.Id, "md", "steps"), "Orphan text.")
+	if err := flush(t.Context(), env.project.Id, handle); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	if fields := fieldsOf(t, env, env.card.Id); len(fields) != 0 {
+		t.Errorf("a card with no type got fields: %v", fields)
+	}
+}
+
+func TestFlush_HtmlFragmentRoundTrips(t *testing.T) {
+	env := setupCardsEnv(t)
+	form := cardsForm(t, env.app, bugDefinitionJSON)
+	card := cardsCardOfForm(t, env, "Typed", form)
+	_, _, flush, handle := boardRoom(t, env)
+
+	const notes = "<p>Seen on <strong>staging</strong> only.</p>"
+	fragment := customFragment(card.Id, "html", "notes")
+	writeNamedFragment(t, handle, fragment, notes)
+	written := readNamedFragment(t, handle, fragment)
+	if err := flush(t.Context(), env.project.Id, handle); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	if got := fieldsOf(t, env, card.Id)["notes"]; got != notes {
+		t.Fatalf("notes = %q, want %q", got, notes)
+	}
+
+	// A new room seeds the stored HTML back into the same document content.
+	_, _, _, reopened := boardRoom(t, env)
+	if got := readNamedFragment(t, reopened, fragment); string(got) != string(written) {
+		t.Errorf("reseeded fragment = %s, want %s", got, written)
+	}
+}
+
+func TestFlush_ClampsACustomValue(t *testing.T) {
+	env := setupCardsEnv(t)
+	form := cardsForm(t, env.app, bugDefinitionJSON)
+	card := cardsCardOfForm(t, env, "Typed", form)
+	_, _, flush, handle := boardRoom(t, env)
+
+	writeNamedFragment(t, handle, customFragment(card.Id, "md", "steps"), strings.Repeat("x", 40000))
+	if err := flush(t.Context(), env.project.Id, handle); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	steps, _ := fieldsOf(t, env, card.Id)["steps"].(string)
+	if got := len([]rune(steps)); got != descriptionRuneLimit {
+		t.Errorf("stored %d runes, want %d", got, descriptionRuneLimit)
+	}
+}
+
+func TestFlush_KeepsBaselinePerFragment(t *testing.T) {
+	// A card's description and its custom fields are separate fragments of
+	// one row. Keyed by card, their baselines would overwrite each other and
+	// every flush would rewrite whichever one lost.
+	env := setupCardsEnv(t)
+	form := cardsForm(t, env.app, bugDefinitionJSON)
+	card := cardsCardOfForm(t, env, "Typed", form)
+	_, _, flush, handle := boardRoom(t, env)
+
+	descriptionWrites, saves := 0, 0
+	env.app.OnRecordUpdate("boards_cards").BindFunc(func(e *core.RecordEvent) error {
+		if e.Record.Id == card.Id {
+			saves++
+			if e.Record.Original().GetString("description") != e.Record.GetString("description") {
+				descriptionWrites++
+			}
+		}
+		return e.Next()
+	})
+
+	writeFragment(t, handle, card.Id, "The description.")
+	writeNamedFragment(t, handle, customFragment(card.Id, "md", "steps"), "Some steps.")
+	if err := flush(t.Context(), env.project.Id, handle); err != nil {
+		t.Fatalf("first flush: %v", err)
+	}
+
+	// Only one field changes now; the description and steps must stay put.
+	saves = 0
+	writeNamedFragment(t, handle, customFragment(card.Id, "html", "notes"), "<p>A note.</p>")
+	if err := flush(t.Context(), env.project.Id, handle); err != nil {
+		t.Fatalf("second flush: %v", err)
+	}
+	if saves != 1 {
+		t.Errorf("second flush saved the card %d times, want 1", saves)
+	}
+
+	saves = 0
+	if err := flush(t.Context(), env.project.Id, handle); err != nil {
+		t.Fatalf("third flush: %v", err)
+	}
+	if saves != 0 {
+		t.Errorf("a flush with no edits saved the card %d times", saves)
+	}
+	if descriptionWrites != 1 {
+		t.Errorf("description written %d times, want 1", descriptionWrites)
+	}
+	fields := fieldsOf(t, env, card.Id)
+	if fields["steps"] != "Some steps.\n" || fields["notes"] != "<p>A note.</p>" {
+		t.Errorf("fields = %v", fields)
+	}
+}
+
+func TestFlush_IgnoresAForeignBoardCustomFragment(t *testing.T) {
+	env := setupCardsEnv(t)
+	form := cardsForm(t, env.app, bugDefinitionJSON)
+	otherProject := cardsProject(t, env.app, "Other board", env.owner)
+	otherList := cardsList(t, env.app, otherProject, "To do", "a0")
+	foreign := cardsCard(t, env.app, otherProject, otherList, "foreign-card", "a0", env.owner)
+	foreign.Set("form", form.Id)
+	setFields(t, env.app, foreign, map[string]any{"steps": "Untouched."})
+
+	_, _, flush, handle := boardRoom(t, env)
+	writeNamedFragment(t, handle, customFragment(foreign.Id, "md", "steps"), "Injected by another board.")
+	if err := flush(t.Context(), env.project.Id, handle); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	if got := fieldsOf(t, env, foreign.Id)["steps"]; got != "Untouched." {
+		t.Errorf("a board's flush wrote to another board's card: %q", got)
+	}
+}
+
+func TestBootstrap_SeedsCustomFragments(t *testing.T) {
+	env := setupCardsEnv(t)
+	form := cardsForm(t, env.app, bugDefinitionJSON)
+	card := cardsCardOfForm(t, env, "Typed", form)
+	setFields(t, env.app, card, map[string]any{"steps": "a", "severity": "high"})
+
+	_, _, _, handle := boardRoom(t, env)
+	var pm markdown.PMNode
+	if err := json.Unmarshal(readNamedFragment(t, handle, customFragment(card.Id, "md", "steps")), &pm); err != nil {
+		t.Fatal(err)
+	}
+	if got := markdown.FromPM(&pm); got != "a\n" {
+		t.Errorf("seeded steps = %q", got)
+	}
+}
+
+func TestBootstrap_ThenFlushLeavesCustomFieldsAlone(t *testing.T) {
+	env := setupCardsEnv(t)
+	form := cardsForm(t, env.app, bugDefinitionJSON)
+	card := cardsCardOfForm(t, env, "Typed", form)
+	setFields(t, env.app, card, map[string]any{
+		"steps": "Timings: ~2s and a | pipe.",
+		"notes": "<p>Some <em>notes</em> &amp; more</p>",
+	})
+
+	_, _, flush, handle := boardRoom(t, env)
+	saves := 0
+	env.app.OnRecordUpdate("boards_cards").BindFunc(func(e *core.RecordEvent) error {
+		saves++
+		return e.Next()
+	})
+	if err := flush(t.Context(), env.project.Id, handle); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	if saves != 0 {
+		t.Errorf("opening a board rewrote %d card(s) nobody edited", saves)
+	}
+}
+
+func TestFingerprint_RecordsMatchASeededDocumentWithCustomFields(t *testing.T) {
+	// A checkpoint or parked document is reused only when the records still
+	// hash to what its baselines say. The two must agree for custom fields
+	// too, or every board with a typed card would re-seed on each open.
+	env := setupCardsEnv(t)
+	form := cardsForm(t, env.app, bugDefinitionJSON)
+	card := cardsCardOfForm(t, env, "Typed", form)
+	setFields(t, env.app, card, map[string]any{"steps": "Do **this**.", "notes": "<p>n</p>"})
+	env.card.Set("description", "Plain description.")
+	if err := env.app.Save(env.card); err != nil {
+		t.Fatal(err)
+	}
+
+	_, state, _, _ := boardRoom(t, env)
+	seeded, ok := state.fingerprint(env.project.Id)
+	if !ok {
+		t.Fatal("no fingerprint for a seeded board")
+	}
+	fromRecords, err := makeFingerprint(env.app, newBoardDocState())(env.project.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seeded != fromRecords {
+		t.Error("the records' fingerprint differs from the seeded document's")
+	}
+
+	setFields(t, env.app, card, map[string]any{"steps": "Changed outside the room."})
+	changed, err := makeFingerprint(env.app, newBoardDocState())(env.project.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed == fromRecords {
+		t.Error("a custom value written outside the room did not change the fingerprint")
+	}
+}
+
+func TestParseCardFragment(t *testing.T) {
+	cases := []struct {
+		name                string
+		cardID, format, key string
+		ok                  bool
+	}{
+		{"card:abc", "abc", "", "", true},
+		{"card:abc:md:steps", "abc", "md", "steps", true},
+		{"card:abc:html:notes", "abc", "html", "notes", true},
+		{"card:", "", "", "", false},
+		{"card:abc:md:", "", "", "", false},
+		{"card:abc:pdf:steps", "", "", "", false},
+		{"card:abc:md", "", "", "", false},
+		{"prosemirror", "", "", "", false},
+	}
+	for _, c := range cases {
+		cardID, format, key, ok := parseCardFragment(c.name)
+		if cardID != c.cardID || format != c.format || key != c.key || ok != c.ok {
+			t.Errorf("parseCardFragment(%q) = (%q, %q, %q, %v)", c.name, cardID, format, key, ok)
+		}
+	}
+	if got := customFragment("abc", "md", "steps"); got != "card:abc:md:steps" {
+		t.Errorf("customFragment = %q", got)
 	}
 }

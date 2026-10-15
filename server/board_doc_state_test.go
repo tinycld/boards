@@ -1,6 +1,8 @@
 package boards
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 )
 
@@ -75,7 +77,7 @@ func TestBaseline_ForgetCardStopsRetrying(t *testing.T) {
 	state := newBoardDocState()
 	state.open("board")
 	state.setBaseline("board", "card", "text\n")
-	state.forgetCard("board", "card")
+	state.forget("board", "card")
 
 	if !state.matchesBaseline("board", "card", "") {
 		t.Error("a forgotten card should fall back to the empty baseline")
@@ -115,5 +117,29 @@ func TestFingerprint_FollowsTheBaselines(t *testing.T) {
 	state.drop("board")
 	if _, ok := state.fingerprint("board"); ok {
 		t.Fatal("a dropped board still reported a fingerprint")
+	}
+}
+
+func TestFingerprint_ADescriptionKeepsItsPreviousFingerprint(t *testing.T) {
+	// Before custom fields, a baseline was keyed by card id. A stored
+	// checkpoint carries the fingerprint it was written under, so a board
+	// whose only fragments are descriptions must hash exactly as it did then,
+	// or the upgrade discards every checkpoint.
+	hashes := map[string]string{"b": hashText("Second.\n"), "a": hashText("First.\n")}
+	legacy := sha256.New()
+	for _, id := range []string{"a", "b"} {
+		legacy.Write([]byte(id))
+		legacy.Write([]byte{0})
+		legacy.Write([]byte(hashes[id]))
+		legacy.Write([]byte{0})
+	}
+	want := hex.EncodeToString(legacy.Sum(nil))
+
+	state := newBoardDocState()
+	state.open("board")
+	state.setBaseline("board", cardFragment("a"), "First.\n")
+	state.setBaseline("board", cardFragment("b"), "Second.\n")
+	if got, _ := state.fingerprint("board"); got != want {
+		t.Errorf("fingerprint = %s, want the pre-fragment %s", got, want)
 	}
 }

@@ -11,43 +11,48 @@ import (
 	"tinycld.org/core/sharequota"
 )
 
-// ftsConfig is the cards FTS index/search config, driving both the index-sync
-// hooks and the /api/boards/search route. The fts_boards virtual table is created
-// by pb-migrations/1980000002; this only reads and writes it.
+// ftsConfigFor is the cards FTS index/search config, driving both the
+// index-sync hooks and the search routes. The fts_boards virtual table is
+// created by pb-migrations/2090000101; this only reads and writes it.
 //
 // description is markdown source rather than HTML, so it is indexed verbatim.
-var ftsConfig = fts.Config{
-	Slug:       "boards",
-	Collection: "boards_cards",
-	Table:      "fts_boards",
-	Columns: []fts.Column{
-		{FTS: "title", Field: "title"},
-		{FTS: "description", Field: "description"},
-	},
-	Scope: fts.MemberScope{
-		Table:       "boards_project_members",
-		MemberField: "project",
-		UserField:   "user",
-		RecordField: "project",
-	},
-	Output: []fts.OutputColumn{
-		{Name: "title"},
-		{Name: "project"},
-		{Name: "list"},
-		// The card key's numeric half, so a palette row can show OTTER-123.
-		//
-		// Deliberately an OUTPUT column and NOT an indexed one. FTS5 cannot
-		// ALTER-add a column, so indexing the key would mean dropping,
-		// recreating and backfilling fts_boards — real risk to the only search
-		// index boards has — and it would not even work well: `porter
-		// unicode61` splits OTTER-123 on the hyphen, so the full key would
-		// match every card on the OTTER board plus everything mentioning
-		// "123". Exact-key lookup belongs to the URL resolver
-		// (hooks/useCardRoute.ts), which is the right shape for it.
-		{Name: "number", Type: "number"},
-	},
-	// Someone typing `/` wants active work, not history.
-	ExcludeField: "archived",
+// fields is computed: what a card's custom values mean depends on its type,
+// another row, which is why the config needs the app.
+func ftsConfigFor(app core.App) fts.Config {
+	return fts.Config{
+		Slug:       "boards",
+		Collection: "boards_cards",
+		Table:      "fts_boards",
+		Columns: []fts.Column{
+			{FTS: "title", Field: "title"},
+			{FTS: "description", Field: "description"},
+			{FTS: "fields", Text: customFieldsText(app)},
+		},
+		Scope: fts.MemberScope{
+			Table:       "boards_project_members",
+			MemberField: "project",
+			UserField:   "user",
+			RecordField: "project",
+		},
+		Output: []fts.OutputColumn{
+			{Name: "title"},
+			{Name: "project"},
+			{Name: "list"},
+			// The card key's numeric half, so a palette row can show OTTER-123.
+			//
+			// Deliberately an OUTPUT column and NOT an indexed one. FTS5 cannot
+			// ALTER-add a column, so indexing the key would mean dropping,
+			// recreating and backfilling fts_boards — real risk to the only search
+			// index boards has — and it would not even work well: `porter
+			// unicode61` splits OTTER-123 on the hyphen, so the full key would
+			// match every card on the OTTER board plus everything mentioning
+			// "123". Exact-key lookup belongs to the URL resolver
+			// (hooks/useCardRoute.ts), which is the right shape for it.
+			{Name: "number", Type: "number"},
+		},
+		// Someone typing `/` wants active work, not history.
+		ExcludeField: "archived",
+	}
 }
 
 // Register wires server-side behavior for the Boards package. Core's generator
@@ -192,7 +197,7 @@ func registerShared(app *pocketbase.PocketBase) {
 	// would also mount GET /api/boards/search. Boards has no in-app search box,
 	// so the federated /api/search is its only reader; a per-package route
 	// would be dead on arrival.
-	fts.RegisterSync(app, ftsConfig)
+	fts.RegisterSync(app, ftsConfigFor(app))
 
 	// Boards' contribution to the federated GET /api/search. Registered here
 	// rather than in Register so a hosted tenant and a self-hosted deployment

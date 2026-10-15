@@ -7,7 +7,6 @@ import (
 
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
-	"tinycld.org/core/markdown"
 	"tinycld.org/core/yjsdoc"
 )
 
@@ -496,51 +495,61 @@ func membersOnly(app core.App, projectID string, userIDs []string) []string {
 	return out
 }
 
-// handoffDescription moves the card's collaborative text between rooms.
+// handoffDescription moves the card's collaborative text — its description
+// and each collaborative field of its type — between rooms.
 //
-// Source: the fragment lingers until the room closes, and a flush would find
-// it "changed" relative to no baseline and try to write it to a card that now
-// belongs elsewhere (saveDescription refuses, loudly). Setting the baseline to
-// the flushed text keeps every later flush silent unless someone edits the
-// stale fragment — and even then the refusal stands.
+// Source: the fragments linger until the room closes, and a flush would find
+// them "changed" relative to no baseline and try to write them to a card that
+// now belongs elsewhere (the flush refuses, loudly). Setting each baseline to
+// the stored text keeps every later flush silent unless someone edits a stale
+// fragment — and even then the refusal stands.
 //
 // Target: an open room was bootstrapped before this card existed there, so
-// its fragment is seeded now and the update is published to every client in
+// its fragments are seeded now and the update is published to every client in
 // the room. A closed room needs nothing; bootstrap seeds from the record.
 func handoffDescription(app core.App, rt *boardRealtime, source, target string, card *core.Record) {
 	if rt == nil {
 		return
 	}
-	description := card.GetString("description")
-	serialized := markdown.FromPM(markdown.ToPM(description))
+	seeds := cardSeeds(card, newFormCache(app))
 	if rt.state != nil {
-		rt.state.setBaseline(source, card.Id, serialized)
+		for _, seed := range seeds {
+			rt.state.setBaseline(source, seed.fragment, normalizedText(seed.format, seed.text))
+		}
 	}
-	if rt.runtime == nil || description == "" {
+	if rt.runtime == nil || len(seeds) == 0 {
 		return
 	}
 	handle := rt.runtime.HandleFor(target)
 	if handle == nil {
 		return
 	}
-	pmJSON, err := json.Marshal(markdown.ToPM(description))
-	if err != nil {
-		return
+	seeded := false
+	for _, seed := range seeds {
+		pm := fragmentPM(seed.format, seed.text)
+		pmJSON, err := json.Marshal(pm)
+		if err != nil {
+			continue
+		}
+		err = handle.WithDoc(func(doc *yjsdoc.Doc) error {
+			return yjsdoc.SeedFragmentFromPMJSON(doc, seed.fragment, pmJSON)
+		})
+		if err != nil {
+			activityLog.Warn("move: could not seed the target fragment", "card", card.Id, "fragment", seed.fragment, "error", err)
+			continue
+		}
+		seeded = true
+		if rt.state != nil {
+			rt.state.setBaseline(target, seed.fragment, fragmentText(seed.format, pm))
+		}
 	}
-	err = handle.WithDoc(func(doc *yjsdoc.Doc) error {
-		return yjsdoc.SeedFragmentFromPMJSON(doc, cardFragment(card.Id), pmJSON)
-	})
-	if err != nil {
-		activityLog.Warn("move: could not seed the target fragment", "card", card.Id, "error", err)
+	if !seeded {
 		return
-	}
-	if rt.state != nil {
-		rt.state.setBaseline(target, card.Id, serialized)
 	}
 	if room := rt.runtime.RoomFor(target); room != nil {
 		if update, err := handle.EncodeStateAsUpdate(); err == nil {
 			if err := room.PublishDocUpdate(update); err != nil {
-				activityLog.Warn("move: could not publish the seeded fragment", "card", card.Id, "error", err)
+				activityLog.Warn("move: could not publish the seeded fragments", "card", card.Id, "error", err)
 			}
 		}
 	}

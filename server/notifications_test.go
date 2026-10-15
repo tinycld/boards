@@ -274,8 +274,8 @@ func TestNotify_ReplyTellsTheParentAuthorOnce(t *testing.T) {
 
 // --- field-change summaries ---------------------------------------------
 
-// fieldsOf reads the changed-field list a boards_watched "updated" carries.
-func fieldsOf(t *testing.T, n *core.Record) []string {
+// changedFieldsOf reads the changed-field list a boards_watched "updated" carries.
+func changedFieldsOf(t *testing.T, n *core.Record) []string {
 	t.Helper()
 	var meta map[string]any
 	if err := n.UnmarshalJSONField("metadata", &meta); err != nil {
@@ -319,7 +319,7 @@ func TestNotify_FieldEditSendsOneSummaryNamingEveryField(t *testing.T) {
 	if body := notes[0].GetString("body"); !strings.Contains(body, "the priority, the estimate and the due date") {
 		t.Fatalf("body = %q, want it to name all three fields", body)
 	}
-	requireTypes(t, fieldsOf(t, notes[0]), "priority", "estimate", "due")
+	requireTypes(t, changedFieldsOf(t, notes[0]), "priority", "estimate", "due")
 
 	// The actor hears nothing about their own edit.
 	requireTypes(t, notificationTypes(t, env.app, env.owner.Id))
@@ -416,7 +416,7 @@ func TestNotify_SummaryReachesEveryWatcher(t *testing.T) {
 		if len(notes) != 1 || eventOf(t, notes[0]) != "updated" {
 			t.Fatalf("watcher %s got %v", u.Id, notificationTypes(t, env.app, u.Id))
 		}
-		if fields := fieldsOf(t, notes[0]); len(fields) != 1 || fields[0] != "title" {
+		if fields := changedFieldsOf(t, notes[0]); len(fields) != 1 || fields[0] != "title" {
 			t.Fatalf("fields = %v, want [title]", fields)
 		}
 	}

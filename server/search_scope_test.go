@@ -55,7 +55,7 @@ func setupSearchApp(t *testing.T) *tests.TestApp {
 	cards := core.NewBaseCollection("boards_cards")
 	cards.Fields.Add(&core.TextField{Name: "title"})
 	cards.Fields.Add(&core.TextField{Name: "description"})
-	// ftsConfig selects this as an Output column to build the OTTER-123 key, so
+	// ftsConfigFor selects this as an Output column to build the OTTER-123 key, so
 	// the synthetic collection needs it even though no assertion here reads it —
 	// without the column the search query itself fails to compile.
 	cards.Fields.Add(&core.NumberField{Name: "number"})
@@ -68,7 +68,7 @@ func setupSearchApp(t *testing.T) *tests.TestApp {
 
 	if _, err := app.DB().NewQuery(`
 		CREATE VIRTUAL TABLE fts_boards USING fts5(
-			record_id UNINDEXED, title, description, tokenize='porter unicode61'
+			record_id UNINDEXED, title, description, fields, tokenize='porter unicode61'
 		)`).Execute(); err != nil {
 		t.Fatalf("create fts_boards: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestSearchScopedToMembership(t *testing.T) {
 	app := setupSearchApp(t)
 	member, other, projectID := seedProjectWithCard(t, app, "Ship the budget")
 
-	hits, _, err := fts.Search(app, ftsConfig, member, fts.SearchOpts{Query: "budget", Limit: 25})
+	hits, _, err := fts.Search(app, ftsConfigFor(app), member, fts.SearchOpts{Query: "budget", Limit: 25})
 	if err != nil {
 		t.Fatalf("search: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestSearchScopedToMembership(t *testing.T) {
 		t.Errorf("project = %v, want %v", hits[0].Columns["project"], projectID)
 	}
 
-	hits, _, err = fts.Search(app, ftsConfig, other, fts.SearchOpts{Query: "budget", Limit: 25})
+	hits, _, err = fts.Search(app, ftsConfigFor(app), other, fts.SearchOpts{Query: "budget", Limit: 25})
 	if err != nil {
 		t.Fatalf("search: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestSearchDeniesRemovedMember(t *testing.T) {
 		}
 	}
 
-	hits, _, err := fts.Search(app, ftsConfig, member, fts.SearchOpts{Query: "budget", Limit: 25})
+	hits, _, err := fts.Search(app, ftsConfigFor(app), member, fts.SearchOpts{Query: "budget", Limit: 25})
 	if err != nil {
 		t.Fatalf("search: %v", err)
 	}
@@ -267,7 +267,7 @@ func TestSearchScopeWiresMemberAndRecordFieldsCorrectly(t *testing.T) {
 	newCard("Roadmap alpha", projectA)
 	newCard("Roadmap beta", projectB)
 
-	hits, _, err := fts.Search(app, ftsConfig, member.Id, fts.SearchOpts{Query: "roadmap", Limit: 25})
+	hits, _, err := fts.Search(app, ftsConfigFor(app), member.Id, fts.SearchOpts{Query: "roadmap", Limit: 25})
 	if err != nil {
 		t.Fatalf("search: %v", err)
 	}
@@ -294,7 +294,7 @@ func TestSearchDeniesDisabledUser(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hits, _, err := fts.Search(app, ftsConfig, member, fts.SearchOpts{Query: "budget", Limit: 25})
+	hits, _, err := fts.Search(app, ftsConfigFor(app), member, fts.SearchOpts{Query: "budget", Limit: 25})
 	if err != nil {
 		t.Fatalf("search: %v", err)
 	}
@@ -316,7 +316,7 @@ func TestSearchExcludesArchivedCards(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hits, _, err := fts.Search(app, ftsConfig, member, fts.SearchOpts{Query: "budget", Limit: 25})
+	hits, _, err := fts.Search(app, ftsConfigFor(app), member, fts.SearchOpts{Query: "budget", Limit: 25})
 	if err != nil {
 		t.Fatalf("search: %v", err)
 	}

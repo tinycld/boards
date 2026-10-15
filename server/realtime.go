@@ -7,7 +7,6 @@ import (
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 
-	"tinycld.org/core/markdown"
 	"tinycld.org/core/realtime"
 	"tinycld.org/core/yjsdoc"
 )
@@ -24,7 +23,8 @@ import (
 //
 // The room carries BOTH ephemeral awareness and a shared document. That works
 // because a Y.Doc is a container of named types: the board's document holds one
-// XmlFragment per card (`card:<id>`), and awareness rides the same socket
+// XmlFragment per card description (`card:<id>`) and per collaborative field
+// of a card's type (`card:<id>:<md|html>:<key>`), and awareness rides the same socket
 // discriminated by message type. Presence and every open description therefore
 // cost one connection per person, not one per card.
 //
@@ -96,26 +96,24 @@ func registerRealtime(app core.App) *boardRealtime {
 // from. While the document exists (open or parked) the baselines say what
 // it believes is stored, and a change made to the records outside the room
 // shows up as a difference at the next open. With no document, the rows
-// themselves are hashed, normalized the way bootstrap normalizes them, so
-// a document seeded from these rows and flushed unchanged matches.
+// themselves are hashed per fragment, normalized the way bootstrap
+// normalizes them, so a document seeded from these rows and flushed
+// unchanged matches.
 func makeFingerprint(app core.App, state *boardDocState) realtime.FingerprintFn {
 	return func(projectID string) (string, error) {
 		if fp, ok := state.fingerprint(projectID); ok {
 			return fp, nil
 		}
-		records, err := app.FindRecordsByFilter(
-			"boards_cards",
-			"project = {:project} && description != ''",
-			"", 0, 0,
-			dbx.Params{"project": projectID},
-		)
+		records, err := seedableCards(app, projectID)
 		if err != nil {
 			return "", fmt.Errorf("cards: fingerprint of board %s: %w", projectID, err)
 		}
+		cache := newFormCache(app)
 		hashes := make(map[string]string, len(records))
 		for _, record := range records {
-			description := record.GetString("description")
-			hashes[record.Id] = hashMarkdown(markdown.FromPM(markdown.ToPM(description)))
+			for _, seed := range cardSeeds(record, cache) {
+				hashes[seed.fragment] = hashText(normalizedText(seed.format, seed.text))
+			}
 		}
 		return fingerprintOf(hashes), nil
 	}

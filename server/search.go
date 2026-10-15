@@ -16,7 +16,7 @@ import (
 // toRow. Doing it server-side means the palette and the CLI render the same row
 // from the same code rather than from two copies that drift.
 //
-// It reuses ftsConfig — the same value driving the index-sync hooks and
+// It reuses ftsConfigFor — the same value driving the index-sync hooks and
 // /api/boards/search — so the search surface cannot diverge from the index.
 func searchSource() search.Source {
 	return search.Source{
@@ -33,7 +33,7 @@ func searchSource() search.Source {
 }
 
 func searchCards(app core.App, userID string, q search.Query) (search.Result, error) {
-	hits, total, err := fts.Search(app, ftsConfig, userID, fts.SearchOpts{
+	hits, total, err := fts.Search(app, ftsConfigFor(app), userID, fts.SearchOpts{
 		Query:   joinTerms(q.Include),
 		Exclude: joinTerms(q.Exclude),
 		Limit:   q.Limit,
