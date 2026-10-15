@@ -1,6 +1,0 @@
-/* Relative timestamps ("Just now", "2m ago") change width as well as text, so a
-   mask over them would change size between runs. Hidden text keeps its layout
-   box and paints nothing, which is what a stable baseline needs. */
-[data-testid='boards-timestamp'] {
-    visibility: hidden !important;
-}

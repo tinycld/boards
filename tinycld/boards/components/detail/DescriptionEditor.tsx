@@ -344,7 +344,8 @@ function DescriptionHeader({
         // a direct child of the form's ScrollView, which `stickyHeaderIndices`
         // sticks (react-native-web through its own sticky wrapper). The
         // web-only STICKY_HEADER style is inert inside that row, whose height
-        // is its own; it stays so the pixels match the parity baselines.
+        // is its own; it stays because the row's look on web was checked with
+        // it in place.
         <View
             className="justify-center bg-card"
             style={
