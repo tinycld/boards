@@ -11,4 +11,6 @@ To create a card of a type, open the list's menu (the **⋯** button in its head
 
 To change a card's type, open the card's actions menu and choose **Change type**. Values of fields the new type does not have stay stored and come back if the type is changed back.
 
+A rule that reads a checklist runs only inside the open card. Dropping a file onto a card on the board does not see the checklist, so the card's own rules on its checklist never refuse a drop on the board; the card itself still applies them.
+
 Custom field values are searchable: text and the names of chosen options show up in search.

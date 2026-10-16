@@ -37,10 +37,12 @@ export function useFaceAttachmentsGate() {
             const form = forms.find(f => f.id === card?.form) ?? forms.find(f => f.is_default)
             const definition = form?.definition
             const values = definition && card ? mergeValues(host, definition, { ...card }) : {}
-            return attachmentsVisible(definition, values, {
-                today: toDateString(new Date()),
-                userId,
-            })
+            return attachmentsVisible(
+                definition,
+                values,
+                { today: toDateString(new Date()), userId },
+                host
+            )
         },
         [cardsCollection, host]
     )
