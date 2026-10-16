@@ -38,25 +38,27 @@ import {
 
 declare global {
     interface Window {
-        __urlWrites: string[]
+        __urlWrites: { method: 'pushState' | 'replaceState'; url: string }[]
     }
 }
 
 async function recordUrlWrites(page: Page) {
     await page.addInitScript(() => {
         window.__urlWrites = []
-        const record = (write: History['replaceState']) =>
-            function recorded(
+        const record = (method: 'pushState' | 'replaceState') => {
+            const write = history[method]
+            return function recorded(
                 this: History,
                 data: unknown,
                 unused: string,
                 url?: string | URL | null
             ) {
-                if (url != null) window.__urlWrites.push(String(url))
+                if (url != null) window.__urlWrites.push({ method, url: String(url) })
                 return write.call(this, data, unused, url)
             }
-        history.replaceState = record(history.replaceState)
-        history.pushState = record(history.pushState)
+        }
+        history.replaceState = record('replaceState')
+        history.pushState = record('pushState')
     })
 }
 
@@ -77,6 +79,7 @@ for (const spelling of ['canonical', 'old', 'focused'] as const) {
             focused: `/a/boards?focused=${key}-1`,
         }
         const link = links[spelling]
+        const before = page.url()
         await recordUrlWrites(page)
         await page.goto(link)
 
@@ -85,12 +88,15 @@ for (const spelling of ['canonical', 'old', 'focused'] as const) {
         await expect(peek.getByTestId('boards-detail-key')).toHaveText(`${key}-1`)
         expect(new URL(page.url()).pathname + new URL(page.url()).search).toBe(canonical)
 
-        // The board's URL was never written without its card. Writes that still
-        // name the card, even as a param, are the layout mounting; the final URL
-        // above is the one that must be clean.
         const writes = await page.evaluate(() => window.__urlWrites)
-        const boardWrites = writes.filter(url => url.startsWith('/a/boards'))
-        expect(boardWrites.filter(url => !url.includes(`${key}-1`))).toEqual([])
+        const boardWrites = writes.filter(write => write.url.startsWith('/a/boards'))
+        // The board's URL was never written without its card.
+        expect(boardWrites.filter(write => !write.url.includes(`${key}-1`))).toEqual([])
+        // A cold load adds no history entry of its own beyond the goto's, so
+        // one Back returns to the page the goto left.
+        expect(writes.filter(write => write.method === 'pushState')).toEqual([])
+        await page.goBack()
+        await expect(page).toHaveURL(before)
     })
 }
 

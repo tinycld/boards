@@ -32,7 +32,7 @@ next or previous card, press **j** or **k**. Each of those is a step too.
 
 To give a card the whole screen, click the expand button (the arrows in the top
 corner). That works from either the panel or the window, and the back button
-returns you to the panel. A card that is still being saved has no number yet and
+returns you to the card as it was. A card that is still being saved has no number yet and
 shows no expand button until it does.
 
 To make the panel wider, drag its left edge. It remembers the width you set, and
