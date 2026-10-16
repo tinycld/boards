@@ -14,6 +14,7 @@ import { useProjectRole } from '../hooks/useProjectRole'
 import { type ShareLinkSignInRole, useShareLinkMeta } from '../hooks/useShareLinkMeta'
 import { paramString } from '../lib/board-route'
 import { decidePublicBoardRoute, type PublicBoardGoneReason } from '../lib/public-board-routing'
+import { useBoardsUIStore } from '../stores/boards-ui-store'
 
 /**
  * A board opened by share link, at `/p/boards/<token>`.
@@ -56,6 +57,9 @@ export default function PublicBoardScreen() {
     // It is public by design precisely because boards_share_links is owner-only,
     // so no client-side query can answer this for the caller who needs it.
     const meta = useShareLinkMeta(token)
+    // The public board keeps its peek in the store, with no URL: it has no
+    // board layout route to stack card children under.
+    const openCardId = useBoardsUIStore(s => s.openCardId)
 
     // Realtime is on by default, so an embed must opt OUT rather than in — the
     // same shape as the token install above, and for the same reason: by the
@@ -115,7 +119,7 @@ export default function PublicBoardScreen() {
                 onSignedIn={() => setShareToken(null)}
             />
             <BoardCanvas project={project} />
-            <CardPeek project={project} />
+            <CardPeek project={project} cardId={openCardId} />
         </View>
     )
 }

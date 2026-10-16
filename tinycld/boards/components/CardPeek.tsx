@@ -24,6 +24,8 @@ import { ProjectWash } from './ProjectWash'
 
 interface CardPeekProps {
     project: BoardProject
+    /** The card to show; null shows nothing. */
+    cardId: string | null
 }
 
 /**
@@ -32,9 +34,8 @@ interface CardPeekProps {
  * step to the next and previous card without closing, and ⤢ promotes the card
  * to its full-page route.
  */
-export function CardPeek({ project }: CardPeekProps) {
-    const openCardId = useBoardsUIStore(s => s.openCardId)
-    const entry = openCardId ? findCardEntry(project, openCardId) : null
+export function CardPeek({ project, cardId }: CardPeekProps) {
+    const entry = cardId ? findCardEntry(project, cardId) : null
     if (!entry) return null
 
     return <CardPeekPanel project={project} entry={entry} />

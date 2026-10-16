@@ -288,6 +288,20 @@ describe('boards-ui-store view preferences', () => {
         })
     })
 
+    // The open card is the route's (`/a/boards/PL/PL-12`), and the board
+    // layout writes it here as the route's child takes focus. A board visit
+    // records the active board in that same commit, so a reset here closed the
+    // card a deep link had just opened.
+    describe('setActiveProject', () => {
+        it('leaves the open card alone', () => {
+            useBoardsUIStore.setState({ openCardId: 'card_1' })
+
+            useBoardsUIStore.getState().setActiveProject('proj_2')
+
+            expect(useBoardsUIStore.getState().openCardId).toBe('card_1')
+        })
+    })
+
     describe('the card display mode', () => {
         it('opens cards in the peek until the user says otherwise', () => {
             expect(useBoardsUIStore.getState().cardDisplayMode).toBe('peek')

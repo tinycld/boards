@@ -354,13 +354,15 @@ export const useBoardsUIStore = create<BoardsUIState>()(
             }
             return {
                 activeProjectId: null,
-                // Switching boards closes the peek: the open card belongs to the
-                // board being left, so it would resolve to nothing and the peek
-                // would silently empty itself.
+                // The open card is NOT reset here: it is the route's
+                // (`/a/boards/PL/PL-12`), and the board layout writes it into
+                // this store as a card child takes focus. A visit records the
+                // board in that same commit, so a reset closed the card a deep
+                // link had just opened. A board switch replaces the board's
+                // whole route, card children included.
                 setActiveProject: projectId =>
                     set({
                         activeProjectId: projectId,
-                        openCardId: null,
                         openPickerFor: null,
                         // The selection belongs to the board being left; carrying it
                         // over would aim a bulk action at cards that are no longer

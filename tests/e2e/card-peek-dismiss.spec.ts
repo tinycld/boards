@@ -1,6 +1,15 @@
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, columnHeader, createBoard, openCard, uniqueStamp } from './helpers'
+import {
+    addCard,
+    boardCard,
+    cardsInColumn,
+    columnHeader,
+    createBoard,
+    dragCardToColumn,
+    openCard,
+    uniqueStamp,
+} from './helpers'
 
 /**
  * Pressing the board behind the peek dismisses it.
@@ -63,6 +72,27 @@ test.describe('the card peek', () => {
 
         await boardCard(page, 'Second card').click()
         await expect(peek.getByText('Second card').first()).toBeVisible()
+    })
+
+    /**
+     * The board stays operable under an open card's route, not just under
+     * its panel.
+     *
+     * A card is a child route of the board's layout, drawn in a stack laid
+     * over the whole board. On web that stack's own layers cover the board,
+     * so this pins that they let a drag through: the grab starts on a card
+     * face beside the panel and the drop lands in another column.
+     */
+    test('a drag between columns lands while a peek is open', async ({ page }) => {
+        await createBoard(page, `peek-drag-${uniqueStamp()}`)
+        await addCard(page, 0, 'Read card')
+        await addCard(page, 0, 'Moved card')
+        await openCard(page, 'Read card')
+
+        await dragCardToColumn(page, boardCard(page, 'Moved card'), 'Doing')
+
+        await expect.poll(async () => cardsInColumn(page, 'Doing')).toEqual(['Moved card'])
+        await expect.poll(async () => cardsInColumn(page, 'To do')).toEqual(['Read card'])
     })
 
     // The peek's own subtree counts as INSIDE the layer, so a press in here

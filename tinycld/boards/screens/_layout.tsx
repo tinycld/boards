@@ -36,7 +36,9 @@ export default function BoardsLayout() {
     return (
         <Stack screenOptions={{ headerShown: false, animation: 'none' }}>
             {/*
-             * One board screen, reused — never a stack of them.
+             * One board screen, reused — never a stack of them. The screen is
+             * the board's layout route (`[boardSlug]/_layout.tsx`); its card
+             * children stack inside it, not here.
              *
              * A board is its own route now (`/a/boards/PL`), and React
              * Navigation's NAVIGATE matches an existing screen by name AND
@@ -51,7 +53,7 @@ export default function BoardsLayout() {
              * every slug gets a different id and nothing collapses. Returning
              * one id for the route makes all boards the same screen entry.
              */}
-            <Stack.Screen name="[boardSlug]/index" dangerouslySingular={() => 'board'} />
+            <Stack.Screen name="[boardSlug]" dangerouslySingular={() => 'board'} />
         </Stack>
     )
 }

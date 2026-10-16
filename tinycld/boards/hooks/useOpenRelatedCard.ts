@@ -9,14 +9,10 @@ import { useBoardsUIStore } from '../stores/boards-ui-store'
  * link).
  *
  * On the full page the next card gets its own page, pushed on top, so Back
- * returns to the card it was opened from. The board stays mounted under the
- * page, so opening through the store there would navigate back to the board's
- * peek and lose the page.
+ * returns to the card it was opened from.
  *
- * On the peek and the modal the store is the opener, and usePeekUrl writes the
- * change as a history REPLACE: the board route is singular
- * (screens/_layout.tsx), so even a push of it replaces the entry on web. Back
- * walking the cards opened on the peek is an open follow-up.
+ * On the peek and the modal the store is the opener, and the board layout
+ * pushes that card's peek (useOpenCardSync), so Back returns here too.
  */
 export function useOpenRelatedCard() {
     const { variant, projectId, projectSlug } = useCardFormContext()
