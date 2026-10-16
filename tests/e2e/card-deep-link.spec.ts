@@ -3,20 +3,24 @@ import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
 import {
     addCard,
     addSubtask,
+    boardCard,
     cardSurface,
     createBoard,
     openBoard,
     openBoardNamed,
     openCard,
+    pageUrl,
+    peekUrl,
     uniqueNumber,
     uniqueStamp,
 } from './helpers'
 
 // A pasted card link opened cold: the card's peek opens and the address bar
-// keeps the card. Two spellings are covered — the canonical /a/boards/KEY-1,
-// and /a/boards?focused=KEY-1, which core's notifications mint for every
-// package and which every stored notification link carries. The second is
-// redirected to the first, which is the one write the recording allows.
+// keeps the card. Three spellings are covered — the canonical
+// /a/boards/KEY/KEY-1, the old /a/boards/KEY-1, and /a/boards?focused=KEY-1,
+// which core's notifications mint for every package and which every stored
+// notification link carries. The last two are redirected to the first, which
+// is the one write the recording allows.
 //
 // The `page.goto` here is the subject, not a shortcut: this is a cold load of
 // a URL, which is exactly the thing in-app navigation can't exercise. Every
@@ -56,7 +60,7 @@ async function recordUrlWrites(page: Page) {
     })
 }
 
-for (const spelling of ['path', 'focused'] as const) {
+for (const spelling of ['canonical', 'old', 'focused'] as const) {
     test(`a card link (${spelling}) opens the card and keeps its URL on a cold load`, async ({
         page,
     }) => {
@@ -66,8 +70,13 @@ for (const spelling of ['path', 'focused'] as const) {
         await createBoard(page, `deep-link-${uniqueStamp()}`, key)
         await addCard(page, 0, 'Linked card')
 
-        const canonical = `/a/boards/${key}-1`
-        const link = spelling === 'path' ? canonical : `/a/boards?focused=${key}-1`
+        const canonical = `/a/boards/${key}/${key}-1`
+        const links = {
+            canonical,
+            old: `/a/boards/${key}-1`,
+            focused: `/a/boards?focused=${key}-1`,
+        }
+        const link = links[spelling]
         await recordUrlWrites(page)
         await page.goto(link)
 
@@ -76,11 +85,12 @@ for (const spelling of ['path', 'focused'] as const) {
         await expect(peek.getByTestId('boards-detail-key')).toHaveText(`${key}-1`)
         expect(new URL(page.url()).pathname + new URL(page.url()).search).toBe(canonical)
 
-        // The board's URL was never written without its card.
+        // The board's URL was never written without its card. Writes that still
+        // name the card, even as a param, are the layout mounting; the final URL
+        // above is the one that must be clean.
         const writes = await page.evaluate(() => window.__urlWrites)
-        expect(
-            writes.filter(url => url.startsWith('/a/boards') && url !== link && url !== canonical)
-        ).toEqual([])
+        const boardWrites = writes.filter(url => url.startsWith('/a/boards'))
+        expect(boardWrites.filter(url => !url.includes(`${key}-1`))).toEqual([])
     })
 }
 
@@ -126,54 +136,124 @@ test('j on the full page pushes, so Back returns to the card it left', async ({ 
     await expect(visibleCardPage(page).getByTestId('boards-detail-key')).toHaveText(`${key}-1`)
 })
 
-// Escape on a page expanded from the peek returns to that peek, as it did
-// before the card pages stacked.
-test('Escape on an expanded page returns to the card’s peek', async ({ page }) => {
+// Escape and "Back to board" leave for the board in one step, whatever the
+// reader walked: they name the board, not the previous card.
+test('Escape on an expanded page leaves for the board in one step', async ({ page }) => {
     const key = await boardWithThreeCards(page, 'page-escape')
     await openFullPage(page, 'Alpha')
-    await expect(page).toHaveURL(new RegExp(`/a/boards/${key}/1$`))
+    await expect(page).toHaveURL(pageUrl(key, 1))
     await page.keyboard.press('Escape')
 
-    await expect(page).toHaveURL(new RegExp(`/a/boards/${key}-1$`))
-    await expect(visibleCardPage(page)).toHaveCount(0)
-    await expect(cardSurface(page).getByTestId('boards-detail-key')).toHaveText(`${key}-1`)
+    await expectBareBoard(page, key)
 })
 
-// However many cards j walked, Escape and "Back to board" leave for the board
-// in one step, with the card the reader was on peeked: they name the board,
-// not the previous card.
-test('j, j, Escape lands on the board with the last card peeked', async ({ page }) => {
-    const key = await boardWithThreeCards(page, 'page-leave')
-    await openFullPage(page, 'Alpha')
-
+test('Escape leaves in one step, from the peek and from the page', async ({ page }) => {
+    const key = await boardWithThreeCards(page, 'escape-steps')
+    await openCard(page, 'Alpha')
     await page.keyboard.press('j')
-    await expect(page).toHaveURL(new RegExp(`/a/boards/${key}/2$`))
+    await expect(page).toHaveURL(peekUrl(key, 2))
     await page.keyboard.press('j')
-    await expect(page).toHaveURL(new RegExp(`/a/boards/${key}/3$`))
+    await expect(page).toHaveURL(peekUrl(key, 3))
     await page.keyboard.press('Escape')
+    await expectBareBoard(page, key)
 
-    await expect(page).toHaveURL(new RegExp(`/a/boards/${key}-3$`))
-    await expect(visibleCardPage(page)).toHaveCount(0)
-    await expect(cardSurface(page).getByTestId('boards-detail-key')).toHaveText(`${key}-3`)
+    await openFullPage(page, 'Alpha')
+    await page.keyboard.press('j')
+    await expect(page).toHaveURL(pageUrl(key, 2))
+    await page.keyboard.press('j')
+    await expect(page).toHaveURL(pageUrl(key, 3))
+    await page.keyboard.press('Escape')
+    await expectBareBoard(page, key)
 })
 
 // Each stacked page owns its keys. The page j pushed shared its shortcut ids
 // with the page under it, and unmounting on Back deleted them, so the page
 // Back returned to answered no key at all.
-test('j, goBack, Escape lands on the board with the card peeked', async ({ page }) => {
+test('j, goBack, Escape lands on the bare board', async ({ page }) => {
     const key = await boardWithThreeCards(page, 'page-keys')
     await openFullPage(page, 'Alpha')
 
     await page.keyboard.press('j')
-    await expect(page).toHaveURL(new RegExp(`/a/boards/${key}/2$`))
+    await expect(page).toHaveURL(pageUrl(key, 2))
     await page.goBack()
-    await expect(page).toHaveURL(new RegExp(`/a/boards/${key}/1$`))
+    await expect(page).toHaveURL(pageUrl(key, 1))
     await expect(visibleCardPage(page).getByTestId('boards-detail-key')).toHaveText(`${key}-1`)
     await page.keyboard.press('Escape')
 
-    await expect(page).toHaveURL(new RegExp(`/a/boards/${key}-1$`))
+    await expectBareBoard(page, key)
+})
+
+// Each peek is a navigation, so the browser's Back walks the cards in the
+// order they were opened and ends on the board.
+test('Back walks peeks, then the board', async ({ page }) => {
+    await login(page)
+    await navigateToPackage(page, 'boards')
+    const key = `WALK${uniqueNumber() % 100000}`
+    await createBoard(page, `back-walk-${uniqueStamp()}`, key)
+    await addCard(page, 0, 'Parent')
+    await addSubtask(page, 'Parent', 'Child')
+
+    await openCard(page, 'Parent')
+    await expect(page).toHaveURL(peekUrl(key, 1))
+    await cardSurface(page).getByTestId('boards-subtask-row').getByText('Child').click()
+    await expect(page).toHaveURL(peekUrl(key, 2))
+    await expect(cardSurface(page).getByTestId('boards-detail-key')).toHaveText(`${key}-2`)
+
+    await page.goBack()
+    await expect(page).toHaveURL(peekUrl(key, 1))
+    await expect(cardSurface(page).getByTestId('boards-detail-key')).toHaveText(`${key}-1`)
+
+    await page.goBack()
+    await expectBareBoard(page, key)
+})
+
+test('expand, then Back returns to the peek', async ({ page }) => {
+    const key = await boardWithThreeCards(page, 'expand-back')
+    await openFullPage(page, 'Alpha')
+    await expect(page).toHaveURL(pageUrl(key, 1))
+
+    await page.goBack()
+    await expect(page).toHaveURL(peekUrl(key, 1))
     await expect(visibleCardPage(page)).toHaveCount(0)
     await expect(cardSurface(page).getByTestId('boards-detail-key')).toHaveText(`${key}-1`)
+})
+
+// j and k push the neighbour on the peek and on the page, so Back steps back
+// through the cards walked.
+test('j pushes on the peek and on the page', async ({ page }) => {
+    const key = await boardWithThreeCards(page, 'jk-push')
+    await openCard(page, 'Alpha')
+    await page.keyboard.press('j')
+    await expect(page).toHaveURL(peekUrl(key, 2))
+    await page.keyboard.press('j')
+    await expect(page).toHaveURL(peekUrl(key, 3))
+    await page.goBack()
+    await expect(page).toHaveURL(peekUrl(key, 2))
+
+    await page.getByLabel('Open full page').click()
+    await expect(page).toHaveURL(pageUrl(key, 2))
+    await page.keyboard.press('j')
+    await expect(page).toHaveURL(pageUrl(key, 3))
+    await page.goBack()
+    await expect(page).toHaveURL(pageUrl(key, 2))
+})
+
+// A cold load of a page URL has no history to pop, but the board is still
+// rendered beneath it, so Escape has somewhere to land.
+test('a deep-linked page has the board beneath', async ({ page }) => {
+    await login(page)
+    await navigateToPackage(page, 'boards')
+    const key = `DEEP${uniqueNumber() % 100000}`
+    await createBoard(page, `deep-page-${uniqueStamp()}`, key)
+    await addCard(page, 0, 'Alpha')
+
+    // An initial-load deep link is the subject, not in-app navigation.
+    await page.goto(`/a/boards/${key}/1`)
+    await expect(visibleCardPage(page).getByText('Description', { exact: true })).toBeVisible()
+    await page.keyboard.press('Escape')
+
+    await expectBareBoard(page, key)
+    await expect(boardCard(page, 'Alpha')).toBeVisible()
 })
 
 // One room per board, however many card views are stacked on it: the peek, the
@@ -242,6 +322,12 @@ test('switching boards from the sidebar lands on the other board without a card'
     await page.goBack()
     await expect(page).toHaveURL('about:blank')
 })
+
+async function expectBareBoard(page: Page, key: string) {
+    await expect(page).toHaveURL(new RegExp(`/a/boards/${key}$`))
+    await expect(visibleCardPage(page)).toHaveCount(0)
+    await expect(cardSurface(page)).toHaveCount(0)
+}
 
 async function boardWithThreeCards(page: Page, name: string): Promise<string> {
     await login(page)

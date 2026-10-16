@@ -24,13 +24,16 @@ The two behave the same except in one way: while a card is open **in a panel**,
 the board behind it still works, so clicking another card swaps the open card
 straight over. A **window** dims the board, so close the card first.
 
-To close a card, press **Esc** or use the ✕ in its corner; with a panel you can
-also click the board behind it. To move to the next or previous card without
-closing, press **j** or **k**.
+Each card you open is a step in your browser's history, so the back button walks
+back through the cards you opened, one at a time, and then to the board. To
+close a card and return to the board in one step, press **Esc** or use the ✕ in
+its corner; with a panel you can also click the board behind it. To move to the
+next or previous card, press **j** or **k**. Each of those is a step too.
 
 To give a card the whole screen, click the expand button (the arrows in the top
-corner). That works from either the panel or the window, and your browser's
-back button returns you to the board.
+corner). That works from either the panel or the window, and the back button
+returns you to the panel. A card that is still being saved has no number yet and
+shows no expand button until it does.
 
 To make the panel wider, drag its left edge. It remembers the width you set, and
 it will not go narrower than its normal size.
@@ -451,10 +454,10 @@ opens the card on its board.
 
 Every board has its own web address, made from its key —
 `{{server-host}}/a/boards/OTTER` — and so does every card. Open a card and the
-address bar reads `{{server-host}}/a/boards/OTTER-1`; give it the whole screen
-and it reads `{{server-host}}/a/boards/OTTER/1`. Any of these can be copied and
-sent to someone, bookmarked, or typed from memory (`otter-1` works as well as
-`OTTER-1`), and opens exactly that board or card, whatever you were looking at
+address bar reads `{{server-host}}/a/boards/OTTER/OTTER-1`; give it the whole
+screen and it reads `{{server-host}}/a/boards/OTTER/1`. Any of these can be copied and
+sent to someone, bookmarked, or typed from memory (`otter/otter-1` works as well as
+`OTTER/OTTER-1`), and opens exactly that board or card, whatever you were looking at
 last.
 
 Numbers are never reused. If you delete `OTTER-7`, the next card you make is

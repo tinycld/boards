@@ -176,7 +176,7 @@ test.describe('optional card sections', () => {
         await input.press('Enter')
         await expect(peek(page).getByLabel('Edit confirm the venue').first()).toBeVisible()
 
-        await page.goto(`/a/boards/${key}-1`)
+        await page.goto(`/a/boards/${key}/${key}-1`)
 
         await expect(peek(page)).toBeVisible()
         await expect(peek(page).getByLabel('Edit confirm the venue').first()).toBeVisible()
@@ -199,7 +199,7 @@ test.describe('optional card sections', () => {
             peek(page).getByTestId('boards-link-row').filter({ hasText: OTHER })
         ).toBeVisible()
 
-        await page.goto(`/a/boards/${key}-1`)
+        await page.goto(`/a/boards/${key}/${key}-1`)
 
         await expect(peek(page)).toBeVisible()
         await expect(
@@ -227,7 +227,7 @@ test.describe('optional card sections', () => {
             peek(page).getByTestId('boards-subtask-row').filter({ hasText: 'book the room' })
         ).toBeVisible()
 
-        await page.goto(`/a/boards/${key}-1`)
+        await page.goto(`/a/boards/${key}/${key}-1`)
 
         await expect(peek(page)).toBeVisible()
         await expect(heading(page, 'subtasks')).toBeVisible()

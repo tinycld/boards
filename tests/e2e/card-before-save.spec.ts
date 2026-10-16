@@ -7,8 +7,10 @@ import {
     cardSurface,
     closeCardPeek,
     createBoard,
+    expectPeekUrl,
     holdRequests,
     openCard,
+    pageUrl,
     uniqueNumber,
     uniqueStamp,
 } from './helpers'
@@ -63,44 +65,42 @@ test.describe('a card the server has not saved yet', () => {
         await page.keyboard.press('Escape')
     })
 
-    test('an open card takes its key into the URL, and its page, once numbered', async ({
+    test('an open card takes its key into the URL once numbered, with no new history entry', async ({
         page,
     }) => {
         const key = await freshBoard(page)
         const release = await holdRequests(page, 'POST', CARD_CREATE)
         await addCard(page, 0, 'opened early')
         await openCard(page, 'opened early')
-        await expect(page).toHaveURL(/\?focused=[a-z0-9]{15}$/)
+        await expect(page).toHaveURL(new RegExp(`/a/boards/${key}/[a-z0-9]{15}$`))
+        // Not numbered, so there is no page to expand to yet.
+        await expect(cardSurface(page).getByLabel('Open full page')).toHaveCount(0)
 
         release()
         await expect(cardSurface(page).getByTestId('boards-detail-key')).toHaveText(`${key}-1`)
-        await expect(page).toHaveURL(new RegExp(`/a/boards/${key}-1$`))
+        await expectPeekUrl(page, key)
 
-        await cardSurface(page).getByLabel('Open full page').click()
-        await expect(page).toHaveURL(new RegExp(`/a/boards/${key}/1$`))
-
-        // Back returns to the key spelling: the id spelling was replaced, not
-        // left in the history under it.
+        // The id spelling was replaced, not left in the history under the key:
+        // one Back reaches the board.
         await page.goBack()
-        await expect(page).toHaveURL(new RegExp(`/a/boards/${key}-1$`))
-        await closeCardPeek(page)
+        await expect(page).toHaveURL(new RegExp(`/a/boards/${key}$`))
+        await expect(cardSurface(page)).toHaveCount(0)
     })
 
-    test('a card still saving opens on its own page, which takes the number once it lands', async ({
-        page,
-    }) => {
+    test('a card offers its full page once the number lands', async ({ page }) => {
         const key = await freshBoard(page)
         const release = await holdRequests(page, 'POST', CARD_CREATE)
         await addCard(page, 0, 'paged early')
         await openCard(page, 'paged early')
-
-        await cardSurface(page).getByLabel('Open full page').click()
-        await expect(page.getByRole('button', { name: 'Back to board' })).toBeVisible()
-        await expect(page).toHaveURL(new RegExp(`/a/boards/${key}/[a-z0-9]{15}$`))
+        await expect(cardSurface(page).getByLabel('Open full page')).toHaveCount(0)
 
         release()
-        await expect(page).toHaveURL(new RegExp(`/a/boards/${key}/1$`))
-        // Still the page, not a remount into "this card doesn't exist".
+        await cardSurface(page).getByLabel('Open full page').click()
+        await expect(page).toHaveURL(pageUrl(key, 1))
         await expect(page.getByRole('button', { name: 'Back to board' })).toBeVisible()
+
+        await page.goBack()
+        await expectPeekUrl(page, key)
+        await closeCardPeek(page)
     })
 })
