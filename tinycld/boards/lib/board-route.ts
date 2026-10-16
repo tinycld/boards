@@ -154,3 +154,12 @@ export function isCoveredByBoard(
     if (index < 0) return false
     return routes.slice(index + 1).some(route => route.name === '[boardSlug]')
 }
+
+/**
+ * Whether `pathname` names a card on its board: a peek (`/a/boards/PL/PL-12`)
+ * or a page (`/a/boards/PL/12`), rather than the bare board.
+ */
+export function pathNamesCard(pathname: string): boolean {
+    const [, , pkg, board = '', card = ''] = pathname.split('/')
+    return pkg === 'boards' && board !== '' && card !== ''
+}

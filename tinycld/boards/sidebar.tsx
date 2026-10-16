@@ -11,7 +11,7 @@ import { usePathname, useRouter } from 'expo-router'
 import { Archive, HelpCircle, UserCheck } from 'lucide-react-native'
 import { View } from 'react-native'
 import { useBoardList } from './hooks/useActiveBoard'
-import { activeBoardIdFromPath, boardPath, boardSegment } from './lib/board-route'
+import { activeBoardIdFromPath, boardHref, boardSegment, pathNamesCard } from './lib/board-route'
 import { useBoardsUIStore } from './stores/boards-ui-store'
 import type { BoardsProjects } from './types'
 
@@ -37,10 +37,13 @@ export default function BoardsSidebar() {
     // open on the board left would carry over under the next board.
     //
     // The board already on screen is not pushed again: a second copy of it
-    // would be a step where Back seems to do nothing.
+    // would be a step where Back seems to do nothing. With a card open on it,
+    // the press closes the card instead, back to the bare board in one step,
+    // as Escape does.
     const selectBoard = (project: BoardsProjects) => {
-        if (project.id === activeProjectId) return
-        router.push(orgHref(boardPath(boardSegment(project))))
+        const href = boardHref(orgHref, boardSegment(project))
+        if (project.id !== activeProjectId) router.push(href)
+        else if (pathNamesCard(pathname)) router.dismissTo(href)
     }
 
     return (

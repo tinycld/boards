@@ -493,6 +493,22 @@ test('picking the board on screen in the sidebar adds no history', async ({ page
     await expect(page).toHaveURL(new RegExp(`/a/boards/${firstKey}$`))
 })
 
+// With a card open, the board on screen picked again from the sidebar closes
+// the card, back to the bare board in one step — the same as Escape — and adds
+// no history of its own: one Back then leaves the board.
+test('picking the board on screen with a card open returns to the bare board', async ({ page }) => {
+    const key = await boardWithThreeCards(page, 'same-card')
+    const name = await page.getByTestId('boards-board-name').filter({ visible: true }).innerText()
+    await openCard(page, 'Alpha')
+    await expect(page).toHaveURL(peekUrl(key, 1))
+
+    await openBoardNamed(page, name)
+    await expectBareBoard(page, key)
+
+    await page.goBack()
+    await expect(page).not.toHaveURL(new RegExp(`/a/boards/${key}(/|$)`))
+})
+
 // A page link whose board does not exist says so. The card child cannot
 // resolve anything without its board, and a page draws an opaque screen, so
 // the board's not-found has to show over the card children, not under them.
@@ -506,6 +522,10 @@ test('a page link on a missing board says the board is missing', async ({ page }
     // Visible is not enough: an opaque page laid over it still counts as
     // visible. The press point has to land on the message itself.
     await expect.poll(() => isOnTop(notFound)).toBe(true)
+    // And it takes a press: Playwright's click refuses a target that another
+    // element would receive the press for. The face has no button of its own
+    // (its New board dialog opens from the sidebar), so the message is pressed.
+    await notFound.click()
 })
 
 /**

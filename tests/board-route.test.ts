@@ -12,6 +12,7 @@ import {
     parseBoardSegment,
     parseCardNumber,
     parseCardSegment,
+    pathNamesCard,
     peekHref,
     peekSegment,
 } from '../tinycld/boards/lib/board-route'
@@ -162,5 +163,21 @@ describe('isCoveredByBoard', () => {
 
     it('is not covered when the route is not in the stack', () => {
         expect(isCoveredByBoard([board('ot')], 'pl')).toBe(false)
+    })
+})
+
+// The sidebar's press on the board already on screen closes the open card, and
+// does nothing on the bare board; this is how it tells the two apart.
+describe('pathNamesCard', () => {
+    it('reads a peek or a page as a card', () => {
+        expect(pathNamesCard('/a/boards/PL/PL-12')).toBe(true)
+        expect(pathNamesCard('/a/boards/PL/12')).toBe(true)
+    })
+
+    it('reads the bare board, My cards and other packages as no card', () => {
+        expect(pathNamesCard('/a/boards/PL')).toBe(false)
+        expect(pathNamesCard('/a/boards/my-cards')).toBe(false)
+        expect(pathNamesCard('/a/boards')).toBe(false)
+        expect(pathNamesCard('/a/mail/inbox/x')).toBe(false)
     })
 })
