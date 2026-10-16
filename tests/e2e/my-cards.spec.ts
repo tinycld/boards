@@ -159,9 +159,10 @@ test.describe('Boards — My cards', () => {
 
         await page.goBack()
         // One Back leaves the card: the id spelling was replaced, not left under
-        // the key. It lands on the board screen already in the stack, which is
-        // the singular board screen, not on this list.
-        await expect(page).toHaveURL(/\/a\/boards\/[A-Z0-9]+$/)
+        // the key. The row pushed the card's board, although that board was
+        // already in the stack beneath this list, so Back returns to the list.
+        await expect(page).toHaveURL(/\/a\/boards\/my-cards$/)
+        await expect(page.getByTestId('boards-my-cards')).toBeVisible()
         await expect(page.getByTestId('boards-card-peek')).toHaveCount(0)
     })
 

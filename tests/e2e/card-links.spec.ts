@@ -230,14 +230,13 @@ test('files a link to a card on another board, and both ends read it', async ({ 
     ).toBeVisible()
 })
 
-// Pressing a link to a card on another board opens that board with the card
-// peeked. The board screen is singular, so the board left must not carry its
-// cards into the new one: they name nothing there, and showed as a not-found
-// under the peek. The new board is landed on fresh, which on web replaces the
-// history entry of the card the link was pressed on — so Back returns to the
-// board that card was opened from, without the card. Pinned as such: one board
-// entry cannot hold both boards' cards.
-test('a link to a card on another board opens it there on a clean board', async ({ page }) => {
+// Pressing a link to a card on another board pushes that board with the card
+// peeked. The board left must not carry its cards into the new one: they name
+// nothing there, and showed as a not-found under the peek. The board left
+// stays beneath, so Back returns to the card the link was pressed on.
+test('a link to a card on another board opens it there, and Back returns to the card', async ({
+    page,
+}) => {
     const farKey = `FAR${uniqueNumber() % 100000}`
     const far = `links-far-${uniqueStamp()}-${run++}`
     await createBoard(page, far, farKey)
@@ -255,8 +254,8 @@ test('a link to a card on another board opens it there on a clean board', async 
     await expect(page.getByText(NOT_FOUND)).toHaveCount(0)
 
     await page.goBack()
-    await expect(page).toHaveURL(new RegExp(`/a/boards/${homeKey}$`))
-    await expect(peek(page)).toHaveCount(0)
+    await expect(page).toHaveURL(peekUrl(homeKey, 1))
+    await expect(peek(page).getByTestId('boards-detail-key')).toHaveText(`${homeKey}-1`)
     await expect(boardCard(page, BLOCKER)).toBeVisible()
     await expect(page.getByText(NOT_FOUND)).toHaveCount(0)
 })

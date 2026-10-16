@@ -338,18 +338,28 @@ test('peek, page and j share the board’s one realtime socket', async ({ page }
     expect(opened).toBe(openedForBoard)
 })
 
-// A `?focused=` link followed from an open board — here through search, the
-// way core's notifications reach it too — lands on the other board in the ONE
-// board screen. The index route used to redirect with a replace, which the
-// singular board does not cover: a second board layout mounted over the first,
-// which kept its queries and its socket.
-test('a search hit on another board reuses the one board screen and socket', async ({ page }) => {
+// Only OPEN sockets to the boards room are counted: a covered board parks and
+// closes its socket, so a count of sockets ever opened would grow with every
+// board visited.
+function openBoardSockets(page: Page): Set<WebSocket> {
     const live = new Set<WebSocket>()
     page.on('websocket', socket => {
         if (!socket.url().includes('/api/realtime/boards/')) return
         live.add(socket)
         socket.on('close', () => live.delete(socket))
     })
+    return live
+}
+
+// A `?focused=` link followed from an open board — here through search, the
+// way core's notifications reach it too — lands on the other board with the
+// card, pushed over the board it was followed from. The bare `/a/boards` the
+// link names replaces itself with the board, so Back skips it and returns to
+// the board and card the reader was on. Only the board on screen holds a room.
+test('a search hit on another board lands on it, and Back returns to the card', async ({
+    page,
+}) => {
+    const live = openBoardSockets(page)
     await login(page)
     await navigateToPackage(page, 'boards')
     const target = `Focus target ${uniqueStamp()}`
@@ -375,14 +385,24 @@ test('a search hit on another board reuses the one board screen and socket', asy
     await expect(page.getByText('This card doesn’t exist or was removed')).toHaveCount(0)
     await expect(page.getByTestId('boards-board-room')).toHaveCount(1)
     await expect.poll(() => live.size).toBe(1)
+
+    await page.goBack()
+    await expect(page).toHaveURL(peekUrl(homeKey, 1))
+    await expect(cardSurface(page).getByTestId('boards-detail-key')).toHaveText(`${homeKey}-1`)
+    await expect(boardCard(page, 'Alpha')).toBeVisible()
+    await expect(page.getByText('This card doesn’t exist or was removed')).toHaveCount(0)
+    await expect(page.getByTestId('boards-board-room')).toHaveCount(1)
+    await expect.poll(() => live.size).toBe(1)
 })
 
-// Switching boards from the sidebar replaces the board screen: the other
-// board's URL carries no card, and the first board's peek does not follow.
-// What Back does afterwards is pinned at the end.
-test('switching boards from the sidebar lands on the other board without a card', async ({
+// Switching boards from the sidebar pushes the other board: its URL carries no
+// card, and the first board's peek does not follow. The first board stays
+// beneath, parked — its room left, its socket closed — so Back returns to it
+// with its card open, and it joins its room again.
+test('switching boards from the sidebar, then Back, returns to the card on the first board', async ({
     page,
 }) => {
+    const live = openBoardSockets(page)
     await login(page)
     await navigateToPackage(page, 'boards')
     const first = `swap-a-${uniqueStamp()}`
@@ -394,20 +414,22 @@ test('switching boards from the sidebar lands on the other board without a card'
     await createBoard(page, second, secondKey)
     await openBoard(page, first, 'Alpha')
     await openCard(page, 'Alpha')
-    await expect(page).toHaveURL(new RegExp(`/a/boards/${firstKey}/${firstKey}-1$`))
+    await expect(page).toHaveURL(peekUrl(firstKey, 1))
+    await expect.poll(() => live.size).toBe(1)
 
     await openBoardNamed(page, second)
     await expect(page).toHaveURL(new RegExp(`/a/boards/${secondKey}$`))
     await expect(cardSurface(page)).toHaveCount(0)
     // The first board's card does not carry over under the second board.
     await expect(page.getByText('This card doesn’t exist or was removed')).toHaveCount(0)
+    await expect.poll(() => live.size).toBe(1)
 
-    // Pinned as observed, not as designed: the switch replaces the board
-    // screen, so the history entries of the board left are gone and the
-    // browser's Back returns to neither board. Where it does land depends on
-    // the history before this test's first push, so that is not pinned.
     await page.goBack()
-    await expect(page).not.toHaveURL(new RegExp(`/a/boards/(${firstKey}|${secondKey})`))
+    await expect(page).toHaveURL(peekUrl(firstKey, 1))
+    await expect(cardSurface(page).getByTestId('boards-detail-key')).toHaveText(`${firstKey}-1`)
+    await expect(boardCard(page, 'Alpha')).toBeVisible()
+    await expect(page.getByTestId('boards-board-room')).toHaveCount(1)
+    await expect.poll(() => live.size).toBe(1)
 })
 
 async function expectBareBoard(page: Page, key: string) {
