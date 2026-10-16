@@ -19,6 +19,7 @@ const manifest = {
     sidebar: { component: 'sidebar' },
     accountSettings: [{ slug: 'github', label: 'GitHub', component: 'settings/github' }],
     help: { directory: 'help' },
+    notifications: { events: 'notify-events' },
     tests: { directory: 'tests' },
     // Boards is searchable through core's federated /api/search, which reads the
     // Go source registered in server/search.go — there is no per-package search

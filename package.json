@@ -19,6 +19,7 @@
         "./lib/*": "./tinycld/boards/lib/*.ts",
         "./stores/*": "./tinycld/boards/stores/*.ts",
         "./components/*": "./tinycld/boards/components/*.tsx",
+        "./notify-events": "./tinycld/boards/notify-events.ts",
         "./search-adapter": "./tinycld/boards/search-adapter.ts",
         "./calendar-source": "./tinycld/boards/calendar-source.ts",
         "./calendar-sprint-source": "./tinycld/boards/calendar-sprint-source.ts"
