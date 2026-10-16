@@ -9,8 +9,9 @@ import { openHelpPackage } from '@tinycld/core/lib/help/open-help'
 import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { usePathname, useRouter } from 'expo-router'
 import { Archive, HelpCircle, UserCheck } from 'lucide-react-native'
+import { View } from 'react-native'
 import { useBoardList } from './hooks/useActiveBoard'
-import { activeBoardIdFromPath, boardPath, boardSegment } from './lib/board-route'
+import { activeBoardIdFromPath, boardHref, boardSegment, pathNamesCard } from './lib/board-route'
 import { useBoardsUIStore } from './stores/boards-ui-store'
 import type { BoardsProjects } from './types'
 
@@ -29,55 +30,67 @@ export default function BoardsSidebar() {
     const isOnMyCards = pathname.endsWith('/boards/my-cards')
     const activeProjectId = activeBoardIdFromPath(pathname, [...projects, ...archivedProjects])
 
-    // `navigate`, not `push`: a board is a change of what the one board screen
-    // shows, so the screen is reused rather than stacked — pushing would keep
-    // every visited board mounted underneath, each with its live queries and
-    // its presence room. And not `replace`, which mints a new route key and
-    // remounts the screen.
-    const selectBoard = (project: BoardsProjects) =>
-        router.navigate(orgHref(boardPath(boardSegment(project))))
+    // `push`, so Back returns to the board left with its card; that board parks
+    // beneath (screens/[boardSlug]/_layout.tsx), holding no queries and no
+    // room. Not `navigate`: Expo Router's NAVIGATE to a screen of the same name
+    // as the one on top reuses that route, child stack included, so the cards
+    // open on the board left would carry over under the next board.
+    //
+    // The board already on screen is not pushed again: a second copy of it
+    // would be a step where Back seems to do nothing. With a card open on it,
+    // the press closes the card instead, back to the bare board in one step,
+    // as Escape does.
+    const selectBoard = (project: BoardsProjects) => {
+        const href = boardHref(orgHref, boardSegment(project))
+        if (project.id !== activeProjectId) router.push(href)
+        else if (pathNamesCard(pathname)) router.dismissTo(href)
+    }
 
     return (
-        <SidebarNav>
-            <SidebarActionButton label="+ New board" onPress={openNewBoard} />
+        // The testID marks the sidebar as inside an open peek (CardPeek's
+        // insideNodes), so picking a board here does not close the card first.
+        <View className="flex-1" testID="boards-sidebar">
+            <SidebarNav>
+                <SidebarActionButton label="+ New board" onPress={openNewBoard} />
 
-            <SidebarItem
-                label="My cards"
-                icon={UserCheck}
-                isActive={isOnMyCards}
-                closesDrawer
-                testID="boards-sidebar-my-cards"
-                onPress={() => router.navigate(orgHref('boards/my-cards'))}
-            />
-
-            <SidebarHeading>Projects</SidebarHeading>
-
-            {projects.map(item => (
                 <SidebarItem
-                    key={item.id}
-                    label={item.name}
-                    colorDot={item.color}
-                    isActive={activeProjectId === item.id}
+                    label="My cards"
+                    icon={UserCheck}
+                    isActive={isOnMyCards}
                     closesDrawer
-                    onPress={() => selectBoard(item)}
+                    testID="boards-sidebar-my-cards"
+                    onPress={() => router.navigate(orgHref('boards/my-cards'))}
                 />
-            ))}
 
-            <ArchivedBoards
-                projects={archivedProjects}
-                activeProjectId={activeProjectId}
-                onSelect={selectBoard}
-            />
+                <SidebarHeading>Projects</SidebarHeading>
 
-            <SidebarDivider />
+                {projects.map(item => (
+                    <SidebarItem
+                        key={item.id}
+                        label={item.name}
+                        colorDot={item.color}
+                        isActive={activeProjectId === item.id}
+                        closesDrawer
+                        onPress={() => selectBoard(item)}
+                    />
+                ))}
 
-            <SidebarItem
-                label="Help"
-                icon={HelpCircle}
-                closesDrawer
-                onPress={() => openHelpPackage('boards')}
-            />
-        </SidebarNav>
+                <ArchivedBoards
+                    projects={archivedProjects}
+                    activeProjectId={activeProjectId}
+                    onSelect={selectBoard}
+                />
+
+                <SidebarDivider />
+
+                <SidebarItem
+                    label="Help"
+                    icon={HelpCircle}
+                    closesDrawer
+                    onPress={() => openHelpPackage('boards')}
+                />
+            </SidebarNav>
+        </View>
     )
 }
 

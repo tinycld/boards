@@ -97,7 +97,7 @@ test('opens a card from its key in the address bar', async ({ page }) => {
 
     // The one legitimate page.goto in these specs: URL entry IS what is under
     // test here, and it is an initial load rather than in-app navigation.
-    await page.goto(`/a/boards/${key}-1`)
+    await page.goto(`/a/boards/${key}/${key}-1`)
     // A hard navigation reloads the whole app; gate on the shell the way
     // login does before asking anything of the route it opened on.
     await appShell(page).waitFor({ state: 'visible', timeout: 15_000 })
@@ -105,7 +105,7 @@ test('opens a card from its key in the address bar', async ({ page }) => {
     await expect(page.getByText('Deep linked card').first()).toBeVisible()
 
     // Lower case has to reach the same card — a key gets retyped from memory.
-    await page.goto(`/a/boards/${key.toLowerCase()}-1`)
+    await page.goto(`/a/boards/${key.toLowerCase()}/${key.toLowerCase()}-1`)
     await appShell(page).waitFor({ state: 'visible', timeout: 15_000 })
     await expect(page.getByTestId('boards-detail-key')).toHaveText(`${key}-1`)
 })

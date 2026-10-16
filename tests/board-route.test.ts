@@ -3,18 +3,19 @@ import type { Href } from 'expo-router'
 import { describe, expect, it } from 'vitest'
 import {
     activeBoardIdFromPath,
+    boardHref,
     boardPath,
     boardSegment,
     cardHref,
     cardPagePath,
+    isCoveredByBoard,
     parseBoardSegment,
     parseCardNumber,
+    parseCardSegment,
+    pathNamesCard,
     peekHref,
-    peekParams,
-    resolveCardOnBoard,
-    urlCardParam,
+    peekSegment,
 } from '../tinycld/boards/lib/board-route'
-import type { BoardProject } from '../tinycld/boards/types'
 
 /**
  * The URL is the source of truth for which board is open and which card is
@@ -29,27 +30,27 @@ import type { BoardProject } from '../tinycld/boards/types'
  */
 describe('parseBoardSegment', () => {
     it('reads a bare slug as a board', () => {
-        expect(parseBoardSegment('PL')).toEqual({ slug: 'PL', cardNumber: 0 })
+        expect(parseBoardSegment('PL')).toEqual({ slug: 'PL' })
     })
 
-    it('reads a key as a board AND a card', () => {
-        expect(parseBoardSegment('PL-12')).toEqual({ slug: 'PL', cardNumber: 12 })
+    it('reads the old key spelling as its board', () => {
+        expect(parseBoardSegment('PL-12')).toEqual({ slug: 'PL' })
     })
 
     // A URL is typed from memory as often as it is pasted.
     it('uppercases, so a retyped URL reaches the same board', () => {
-        expect(parseBoardSegment('pl')).toEqual({ slug: 'PL', cardNumber: 0 })
-        expect(parseBoardSegment('pl-3')).toEqual({ slug: 'PL', cardNumber: 3 })
+        expect(parseBoardSegment('pl')).toEqual({ slug: 'PL' })
+        expect(parseBoardSegment('pl-3')).toEqual({ slug: 'PL' })
     })
 
     // The sibling route must never read as a card — a key needs digits after
     // the hyphen — so it is safe by the parsing rule rather than by name.
     it('does not read my-cards as a key', () => {
-        expect(parseBoardSegment('my-cards').cardNumber).toBe(0)
+        expect(parseBoardSegment('my-cards').slug).toBe('MY-CARDS')
     })
 
     it('does not read a record id as a key', () => {
-        expect(parseBoardSegment('r8f3k2m9x1p7q4w').cardNumber).toBe(0)
+        expect(parseBoardSegment('r8f3k2m9x1p7q4w').slug).toBe('R8F3K2M9X1P7Q4W')
     })
 })
 
@@ -84,96 +85,38 @@ describe('paths', () => {
         expect(cardHref(orgHref, board, { id: 'c0', number: 0 })).toEqual(appHref('boards/PL/c0'))
     })
 
-    it('puts a keyed card in the path and a keyless one in ?focused=', () => {
-        expect(peekParams('PL', { key: 'PL-12', id: 'c1' })).toEqual({
-            boardSlug: 'PL-12',
-            focused: undefined,
-        })
-        expect(peekParams('p1', { key: '', id: 'c1' })).toEqual({ boardSlug: 'p1', focused: 'c1' })
-        // Closing names both params so setParams clears whichever was set.
-        expect(peekParams('PL', null)).toEqual({ boardSlug: 'PL', focused: undefined })
+    it('peeks by key, else by record id', () => {
+        const org = (path: string): Href => `/a/${path}` as Href
+        expect(peekHref(org, 'PL', { key: 'PL-12', id: 'x' })).toBe('/a/boards/PL/PL-12')
+        expect(peekHref(org, 'PL', { key: '', id: 'abcdefghijklmno' })).toBe(
+            '/a/boards/PL/abcdefghijklmno'
+        )
+        expect(peekSegment({ key: '', id: 'abcdefghijklmno' })).toBe('abcdefghijklmno')
+        expect(boardHref(org, 'PL')).toBe('/a/boards/PL')
     })
 
-    it('builds the matching href', () => {
-        const orgHref = (path: string, extra?: Record<string, string>): Href =>
-            (extra ? { pathname: appHref(path), params: extra } : appHref(path)) as Href
-        expect(peekHref(orgHref, 'PL', { key: 'PL-12', id: 'c1' })).toBe('/a/boards/PL-12')
-        expect(peekHref(orgHref, 'p1', { key: '', id: 'c1' })).toEqual({
-            pathname: '/a/boards/p1',
-            params: { focused: 'c1' },
-        })
-    })
-})
-
-describe('urlCardParam', () => {
-    it('prefers a key in the segment over ?focused=', () => {
-        expect(urlCardParam('PL-3', 'PL-9')).toBe('PL-3')
-        expect(urlCardParam('PL', 'PL-9')).toBe('PL-9')
-        expect(urlCardParam('PL', '')).toBe('')
+    it('pages by number, else by id', () => {
+        const org = (path: string): Href => `/a/${path}` as Href
+        expect(cardHref(org, { id: 'b', slug: 'pl' }, { id: 'x', number: 12 })).toBe(
+            '/a/boards/pl/12'
+        )
+        expect(cardHref(org, { id: 'b', slug: '' }, { id: 'abcdefghijklmno', number: 0 })).toBe(
+            '/a/boards/b/abcdefghijklmno'
+        )
     })
 })
 
-function board(overrides: Partial<BoardProject> = {}): BoardProject {
-    return {
-        id: 'p1',
-        name: 'Home projects',
-        slug: 'HOME',
-        color: '#4A86E8',
-        members: [],
-        labels: [],
-        listOrder: [{ id: 'l1', position: 'a0' }],
-        lists: [
-            {
-                id: 'l1',
-                name: 'To do',
-                position: 'a0',
-                category: 'todo',
-                cards: [card('c1', 'HOME-1', 1), card('c2', 'HOME-2', 2)],
-            },
-        ],
-        ...overrides,
-    } as BoardProject
-}
-
-function card(id: string, key: string, number: number) {
-    return {
-        id,
-        key,
-        number,
-        listId: 'l1',
-        position: 'a0',
-        title: id,
-        description: '',
-        labels: [],
-        assignees: [],
-        checklistTotal: 0,
-        checklistDone: 0,
-        commentCount: 0,
-        attachmentCount: 0,
-        listCategory: 'todo',
-    }
-}
-
-describe('resolveCardOnBoard', () => {
-    it('resolves a key, in either case', () => {
-        expect(resolveCardOnBoard(board(), 'HOME-2')).toBe('c2')
-        expect(resolveCardOnBoard(board(), 'home-2')).toBe('c2')
-    })
-
-    // The `?focused=<id>` spelling: core's notifications, and a keyless card.
-    it('resolves a raw record id', () => {
-        expect(resolveCardOnBoard(board(), 'c1')).toBe('c1')
-    })
-
-    // A key from ANOTHER board must not resolve to whichever local card
-    // happens to carry that number.
-    it('ignores a key belonging to a different board', () => {
-        expect(resolveCardOnBoard(board(), 'FOX-2')).toBe('')
-    })
-
-    it('ignores a number that names no card here, and an empty param', () => {
-        expect(resolveCardOnBoard(board(), 'HOME-99')).toBe('')
-        expect(resolveCardOnBoard(board(), '')).toBe('')
+describe('parseCardSegment', () => {
+    it('reads a key', () =>
+        expect(parseCardSegment('pl-12')).toEqual({ kind: 'key', slug: 'PL', number: 12 }))
+    it('reads a number', () =>
+        expect(parseCardSegment('12')).toEqual({ kind: 'number', number: 12 }))
+    it('reads a record id', () =>
+        expect(parseCardSegment('abcdefghijklmno')).toEqual({ kind: 'id', id: 'abcdefghijklmno' }))
+    it('rejects leading zeros, blanks and junk', () => {
+        for (const s of ['012', '', 'PL-012', 'my-cards', 'abc']) {
+            expect(parseCardSegment(s)).toEqual({ kind: 'none' })
+        }
     })
 })
 
@@ -194,5 +137,47 @@ describe('activeBoardIdFromPath', () => {
         expect(activeBoardIdFromPath('/a/boards/my-cards', boards)).toBeNull()
         expect(activeBoardIdFromPath('/a/boards', boards)).toBeNull()
         expect(activeBoardIdFromPath('/a/mail/PL', boards)).toBeNull()
+    })
+})
+
+// A board parks only when the reader went on to ANOTHER board from it: Back
+// returns to it, and until then it need hold nothing. Anything else above it
+// (My cards, the bare /a/boards) or leaving Boards altogether keeps it live.
+describe('isCoveredByBoard', () => {
+    const board = (key: string) => ({ key, name: '[boardSlug]' })
+
+    it('is covered by a later board', () => {
+        expect(isCoveredByBoard([board('pl'), board('ot')], 'pl')).toBe(true)
+    })
+
+    it('is covered by a later board past My cards', () => {
+        const routes = [board('pl'), { key: 'mine', name: 'my-cards' }, board('ot')]
+        expect(isCoveredByBoard(routes, 'pl')).toBe(true)
+    })
+
+    it('is not covered on top, nor under only My cards or the index', () => {
+        const routes = [board('pl'), { key: 'mine', name: 'my-cards' }, { key: 'i', name: 'index' }]
+        expect(isCoveredByBoard(routes, 'pl')).toBe(false)
+        expect(isCoveredByBoard([board('pl'), board('ot')], 'ot')).toBe(false)
+    })
+
+    it('is not covered when the route is not in the stack', () => {
+        expect(isCoveredByBoard([board('ot')], 'pl')).toBe(false)
+    })
+})
+
+// The sidebar's press on the board already on screen closes the open card, and
+// does nothing on the bare board; this is how it tells the two apart.
+describe('pathNamesCard', () => {
+    it('reads a peek or a page as a card', () => {
+        expect(pathNamesCard('/a/boards/PL/PL-12')).toBe(true)
+        expect(pathNamesCard('/a/boards/PL/12')).toBe(true)
+    })
+
+    it('reads the bare board, My cards and other packages as no card', () => {
+        expect(pathNamesCard('/a/boards/PL')).toBe(false)
+        expect(pathNamesCard('/a/boards/my-cards')).toBe(false)
+        expect(pathNamesCard('/a/boards')).toBe(false)
+        expect(pathNamesCard('/a/mail/inbox/x')).toBe(false)
     })
 })

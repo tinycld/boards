@@ -1,7 +1,5 @@
 import type { Href } from 'expo-router'
-import type { BoardProject } from '../types'
-import { flattenCards } from './board-cards'
-import { parseCardKey } from './card-key'
+import { isRecordId, parseCardKey } from './card-key'
 
 /**
  * The URL shapes under `/a/boards`, and the rules that read them.
@@ -13,34 +11,29 @@ import { parseCardKey } from './card-key'
  *   boards                  the package root -> the reader's last board
  *   boards/PL               a board, by slug (or by record id, for a board
  *                           created without one)
- *   boards/PL-12            that board, card 12 peeked
- *   boards/PL?focused=<id>  the peek for a card with no key yet, and every
- *                           link core mints (`?focused=` is an ecosystem
- *                           convention, so it is accepted and never dropped)
- *   boards/PL/12            card 12, full page
- *   boards/PL/<id>          the full page of a card with no number yet; the
- *                           page respells it as the number once that lands
+ *   boards/PL/PL-12         that board, card 12 peeked (or in the modal)
+ *   boards/PL/<id>          the same peek for a card with no key yet; the
+ *                           screen respells it as the key once that lands
+ *   boards/PL/12            card 12, full page, covering the board
+ *   boards/PL-12            old spelling; redirects to boards/PL/PL-12
  *   boards/my-cards         unchanged — it does not parse as a key
  *
- * ONE segment, told apart by `parseCardKey`: a key has a hyphen followed by
- * digits, a slug has neither, and a 15-character PocketBase id has no hyphen
- * at all. So `my-cards` and a record id both fall through to "board" without
- * a special case. A record id in the segment always names a BOARD; a card is
- * only ever spelled by its key, its number, `?focused=<id>`, or its id in the
- * full page's own segment.
+ * The board segment is told apart by `parseCardKey` (the old `PL-12` spelling
+ * still reaches the board screen); the child segment by `parseCardSegment`.
+ * `my-cards` and a record id both fall through to "board" without a special
+ * case.
  */
 
 export interface BoardSegment {
     /** Uppercased: slugs are stored uppercase and a URL is retyped from memory. */
     slug: string
-    /** 0 when the segment names only a board. */
-    cardNumber: number
 }
 
+/** The board a board segment names; the old `PL-12` spelling names board PL. */
 export function parseBoardSegment(segment: string): BoardSegment {
     const key = parseCardKey(segment)
-    if (key) return { slug: key.slug, cardNumber: key.number }
-    return { slug: segment.trim().toUpperCase(), cardNumber: 0 }
+    if (key) return { slug: key.slug }
+    return { slug: segment.trim().toUpperCase() }
 }
 
 /**
@@ -73,25 +66,6 @@ export function cardPagePath(segment: string, card: { id: string; number: number
     return `boards/${segment}/${card.number || card.id}`
 }
 
-/**
- * The route params that put `card` in the peek on the board at `segment`, or
- * take it out when `card` is null.
- *
- * The key rides in the path (`boards/PL-12`); a card with no key — a board
- * without a slug, or a card the server has not numbered yet — falls back to
- * `?focused=<id>`, which is also the spelling core's notifications use. Both
- * keys are always present so a `setParams` call clears whichever one the URL
- * carried before.
- */
-export function peekParams(
-    segment: string,
-    card: { key: string; id: string } | null
-): { boardSlug: string; focused: string | undefined } {
-    if (!card) return { boardSlug: segment, focused: undefined }
-    if (card.key) return { boardSlug: card.key, focused: undefined }
-    return { boardSlug: segment, focused: card.id }
-}
-
 type HrefBuilder = (path: string, extra?: Record<string, string>) => Href
 
 /** A link to `card`'s full page (see cardPagePath). */
@@ -103,44 +77,43 @@ export function cardHref(
     return orgHref(cardPagePath(boardSegment(board), card))
 }
 
-/** A link to `card` peeked on its board — what search and cross-board links navigate to. */
+/** The [card] segment that peeks `card` on its board: the key, else the record id. */
+export function peekSegment(card: { key: string; id: string }): string {
+    return card.key || card.id
+}
+
+/** A link to `card` peeked over its board — what search and cross-board links navigate to. */
 export function peekHref(
     orgHref: HrefBuilder,
     segment: string,
     card: { key: string; id: string }
 ): Href {
-    const params = peekParams(segment, card)
-    return params.focused
-        ? orgHref(boardPath(params.boardSlug), { focused: params.focused })
-        : orgHref(boardPath(params.boardSlug))
+    return orgHref(`${boardPath(segment)}/${peekSegment(card)}`)
 }
 
-/**
- * The card a board URL names, as the URL spells it: a key in the segment, else
- * the `?focused=` value, else ''. A key in the path wins because only one
- * spelling is ever written, and the path is the newer one.
- */
-export function urlCardParam(boardSlug: string, focused: string): string {
-    if (parseCardKey(boardSlug)) return boardSlug
-    return focused
+/** A link to a board with no card open. */
+export function boardHref(orgHref: HrefBuilder, segment: string): Href {
+    return orgHref(boardPath(segment))
 }
 
+export type CardSegment =
+    | { kind: 'none' }
+    | { kind: 'key'; slug: string; number: number }
+    | { kind: 'id'; id: string }
+    | { kind: 'number'; number: number }
+
 /**
- * A URL's card param -> a card id on THIS board, or ''.
- *
- * Accepts a key or a raw record id (the `?focused=` spelling). A key is
- * checked against the board's own slug so `OTTER-2` on the FOX board resolves
- * to nothing rather than to whichever card happens to be numbered 2 here.
+ * What a `[card]` segment names. Key first, then number, then record id: a key
+ * has a hyphen, a number is digits only, an id is 15 lowercase alphanumerics.
  */
-export function resolveCardOnBoard(project: BoardProject, param: string): string {
-    if (!param) return ''
-    const key = parseCardKey(param)
-    const wanted = key ? `${key.slug}-${key.number}` : ''
-    if (key && (!project.slug || key.slug !== project.slug.toUpperCase())) return ''
-    for (const { card } of flattenCards(project)) {
-        if (key ? card.key === wanted : card.id === param) return card.id
-    }
-    return ''
+export function parseCardSegment(segment: string): CardSegment {
+    const key = parseCardKey(segment)
+    if (key) return { kind: 'key', slug: key.slug, number: key.number }
+    const number = parseCardNumber(segment)
+    if (number) return { kind: 'number', number }
+    const trimmed = segment.trim()
+    if (isRecordId(trimmed)) return { kind: 'id', id: trimmed }
+    return { kind: 'none' }
 }
 
 /**
@@ -165,4 +138,28 @@ export function activeBoardIdFromPath(
 export function paramString(value: string | string[] | undefined): string {
     if (Array.isArray(value)) return value[0] ?? ''
     return value ?? ''
+}
+
+/**
+ * Whether a later board sits above the route `key` in the boards stack: the
+ * reader went on from this board to another, and Back will return here. Only
+ * a board covers one — My cards or the bare `/a/boards` above it, or leaving
+ * Boards altogether, does not.
+ */
+export function isCoveredByBoard(
+    routes: readonly { key: string; name: string }[],
+    key: string
+): boolean {
+    const index = routes.findIndex(route => route.key === key)
+    if (index < 0) return false
+    return routes.slice(index + 1).some(route => route.name === '[boardSlug]')
+}
+
+/**
+ * Whether `pathname` names a card on its board: a peek (`/a/boards/PL/PL-12`)
+ * or a page (`/a/boards/PL/12`), rather than the bare board.
+ */
+export function pathNamesCard(pathname: string): boolean {
+    const [, , pkg, board = '', card = ''] = pathname.split('/')
+    return pkg === 'boards' && board !== '' && card !== ''
 }

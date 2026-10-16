@@ -7,7 +7,9 @@ import {
     closeCardPeek,
     createBoard,
     openBoard,
+    peekUrl,
     sectionControl,
+    uniqueNumber,
     uniqueStamp,
 } from './helpers'
 
@@ -28,6 +30,7 @@ import {
 
 const BLOCKER = 'Ship the API'
 const BLOCKED = 'Ship the client'
+const NOT_FOUND = 'This card doesn’t exist or was removed'
 
 let run = 0
 async function freshBoard(page: Page): Promise<string> {
@@ -225,6 +228,36 @@ test('files a link to a card on another board, and both ends read it', async ({ 
     await expect(
         peek(page).getByTestId('boards-link-row').filter({ hasText: 'Far side work' })
     ).toBeVisible()
+})
+
+// Pressing a link to a card on another board pushes that board with the card
+// peeked. The board left must not carry its cards into the new one: they name
+// nothing there, and showed as a not-found under the peek. The board left
+// stays beneath, so Back returns to the card the link was pressed on.
+test('a link to a card on another board opens it there, and Back returns to the card', async ({
+    page,
+}) => {
+    const farKey = `FAR${uniqueNumber() % 100000}`
+    const far = `links-far-${uniqueStamp()}-${run++}`
+    await createBoard(page, far, farKey)
+    await addCard(page, 0, 'Far side work')
+    const homeKey = `HOME${uniqueNumber() % 100000}`
+    await createBoard(page, `links-home-${uniqueStamp()}-${run++}`, homeKey)
+    await addCard(page, 0, BLOCKER)
+    await addLink(page, BLOCKER, 'Blocks', 'Far side work', far)
+    await expect(page).toHaveURL(peekUrl(homeKey, 1))
+
+    await peek(page).getByTestId('boards-link-row').getByText('Far side work').click()
+    await expect(page).toHaveURL(peekUrl(farKey, 1))
+    await expect(peek(page).getByTestId('boards-detail-key')).toHaveText(`${farKey}-1`)
+    await expect(boardCard(page, 'Far side work')).toBeVisible()
+    await expect(page.getByText(NOT_FOUND)).toHaveCount(0)
+
+    await page.goBack()
+    await expect(page).toHaveURL(peekUrl(homeKey, 1))
+    await expect(peek(page).getByTestId('boards-detail-key')).toHaveText(`${homeKey}-1`)
+    await expect(boardCard(page, BLOCKER)).toBeVisible()
+    await expect(page.getByText(NOT_FOUND)).toHaveCount(0)
 })
 
 // The board step must not cost the common case anything: with no board picked

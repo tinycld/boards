@@ -36,22 +36,13 @@ export default function BoardsLayout() {
     return (
         <Stack screenOptions={{ headerShown: false, animation: 'none' }}>
             {/*
-             * One board screen, reused — never a stack of them.
-             *
-             * A board is its own route now (`/a/boards/PL`), and React
-             * Navigation's NAVIGATE matches an existing screen by name AND
-             * params. `boardSlug` differs per board, so nothing matches and
-             * every board PUSHES: the board you came from stays mounted
-             * underneath, keeping its live queries and its presence room, and
-             * the next board stacks on top of that. That is what
-             * `router.navigate` was already reaching for at every call site.
-             *
-             * The id is a CONSTANT rather than `dangerouslySingular` (bare),
-             * whose default id substitutes the params into the route name — so
-             * every slug gets a different id and nothing collapses. Returning
-             * one id for the route makes all boards the same screen entry.
+             * A board is a screen of its own per visit: going to another board
+             * pushes it, so Back returns to the board left with its card. The
+             * board beneath parks while covered (its layout drops its queries
+             * and its room), so the stack holds one live board. Its card
+             * children stack inside it, not here.
              */}
-            <Stack.Screen name="[boardSlug]/index" dangerouslySingular={() => 'board'} />
+            <Stack.Screen name="[boardSlug]" />
         </Stack>
     )
 }

@@ -6,7 +6,10 @@ import {
     cardSurface,
     closeCardPeek,
     createBoard,
+    expectPeekUrl,
     openCard,
+    pageUrl,
+    peekUrl,
     uniqueNumber,
     uniqueStamp,
 } from './helpers'
@@ -47,7 +50,7 @@ test.describe('card display mode', () => {
         await addCard(page, 0, 'shown two ways')
         await openCard(page, 'shown two ways')
 
-        const cardUrl = new RegExp(`/a/boards/${key}-1$`)
+        const cardUrl = peekUrl(key, 1)
         await expect(page).toHaveURL(cardUrl)
 
         await toggleTo(page, 'modal')
@@ -124,7 +127,7 @@ test.describe('card display mode', () => {
         // ⤢ is NOT the mode toggle: it navigates, and to the full-page
         // spelling of the URL rather than the on-board one.
         await page.getByLabel('Open full page').click()
-        await expect(page).toHaveURL(new RegExp(`/a/boards/${key}/1$`))
+        await expect(page).toHaveURL(pageUrl(key, 1))
         await expect(cardSurface(page, 'modal')).toHaveCount(0)
 
         // Back lands on the board with the card STILL open — the URL never
@@ -132,7 +135,7 @@ test.describe('card display mode', () => {
         // comes back because the board's route is focused again, not because
         // anything reopened it.
         await page.goBack()
-        await expect(page).toHaveURL(new RegExp(`/a/boards/${key}-1$`))
+        await expectPeekUrl(page, key)
         await expect(cardSurface(page, 'modal')).toBeVisible()
 
         await toggleTo(page, 'peek')

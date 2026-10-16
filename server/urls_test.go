@@ -5,7 +5,7 @@ import "testing"
 // The URL shapes notifications mint. The client twin is
 // tinycld/boards/lib/board-route.ts (tests/board-route.test.ts); a change to
 // one side without the other is a link that lands on "no such board".
-func TestCardURLSpellsTheKeyInThePath(t *testing.T) {
+func TestCardURLSpellsTheKeyAsTheChildSegment(t *testing.T) {
 	env := setupMentionFlushEnv(t)
 	env.project.Set("slug", "PL")
 	if err := env.app.Save(env.project); err != nil {
@@ -17,19 +17,19 @@ func TestCardURLSpellsTheKeyInThePath(t *testing.T) {
 	}
 
 	got := cardURL(env.app, env.card.Id)
-	want := appBase(env.app) + "/a/boards/PL-12"
+	want := appBase(env.app) + "/a/boards/PL/PL-12"
 	if got != want {
 		t.Errorf("cardURL = %q, want %q", got, want)
 	}
 }
 
-// A board with no slug has no keys; the card rides `?focused=` on the board's
-// id, which is the shape core's own mention notifications use.
-func TestCardURLFallsBackToFocusedParam(t *testing.T) {
+// A board with no slug has no keys, so the card's id is the child segment and
+// stays so: the client peeks it by id.
+func TestCardURLFallsBackToTheIDSegment(t *testing.T) {
 	env := setupMentionFlushEnv(t)
 
 	got := cardURL(env.app, env.card.Id)
-	want := appBase(env.app) + "/a/boards/" + env.project.Id + "?focused=" + env.card.Id
+	want := appBase(env.app) + "/a/boards/" + env.project.Id + "/" + env.card.Id
 	if got != want {
 		t.Errorf("cardURL = %q, want %q", got, want)
 	}

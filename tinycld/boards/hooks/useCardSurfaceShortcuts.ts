@@ -1,9 +1,10 @@
 import { type Shortcut, useRegisterShortcuts, useShortcutScope } from '@tinycld/core/lib/shortcuts'
-import { type RefObject, useMemo } from 'react'
+import { type RefObject, useId, useMemo } from 'react'
 import type { EditableTextHandle } from '../components/detail/EditableText'
-import { neighborCardId } from '../lib/board-cards'
+import { findCardEntry, neighborCardId } from '../lib/board-cards'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
 import type { BoardProject } from '../types'
+import { useCardNavigation } from './useCardNavigation'
 
 /**
  * The keys an open card answers, on whichever surface it opened on.
@@ -29,22 +30,28 @@ export function useCardSurfaceShortcuts(
     canEdit: boolean,
     titleRef: RefObject<EditableTextHandle | null>
 ) {
-    const openCard = useBoardsUIStore(s => s.openCard)
-    const closeCard = useBoardsUIStore(s => s.closeCard)
+    const { openPeek, leave } = useCardNavigation()
     const setCardDisplayMode = useBoardsUIStore(s => s.setCardDisplayMode)
     // Pushed ABOVE the registration below, and in the same component as it, so
     // every shortcut is stamped with this instance — see core's withScopeId.
     const scopeOwner = useShortcutScope('modal')
+    // One id per surface INSTANCE, as on the card page: peeks stack now, and
+    // the registry keys shortcuts by id, so with shared ids the order in which
+    // one peek unmounts and the next mounts decided whether either answered.
+    const instance = useId()
 
     const shortcuts = useMemo<Shortcut[]>(() => {
+        const idOf = (name: string) => `boards.peek.${name}#${instance}`
         const step = (delta: number) => {
             const next = neighborCardId(project, cardId, delta)
-            if (next) openCard(next)
+            const entry = next ? findCardEntry(project, next) : null
+            // A push, so Back steps back through the cards j/k walked.
+            if (entry) openPeek(entry.card)
         }
         const editTitle: Shortcut[] = canEdit
             ? [
                   {
-                      id: 'boards.peek.editTitle',
+                      id: idOf('editTitle'),
                       keys: 'e',
                       scope: 'modal',
                       group: 'Boards',
@@ -56,15 +63,15 @@ export function useCardSurfaceShortcuts(
         return [
             ...editTitle,
             {
-                id: 'boards.peek.close',
+                id: idOf('close'),
                 keys: 'Escape',
                 scope: 'modal',
                 group: 'Boards',
                 description: 'Close card',
-                run: closeCard,
+                run: leave,
             },
             {
-                id: 'boards.peek.next',
+                id: idOf('next'),
                 keys: 'j',
                 scope: 'modal',
                 group: 'Boards',
@@ -72,7 +79,7 @@ export function useCardSurfaceShortcuts(
                 run: () => step(1),
             },
             {
-                id: 'boards.peek.prev',
+                id: idOf('prev'),
                 keys: 'k',
                 scope: 'modal',
                 group: 'Boards',
@@ -83,7 +90,7 @@ export function useCardSurfaceShortcuts(
                 // `]` rather than `f`, which the board already spends on the
                 // filter panel. A key that means one thing on the board and
                 // another over it is worse than an unmemorable one.
-                id: 'boards.card.toggleDisplayMode',
+                id: `boards.card.toggleDisplayMode#${instance}`,
                 keys: ']',
                 scope: 'modal',
                 group: 'Boards',
@@ -98,6 +105,6 @@ export function useCardSurfaceShortcuts(
                     ),
             },
         ]
-    }, [project, cardId, openCard, closeCard, canEdit, titleRef, setCardDisplayMode])
+    }, [project, cardId, openPeek, leave, canEdit, titleRef, setCardDisplayMode, instance])
     useRegisterShortcuts(shortcuts, scopeOwner)
 }

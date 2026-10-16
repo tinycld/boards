@@ -11,6 +11,7 @@ import { type CanvasPickerKind, selectBoardSort, useBoardsUIStore } from '../sto
 import { useCardCreateStore } from '../stores/card-create-store'
 import type { BoardProject } from '../types'
 import { useArchiveCard, useMoveCard } from './useCardMutations'
+import { useCardNavigation } from './useCardNavigation'
 
 /**
  * Keyboard control of the board itself, at 'list' scope — so it stops matching
@@ -56,7 +57,7 @@ export function useBoardShortcuts(
     // then records whoever holds the keyboard instead of the owner.
     const scopeOwner = useShortcutScope('list')
 
-    const openCard = useBoardsUIStore(s => s.openCard)
+    const { openPeek } = useCardNavigation()
     const focusCard = useBoardsUIStore(s => s.focusCard)
     const focusColumn = useBoardsUIStore(s => s.focusColumn)
     const openComposer = useBoardsUIStore(s => s.openComposer)
@@ -161,7 +162,8 @@ export function useBoardShortcuts(
 
         const open = () => {
             const { focusedCardId } = focus()
-            if (focusedCardId && findCardEntry(project, focusedCardId)) openCard(focusedCardId)
+            const entry = focusedCardId ? findCardEntry(project, focusedCardId) : null
+            if (entry) openPeek(entry.card)
         }
 
         /**
@@ -398,7 +400,7 @@ export function useBoardShortcuts(
         rowPickers,
         router,
         orgHref,
-        openCard,
+        openPeek,
         focusCard,
         focusColumn,
         moveCard,

@@ -35,8 +35,15 @@ const BoardPresenceContext = createContext<BoardPresenceValue>({
 })
 
 /**
- * Holds the board's single presence room, so the header's avatar stack and the
- * per-card clusters read one connection rather than opening one each.
+ * Holds the board's single room — awareness AND the board document — so the
+ * header's avatar stack, the per-card clusters and every open card's
+ * description read one connection rather than opening one each.
+ *
+ * Mounted ONCE per board, in the board layout route (`[boardSlug]/_layout`),
+ * never by a card child: a peek, a modal and any number of stacked pages are
+ * children of that layout and share this room, so opening or stepping cards
+ * neither opens a socket nor reconnects the document. `cardId` is the top
+ * child's card, which is what peers see this user looking at.
  *
  * A React context rather than a Zustand store, against the usual house rule for
  * shared UI state: what is being shared is a live socket handle scoped to the
@@ -44,23 +51,25 @@ const BoardPresenceContext = createContext<BoardPresenceValue>({
  * would need explicit teardown; `useRealtimeRoom` publishes a clean-leave frame
  * on the way out.
  *
- * Note that "on the way out" is NOT unmount: package screens render with
- * `freezeOnBlur`, so leaving cards for another package keeps this provider
- * mounted and its socket open. `useRealtimeRoom` therefore publishes the leave
- * on blur, not on teardown — see the comment on its useLeaveOnBlur.
+ * "On the way out" is two things. Leaving Boards for another package is a
+ * blur, not an unmount: `freezeOnBlur` keeps this provider mounted and its
+ * socket open, so `useRealtimeRoom` publishes the leave on blur (its
+ * useLeaveOnBlur). Going on to another board parks this one: the layout
+ * passes an empty project id, which closes the socket while this provider
+ * stays mounted (the card children's Stack beneath it must not remount).
  */
 export function BoardPresenceProvider({
     projectId,
-    openCardId,
+    cardId,
     children,
 }: {
     projectId: string
-    openCardId: string | null
+    cardId: string | null
     children: ReactNode
 }) {
     const { awareness, peers, doc, isReady, isConnected, canEditDoc, identity } = useBoardPresence(
         projectId,
-        openCardId
+        cardId
     )
     // Memoized so a board re-render for any unrelated reason does not push a
     // new context value at every consumer.

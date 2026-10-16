@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, expectTypeOf, it } from 'vitest'
 import { EMPTY_FILTER } from '../tinycld/boards/lib/board-filter'
 import { PEEK_MIN_WIDTH } from '../tinycld/boards/lib/peek-width'
 import {
@@ -288,6 +288,32 @@ describe('boards-ui-store view preferences', () => {
         })
     })
 
+    // The open card is the route's (`/a/boards/PL/PL-12`), never a store field:
+    // only the public board, which has no route to stack a card under, peeks
+    // from here.
+    describe('the open card', () => {
+        it('is not in the store', () => {
+            type State = ReturnType<typeof useBoardsUIStore.getState>
+            expectTypeOf<State>().not.toHaveProperty('openCard')
+            expectTypeOf<State>().not.toHaveProperty('closeCard')
+            const fields = Object.keys(useBoardsUIStore.getState())
+            expect(fields.filter(field => /^(open|close)Card/.test(field))).toEqual([])
+        })
+
+        it('is left to the public board alone', () => {
+            useBoardsUIStore.getState().openPublicCard('card_1')
+            expect(useBoardsUIStore.getState().publicOpenCardId).toBe('card_1')
+            useBoardsUIStore.getState().closePublicCard()
+            expect(useBoardsUIStore.getState().publicOpenCardId).toBeNull()
+        })
+
+        it('is not touched by a board visit', () => {
+            useBoardsUIStore.getState().openPublicCard('card_1')
+            useBoardsUIStore.getState().setActiveProject('proj_2')
+            expect(useBoardsUIStore.getState().publicOpenCardId).toBe('card_1')
+        })
+    })
+
     describe('the card display mode', () => {
         it('opens cards in the peek until the user says otherwise', () => {
             expect(useBoardsUIStore.getState().cardDisplayMode).toBe('peek')
@@ -359,10 +385,10 @@ describe('boards-ui-store view preferences', () => {
             })
         })
 
-        it('never persists the open card, the dialog flag, or the focus ring', async () => {
+        it('never persists the public peek, the dialog flag, or the focus ring', async () => {
             useBoardsUIStore.setState({
                 activeProjectId: 'proj_1',
-                openCardId: 'card_1',
+                publicOpenCardId: 'card_1',
                 isNewBoardOpen: true,
                 focusedCardId: 'card_2',
                 isCardDragging: true,

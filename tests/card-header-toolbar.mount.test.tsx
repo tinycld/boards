@@ -6,6 +6,12 @@ import { OverlayProvider } from '@tinycld/core/ui/overlay'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CardHeaderToolbar } from '../tinycld/boards/components/detail/CardHeaderToolbar'
+import {
+    CardNavigationProvider,
+    expandAction,
+    useCardNavigation,
+    useRouterCardNavigation,
+} from '../tinycld/boards/hooks/useCardNavigation'
 import type { BoardCardView, BoardListView, BoardProject } from '../tinycld/boards/types'
 
 afterEach(() => {
@@ -105,10 +111,20 @@ const project: BoardProject = {
     unplacedCards: [],
 }
 
+function BoardNavigation({ children }: { children: ReactNode }) {
+    return (
+        <CardNavigationProvider value={useRouterCardNavigation('PL', '', null)}>
+            {children}
+        </CardNavigationProvider>
+    )
+}
+
 function wrapper({ children }: { children: ReactNode }) {
     return (
         <QueryClientProvider client={new QueryClient()}>
-            <OverlayProvider>{children}</OverlayProvider>
+            <OverlayProvider>
+                <BoardNavigation>{children}</BoardNavigation>
+            </OverlayProvider>
         </QueryClientProvider>
     )
 }
@@ -124,6 +140,40 @@ function mountToolbar(canEdit: boolean) {
         { wrapper }
     )
 }
+
+// The toolbar names an item's node by a bare `testid` attribute under react-native-web.
+function expandItems(container: HTMLElement) {
+    return [...container.querySelectorAll('[testid="toolbar-item-expand"]')]
+}
+
+// What the peek and the modal hand the toolbar: Expand only where the card has a page.
+function ExpandableToolbar({ target }: { target: BoardCardView }) {
+    const navigation = useCardNavigation()
+    return (
+        <CardHeaderToolbar
+            project={project}
+            entry={{ card: target, list }}
+            canEdit={false}
+            onDismiss={() => {}}
+            onExpand={expandAction(navigation, target)}
+        />
+    )
+}
+
+describe('the Expand control', () => {
+    it('is offered for a numbered card', () => {
+        const { container } = render(<ExpandableToolbar target={card} />, { wrapper })
+        expect(expandItems(container).length).toBeGreaterThan(0)
+    })
+
+    it('is not offered for a card with no number, which has no page URL', () => {
+        const { container } = render(
+            <ExpandableToolbar target={{ ...card, key: '', number: 0 }} />,
+            { wrapper }
+        )
+        expect(expandItems(container)).toEqual([])
+    })
+})
 
 describe('CardHeaderToolbar', () => {
     it('runs no card-type query for a viewer', () => {

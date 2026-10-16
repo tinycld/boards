@@ -37,10 +37,12 @@ export interface RemoteCardsPresence extends BoardsPresenceState {
  * Live presence for a board: who else has it open, and which card each of them
  * is looking at.
  *
- * The room carries awareness only — no shared document — so the server side is
- * an authorize handler and nothing else (boards/server/realtime.go).
+ * The room carries awareness AND the board's shared document (one fragment per
+ * card; see BoardPresenceProvider), so this hook is called once per board, from
+ * the board layout route, and every card view reads the result through context.
+ * The server side is boards/server/realtime.go.
  */
-export function useBoardPresence(projectId: string, openCardId: string | null) {
+export function useBoardPresence(projectId: string, cardId: string | null) {
     // Non-throwing: BoardColumn calls the mutation hooks unconditionally, so
     // they are constructed on the PUBLIC board too — where there is no
     // session and the affordances that would invoke them are already gated
@@ -83,7 +85,7 @@ export function useBoardPresence(projectId: string, openCardId: string | null) {
     // Keying on `isConnected` also covers reconnects, where the server has
     // dropped every slot it held for us.
     //
-    // `openCardId` is in the same effect rather than one of its own so the two
+    // `cardId` is in the same effect rather than one of its own so the two
     // cannot race: a separate cardId effect could write the field before this
     // one overwrote it with a stale null.
     //
@@ -120,7 +122,7 @@ export function useBoardPresence(projectId: string, openCardId: string | null) {
             awareness.setLocalState({
                 ...(awareness.getLocalState() ?? {}),
                 user: identity,
-                cardId: openCardId,
+                cardId,
             })
         }
         publish()
@@ -148,7 +150,7 @@ export function useBoardPresence(projectId: string, openCardId: string | null) {
         }
         awareness.on('change', handleAdded)
         return () => awareness.off('change', handleAdded)
-    }, [awareness, isConnected, openCardId, identity])
+    }, [awareness, isConnected, cardId, identity])
 
     return {
         room,

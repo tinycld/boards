@@ -1,9 +1,9 @@
-import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
-import { useRouter } from 'expo-router'
 import { Link2, Lock, X } from 'lucide-react-native'
 import { Pressable, Text, View } from 'react-native'
+import { useCardNavigation } from '../../hooks/useCardNavigation'
 import { useOpenRelatedCard } from '../../hooks/useOpenRelatedCard'
+import { parseCardKey } from '../../lib/card-key'
 import { type CardLinkView, groupLinks, type LinkType } from '../../lib/card-links'
 import { isClosedCategory } from '../../lib/list-category'
 import type { BoardCardView } from '../../types'
@@ -181,8 +181,7 @@ function RedactedFar() {
 
 function ResolvedFar({ link, isOnThisBoard }: { link: CardLinkView; isOnThisBoard: boolean }) {
     const openCard = useOpenRelatedCard()
-    const router = useRouter()
-    const orgHref = useOrgHref()
+    const { openPeek } = useCardNavigation()
     const mutedColor = useThemeColor('muted')
     const successColor = useThemeColor('success')
     if (link.far.state !== 'resolved') return null
@@ -191,11 +190,11 @@ function ResolvedFar({ link, isOnThisBoard }: { link: CardLinkView; isOnThisBoar
     // A card on ANOTHER board cannot open in this board's peek: CardPeek
     // resolves its id through `findCardEntry(project, …)`, which only knows
     // this board, so the peek would render nothing and the press would look
-    // broken. `/a/boards/<KEY>` opens the other board with the card peeked —
-    // a real navigation, so Back returns here.
+    // broken. So the press pushes the other board's own route with the card
+    // peeked over it; Back returns to this card.
     const open = () => {
         if (isOnThisBoard) openCard(far)
-        else if (far.key) router.push(orgHref(`boards/${far.key}`))
+        else if (far.key) openPeek(far, parseCardKey(far.key)?.slug ?? far.key)
     }
     const isDone = isClosedCategory(far.listCategory)
 

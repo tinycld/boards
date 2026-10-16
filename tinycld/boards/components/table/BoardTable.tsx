@@ -114,7 +114,7 @@ function TableRow({
             isFocused={isFocused}
             isSelected={isSelected}
             showSprint={showSprint}
-            onPress={event => select(row.card.id, event)}
+            onPress={event => select(row.card, event)}
         />
     )
 }

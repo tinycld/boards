@@ -120,6 +120,52 @@ test.describe('Boards — real-time presence', () => {
     })
 })
 
+// A card's page is a child route over the same board, so it shares the board's
+// room: the peer on a page is shown on that card, steps with j, and returns
+// with Back — all through the one connection the layout owns.
+test('shows a peer on a card page, following j and Back', async ({ page }) => {
+    await login(page)
+    await navigateToPackage(page, 'boards')
+    const boardName = `presence-page-${uniqueStamp()}`
+    await createBoard(page, boardName)
+    await addCard(page, 0, 'Alpha')
+    await addCard(page, 0, 'Beta')
+    await openBoard(page, boardName, 'Alpha')
+    await shareBoard(page, boardName, TEST_COLLABORATOR_EMAIL, 'Editor')
+
+    const { page: peerPage, close } = await signInAsCollaborator(page)
+    try {
+        await navigateToPackage(peerPage, 'boards')
+        await openBoard(peerPage, boardName, 'Alpha')
+        const alphaId = await cardIdFor(page, 'Alpha')
+        const betaId = await cardIdFor(page, 'Beta')
+
+        // The peer opens Alpha's full page.
+        await boardCard(peerPage, 'Alpha').click()
+        await peerPage.getByLabel('Open full page').click()
+        await expect(
+            peerPage
+                .getByTestId('boards-card-page')
+                .filter({ visible: true })
+                .getByText('Description', { exact: true })
+        ).toBeVisible()
+        await expect(page.getByTestId(`boards-watchers-${alphaId}`)).toBeVisible()
+        await expect(page.getByTestId(`boards-watchers-${betaId}`)).toHaveCount(0)
+
+        // j pushes the next card's page; the marker follows.
+        await peerPage.keyboard.press('j')
+        await expect(page.getByTestId(`boards-watchers-${betaId}`)).toBeVisible()
+        await expect(page.getByTestId(`boards-watchers-${alphaId}`)).toHaveCount(0)
+
+        // Back pops to Alpha's page; the marker returns.
+        await peerPage.goBack()
+        await expect(page.getByTestId(`boards-watchers-${alphaId}`)).toBeVisible()
+        await expect(page.getByTestId(`boards-watchers-${betaId}`)).toHaveCount(0)
+    } finally {
+        await close()
+    }
+})
+
 /** The card id embedded in a face's testID (`board-card-<id>`). */
 async function cardIdFor(page: Page, title: string): Promise<string> {
     const testId = await boardCard(page, title).getAttribute('data-testid')

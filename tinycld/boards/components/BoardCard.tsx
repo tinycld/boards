@@ -19,6 +19,7 @@ import { type GestureResponderEvent, Pressable, Text, View } from 'react-native'
 import type { RemoteCardsPresence } from '../hooks/useBoardPresence'
 import { useCardFileDrop } from '../hooks/useCardFileDrop'
 import { useCardSelection } from '../hooks/useCardSelection'
+import { useIsBoardCardOpen } from '../hooks/useOpenCard'
 import { type AgingLevel, agingLevel } from '../lib/aging'
 import { dueStateFor } from '../lib/due-state'
 import { formatSchedule } from '../lib/due-time'
@@ -86,8 +87,8 @@ interface BoardCardProps {
     acceptsFiles: (cardId: string) => boolean
 }
 
-function useCardPress(cardId: string) {
-    const isOpen = useBoardsUIStore(s => s.openCardId === cardId)
+function useCardPress(card: { id: string; key: string }) {
+    const cardId = card.id
     // Per-card boolean, not the whole focus state: only the card whose ring
     // actually flips re-renders, so arrowing across the board never re-renders
     // a column and cannot disturb a live drag.
@@ -97,32 +98,26 @@ function useCardPress(cardId: string) {
     const isSelected = useBoardsUIStore(s => s.selectedCardIds.has(cardId))
     // Owns the drag guard and the open-vs-select decision; see the hook.
     const select = useCardSelection()
-    const onPress = (event: GestureResponderEvent) => select(cardId, event)
-    return { isOpen, isFocused, isSelected, onPress }
+    const onPress = (event: GestureResponderEvent) => select(card, event)
+    return { isFocused, isSelected, onPress }
 }
 
 /**
- * The open card already wears the solid ring, so focus only shows while the
- * peek is closed — otherwise the card you are reading carries two rings and
- * neither reads as meaningful. A hovering OS file drop outranks both: it is
- * the only transient state, and the ring is what tells the user which card
- * will receive the files.
+ * The border colour of a card at rest, by state. The open card is not on this
+ * ladder: its ring is the `OpenRing` overlay, drawn OVER the border, so it
+ * covers whichever colour wins here and the card you are reading carries one
+ * ring, not two. A hovering OS file drop outranks the rest: it is the only
+ * transient state, and the ring is what tells the user which card will receive
+ * the files.
  *
- * Selection sits above focus and below open: a selected card is a stronger
+ * Selection sits above focus: a selected card is a stronger
  * statement than the cursor merely resting on one. It is the only rung that
  * also tints the BACKGROUND (see `cardSelectedClass`) rather than only
  * recolouring the border — a selection has to stay legible across a run of
  * cards at a glance, and at most one of them can be the focused one.
  */
-function cardRingClass(
-    isOpen: boolean,
-    isFocused: boolean,
-    idle: string,
-    isDropTarget = false,
-    isSelected = false
-) {
+function cardRingClass(isFocused: boolean, idle: string, isDropTarget = false, isSelected = false) {
     if (isDropTarget) return 'border-ring'
-    if (isOpen) return 'border-ring'
     if (isSelected) return 'border-primary'
     if (isFocused) return 'border-muted-foreground'
     return idle
@@ -157,7 +152,7 @@ export function BoardCard({
     reactorName,
     currentUserId,
 }: BoardCardProps) {
-    const { isOpen, isFocused, isSelected, onPress } = useCardPress(card.id)
+    const { isFocused, isSelected, onPress } = useCardPress(card)
     // canDrag doubles as the edit gate: both come from the same role check.
     const { isDropTarget, dropRef } = useCardFileDrop(card.id, projectId, canDrag, acceptsFiles)
     // Board-wide, so read here rather than threaded through BoardColumn —
@@ -178,7 +173,6 @@ export function BoardCard({
                 cardId={card.id}
                 title={card.title}
                 category={category}
-                isOpen={isOpen}
                 isFocused={isFocused}
                 isSelected={isSelected}
                 onPress={onPress}
@@ -207,13 +201,13 @@ export function BoardCard({
             testID={`board-card-${card.id}`}
             onPress={onPress}
             className={`${cardSelectedClass(isSelected, aging)} border rounded-[10px] shadow-sm ${layout} ${canDrag ? 'web:cursor-grab' : ''} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${cardRingClass(
-                isOpen,
                 isFocused,
                 'border-border hover:border-muted/50',
                 isDropTarget,
                 isSelected
             )}`}
         >
+            <OpenRing cardId={card.id} />
             <DropMarker isDropTarget={isDropTarget} cardId={card.id} />
             <FocusMarker isFocused={isFocused} cardId={card.id} />
             <SelectedMarker isSelected={isSelected} cardId={card.id} />
@@ -483,6 +477,22 @@ function CardKey({ cardKey }: { cardKey: string }) {
 }
 
 /**
+ * The solid ring the open card wears. Its own leaf, so opening a card re-renders
+ * these tiny components rather than every card face on the board. Inset by the
+ * border's width so it paints over it, covering a focus or selection colour.
+ */
+function OpenRing({ cardId }: { cardId: string }) {
+    if (!useIsBoardCardOpen(cardId)) return null
+    return (
+        <View
+            pointerEvents="none"
+            testID={`boards-card-open-${cardId}`}
+            className="absolute -inset-px rounded-[10px] border border-ring"
+        />
+    )
+}
+
+/**
  * Zero-size marker for the drop-hover state, same rationale as FocusMarker: a
  * border class is not queryable from the e2e, and the `cards-` prefix keeps it
  * out of the `board-card-` face selectors.
@@ -574,7 +584,6 @@ interface ClosedCardProps {
     cardId: string
     title: string
     category: ListCategory
-    isOpen: boolean
     isFocused: boolean
     isSelected: boolean
     onPress: (event: GestureResponderEvent) => void
@@ -590,7 +599,6 @@ function ClosedCard({
     cardId,
     title,
     category,
-    isOpen,
     isFocused,
     isSelected,
     onPress,
@@ -608,13 +616,13 @@ function ClosedCard({
             testID={`board-card-${cardId}`}
             onPress={onPress}
             className={`${cardSelectedClass(isSelected, 'fresh')} border rounded-[10px] px-3 py-2.5 shadow-sm ${canDrag ? 'web:cursor-grab' : ''} web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${cardRingClass(
-                isOpen,
                 isFocused,
                 'border-border',
                 false,
                 isSelected
             )}`}
         >
+            <OpenRing cardId={cardId} />
             <FocusMarker isFocused={isFocused} cardId={cardId} />
             <SelectedMarker isSelected={isSelected} cardId={cardId} />
             <View className="flex-row items-start gap-2">

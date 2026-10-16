@@ -1,19 +1,17 @@
 import { useDragGesture } from '@tinycld/core/lib/gestures'
-import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useDeviceInsets } from '@tinycld/core/lib/use-safe-area'
 import { useOverlayLayer } from '@tinycld/core/ui/overlay'
 import { useSwipeToDismiss } from '@tinycld/core/ui/swipe-dismiss'
-import { useRouter } from 'expo-router'
 import { type RefObject, useMemo, useRef, useState } from 'react'
 import { Platform, Pressable, StyleSheet, useWindowDimensions, type View } from 'react-native'
 import { GestureDetector } from 'react-native-gesture-handler'
 import Animated from 'react-native-reanimated'
+import { expandAction, useCardNavigation } from '../hooks/useCardNavigation'
 import { useCardSurfaceShortcuts } from '../hooks/useCardSurfaceShortcuts'
 import { useIsRouteFocused } from '../hooks/useIsRouteFocused'
 import { useProjectRole } from '../hooks/useProjectRole'
-import { type CardEntry, findCardEntry, flattenCards } from '../lib/board-cards'
-import { cardHref } from '../lib/board-route'
+import { type CardEntry, flattenCards } from '../lib/board-cards'
 import { clampPeekWidth } from '../lib/peek-width'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
 import type { BoardProject } from '../types'
@@ -23,7 +21,10 @@ import type { EditableTextHandle } from './detail/EditableText'
 import { ProjectWash } from './ProjectWash'
 
 interface CardPeekProps {
+    /** The board as the reader views it: what j/k steps through. */
     project: BoardProject
+    /** The card to show, resolved by the caller; null shows nothing. */
+    entry: CardEntry | null
 }
 
 /**
@@ -32,9 +33,7 @@ interface CardPeekProps {
  * step to the next and previous card without closing, and ⤢ promotes the card
  * to its full-page route.
  */
-export function CardPeek({ project }: CardPeekProps) {
-    const openCardId = useBoardsUIStore(s => s.openCardId)
-    const entry = openCardId ? findCardEntry(project, openCardId) : null
+export function CardPeek({ project, entry }: CardPeekProps) {
     if (!entry) return null
 
     return <CardPeekPanel project={project} entry={entry} />
@@ -50,9 +49,8 @@ const HANDLE_VISUAL_WIDTH = 4
 const HANDLE_HIT_SLOP = 8
 
 function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardEntry }) {
-    const router = useRouter()
-    const orgHref = useOrgHref()
-    const closeCard = useBoardsUIStore(s => s.closeCard)
+    const navigation = useCardNavigation()
+    const closeCard = navigation.leave
     const setCardDisplayMode = useBoardsUIStore(s => s.setCardDisplayMode)
     const { canEdit } = useProjectRole(project.id)
     const insets = useDeviceInsets()
@@ -82,7 +80,7 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
         [project]
     )
 
-    const expandCard = () => router.push(cardHref(orgHref, project, entry.card))
+    const expandCard = expandAction(navigation, entry.card)
 
     return (
         <>
@@ -328,13 +326,18 @@ function PeekBackdrop({
 /**
  * Everything that counts as "inside" the peek beyond its own panel node.
  *
- * TWO kinds, and both are load-bearing:
+ * THREE kinds, and all are load-bearing:
  *
  * CARDS — a board face or a list/backlog row. Pressing one already SWAPS the
  * peek's content, so dismissing on it too would close the panel the press was
  * about to fill. `pointerdown` fires before the card's `onPress`, so without
  * this the close wins and clicking from one card to the next just shuts the
  * peek.
+ *
+ * THE BOARDS SIDEBAR — a board or My cards picked there is pushed over this
+ * board, which stays beneath with this card open, so Back returns to it.
+ * Dismissing first would pop the card on the way out and Back would find the
+ * board bare.
  *
  * PORTALED SURFACES — the mention popover renders through `createPortal` to
  * `document.body` so it can float over the editor, which puts it outside the
@@ -353,7 +356,7 @@ function insideNodes(): Node[] {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return []
     return Array.from(
         document.querySelectorAll(
-            '[data-testid^="board-card-"], [data-testid^="boards-row-"], [data-testid="boards-mention-popover"]'
+            '[data-testid^="board-card-"], [data-testid^="boards-row-"], [data-testid="boards-sidebar"], [data-testid="boards-mention-popover"]'
         )
     )
 }

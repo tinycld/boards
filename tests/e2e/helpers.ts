@@ -170,6 +170,20 @@ export async function openCard(page: Page, title: string, mode: CardSurfaceMode 
     await expect(cardSurface(page, mode).getByText('Description', { exact: true })).toBeVisible()
 }
 
+/** The URL of card `number` peeked on board `key`: /a/boards/KEY/KEY-n. */
+export function peekUrl(key: string, number: number) {
+    return new RegExp(`/a/boards/${key}/${key}-${number}$`)
+}
+
+/** The URL of card `number`'s full page: /a/boards/KEY/n. */
+export function pageUrl(key: string, number: number) {
+    return new RegExp(`/a/boards/${key}/${number}$`)
+}
+
+export async function expectPeekUrl(page: Page, key: string, number = 1) {
+    await expect(page).toHaveURL(peekUrl(key, number))
+}
+
 /**
  * Close the open card and WAIT for its surface to be gone.
  *

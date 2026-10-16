@@ -134,10 +134,10 @@ test.describe('Boards — My cards', () => {
 
     // A change made before the server numbered the card shows the card as that
     // change left it until the change saves: without a number, although the
-    // server has assigned one. The row must still open the page.
-    test('a row opens the card page while a change from before its number saves', async ({
-        page,
-    }) => {
+    // server has assigned one. An unnumbered card has no page URL, so the row
+    // opens its peek, and the URL takes the key once the number lands without
+    // a new history entry.
+    test('a row opens the peek of a card still unnumbered, then respells it', async ({ page }) => {
         const name = await freshBoard(page)
         const releaseCreate = await holdRequests(page, 'POST', CARD_CREATE)
         const release = await holdRequests(page, 'PATCH', CARD_UPDATE)
@@ -151,10 +151,19 @@ test.describe('Boards — My cards', () => {
             .filter({ hasText: MINE })
             .filter({ hasText: name })
             .click()
-        await expect(page.getByRole('button', { name: 'Back to board' })).toContainText(name)
+        await expect(page.getByTestId('boards-card-peek')).toBeVisible()
+        await expect(page).toHaveURL(/\/a\/boards\/[A-Z0-9]+\/[a-z0-9]{15}$/)
 
         release()
-        await expect(page).toHaveURL(/\/a\/boards\/[A-Z0-9]+\/1$/)
+        await expect(page).toHaveURL(/\/a\/boards\/[A-Z0-9]+\/[A-Z0-9]+-1$/)
+
+        await page.goBack()
+        // One Back leaves the card: the id spelling was replaced, not left under
+        // the key. The row pushed the card's board, although that board was
+        // already in the stack beneath this list, so Back returns to the list.
+        await expect(page).toHaveURL(/\/a\/boards\/my-cards$/)
+        await expect(page.getByTestId('boards-my-cards')).toBeVisible()
+        await expect(page.getByTestId('boards-card-peek')).toHaveCount(0)
     })
 
     test('a card with more than one assignee still lists under Assigned to me', async ({

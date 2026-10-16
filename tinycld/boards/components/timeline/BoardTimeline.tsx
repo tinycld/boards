@@ -3,6 +3,7 @@ import { useBreakpoint } from '@tinycld/core/components/workspace/useBreakpoint'
 import { useCallback, useMemo, useRef } from 'react'
 import { Animated, ScrollView } from 'react-native'
 import { useBoardShortcuts } from '../../hooks/useBoardShortcuts'
+import { useCardNavigation } from '../../hooks/useCardNavigation'
 import { useProjectRole } from '../../hooks/useProjectRole'
 import { buildTimeline, dayColumns, sprintSpans, type TimelineGroup } from '../../lib/timeline'
 import { selectBoardSort, useBoardsUIStore } from '../../stores/boards-ui-store'
@@ -30,7 +31,7 @@ import { type RowChromeProps, TimelineGroupHeader, TimelineRow } from './Timelin
 export function BoardTimeline({ project }: { project: BoardProject }) {
     const { canEdit } = useProjectRole(project.id)
     const sort = useBoardsUIStore(s => selectBoardSort(s, project.id))
-    const openCard = useBoardsUIStore(s => s.openCard)
+    const { openPeek } = useCardNavigation()
     const metrics = useBreakpoint() === 'mobile' ? MOBILE_METRICS : DESKTOP_METRICS
     const scrollX = useRef(new Animated.Value(0)).current
 
@@ -76,7 +77,7 @@ export function BoardTimeline({ project }: { project: BoardProject }) {
                         key={group.list.id}
                         group={group}
                         chrome={rowChrome}
-                        onOpen={openCard}
+                        onOpen={openPeek}
                     />
                 ))}
             </ScrollView>
@@ -91,7 +92,7 @@ function GroupRows({
 }: {
     group: TimelineGroup
     chrome: RowChromeProps
-    onOpen: (cardId: string) => void
+    onOpen: (card: { key: string; id: string }) => void
 }) {
     return (
         <>
@@ -101,7 +102,7 @@ function GroupRows({
                     key={row.card.id}
                     row={row}
                     {...chrome}
-                    onPress={() => onOpen(row.card.id)}
+                    onPress={() => onOpen(row.card)}
                 />
             ))}
         </>

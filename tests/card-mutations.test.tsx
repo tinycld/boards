@@ -192,6 +192,10 @@ describe('useDuplicateCard', () => {
         const { result } = renderHook(() => useDuplicateCard('p1'), { wrapper })
         const source = { id: 'c2', listId: 'l1', labels: [], assignees: [], title: 'Typed' }
         const before = h.stores.boards_cards.toArray.length
+        // The refusal is reported like any failed mutation; with no Sentry in
+        // a test the report goes to stderr. Asserted here, so the expected
+        // report is not noise in every run.
+        const reported = vi.spyOn(console, 'error').mockImplementation(() => {})
         await act(async () => {
             await expect(
                 result.current.mutateAsync({
@@ -200,6 +204,10 @@ describe('useDuplicateCard', () => {
                 })
             ).rejects.toThrow('form has loaded')
         })
+        expect(
+            reported.mock.calls.some(([message]) => String(message).includes('mutation.error'))
+        ).toBe(true)
+        reported.mockRestore()
         expect(h.stores.boards_cards.toArray.length).toBe(before)
         for (const row of h.forms) h.stores.forms.insert(row)
     })

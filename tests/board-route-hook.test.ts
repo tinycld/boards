@@ -92,51 +92,7 @@ describe('useBoardRoute', () => {
 
         expect(h.boardContentCalledWith).toContain('p1')
         expect(result.current.project?.id).toBe('p1')
-        expect(result.current.cardId).toBe('')
         expect(result.current.segment).toBe('OTTER')
-    })
-
-    it('resolves a key to the board and the card it names', () => {
-        h.projects = [{ id: 'p1', slug: 'OTTER' }]
-        h.board = board()
-
-        const { result } = renderHook(() => useBoardRoute('otter-123'))
-
-        expect(result.current.project?.id).toBe('p1')
-        expect(result.current.cardId).toBe('c123')
-    })
-
-    it('resolves the full-page shape by number', () => {
-        h.projects = [{ id: 'p1', slug: 'OTTER' }]
-        h.board = board()
-
-        const { result } = renderHook(() => useBoardRoute('OTTER', '7', { isViewed: false }))
-
-        expect(result.current.cardId).toBe('c7')
-    })
-
-    // The page of a card not numbered yet, and only on its own board.
-    it('resolves the full-page shape by record id on this board', () => {
-        h.projects = [{ id: 'p1', slug: 'OTTER' }]
-        h.board = board()
-
-        const { result } = renderHook(() => useBoardRoute('OTTER', 'c7', { isViewed: false }))
-        expect(result.current.cardId).toBe('c7')
-
-        const { result: other } = renderHook(() =>
-            useBoardRoute('OTTER', 'cardonanother01', { isViewed: false })
-        )
-        expect(other.current.cardId).toBe('')
-    })
-
-    // The spelling core's notifications mint, and the keyless fallback.
-    it('honours ?focused= on the board it names', () => {
-        h.projects = [{ id: 'p1', slug: 'OTTER' }]
-        h.board = board()
-
-        const { result } = renderHook(() => useBoardRoute('OTTER', '', { focused: 'c7' }))
-
-        expect(result.current.cardId).toBe('c7')
     })
 
     // A board created without a slug is addressed by its id, and the slug
@@ -157,14 +113,5 @@ describe('useBoardRoute', () => {
         expect(result.current.project).toBeNull()
         expect(result.current.isLoading).toBe(false)
         expect(result.current.segment).toBe('')
-    })
-
-    it('resolves nothing for a number that names no card on the board', () => {
-        h.projects = [{ id: 'p1', slug: 'OTTER' }]
-        h.board = board()
-
-        const { result } = renderHook(() => useBoardRoute('OTTER-999'))
-
-        expect(result.current.cardId).toBe('')
     })
 })

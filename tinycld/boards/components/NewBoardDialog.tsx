@@ -181,10 +181,11 @@ export function NewBoardDialog() {
     const orgHref = useOrgHref()
     const [projectsCollection] = useStore('boards_projects')
     // Open the imported board: it is in the local store by the time the
-    // importer reports success, so its slug is there to put in the URL.
+    // importer reports success, so its slug is there to put in the URL. A push,
+    // as from the sidebar (sidebar.tsx says why not `navigate`).
     const openImported = (projectId: string) => {
         const project = projectsCollection.get(projectId)
-        router.navigate(orgHref(boardPath(project ? boardSegment(project) : projectId)))
+        router.push(orgHref(boardPath(project ? boardSegment(project) : projectId)))
     }
 
     return (
