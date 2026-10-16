@@ -18,10 +18,20 @@ import { CardPeek } from './CardPeek'
  * dimming window inside someone else's page is the wrong surface, and a
  * signed-out viewer has no preference worth honoring.
  */
-export function CardSurface({ project, entry }: { project: BoardProject; entry: CardEntry }) {
+export function CardSurface({
+    project,
+    fullProject,
+    entry,
+}: {
+    project: BoardProject
+    fullProject: BoardProject
+    entry: CardEntry
+}) {
     const isMobile = useBreakpoint() === 'mobile'
     const mode = useBoardsUIStore(s => selectCardDisplayMode(s, isMobile))
 
-    if (mode === 'modal') return <CardModal project={project} entry={entry} />
-    return <CardPeek project={project} entry={entry} />
+    if (mode === 'modal') {
+        return <CardModal project={project} fullProject={fullProject} entry={entry} />
+    }
+    return <CardPeek project={project} fullProject={fullProject} entry={entry} />
 }

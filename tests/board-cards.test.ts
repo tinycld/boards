@@ -4,6 +4,7 @@ import {
     findCardEntry,
     flattenCards,
     neighborCardId,
+    stepCardId,
 } from '../tinycld/boards/lib/board-cards'
 import type { BoardCardView, BoardProject } from '../tinycld/boards/types'
 
@@ -94,5 +95,25 @@ describe('neighborCardId', () => {
 
     it('returns null for unknown cards', () => {
         expect(neighborCardId(project(), 'nope', 1)).toBeNull()
+    })
+})
+
+describe('stepCardId', () => {
+    it('steps to the neighbour of a card the project holds', () => {
+        expect(stepCardId(project(), 'b', 1)).toBe('c')
+        expect(stepCardId(project(), 'a', -1)).toBeNull()
+    })
+
+    it('steps from a card the project no longer holds to its first or last card', () => {
+        expect(stepCardId(project(), 'not-on-board', 1)).toBe('a')
+        expect(stepCardId(project(), 'not-on-board', -1)).toBe('c')
+    })
+
+    it('steps nowhere on an empty project', () => {
+        const emptyProject = {
+            ...project(),
+            lists: project().lists.map(list => ({ ...list, cards: [] })),
+        }
+        expect(stepCardId(emptyProject, 'not-on-board', 1)).toBeNull()
     })
 })

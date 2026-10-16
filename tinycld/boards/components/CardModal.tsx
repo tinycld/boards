@@ -16,6 +16,8 @@ import type { EditableTextHandle } from './detail/EditableText'
 interface CardModalProps {
     /** The board as the reader views it: what j/k steps through. */
     project: BoardProject
+    /** The whole board, filter or not: what the card's lists draw on. */
+    fullProject: BoardProject
     entry: CardEntry
 }
 
@@ -33,7 +35,7 @@ interface CardModalProps {
  * wraps the board screen, and the description's co-editing session is bound to
  * it. A card surface outside that provider silently loses collaboration.
  */
-export function CardModal({ project, entry }: CardModalProps) {
+export function CardModal({ project, fullProject, entry }: CardModalProps) {
     // Gated on ROUTE FOCUS, not on mount. Expanding the card, or opening
     // another, pushes a child route over this one, and expo-router leaves this
     // child mounted underneath. A Dialog renders through OverlayPortal at the
@@ -46,10 +48,18 @@ export function CardModal({ project, entry }: CardModalProps) {
     const isRouteFocused = useIsRouteFocused()
     if (!isRouteFocused) return null
 
-    return <CardModalWindow project={project} entry={entry} />
+    return <CardModalWindow project={project} fullProject={fullProject} entry={entry} />
 }
 
-function CardModalWindow({ project, entry }: { project: BoardProject; entry: CardEntry }) {
+function CardModalWindow({
+    project,
+    fullProject,
+    entry,
+}: {
+    project: BoardProject
+    fullProject: BoardProject
+    entry: CardEntry
+}) {
     const navigation = useCardNavigation()
     const closeCard = navigation.leave
     const setCardDisplayMode = useBoardsUIStore(s => s.setCardDisplayMode)
@@ -63,11 +73,11 @@ function CardModalWindow({ project, entry }: { project: BoardProject; entry: Car
     // editor. The peek has no such seam: it renders in place.
     const presence = useBoardPresenceContext()
     useCardSurfaceShortcuts(project, entry.card.id, canEdit, titleRef)
-    // Board order, so the sub-task section and the parent picker list cards in
-    // the order the board shows them.
+    // Board order of the WHOLE board, so the sub-task section and the parent
+    // picker list every card, filtered or not.
     const boardCards = useMemo(
-        () => flattenCards(project).map(cardEntry => cardEntry.card),
-        [project]
+        () => flattenCards(fullProject).map(cardEntry => cardEntry.card),
+        [fullProject]
     )
 
     return (

@@ -126,7 +126,7 @@ export default function PublicBoardScreen() {
             <CardNavigationProvider value={navigation}>
                 <BoardOpenCardProvider value={publicOpenCardId}>
                     <BoardCanvas project={project} />
-                    <CardPeek project={project} entry={openEntry} />
+                    <CardPeek project={project} fullProject={project} entry={openEntry} />
                 </BoardOpenCardProvider>
             </CardNavigationProvider>
         </View>

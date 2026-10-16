@@ -45,3 +45,18 @@ export function neighborCardId(
     const next = Math.min(Math.max(index + delta, 0), entries.length - 1)
     return next === index ? null : entries[next].card.id
 }
+
+/**
+ * The card j/k lands on from `cardId`: its neighbour, or — for a card the
+ * project does not hold, which a filter hid after it was opened — the first
+ * card for a step forward and the last for a step back, so the keys keep
+ * working instead of going dead until the reader clicks.
+ */
+export function stepCardId(project: BoardProject, cardId: string, delta: number): string | null {
+    const entries = flattenCards(project)
+    if (entries.some(entry => entry.card.id === cardId)) {
+        return neighborCardId(project, cardId, delta)
+    }
+    const edge = delta > 0 ? entries[0] : entries[entries.length - 1]
+    return edge?.card.id ?? null
+}

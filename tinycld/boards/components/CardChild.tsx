@@ -43,10 +43,11 @@ export function CardChild({ segment }: { segment: string }) {
             </View>
         )
     }
-    // The peek keeps the reader's view for its j/k and lists — it steps
-    // through the cards the board beside it shows — but takes its card from
-    // the whole board, so an edit that filters it out does not close it.
-    return <FocusedSurface project={project} entry={entry} />
+    // The peek keeps the reader's view for j/k — it steps through the cards
+    // the board beside it shows — and takes its card and its lists from the
+    // whole board, so an edit that filters a card out neither closes it nor
+    // drops it from the sub-tasks.
+    return <FocusedSurface project={project} fullProject={fullProject} entry={entry} />
 }
 
 /**
@@ -57,12 +58,20 @@ export function CardChild({ segment }: { segment: string }) {
  * one panel per card walked, each with its own editor; the covered ones come
  * back when Back uncovers them.
  */
-function FocusedSurface({ project, entry }: { project: BoardProject; entry: CardEntry }) {
+function FocusedSurface({
+    project,
+    fullProject,
+    entry,
+}: {
+    project: BoardProject
+    fullProject: BoardProject
+    entry: CardEntry
+}) {
     const isFocused = useIsRouteFocused()
     if (!isFocused) return null
     return (
         <View pointerEvents="box-none" className="flex-1">
-            <CardSurface project={project} entry={entry} />
+            <CardSurface project={project} fullProject={fullProject} entry={entry} />
         </View>
     )
 }

@@ -1,7 +1,7 @@
 import { type Shortcut, useRegisterShortcuts, useShortcutScope } from '@tinycld/core/lib/shortcuts'
 import { type RefObject, useId, useMemo } from 'react'
 import type { EditableTextHandle } from '../components/detail/EditableText'
-import { findCardEntry, neighborCardId } from '../lib/board-cards'
+import { findCardEntry, stepCardId } from '../lib/board-cards'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
 import type { BoardProject } from '../types'
 import { useCardNavigation } from './useCardNavigation'
@@ -43,7 +43,7 @@ export function useCardSurfaceShortcuts(
     const shortcuts = useMemo<Shortcut[]>(() => {
         const idOf = (name: string) => `boards.peek.${name}#${instance}`
         const step = (delta: number) => {
-            const next = neighborCardId(project, cardId, delta)
+            const next = stepCardId(project, cardId, delta)
             const entry = next ? findCardEntry(project, next) : null
             // A push, so Back steps back through the cards j/k walked.
             if (entry) openPeek(entry.card)

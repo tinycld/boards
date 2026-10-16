@@ -23,6 +23,8 @@ import { ProjectWash } from './ProjectWash'
 interface CardPeekProps {
     /** The board as the reader views it: what j/k steps through. */
     project: BoardProject
+    /** The whole board, filter or not: what the card's lists draw on. */
+    fullProject: BoardProject
     /** The card to show, resolved by the caller; null shows nothing. */
     entry: CardEntry | null
 }
@@ -33,10 +35,10 @@ interface CardPeekProps {
  * step to the next and previous card without closing, and ⤢ promotes the card
  * to its full-page route.
  */
-export function CardPeek({ project, entry }: CardPeekProps) {
+export function CardPeek({ project, fullProject, entry }: CardPeekProps) {
     if (!entry) return null
 
-    return <CardPeekPanel project={project} entry={entry} />
+    return <CardPeekPanel project={project} fullProject={fullProject} entry={entry} />
 }
 
 /**
@@ -48,7 +50,15 @@ export function CardPeek({ project, entry }: CardPeekProps) {
 const HANDLE_VISUAL_WIDTH = 4
 const HANDLE_HIT_SLOP = 8
 
-function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardEntry }) {
+function CardPeekPanel({
+    project,
+    fullProject,
+    entry,
+}: {
+    project: BoardProject
+    fullProject: BoardProject
+    entry: CardEntry
+}) {
     const navigation = useCardNavigation()
     const closeCard = navigation.leave
     const setCardDisplayMode = useBoardsUIStore(s => s.setCardDisplayMode)
@@ -73,11 +83,11 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
     // peek — a press in here must not dismiss it.
     const panelRef = useRef<View>(null)
     useCardSurfaceShortcuts(project, entry.card.id, canEdit, titleRef)
-    // Board order, so the sub-task section and the parent picker list cards in
-    // the order the board shows them.
+    // Board order of the WHOLE board, so the sub-task section and the parent
+    // picker list every card, filtered or not.
     const boardCards = useMemo(
-        () => flattenCards(project).map(cardEntry => cardEntry.card),
-        [project]
+        () => flattenCards(fullProject).map(cardEntry => cardEntry.card),
+        [fullProject]
     )
 
     const expandCard = expandAction(navigation, entry.card)

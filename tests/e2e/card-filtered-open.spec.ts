@@ -1,7 +1,15 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard, uniqueBoardKey, uniqueStamp } from './helpers'
+import {
+    addCard,
+    addSubtask,
+    boardCard,
+    createBoard,
+    peekUrl,
+    uniqueBoardKey,
+    uniqueStamp,
+} from './helpers'
 
 /**
  * An open card belongs to the board, not to the reader's view of it.
@@ -41,6 +49,20 @@ async function setPeekPriority(page: Page, level: string) {
     await page.getByRole('menuitem', { name: level }).click()
 }
 
+async function setPriority(page: Page, title: string, level: string) {
+    await openPeek(page, title)
+    await setPeekPriority(page, level)
+    await page.getByRole('button', { name: 'Close' }).click()
+    await expect(peek(page)).toHaveCount(0)
+}
+
+async function filterToHigh(page: Page) {
+    await page.getByTestId('boards-filter-button').click()
+    await page.getByTestId('boards-filter-panel').getByRole('checkbox', { name: 'High' }).click()
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('boards-filter-panel')).toHaveCount(0)
+}
+
 /** A board with Alpha (High) and Bravo, filtered to High: Bravo is hidden. */
 async function boardFilteredToAlpha(page: Page): Promise<string> {
     const name = `filtered-open-${uniqueStamp()}`
@@ -49,15 +71,8 @@ async function boardFilteredToAlpha(page: Page): Promise<string> {
     await addCard(page, 0, ALPHA)
     await addCard(page, 0, BRAVO)
 
-    await openPeek(page, ALPHA)
-    await setPeekPriority(page, 'High')
-    await page.getByRole('button', { name: 'Close' }).click()
-    await expect(peek(page)).toHaveCount(0)
-
-    await page.getByTestId('boards-filter-button').click()
-    await page.getByTestId('boards-filter-panel').getByRole('checkbox', { name: 'High' }).click()
-    await page.keyboard.press('Escape')
-    await expect(page.getByTestId('boards-filter-panel')).toHaveCount(0)
+    await setPriority(page, ALPHA, 'High')
+    await filterToHigh(page)
     await expect(boardCard(page, BRAVO)).toHaveCount(0)
     return key
 }
@@ -90,5 +105,38 @@ test.describe('a card the filter hides', () => {
 
         await expect(page).toHaveURL(new RegExp(`/a/boards/${key}/2$`))
         await expect(visibleCardPage(page).getByTestId('boards-detail-key')).toHaveText(`${key}-2`)
+    })
+
+    test('still lists its sub-tasks, and j steps from it to the cards the board shows', async ({
+        page,
+    }) => {
+        const parent = 'Parent task'
+        const child = 'Child task'
+        const other = 'Other task'
+        const name = `filtered-open-${uniqueStamp()}`
+        const key = uniqueBoardKey(name)
+        await createBoard(page, name, key)
+        await addCard(page, 0, parent)
+        await addSubtask(page, parent, child)
+        await addCard(page, 0, other)
+        await setPriority(page, parent, 'High')
+        await setPriority(page, other, 'High')
+        await filterToHigh(page)
+        await expect(boardCard(page, child)).toHaveCount(0)
+
+        // The sub-task is hidden on the board, not from its parent.
+        await openPeek(page, parent)
+        await expect(
+            peek(page).getByTestId('boards-subtask-row').filter({ hasText: child })
+        ).toBeVisible()
+
+        // An edit hides the parent too: the peek stays, and j adopts the
+        // first card the board still shows rather than going dead.
+        await setPeekPriority(page, 'Low')
+        await expect(boardCard(page, parent)).toHaveCount(0)
+        await page.keyboard.press('j')
+
+        await expect(page).toHaveURL(peekUrl(key, 3))
+        await expect(peek(page).getByTestId('boards-detail-key')).toHaveText(`${key}-3`)
     })
 })
