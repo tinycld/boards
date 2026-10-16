@@ -213,6 +213,29 @@ test('Back walks peeks, then the board', async ({ page }) => {
     await expectBareBoard(page, key)
 })
 
+// Pressing the card that is already open is not a navigation. Expo Router has
+// no same-URL short-circuit, so a push would stack a second child for the same
+// card: the peek would remount (the composer, opened only by a tap, folds
+// back) and Back would seem to do nothing.
+test('pressing the open card again keeps its peek and adds no history', async ({ page }) => {
+    const key = await boardWithThreeCards(page, 'reopen')
+    await openCard(page, 'Alpha')
+    await expect(page).toHaveURL(peekUrl(key, 1))
+    const composer = cardSurface(page).getByTestId('boards-comment-composer')
+    await composer.getByRole('button', { name: 'Write a comment' }).click()
+    const editor = composer.locator('.ProseMirror')
+    await expect(editor).toBeFocused()
+    await editor.pressSequentially('Draft survives')
+    await expect(editor).toContainText('Draft survives')
+
+    await boardCard(page, 'Alpha').click()
+    await expect(page).toHaveURL(peekUrl(key, 1))
+    await expect(editor).toContainText('Draft survives')
+
+    await page.goBack()
+    await expectBareBoard(page, key)
+})
+
 test('expand, then Back returns to the peek', async ({ page }) => {
     const key = await boardWithThreeCards(page, 'expand-back')
     await openFullPage(page, 'Alpha')

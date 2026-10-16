@@ -11,6 +11,7 @@ import {
     useRouterCardNavigation,
 } from '../tinycld/boards/hooks/useCardNavigation'
 import { useCardSelection } from '../tinycld/boards/hooks/useCardSelection'
+import type { OpenCard } from '../tinycld/boards/hooks/useOpenCard'
 import { useOpenRelatedCard } from '../tinycld/boards/hooks/useOpenRelatedCard'
 import { cardParam } from '../tinycld/boards/hooks/useTopCardSegment'
 
@@ -27,8 +28,8 @@ beforeEach(() => {
     h.router.dismissTo.mockClear()
 })
 
-function boardNavigation(topCardSegment = 'PL-1') {
-    return renderHook(() => useRouterCardNavigation('PL', topCardSegment)).result.current
+function boardNavigation(topCardSegment = 'PL-1', topCard: OpenCard = null) {
+    return renderHook(() => useRouterCardNavigation('PL', topCardSegment, topCard)).result.current
 }
 
 describe('card navigation', () => {
@@ -80,6 +81,31 @@ describe('card navigation', () => {
         expect(h.router.push).not.toHaveBeenCalled()
     })
 
+    // Expo Router has no same-URL short-circuit: a second push of the open
+    // card stacks a duplicate child, which remounts the surface (losing its
+    // drafts) and makes Back look like it did nothing.
+    it('does not push the card already peeked on top, by key or by id', () => {
+        const navigation = boardNavigation('PL-1', { cardId: 'c1', surface: 'peek' })
+        navigation.openPeek({ key: 'PL-1', id: 'c1' })
+        navigation.openPeek({ key: '', id: 'c1' })
+        expect(h.router.push).not.toHaveBeenCalled()
+    })
+
+    it('does not push the page already on top', () => {
+        boardNavigation('1', { cardId: 'c1', surface: 'page' }).openPage?.({ id: 'c1', number: 1 })
+        expect(h.router.push).not.toHaveBeenCalled()
+    })
+
+    it('still changes surface for the card on top', () => {
+        boardNavigation('PL-1', { cardId: 'c1', surface: 'peek' }).openPage?.({
+            id: 'c1',
+            number: 1,
+        })
+        expect(h.router.push).toHaveBeenCalledWith('/a/boards/PL/1')
+        boardNavigation('1', { cardId: 'c1', surface: 'page' }).openPeek({ key: 'PL-1', id: 'c1' })
+        expect(h.router.push).toHaveBeenCalledWith('/a/boards/PL/PL-1')
+    })
+
     it('needs a provider', () => {
         expect(() => renderHook(() => useCardNavigation())).toThrow()
     })
@@ -99,7 +125,7 @@ describe('opening a card from a row inside an open card', () => {
 
     function Navigation({ children }: { children: ReactNode }) {
         return (
-            <CardNavigationProvider value={useRouterCardNavigation('PL', '')}>
+            <CardNavigationProvider value={useRouterCardNavigation('PL', '', null)}>
                 {children}
             </CardNavigationProvider>
         )

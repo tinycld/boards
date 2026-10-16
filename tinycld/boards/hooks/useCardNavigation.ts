@@ -2,6 +2,7 @@ import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { useRouter } from 'expo-router'
 import { createContext, useContext, useMemo, useRef } from 'react'
 import { boardHref, cardPagePath, peekHref } from '../lib/board-route'
+import type { OpenCard } from './useOpenCard'
 
 /**
  * Every way a card is opened or left. The open card is the route, so each is a
@@ -49,27 +50,44 @@ export function useOptionalCardNavigation(): CardNavigation | null {
  * The navigation of a board's own route: `segment` is the board's URL segment,
  * `topCardSegment` the `[card]` child on top of it, '' for none (a card that
  * names nothing here still counts: leaving it is how a reader gets out of a
- * not-found). The returned value is stable across changes of the open card — it
- * reads it at call time — so no writer re-renders when a card opens or closes.
+ * not-found), and `topCard` what that child resolves to. The returned value is
+ * stable across changes of the open card — it reads them at call time — so no
+ * writer re-renders when a card opens or closes.
+ *
+ * Opening the card already on top, on the surface it is on, does nothing:
+ * Expo Router has no same-URL short-circuit, so the push would stack a
+ * duplicate child, remount the surface (losing what the reader typed in it)
+ * and make Back look as if it did nothing. Compared by card id, so a key and
+ * an id spelling of the same card match.
  */
-export function useRouterCardNavigation(segment: string, topCardSegment: string): CardNavigation {
+export function useRouterCardNavigation(
+    segment: string,
+    topCardSegment: string,
+    topCard: OpenCard
+): CardNavigation {
     const router = useRouter()
     const orgHref = useOrgHref()
     // Written during render so the memoized navigation never goes stale; only
     // handlers read it, and a discarded render can at worst leave a newer value,
-    // which costs one extra dismissTo.
-    const openRef = useRef(topCardSegment)
-    openRef.current = topCardSegment
+    // which costs one extra dismissTo or one skipped push of the card on top.
+    const openRef = useRef({ segment: topCardSegment, card: topCard })
+    openRef.current = { segment: topCardSegment, card: topCard }
     return useMemo(() => {
-        const openPeek = (card: { key: string; id: string }, board = segment) =>
-            router.push(peekHref(orgHref, board, card))
+        const isOnTop = (cardId: string, surface: 'peek' | 'page') => {
+            const top = openRef.current.card
+            return top?.cardId === cardId && top.surface === surface
+        }
         return {
-            openPeek,
+            openPeek: (card, board = segment) => {
+                if (!isOnTop(card.id, 'peek')) router.push(peekHref(orgHref, board, card))
+            },
             // A card the server has not numbered is spelled by its record id,
             // which is its peek's URL; callers offer no page for one.
-            openPage: card => router.push(orgHref(cardPagePath(segment, card))),
+            openPage: card => {
+                if (!isOnTop(card.id, 'page')) router.push(orgHref(cardPagePath(segment, card)))
+            },
             leave: () => {
-                if (openRef.current) router.dismissTo(boardHref(orgHref, segment))
+                if (openRef.current.segment) router.dismissTo(boardHref(orgHref, segment))
             },
         }
     }, [router, orgHref, segment])

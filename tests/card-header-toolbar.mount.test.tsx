@@ -113,7 +113,7 @@ const project: BoardProject = {
 
 function BoardNavigation({ children }: { children: ReactNode }) {
     return (
-        <CardNavigationProvider value={useRouterCardNavigation('PL', '')}>
+        <CardNavigationProvider value={useRouterCardNavigation('PL', '', null)}>
             {children}
         </CardNavigationProvider>
     )
