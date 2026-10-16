@@ -385,12 +385,11 @@ test('switching boards from the sidebar lands on the other board without a card'
     await expect(page.getByText('This card doesn’t exist or was removed')).toHaveCount(0)
 
     // Pinned as observed, not as designed: the switch replaces the board
-    // screen, and the browser's Back does not return to the first board's
-    // peek or its bare board — it leaves the app for the blank page the tab
-    // started on. The switch is a replace, so the history entries of the board
-    // left are gone.
+    // screen, so the history entries of the board left are gone and the
+    // browser's Back returns to neither board. Where it does land depends on
+    // the history before this test's first push, so that is not pinned.
     await page.goBack()
-    await expect(page).toHaveURL('about:blank')
+    await expect(page).not.toHaveURL(new RegExp(`/a/boards/(${firstKey}|${secondKey})`))
 })
 
 async function expectBareBoard(page: Page, key: string) {
