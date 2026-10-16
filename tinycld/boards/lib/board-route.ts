@@ -139,3 +139,18 @@ export function paramString(value: string | string[] | undefined): string {
     if (Array.isArray(value)) return value[0] ?? ''
     return value ?? ''
 }
+
+/**
+ * Whether a later board sits above the route `key` in the boards stack: the
+ * reader went on from this board to another, and Back will return here. Only
+ * a board covers one — My cards or the bare `/a/boards` above it, or leaving
+ * Boards altogether, does not.
+ */
+export function isCoveredByBoard(
+    routes: readonly { key: string; name: string }[],
+    key: string
+): boolean {
+    const index = routes.findIndex(route => route.key === key)
+    if (index < 0) return false
+    return routes.slice(index + 1).some(route => route.name === '[boardSlug]')
+}

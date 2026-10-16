@@ -35,8 +35,13 @@ export default function BoardsSidebar() {
     // room. Not `navigate`: Expo Router's NAVIGATE to a screen of the same name
     // as the one on top reuses that route, child stack included, so the cards
     // open on the board left would carry over under the next board.
-    const selectBoard = (project: BoardsProjects) =>
+    //
+    // The board already on screen is not pushed again: a second copy of it
+    // would be a step where Back seems to do nothing.
+    const selectBoard = (project: BoardsProjects) => {
+        if (project.id === activeProjectId) return
         router.push(orgHref(boardPath(boardSegment(project))))
+    }
 
     return (
         // The testID marks the sidebar as inside an open peek (CardPeek's

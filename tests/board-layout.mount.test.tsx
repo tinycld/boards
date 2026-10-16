@@ -24,22 +24,27 @@ const h = vi.hoisted(() => ({
     // How many times a card child mounted: a remount would lose the child
     // route a reader had open on the board.
     childMounts: 0,
-    // Whether the board's screen is the one on screen; another board pushed
-    // over it blurs it.
+    // The boards stack this layout's route ('pl') sits in, and whether the
+    // route is focused: leaving Boards blurs it without covering it.
+    routes: [{ key: 'pl', name: '[boardSlug]' }] as { key: string; name: string }[],
     isFocused: true,
-    focusListeners: new Set<() => void>(),
+    navListeners: new Set<() => void>(),
 }))
 
-function setFocused(isFocused: boolean) {
+const PL = { key: 'pl', name: '[boardSlug]' }
+const OTTER = { key: 'otter', name: '[boardSlug]' }
+
+function setNavigation(next: { routes?: { key: string; name: string }[]; isFocused?: boolean }) {
     act(() => {
-        h.isFocused = isFocused
-        for (const listener of h.focusListeners) listener()
+        if (next.routes) h.routes = next.routes
+        if (next.isFocused !== undefined) h.isFocused = next.isFocused
+        for (const listener of h.navListeners) listener()
     })
 }
 
-function subscribeToFocus(listener: () => void) {
-    h.focusListeners.add(listener)
-    return () => h.focusListeners.delete(listener)
+function subscribeToNavigation(listener: () => void) {
+    h.navListeners.add(listener)
+    return () => h.navListeners.delete(listener)
 }
 
 // A card child's view of the room: the document its description binds to.
@@ -88,13 +93,21 @@ vi.mock('expo-router', () => {
         useFocusEffect: (effect: () => undefined | (() => void)) => {
             useEffect(effect, [effect])
         },
-        useNavigation: () => ({ isFocused: () => true, addListener: () => () => {} }),
-        useIsFocused: () => useSyncExternalStore(subscribeToFocus, () => h.isFocused),
+        useNavigation: () => ({ isFocused: () => h.isFocused, addListener: () => () => {} }),
+        useIsFocused: () => useSyncExternalStore(subscribeToNavigation, () => h.isFocused),
+        useRoute: () => ({ key: 'pl', name: '[boardSlug]' }),
         useGlobalSearchParams: () => h.params,
         usePathname: () => '/a/boards/PL',
         useSegments: () => [],
     }
 })
+
+// The boards stack's state, as the layout reads it to know whether a later
+// board covers it.
+vi.mock('expo-router/react-navigation', () => ({
+    useNavigationState: <T,>(selector: (state: { routes: typeof h.routes }) => T) =>
+        useSyncExternalStore(subscribeToNavigation, () => selector({ routes: h.routes })),
+}))
 
 vi.mock('@tinycld/core/lib/auth', () => ({
     useAuth: () => ({ user: { id: 'u1', name: 'Maya Kim' }, isLoggedIn: true }),
@@ -278,6 +291,7 @@ describe('the board layout route', () => {
         h.sockets = []
         h.docs = []
         h.childMounts = 0
+        h.routes = [PL]
         h.isFocused = true
     })
 
@@ -306,9 +320,9 @@ describe('the board layout route', () => {
     })
 
     // Another board pushed over this one leaves it mounted beneath. Parked, it
-    // holds nothing: no room (so no socket), no board view and its queries.
-    it('parks a blurred board: a placeholder, no room and no board view', async () => {
-        h.isFocused = false
+    // holds nothing: no room (so no socket), no board view and no queries.
+    it('parks a board covered by a later board: a placeholder, no room and no board view', async () => {
+        h.routes = [PL, OTTER]
         const view = await mountLayout('PL')
         const byTestId = (id: string) => view.container.querySelectorAll(`[testid="${id}"]`)
 
@@ -319,7 +333,27 @@ describe('the board layout route', () => {
         expect(h.docs.every(doc => doc === null)).toBe(true)
     })
 
-    it('keeps the card children mounted across blur and focus', async () => {
+    // Leaving Boards for another package blurs the board without covering it:
+    // it stays as it was — room, view and the card a reader was writing in —
+    // for when they come back.
+    it('keeps a blurred board that no board covers live', async () => {
+        const view = await mountLayout('PL')
+        const byTestId = (id: string) => view.container.querySelectorAll(`[testid="${id}"]`)
+        await waitFor(() => expect(byTestId('boards-board-room')).toHaveLength(1))
+        await waitFor(() => expect(h.sockets).toHaveLength(1))
+        const mounts = h.childMounts
+
+        setNavigation({ isFocused: false })
+        expect(byTestId('boards-board-parked')).toHaveLength(0)
+        expect(byTestId('boards-board-room')).toHaveLength(1)
+
+        setNavigation({ isFocused: true })
+        expect(byTestId('boards-board-room')).toHaveLength(1)
+        expect(h.sockets).toHaveLength(1)
+        expect(h.childMounts).toBe(mounts)
+    })
+
+    it('keeps the card children mounted across cover and uncover', async () => {
         const view = await mountLayout('PL')
         const byTestId = (id: string) => view.container.querySelectorAll(`[testid="${id}"]`)
         await waitFor(() => expect(byTestId('boards-board-room')).toHaveLength(1))
@@ -327,14 +361,14 @@ describe('the board layout route', () => {
         const mounts = h.childMounts
         expect(mounts).toBeGreaterThan(0)
 
-        setFocused(false)
+        setNavigation({ routes: [PL, OTTER], isFocused: false })
         await waitFor(() => expect(byTestId('boards-board-parked')).toHaveLength(1))
         expect(byTestId('boards-board-room')).toHaveLength(0)
 
-        setFocused(true)
+        setNavigation({ routes: [PL], isFocused: true })
         await waitFor(() => expect(byTestId('boards-board-room')).toHaveLength(1))
         expect(byTestId('boards-board-parked')).toHaveLength(0)
-        // The room was left on blur and is joined again on focus.
+        // The room was left when covered and is joined again when uncovered.
         await waitFor(() => expect(h.sockets).toHaveLength(2))
         // The children's Stack was never torn down, so the card the reader had
         // open on this board is still its child route.

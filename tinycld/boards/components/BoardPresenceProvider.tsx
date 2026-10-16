@@ -51,10 +51,12 @@ const BoardPresenceContext = createContext<BoardPresenceValue>({
  * would need explicit teardown; `useRealtimeRoom` publishes a clean-leave frame
  * on the way out.
  *
- * "On the way out" is when the board's screen loses focus: the layout parks a
- * covered board and passes an empty project id, which leaves the room and
- * closes its socket while this provider stays mounted (the card children's
- * Stack beneath it must not remount).
+ * "On the way out" is two things. Leaving Boards for another package is a
+ * blur, not an unmount: `freezeOnBlur` keeps this provider mounted and its
+ * socket open, so `useRealtimeRoom` publishes the leave on blur (its
+ * useLeaveOnBlur). Going on to another board parks this one: the layout
+ * passes an empty project id, which closes the socket while this provider
+ * stays mounted (the card children's Stack beneath it must not remount).
  */
 export function BoardPresenceProvider({
     projectId,

@@ -1,5 +1,6 @@
 import { useOrgHref } from '@tinycld/core/lib/org-routes'
-import { Redirect, Stack, useIsFocused, useLocalSearchParams } from 'expo-router'
+import { Redirect, Stack, useLocalSearchParams, useRoute } from 'expo-router'
+import { useNavigationState } from 'expo-router/react-navigation'
 import { useEffect, useMemo } from 'react'
 import { Platform, StyleSheet, View } from 'react-native'
 import { BoardChrome, BoardLoading, BoardNotFound } from '../../components/BoardChrome'
@@ -9,7 +10,7 @@ import { useBoardRoute } from '../../hooks/useBoardRoute'
 import { CardNavigationProvider, useRouterCardNavigation } from '../../hooks/useCardNavigation'
 import { BoardOpenCardProvider, resolveOpenCard } from '../../hooks/useOpenCard'
 import { cardParam, useTopCardSegment } from '../../hooks/useTopCardSegment'
-import { paramString, parseCardSegment, peekHref } from '../../lib/board-route'
+import { isCoveredByBoard, paramString, parseCardSegment, peekHref } from '../../lib/board-route'
 import { formatCardKey, parseCardKey } from '../../lib/card-key'
 import { useBoardsUIStore } from '../../stores/boards-ui-store'
 
@@ -24,9 +25,11 @@ import { useBoardsUIStore } from '../../stores/boards-ui-store'
  * cards a reader opened.
  *
  * Boards stack: going to another board pushes it over this one, so Back
- * returns here with the card that was open. While covered, this board is
- * PARKED (see BoardWithCards): it holds no queries and no room, so a stack of
- * boards costs one board's worth of either.
+ * returns here with the card that was open. While another board covers it,
+ * this board is PARKED (see BoardWithCards): it holds no queries and no room,
+ * so a stack of boards costs one board's worth of either. Leaving Boards for
+ * another package does not park it: nothing replaces it, and what the reader
+ * had open there — a half-written comment included — is kept for their return.
  *
  * The old spelling `/a/boards/PL-12` lands here too, as a board segment that
  * parses as a key, and is redirected to `/a/boards/PL/PL-12`.
@@ -36,7 +39,8 @@ export default function BoardLayout() {
     const boardSlug = paramString(params.boardSlug)
     const legacy = parseCardKey(boardSlug)
     const orgHref = useOrgHref()
-    const isFocused = useIsFocused()
+    const routeKey = useRoute().key
+    const isParked = useNavigationState(state => isCoveredByBoard(state.routes, routeKey))
 
     // The key alone is enough to spell the new URL, so the redirect does not
     // wait for the board; the card child resolves the key once it has.
@@ -44,7 +48,7 @@ export default function BoardLayout() {
         const key = formatCardKey(legacy.slug, legacy.number)
         return <Redirect href={peekHref(orgHref, legacy.slug, { key, id: '' })} />
     }
-    return <BoardWithCards boardSlug={boardSlug} isFocused={isFocused} />
+    return <BoardWithCards boardSlug={boardSlug} isParked={isParked} />
 }
 
 /**
@@ -61,16 +65,16 @@ function useVisitedBoard(projectId: string) {
 /**
  * The board's queries, its room and the children's Stack over its view.
  *
- * Parked (not focused), the board resolves nothing — an empty segment runs no
+ * Parked, the board resolves nothing — an empty segment runs no
  * query and an empty room id opens no socket — and shows a placeholder. The
  * providers and the Stack stay in the tree all the same: the Stack's state
  * (the card a reader had open here) lives in the navigator, which a remount
  * would throw away, so nothing above it may come and go. The card children
  * render nothing while there is no board to read (screens/[boardSlug]/[card]).
  */
-function BoardWithCards({ boardSlug, isFocused }: { boardSlug: string; isFocused: boolean }) {
+function BoardWithCards({ boardSlug, isParked }: { boardSlug: string; isParked: boolean }) {
     const { project, fullProject, isLoading, segment, isArchived, cardCount } = useBoardRoute(
-        isFocused ? boardSlug : ''
+        isParked ? '' : boardSlug
     )
     useVisitedBoard(project?.id ?? '')
     const layout = useMemo(
@@ -88,7 +92,7 @@ function BoardWithCards({ boardSlug, isFocused }: { boardSlug: string; isFocused
     )
     const navigation = useRouterCardNavigation(segment, topCardSegment, openCard)
     const openCardId = openCard?.cardId ?? null
-    const face = boardFace(isFocused, isLoading, layout)
+    const face = boardFace(isParked, isLoading, layout)
 
     // The room is mounted here so every card child — a peek, the modal, a
     // page stacked three deep — shares it rather than opening its own socket
@@ -108,6 +112,7 @@ function BoardWithCards({ boardSlug, isFocused }: { boardSlug: string; isFocused
                                     <Stack.Screen name="[card]" options={cardScreenOptions} />
                                 </Stack>
                             </View>
+                            <BoardStatus face={face} />
                         </View>
                     </BoardPresenceProvider>
                 </BoardOpenCardProvider>
@@ -121,21 +126,20 @@ type BoardFace = 'parked' | 'loading' | 'not-found' | 'board'
 // Loading is checked before not-found: without it, a cold load renders
 // not-found for a frame before the query settles.
 function boardFace(
-    isFocused: boolean,
+    isParked: boolean,
     isLoading: boolean,
     layout: BoardLayoutValue | null
 ): BoardFace {
-    if (!isFocused) return 'parked'
+    if (isParked) return 'parked'
     if (isLoading) return 'loading'
     if (!layout) return 'not-found'
     return 'board'
 }
 
-/** What the board draws beneath its card children. */
+/** What the board draws beneath its card children: the board, or nothing. */
 function BoardLayoutBody({ face, layout }: { face: BoardFace; layout: BoardLayoutValue | null }) {
     if (face === 'parked') return <ParkedBoard />
-    if (face === 'loading') return <BoardLoading />
-    if (face === 'not-found' || !layout) return <BoardNotFound />
+    if (face !== 'board' || !layout) return null
     return (
         <View testID="boards-board-room" className="flex-1">
             <BoardChrome
@@ -145,6 +149,29 @@ function BoardLayoutBody({ face, layout }: { face: BoardFace; layout: BoardLayou
             />
         </View>
     )
+}
+
+/**
+ * Loading or not-found, drawn OVER the card children rather than beneath:
+ * a full page is an opaque screen even while it has no board to draw from, so
+ * beneath it these would be hidden and a page link would show a blank screen.
+ */
+function BoardStatus({ face }: { face: BoardFace }) {
+    if (face === 'loading') {
+        return (
+            <View style={StyleSheet.absoluteFill}>
+                <BoardLoading />
+            </View>
+        )
+    }
+    if (face === 'not-found') {
+        return (
+            <View style={StyleSheet.absoluteFill}>
+                <BoardNotFound />
+            </View>
+        )
+    }
+    return null
 }
 
 /** A covered board: nothing to draw, as nothing shows it. */

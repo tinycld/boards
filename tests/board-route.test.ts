@@ -8,6 +8,7 @@ import {
     boardSegment,
     cardHref,
     cardPagePath,
+    isCoveredByBoard,
     parseBoardSegment,
     parseCardNumber,
     parseCardSegment,
@@ -135,5 +136,31 @@ describe('activeBoardIdFromPath', () => {
         expect(activeBoardIdFromPath('/a/boards/my-cards', boards)).toBeNull()
         expect(activeBoardIdFromPath('/a/boards', boards)).toBeNull()
         expect(activeBoardIdFromPath('/a/mail/PL', boards)).toBeNull()
+    })
+})
+
+// A board parks only when the reader went on to ANOTHER board from it: Back
+// returns to it, and until then it need hold nothing. Anything else above it
+// (My cards, the bare /a/boards) or leaving Boards altogether keeps it live.
+describe('isCoveredByBoard', () => {
+    const board = (key: string) => ({ key, name: '[boardSlug]' })
+
+    it('is covered by a later board', () => {
+        expect(isCoveredByBoard([board('pl'), board('ot')], 'pl')).toBe(true)
+    })
+
+    it('is covered by a later board past My cards', () => {
+        const routes = [board('pl'), { key: 'mine', name: 'my-cards' }, board('ot')]
+        expect(isCoveredByBoard(routes, 'pl')).toBe(true)
+    })
+
+    it('is not covered on top, nor under only My cards or the index', () => {
+        const routes = [board('pl'), { key: 'mine', name: 'my-cards' }, { key: 'i', name: 'index' }]
+        expect(isCoveredByBoard(routes, 'pl')).toBe(false)
+        expect(isCoveredByBoard([board('pl'), board('ot')], 'ot')).toBe(false)
+    })
+
+    it('is not covered when the route is not in the stack', () => {
+        expect(isCoveredByBoard([board('ot')], 'pl')).toBe(false)
     })
 })
