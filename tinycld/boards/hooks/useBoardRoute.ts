@@ -26,6 +26,12 @@ import { scopeForView, useBoardRows, useBoardTree } from './useActiveBoard'
  */
 export interface BoardRoute {
     project: BoardProject | null
+    /**
+     * The same board with every live card, in board order and before the
+     * reader's view. What a card is resolved against: the filter decides
+     * which faces the board shows, not which card a peek or a page may open.
+     */
+    fullProject: BoardProject | null
     /** True until the board and its cards can be judged absent. */
     isLoading: boolean
     /** The board's canonical URL segment: its slug, or its id when it has none. */
@@ -75,9 +81,11 @@ export function useBoardRoute(routeSegment: string): BoardRoute {
     )
 
     const { project, cardCount, isLoading: contentLoading } = useBoardTree(rows, view)
+    const { project: fullProject } = useBoardTree(rows)
 
     return {
         project,
+        fullProject,
         // A card child needs the board's cards to have landed before "no such
         // card" can be true; without that a deep link flashes not-found on
         // every cold load.

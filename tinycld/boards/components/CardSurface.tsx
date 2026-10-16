@@ -1,4 +1,5 @@
 import { useBreakpoint } from '@tinycld/core/components/workspace/useBreakpoint'
+import type { CardEntry } from '../lib/board-cards'
 import { selectCardDisplayMode, useBoardsUIStore } from '../stores/boards-ui-store'
 import type { BoardProject } from '../types'
 import { CardModal } from './CardModal'
@@ -17,10 +18,10 @@ import { CardPeek } from './CardPeek'
  * dimming window inside someone else's page is the wrong surface, and a
  * signed-out viewer has no preference worth honoring.
  */
-export function CardSurface({ project, cardId }: { project: BoardProject; cardId: string }) {
+export function CardSurface({ project, entry }: { project: BoardProject; entry: CardEntry }) {
     const isMobile = useBreakpoint() === 'mobile'
     const mode = useBoardsUIStore(s => selectCardDisplayMode(s, isMobile))
 
-    if (mode === 'modal') return <CardModal project={project} cardId={cardId} />
-    return <CardPeek project={project} cardId={cardId} />
+    if (mode === 'modal') return <CardModal project={project} entry={entry} />
+    return <CardPeek project={project} entry={entry} />
 }

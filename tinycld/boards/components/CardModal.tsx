@@ -6,7 +6,7 @@ import { View } from 'react-native'
 import { useCardSurfaceShortcuts } from '../hooks/useCardSurfaceShortcuts'
 import { useIsRouteFocused } from '../hooks/useIsRouteFocused'
 import { useProjectRole } from '../hooks/useProjectRole'
-import { type CardEntry, findCardEntry, flattenCards } from '../lib/board-cards'
+import { type CardEntry, flattenCards } from '../lib/board-cards'
 import { cardHref } from '../lib/board-route'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
 import type { BoardProject } from '../types'
@@ -16,8 +16,9 @@ import { CardHeaderToolbar } from './detail/CardHeaderToolbar'
 import type { EditableTextHandle } from './detail/EditableText'
 
 interface CardModalProps {
+    /** The board as the reader views it: what j/k steps through. */
     project: BoardProject
-    cardId: string
+    entry: CardEntry
 }
 
 /**
@@ -34,19 +35,18 @@ interface CardModalProps {
  * wraps the board screen, and the description's co-editing session is bound to
  * it. A card surface outside that provider silently loses collaboration.
  */
-export function CardModal({ project, cardId }: CardModalProps) {
-    // Gated on ROUTE FOCUS, not on mount. Expanding a card pushes its full page
-    // OVER the board, and expo-router leaves the board — with this modal on it
-    // — mounted underneath. A Dialog renders through OverlayPortal at the top
-    // of the stacking order (zIndex 9999, fixed), so a mount-keyed modal paints
-    // straight over the page that was pushed on top of it.
+export function CardModal({ project, entry }: CardModalProps) {
+    // Gated on ROUTE FOCUS, not on mount. Expanding the card, or opening
+    // another, pushes a child route over this one, and expo-router leaves this
+    // child mounted underneath. A Dialog renders through OverlayPortal at the
+    // top of the stacking order (zIndex 9999, fixed), so a mount-keyed modal
+    // paints straight over the route pushed on top of it.
     //
     // The peek needs the same distinction for the opposite symptom: its panel
     // is in flow and hides with its screen, but its dismiss LAYER is not, so
     // it keys layer membership on this rather than unmounting.
     const isRouteFocused = useIsRouteFocused()
-    const entry = findCardEntry(project, cardId)
-    if (!entry || !isRouteFocused) return null
+    if (!isRouteFocused) return null
 
     return <CardModalWindow project={project} entry={entry} />
 }

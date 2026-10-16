@@ -12,6 +12,7 @@ import { CardPeek } from '../components/CardPeek'
 import { useBoardContent } from '../hooks/useActiveBoard'
 import { useProjectRole } from '../hooks/useProjectRole'
 import { type ShareLinkSignInRole, useShareLinkMeta } from '../hooks/useShareLinkMeta'
+import { findCardEntry } from '../lib/board-cards'
 import { paramString } from '../lib/board-route'
 import { decidePublicBoardRoute, type PublicBoardGoneReason } from '../lib/public-board-routing'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
@@ -103,6 +104,7 @@ export default function PublicBoardScreen() {
     }
 
     if (!project) return <LinkGone reason="missing" />
+    const openEntry = openCardId ? findCardEntry(project, openCardId) : null
 
     return (
         <View className="flex-1 bg-background">
@@ -119,7 +121,7 @@ export default function PublicBoardScreen() {
                 onSignedIn={() => setShareToken(null)}
             />
             <BoardCanvas project={project} />
-            <CardPeek project={project} cardId={openCardId} />
+            <CardPeek project={project} entry={openEntry} />
         </View>
     )
 }

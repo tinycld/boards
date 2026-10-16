@@ -32,16 +32,17 @@ const UNRESOLVED = Symbol('unresolved')
  * listening, and the child's late focus then overwrote it.
  *
  * `routeCardRef` is what the route shows, so a write from either side is never
- * read back as a request from the other. Also returns the top child's segment,
+ * read back as a request from the other. Cards resolve on the full board, so
+ * the filter never makes the open card unresolved. Also returns the top child's segment,
  * for what else the layout keys on it.
  */
-export function useOpenCardSync(project: BoardProject, segment: string) {
+export function useOpenCardSync(fullProject: BoardProject, segment: string) {
     const router = useRouter()
     const orgHref = useOrgHref()
     const navigation = useNavigation()
     const [topCardSegment, setTopCardSegment] = useState('')
-    const boardRef = useRef({ project, segment })
-    boardRef.current = { project, segment }
+    const boardRef = useRef({ project: fullProject, segment })
+    boardRef.current = { project: fullProject, segment }
     const routeCardRef = useRef<string | null | typeof UNRESOLVED>(null)
 
     const screenListeners = useCallback(

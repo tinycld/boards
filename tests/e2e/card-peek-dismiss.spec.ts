@@ -93,6 +93,10 @@ test.describe('the card peek', () => {
 
         await expect.poll(async () => cardsInColumn(page, 'Doing')).toEqual(['Moved card'])
         await expect.poll(async () => cardsInColumn(page, 'To do')).toEqual(['Read card'])
+        // Grabbing a card means the reader is done with the open one: the drag
+        // closed it, through the store, back to the board's own route.
+        await expect(page.getByTestId('boards-card-peek')).toHaveCount(0)
+        await expect(page).toHaveURL(/\/a\/boards\/[A-Z0-9]+$/)
     })
 
     // The peek's own subtree counts as INSIDE the layer, so a press in here

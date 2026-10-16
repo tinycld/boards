@@ -5,7 +5,7 @@ import { useBoardLayout } from '../hooks/useBoardLayout'
 import { useIsRouteFocused } from '../hooks/useIsRouteFocused'
 import { useLeaveToBoard } from '../hooks/useLeaveToBoard'
 import { type OpenCard, useOpenCard } from '../hooks/useOpenCard'
-import { findCardEntry } from '../lib/board-cards'
+import { type CardEntry, findCardEntry } from '../lib/board-cards'
 import { parseCardSegment } from '../lib/board-route'
 import type { BoardProject } from '../types'
 import { CardPage } from './CardPage'
@@ -26,21 +26,27 @@ import { CardSurface } from './CardSurface'
  * stay operable.
  */
 export function CardChild({ segment }: { segment: string }) {
-    const { project } = useBoardLayout()
+    const { project, fullProject } = useBoardLayout()
     const open = useOpenCard()
     const leaveToBoard = useLeaveToBoard()
-    useCanonicalSegment(project, segment, open)
+    useCanonicalSegment(fullProject, segment, open)
     useLeaveWhenCardGoes(open, leaveToBoard)
+    const entry = open ? findCardEntry(fullProject, open.cardId) : null
 
-    if (!open) return <CardNotFound onBack={leaveToBoard} />
+    if (!open || !entry) return <CardNotFound onBack={leaveToBoard} />
     if (open.surface === 'page') {
+        // The whole board: a page reaches every card by j/k and lists every
+        // sub-task, as it did when it ignored the reader's filter outright.
         return (
             <View pointerEvents="auto" className="flex-1">
-                <CardPage project={project} cardId={open.cardId} />
+                <CardPage project={fullProject} cardId={open.cardId} />
             </View>
         )
     }
-    return <FocusedSurface project={project} cardId={open.cardId} />
+    // The peek keeps the reader's view for its j/k and lists — it steps
+    // through the cards the board beside it shows — but takes its card from
+    // the whole board, so an edit that filters it out does not close it.
+    return <FocusedSurface project={project} entry={entry} />
 }
 
 /**
@@ -51,19 +57,20 @@ export function CardChild({ segment }: { segment: string }) {
  * one panel per card walked, each with its own editor; the covered ones come
  * back when Back uncovers them.
  */
-function FocusedSurface({ project, cardId }: { project: BoardProject; cardId: string }) {
+function FocusedSurface({ project, entry }: { project: BoardProject; entry: CardEntry }) {
     const isFocused = useIsRouteFocused()
     if (!isFocused) return null
     return (
         <View pointerEvents="box-none" className="flex-1">
-            <CardSurface project={project} cardId={cardId} />
+            <CardSurface project={project} entry={entry} />
         </View>
     )
 }
 
 /**
  * Leave for the board when the card on screen stops resolving: deleted,
- * archived, moved to another board, or filtered out — here or by someone else.
+ * archived or moved to another board — here or by someone else. A filter
+ * cannot cause it: cards resolve on the whole board.
  *
  * Only a card this child HAS shown: a link that never resolved stays on the
  * not-found, which says what happened. And only while focused, so a covered
@@ -85,9 +92,8 @@ function useLeaveWhenCardGoes(open: OpenCard, leaveToBoard: () => void) {
 }
 
 /**
- * Respell a record-id segment once the card it names has a canonical one: the
- * peek's `/PL/<id>` becomes `/PL/PL-12` once the server numbers the card, the
- * page's `/PL/<id>` becomes `/PL/12`.
+ * Respell a record-id segment once the card it names has a key: the peek's
+ * `/PL/<id>` becomes `/PL/PL-12` once the server numbers the card.
  *
  * `setParams` rather than `replace`, which would remount the child and end
  * the editing session; and only while this child is the focused route,
@@ -107,9 +113,8 @@ function useCanonicalSegment(project: BoardProject, segment: string, open: OpenC
     }, [canonical, segment, router, navigation])
 }
 
-function canonicalSegment(open: OpenCard, card: { key: string; number: number } | undefined) {
+function canonicalSegment(open: OpenCard, card: { key: string } | undefined) {
     if (!open || !card) return ''
-    if (open.surface === 'page') return card.number ? String(card.number) : ''
     return card.key
 }
 

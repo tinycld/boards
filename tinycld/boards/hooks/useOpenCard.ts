@@ -9,21 +9,22 @@ import { useBoardLayout } from './useBoardLayout'
 export type OpenCard = { cardId: string; surface: 'peek' | 'page' } | null
 
 /**
- * The card this route's `[card]` segment names, resolved on THIS board; null
- * on the index child and for a segment that names nothing here.
+ * The card this route's `[card]` segment names, resolved on THIS board — all
+ * of it, not the reader's filtered view; null on the index child and for a
+ * segment that names nothing here.
  *
  * Read from the route's own param, so a child covered by another keeps
  * resolving its own card rather than the one on top of it.
  */
 export function useOpenCard(): OpenCard {
-    const { project } = useBoardLayout()
+    const { fullProject } = useBoardLayout()
     const params = useLocalSearchParams<{ card?: string }>()
     const segment = paramString(params.card)
-    return useMemo(() => resolveOpenCard(project, segment), [project, segment])
+    return useMemo(() => resolveOpenCard(fullProject, segment), [fullProject, segment])
 }
 
 /**
- * A `[card]` segment -> the card it names on `project`.
+ * A `[card]` segment -> the card it names on `project` (pass the full board).
  *
  * A key must carry this board's slug, so `OTTER-2` on the PL board is nothing
  * rather than whichever card happens to be numbered 2 here. A bare number is

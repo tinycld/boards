@@ -31,13 +31,16 @@ export default function BoardLayout() {
     const boardSlug = paramString(params.boardSlug)
     const legacy = parseCardKey(boardSlug)
     const orgHref = useOrgHref()
-    const { project, isLoading, segment, isArchived, cardCount } = useBoardRoute(
+    const { project, fullProject, isLoading, segment, isArchived, cardCount } = useBoardRoute(
         legacy ? legacy.slug : boardSlug
     )
     useVisitedBoard(project?.id ?? '')
     const layout = useMemo(
-        () => (project ? { project, segment, isArchived, cardCount } : null),
-        [project, segment, isArchived, cardCount]
+        () =>
+            project && fullProject
+                ? { project, fullProject, segment, isArchived, cardCount }
+                : null,
+        [project, fullProject, segment, isArchived, cardCount]
     )
 
     // The key alone is enough to spell the new URL, so the redirect does not
@@ -65,9 +68,9 @@ function useVisitedBoard(projectId: string) {
 }
 
 function BoardWithCards({ layout }: { layout: BoardLayoutValue }) {
-    const { project, segment, isArchived, cardCount } = layout
-    const { topCardSegment, screenListeners } = useOpenCardSync(project, segment)
-    const openCardId = resolveOpenCard(project, topCardSegment)?.cardId ?? null
+    const { project, fullProject, segment, isArchived, cardCount } = layout
+    const { topCardSegment, screenListeners } = useOpenCardSync(fullProject, segment)
+    const openCardId = resolveOpenCard(fullProject, topCardSegment)?.cardId ?? null
 
     return (
         <BoardLayoutProvider value={layout}>

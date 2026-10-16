@@ -55,9 +55,26 @@ const project = {
     ],
 } as BoardProject
 
+// The board as the reader's filter leaves it: card 2 hidden.
+const filtered = {
+    ...project,
+    lists: project.lists.map(list => ({
+        ...list,
+        cards: list.cards.filter(card => card.id !== 'c2'),
+    })),
+} as BoardProject
+
 function wrapper({ children }: { children: ReactNode }) {
     return (
-        <BoardLayoutProvider value={{ project, segment: 'PL', isArchived: false, cardCount: 3 }}>
+        <BoardLayoutProvider
+            value={{
+                project: filtered,
+                fullProject: project,
+                segment: 'PL',
+                isArchived: false,
+                cardCount: 2,
+            }}
+        >
             {children}
         </BoardLayoutProvider>
     )
@@ -69,6 +86,14 @@ function openCardFor(segment: string | undefined) {
 }
 
 describe('useOpenCard', () => {
+    // A card is resolved on the whole board, not the reader's view of it: a
+    // link to a card the filter hides still opens it, and a filter changed
+    // with the card open does not take it away.
+    it('a card the reader has filtered out still resolves', () => {
+        expect(openCardFor('PL-2')).toEqual({ cardId: 'c2', surface: 'peek' })
+        expect(openCardFor('2')).toEqual({ cardId: 'c2', surface: 'page' })
+    })
+
     it('a key on this board opens the peek', () => {
         expect(openCardFor('PL-2')).toEqual({ cardId: 'c2', surface: 'peek' })
         // Typed from memory as often as pasted.

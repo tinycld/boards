@@ -1,6 +1,7 @@
 import { DocumentTitle } from '@tinycld/core/components/DocumentTitle'
 import { LoadingState } from '@tinycld/core/components/LoadingState'
 import { useDeviceInsets } from '@tinycld/core/lib/use-safe-area'
+import { memo } from 'react'
 import { Text, View } from 'react-native'
 import { selectViewMode, useBoardsUIStore, type ViewMode } from '../stores/boards-ui-store'
 import type { BoardProject } from '../types'
@@ -26,10 +27,14 @@ interface BoardChromeProps {
  * board layout renders it once, under whichever card child is on top.
  *
  * Holds no open card: a card is a child route drawn over this (see
- * screens/[boardSlug]/_layout.tsx), so opening one does not re-render the
- * board.
+ * screens/[boardSlug]/_layout.tsx). Memoized because the layout re-renders as
+ * its children take focus, and none of that is the board's business.
  */
-export function BoardChrome({ project, isArchived, cardCount }: BoardChromeProps) {
+export const BoardChrome = memo(function BoardChrome({
+    project,
+    isArchived,
+    cardCount,
+}: BoardChromeProps) {
     const insets = useDeviceInsets()
     const viewMode = useBoardsUIStore(s => selectViewMode(s, project.id, project.sprintsEnabled))
 
@@ -50,7 +55,7 @@ export function BoardChrome({ project, isArchived, cardCount }: BoardChromeProps
             <NewBoardDialog />
         </View>
     )
-}
+})
 
 /** The one branch on the view mode. The public board stays a canvas — see public-screens. */
 function BoardView({ project, viewMode }: { project: BoardProject; viewMode: ViewMode }) {

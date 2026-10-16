@@ -12,7 +12,7 @@ import Animated from 'react-native-reanimated'
 import { useCardSurfaceShortcuts } from '../hooks/useCardSurfaceShortcuts'
 import { useIsRouteFocused } from '../hooks/useIsRouteFocused'
 import { useProjectRole } from '../hooks/useProjectRole'
-import { type CardEntry, findCardEntry, flattenCards } from '../lib/board-cards'
+import { type CardEntry, flattenCards } from '../lib/board-cards'
 import { cardHref } from '../lib/board-route'
 import { clampPeekWidth } from '../lib/peek-width'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
@@ -23,9 +23,10 @@ import type { EditableTextHandle } from './detail/EditableText'
 import { ProjectWash } from './ProjectWash'
 
 interface CardPeekProps {
+    /** The board as the reader views it: what j/k steps through. */
     project: BoardProject
-    /** The card to show; null shows nothing. */
-    cardId: string | null
+    /** The card to show, resolved by the caller; null shows nothing. */
+    entry: CardEntry | null
 }
 
 /**
@@ -34,8 +35,7 @@ interface CardPeekProps {
  * step to the next and previous card without closing, and ⤢ promotes the card
  * to its full-page route.
  */
-export function CardPeek({ project, cardId }: CardPeekProps) {
-    const entry = cardId ? findCardEntry(project, cardId) : null
+export function CardPeek({ project, entry }: CardPeekProps) {
     if (!entry) return null
 
     return <CardPeekPanel project={project} entry={entry} />
