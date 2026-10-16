@@ -54,7 +54,7 @@ test.describe('Boards — board sharing and role gates', () => {
         // --- Owner shares the board with bob as viewer ---
         await openShareDialog(page, boardName)
         await page.getByRole('button', { name: 'Add people' }).click()
-        await page.getByRole('button', { name: /^Viewer — / }).click()
+        await page.getByRole('radio', { name: /^Viewer — / }).click()
         // Search by email: display names are not unique across the run's
         // accumulated invitees, emails are.
         await page.getByPlaceholder('Search by name or email').fill(TEST_COLLABORATOR_EMAIL)

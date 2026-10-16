@@ -98,7 +98,9 @@ function Segment({
             <Pressable
                 testID={`boards-view-${mode}`}
                 accessibilityRole="tab"
+                // aria-selected as well: react-native-web drops accessibilityState (see TypePills).
                 accessibilityState={{ selected: isActive }}
+                aria-selected={isActive}
                 accessibilityLabel={`${label} view`}
                 onPress={onPress}
                 className={`items-center justify-center w-6 h-5 rounded ${isActive ? 'bg-foreground/10' : ''}`}

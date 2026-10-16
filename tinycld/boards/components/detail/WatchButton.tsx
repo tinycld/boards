@@ -62,7 +62,10 @@ function WatchButton({
         <Pressable
             accessibilityRole="button"
             accessibilityLabel={label}
+            // aria-pressed, not just accessibilityState: react-native-web drops the
+            // latter, so on web the toggle's state never reached the DOM.
             accessibilityState={{ selected: isWatching }}
+            aria-pressed={isWatching}
             testID="boards-watch-button"
             onPress={onPress}
             disabled={isPending}

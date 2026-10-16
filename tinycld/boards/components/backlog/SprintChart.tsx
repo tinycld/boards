@@ -66,7 +66,10 @@ function KindButton({
     return (
         <Pressable
             accessibilityRole="button"
+            // aria-pressed, not just accessibilityState: react-native-web drops the
+            // latter, so on web the toggle's state never reached the DOM.
             accessibilityState={{ selected: isActive }}
+            aria-pressed={isActive}
             onPress={onPress}
             className={`rounded-full px-2.5 py-[3px] border ${isActive ? 'border-primary bg-primary/10' : 'border-border'}`}
         >

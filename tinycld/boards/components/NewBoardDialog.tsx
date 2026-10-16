@@ -153,7 +153,9 @@ function ModeTabs({ mode, onChange }: { mode: BoardMode; onChange: (mode: BoardM
                 <Pressable
                     key={value}
                     accessibilityRole="tab"
+                    // aria-selected as well: react-native-web drops accessibilityState (see TypePills).
                     accessibilityState={{ selected: mode === value }}
+                    aria-selected={mode === value}
                     testID={`boards-new-board-${value}`}
                     onPress={() => onChange(value)}
                     className={`px-2.5 py-1 rounded-md ${mode === value ? 'bg-foreground/10' : ''}`}

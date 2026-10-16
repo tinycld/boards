@@ -111,7 +111,7 @@ async function addMemberToBoard(page: Page, boardName: string, email: string, ro
     await page.getByRole('button', { name: 'Share board' }).click()
     await expect(page.getByText(`Share “${boardName}”`)).toBeVisible()
     await page.getByRole('button', { name: 'Add people' }).click()
-    await page.getByRole('button', { name: new RegExp(`^${role} — `) }).click()
+    await page.getByRole('radio', { name: new RegExp(`^${role} — `) }).click()
     // Search by email: display names are not unique across a run's invitees.
     await page.getByPlaceholder('Search by name or email').fill(email)
     await expect(page.getByText(email)).toBeVisible()

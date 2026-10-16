@@ -50,7 +50,10 @@ function FormatRow({
     return (
         <Pressable
             accessibilityRole="radio"
-            accessibilityState={{ selected: isSelected }}
+            // A radio's state is "checked"; ARIA ignores aria-selected on it,
+            // so a reader would call every option unchecked.
+            accessibilityState={{ checked: isSelected }}
+            aria-checked={isSelected}
             accessibilityLabel={option.label}
             testID={`boards-export-${option.format}`}
             onPress={onSelect}

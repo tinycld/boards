@@ -269,7 +269,10 @@ function Segments({
                 <Pressable
                     key={item}
                     accessibilityRole="button"
+                    // aria-pressed, not just accessibilityState: react-native-web drops the
+                    // latter, so on web the toggle's state never reached the DOM.
                     accessibilityState={{ selected: mode === item }}
+                    aria-pressed={mode === item}
                     accessibilityLabel={MY_CARDS_MODE_LABELS[item]}
                     testID={`boards-my-boards-mode-${item}`}
                     onPress={() => onChange(item)}
@@ -321,6 +324,7 @@ function ClosedToggle({ isShowing, onToggle }: { isShowing: boolean; onToggle: (
         <Pressable
             accessibilityRole="button"
             accessibilityState={{ selected: isShowing }}
+            aria-pressed={isShowing}
             accessibilityLabel={isShowing ? 'Hide closed cards' : 'Show closed cards'}
             testID="boards-my-boards-closed"
             onPress={onToggle}

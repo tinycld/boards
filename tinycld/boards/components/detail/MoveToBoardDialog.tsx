@@ -151,7 +151,7 @@ function SectionTitle({ children }: { children: string }) {
     )
 }
 
-function ChoiceRow({
+export function ChoiceRow({
     label,
     color,
     isSelected,
@@ -168,7 +168,10 @@ function ChoiceRow({
     return (
         <Pressable
             accessibilityRole="radio"
-            accessibilityState={{ selected: isSelected }}
+            // A radio's state is "checked"; ARIA ignores aria-selected on it,
+            // so a reader would call every option unchecked.
+            accessibilityState={{ checked: isSelected }}
+            aria-checked={isSelected}
             accessibilityLabel={label}
             testID={testID}
             onPress={onPress}

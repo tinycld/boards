@@ -138,13 +138,16 @@ function RolePicker({
     onChange: (role: BoardsMemberRole) => void
 }) {
     return (
-        <View className="flex-row gap-1.5 items-center flex-wrap">
+        <View className="flex-row gap-1.5 items-center flex-wrap" accessibilityRole="radiogroup">
             <Text className="text-[12px] text-muted">Role:</Text>
             {ROLE_OPTIONS.map(option => (
                 <Pressable
                     key={option.value}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: role === option.value }}
+                    accessibilityRole="radio"
+                    // A radio's state is "checked"; ARIA ignores aria-selected on it,
+                    // so a reader would call every option unchecked.
+                    accessibilityState={{ checked: role === option.value }}
+                    aria-checked={role === option.value}
                     accessibilityLabel={`${option.label} — ${option.description}`}
                     onPress={() => onChange(option.value)}
                     className={
