@@ -108,7 +108,10 @@ function BoardWithCards({ boardSlug, isParked }: { boardSlug: string; isParked: 
             <CardNavigationProvider value={navigation}>
                 <BoardOpenCardProvider value={openCardId}>
                     <BoardPresenceProvider projectId={layout?.project.id ?? ''} cardId={openCardId}>
-                        <View className="flex-1">
+                        {/* The peek's dismissal region (CardPeek): a press outside
+                            this board's screen — rail, header, sidebar — is not
+                            the peek's business. */}
+                        <View className="flex-1" testID="boards-board-screen">
                             <BoardLayoutBody face={face} layout={layout} />
                             <View
                                 pointerEvents={childStackPointerEvents(topCardSegment)}

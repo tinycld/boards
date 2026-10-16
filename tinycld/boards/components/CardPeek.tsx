@@ -298,6 +298,12 @@ function PeekBackdrop({
     // it up is a separate change, not a side effect of this one.
     useOverlayLayer({
         isOpen: isRouteFocused,
+        // Only a press INSIDE this board's screen can dismiss the peek: the rail,
+        // the header and the boards sidebar are outside it, so a press there
+        // acts without closing the card (and Back after a sidebar push finds the
+        // card still open). Found from the panel up, so a stacked board's
+        // region is never mistaken for this one.
+        within: () => boardScreenOf(panelRef.current),
         // Another CARD counts as inside, and that is the whole point of using a
         // listener rather than an overlay: a press on a card already swaps the
         // peek's content, so dismissing on it too would close the panel the
@@ -305,8 +311,7 @@ function PeekBackdrop({
         // `onPress`, so without this exemption the close wins and clicking from
         // one card to the next just shuts the peek.
         //
-        // See insideNodes: card faces, list rows, and the portaled mention
-        // popover.
+        // See insideNodes: card faces and list rows.
         nodes: () => [panelRef.current as unknown as Node | null, ...insideNodes()],
         onDismiss: onPress,
         dismissOnEscape: false,
@@ -326,25 +331,17 @@ function PeekBackdrop({
 /**
  * Everything that counts as "inside" the peek beyond its own panel node.
  *
- * THREE kinds, and all are load-bearing:
- *
  * CARDS — a board face or a list/backlog row. Pressing one already SWAPS the
  * peek's content, so dismissing on it too would close the panel the press was
  * about to fill. `pointerdown` fires before the card's `onPress`, so without
  * this the close wins and clicking from one card to the next just shuts the
  * peek.
  *
- * THE BOARDS SIDEBAR — a board or My cards picked there is pushed over this
- * board, which stays beneath with this card open, so Back returns to it.
- * Dismissing first would pop the card on the way out and Back would find the
- * board bare.
- *
- * PORTALED SURFACES — the mention popover renders through `createPortal` to
- * `document.body` so it can float over the editor, which puts it outside the
- * panel's DOM subtree. A press on a mention suggestion therefore read as
- * "outside the peek" and dismissed it mid-@mention. Menus and dialogs opened
- * from the peek join the layer stack themselves and are handled by it being a
- * STACK — the popover does not, so it is named here.
+ * Nothing outside the board's screen needs an entry: the layer's `within`
+ * region (boardScreenOf) already makes a press there none of the peek's
+ * business. That covers the boards sidebar and app chrome, and the mention
+ * popover too — it portals to `document.body`, outside the region, so it needs
+ * no entry.
  *
  * Queried at event time rather than held in refs: the set changes with every
  * filter, sort and realtime update, and the stack calls this once per press.
@@ -355,8 +352,13 @@ function PeekBackdrop({
 function insideNodes(): Node[] {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return []
     return Array.from(
-        document.querySelectorAll(
-            '[data-testid^="board-card-"], [data-testid^="boards-row-"], [data-testid="boards-sidebar"], [data-testid="boards-mention-popover"]'
-        )
+        document.querySelectorAll('[data-testid^="board-card-"], [data-testid^="boards-row-"]')
     )
+}
+
+/** The board screen this panel is drawn in (see the layout's testID). */
+function boardScreenOf(panel: View | null): Node | null {
+    if (Platform.OS !== 'web') return null
+    const el = panel as unknown as { closest?: (selector: string) => Element | null } | null
+    return el?.closest?.('[data-testid="boards-board-screen"]') ?? null
 }

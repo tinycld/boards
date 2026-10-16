@@ -8,6 +8,8 @@ import {
     createBoard,
     dragCardToColumn,
     openCard,
+    peekUrl,
+    uniqueNumber,
     uniqueStamp,
 } from './helpers'
 
@@ -112,5 +114,34 @@ test.describe('the card peek', () => {
 
         await peek.getByText('Kept open card').first().click()
         await expect(peek).toBeVisible()
+    })
+
+    test('stays open when app chrome around the board is pressed', async ({ page }) => {
+        const key = `RAIL${uniqueNumber() % 100000}`
+        await createBoard(page, `peek-chrome-${uniqueStamp()}`, key)
+        await addCard(page, 0, 'Chrome card')
+        await openCard(page, 'Chrome card')
+        const peek = page.getByTestId('boards-card-peek')
+        await expect(peek).toBeVisible()
+
+        // The core rail item for Boards: inert on the open package (core), and
+        // outside the board, so the peek is none of its business.
+        await page.getByTestId('nav-boards').click()
+        await expect(peek).toBeVisible()
+        await expect(page).toHaveURL(peekUrl(key, 1))
+
+        // The core header: opening the user menu leaves the peek where it is.
+        await page.getByLabel('User menu').click()
+        await expect(page.getByRole('menu')).toBeVisible()
+        await expect(peek).toBeVisible()
+        await page.keyboard.press('Escape')
+        await expect(page.getByRole('menu')).toHaveCount(0)
+        await expect(peek).toBeVisible()
+
+        // Neither press added a history entry: Back leaves the card for the
+        // bare board it was opened from.
+        await page.goBack()
+        await expect(peek).toHaveCount(0)
+        await expect(page).toHaveURL(new RegExp(`/a/boards/${key}$`))
     })
 })

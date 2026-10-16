@@ -47,8 +47,6 @@ export default function BoardsSidebar() {
     }
 
     return (
-        // The testID marks the sidebar as inside an open peek (CardPeek's
-        // insideNodes), so picking a board here does not close the card first.
         <View className="flex-1" testID="boards-sidebar">
             <SidebarNav>
                 <SidebarActionButton label="+ New board" onPress={openNewBoard} />

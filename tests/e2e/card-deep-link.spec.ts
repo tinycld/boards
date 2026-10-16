@@ -435,8 +435,7 @@ test('switching boards from the sidebar, then Back, returns to the card on the f
 // Leaving Boards for another package and coming back is not a board switch:
 // the board is not covered by another board, so it does not park. The page
 // open on it, the comment half-written there and the board's socket are all
-// as they were. A full page rather than a peek: a rail press is outside the
-// peek and closes it first, which is the peek's own rule.
+// as they were.
 test('leaving Boards and coming back keeps the open card, its draft and its socket', async ({
     page,
 }) => {
@@ -507,6 +506,26 @@ test('picking the board on screen with a card open returns to the bare board', a
 
     await page.goBack()
     await expect(page).not.toHaveURL(new RegExp(`/a/boards/${key}(/|$)`))
+})
+
+// Back on Boards with a card still open, the sidebar closes it the same way,
+// and the card it closed opens again on the next press. The rail brings the
+// card back by URL, which leaves it in the router's global params after the
+// close: read from there, the board still took the card for open and the
+// press did nothing.
+test('a card closed after a trip away opens again on the next press', async ({ page }) => {
+    const key = await boardWithThreeCards(page, 'trip-close')
+    const name = await page.getByTestId('boards-board-name').filter({ visible: true }).innerText()
+    await openCard(page, 'Alpha')
+    await navigateToPackage(page, 'settings')
+    await navigateToPackage(page, 'boards')
+    await expect(page).toHaveURL(peekUrl(key, 1))
+
+    await openBoardNamed(page, name)
+    await expectBareBoard(page, key)
+
+    await openCard(page, 'Alpha')
+    await expect(page).toHaveURL(peekUrl(key, 1))
 })
 
 // A page link whose board does not exist says so. The card child cannot
