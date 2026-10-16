@@ -5,9 +5,9 @@ import { useFocusedLink } from '../tinycld/boards/screens/index'
 
 // Only the key path is exercised: it names its board itself and runs no query.
 vi.mock('expo-router', () => ({
-    Redirect: () => null,
+    useFocusEffect: () => {},
     useLocalSearchParams: () => ({}),
-    useRouter: () => ({}),
+    useNavigation: () => ({}),
 }))
 
 vi.mock('@tinycld/core/lib/pocketbase', async () => {
@@ -26,11 +26,14 @@ vi.mock('@tinycld/core/lib/pocketbase', async () => {
 describe('a ?focused=<key> link', () => {
     it('goes straight to the peek spelling on the key’s board', () => {
         const { result } = renderHook(() => useFocusedLink('pl-12'))
-        expect(result.current).toEqual({ isLoading: false, href: '/a/boards/PL/PL-12' })
+        expect(result.current).toEqual({
+            isLoading: false,
+            target: { segment: 'PL', card: 'PL-12' },
+        })
     })
 
     it('goes nowhere without a link', () => {
         const { result } = renderHook(() => useFocusedLink(''))
-        expect(result.current).toEqual({ isLoading: false, href: null })
+        expect(result.current).toEqual({ isLoading: false, target: null })
     })
 })

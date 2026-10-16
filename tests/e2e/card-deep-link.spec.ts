@@ -320,6 +320,45 @@ test('peek, page and j share the board’s one realtime socket', async ({ page }
     expect(opened).toBe(openedForBoard)
 })
 
+// A `?focused=` link followed from an open board — here through search, the
+// way core's notifications reach it too — lands on the other board in the ONE
+// board screen. The index route used to redirect with a replace, which the
+// singular board does not cover: a second board layout mounted over the first,
+// which kept its queries and its socket.
+test('a search hit on another board reuses the one board screen and socket', async ({ page }) => {
+    const live = new Set<WebSocket>()
+    page.on('websocket', socket => {
+        if (!socket.url().includes('/api/realtime/boards/')) return
+        live.add(socket)
+        socket.on('close', () => live.delete(socket))
+    })
+    await login(page)
+    await navigateToPackage(page, 'boards')
+    const target = `Focus target ${uniqueStamp()}`
+    const farKey = `FOCB${uniqueNumber() % 100000}`
+    await createBoard(page, `focus-far-${uniqueStamp()}`, farKey)
+    await addCard(page, 0, target)
+    const homeKey = `FOCA${uniqueNumber() % 100000}`
+    const home = `focus-home-${uniqueStamp()}`
+    await createBoard(page, home, homeKey)
+    await addCard(page, 0, 'Alpha')
+    await openCard(page, 'Alpha')
+    await expect(page).toHaveURL(peekUrl(homeKey, 1))
+    await expect.poll(() => live.size).toBe(1)
+
+    await page.keyboard.press('/')
+    await expect(page.getByRole('dialog', { name: 'Search' })).toBeVisible()
+    await page.keyboard.type(target)
+    await page.getByRole('option').filter({ hasText: target }).click()
+
+    await expect(page).toHaveURL(peekUrl(farKey, 1))
+    await expect(cardSurface(page).getByTestId('boards-detail-key')).toHaveText(`${farKey}-1`)
+    await expect(boardCard(page, target)).toBeVisible()
+    await expect(page.getByText('This card doesn’t exist or was removed')).toHaveCount(0)
+    await expect(page.getByTestId('boards-board-room')).toHaveCount(1)
+    await expect.poll(() => live.size).toBe(1)
+})
+
 // Switching boards from the sidebar replaces the board screen: the other
 // board's URL carries no card, and the first board's peek does not follow.
 // What Back does afterwards is pinned at the end.
@@ -342,6 +381,8 @@ test('switching boards from the sidebar lands on the other board without a card'
     await openBoardNamed(page, second)
     await expect(page).toHaveURL(new RegExp(`/a/boards/${secondKey}$`))
     await expect(cardSurface(page)).toHaveCount(0)
+    // The first board's card does not carry over under the second board.
+    await expect(page.getByText('This card doesn’t exist or was removed')).toHaveCount(0)
 
     // Pinned as observed, not as designed: the switch replaces the board
     // screen, and the browser's Back does not return to the first board's
