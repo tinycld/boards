@@ -13,9 +13,7 @@ import {
     parseCardSegment,
     peekHref,
     peekSegment,
-    resolveCardOnBoard,
 } from '../tinycld/boards/lib/board-route'
-import type { BoardProject } from '../tinycld/boards/types'
 
 /**
  * The URL is the source of truth for which board is open and which card is
@@ -117,70 +115,6 @@ describe('parseCardSegment', () => {
         for (const s of ['012', '', 'PL-012', 'my-cards', 'abc']) {
             expect(parseCardSegment(s)).toEqual({ kind: 'none' })
         }
-    })
-})
-
-function board(overrides: Partial<BoardProject> = {}): BoardProject {
-    return {
-        id: 'p1',
-        name: 'Home projects',
-        slug: 'HOME',
-        color: '#4A86E8',
-        members: [],
-        labels: [],
-        listOrder: [{ id: 'l1', position: 'a0' }],
-        lists: [
-            {
-                id: 'l1',
-                name: 'To do',
-                position: 'a0',
-                category: 'todo',
-                cards: [card('c1', 'HOME-1', 1), card('c2', 'HOME-2', 2)],
-            },
-        ],
-        ...overrides,
-    } as BoardProject
-}
-
-function card(id: string, key: string, number: number) {
-    return {
-        id,
-        key,
-        number,
-        listId: 'l1',
-        position: 'a0',
-        title: id,
-        description: '',
-        labels: [],
-        assignees: [],
-        checklistTotal: 0,
-        checklistDone: 0,
-        commentCount: 0,
-        attachmentCount: 0,
-        listCategory: 'todo',
-    }
-}
-
-describe('resolveCardOnBoard', () => {
-    it('resolves a key, in either case', () => {
-        expect(resolveCardOnBoard(board(), 'HOME-2')).toBe('c2')
-        expect(resolveCardOnBoard(board(), 'home-2')).toBe('c2')
-    })
-
-    // The `?focused=<id>` spelling: core's notifications, and a keyless card.
-    it('resolves a raw record id', () => {
-        expect(resolveCardOnBoard(board(), 'c1')).toBe('c1')
-    })
-
-    // A key from ANOTHER board must not resolve to whichever local card
-    // happens to carry that number.
-    it('ignores a key belonging to a different board', () => {
-        expect(resolveCardOnBoard(board(), 'FOX-2')).toBe('')
-    })
-
-    it('ignores a number that names no card here, and an empty param', () => {
-        expect(resolveCardOnBoard(board(), 'HOME-99')).toBe('')
-        expect(resolveCardOnBoard(board(), '')).toBe('')
     })
 })
 

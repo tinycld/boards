@@ -1,6 +1,4 @@
 import type { Href } from 'expo-router'
-import type { BoardProject } from '../types'
-import { flattenCards } from './board-cards'
 import { isRecordId, parseCardKey } from './card-key'
 
 /**
@@ -117,24 +115,6 @@ export function parseCardSegment(segment: string): CardSegment {
     const trimmed = segment.trim()
     if (isRecordId(trimmed)) return { kind: 'id', id: trimmed }
     return { kind: 'none' }
-}
-
-/**
- * A URL's card param -> a card id on THIS board, or ''.
- *
- * Accepts a key or a raw record id (the `?focused=` spelling). A key is
- * checked against the board's own slug so `OTTER-2` on the FOX board resolves
- * to nothing rather than to whichever card happens to be numbered 2 here.
- */
-export function resolveCardOnBoard(project: BoardProject, param: string): string {
-    if (!param) return ''
-    const key = parseCardKey(param)
-    const wanted = key ? `${key.slug}-${key.number}` : ''
-    if (key && (!project.slug || key.slug !== project.slug.toUpperCase())) return ''
-    for (const { card } of flattenCards(project)) {
-        if (key ? card.key === wanted : card.id === param) return card.id
-    }
-    return ''
 }
 
 /**
