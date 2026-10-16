@@ -1,4 +1,4 @@
-import { expect, type Page, test, type WebSocket } from '@playwright/test'
+import { expect, type Locator, type Page, test, type WebSocket } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
 import {
     addCard,
@@ -431,6 +431,102 @@ test('switching boards from the sidebar, then Back, returns to the card on the f
     await expect(page.getByTestId('boards-board-room')).toHaveCount(1)
     await expect.poll(() => live.size).toBe(1)
 })
+
+// Leaving Boards for another package and coming back is not a board switch:
+// the board is not covered by another board, so it does not park. The page
+// open on it, the comment half-written there and the board's socket are all
+// as they were. A full page rather than a peek: a rail press is outside the
+// peek and closes it first, which is the peek's own rule.
+test('leaving Boards and coming back keeps the open card, its draft and its socket', async ({
+    page,
+}) => {
+    let opened = 0
+    let closed = 0
+    page.on('websocket', socket => {
+        if (!socket.url().includes('/api/realtime/boards/')) return
+        opened += 1
+        socket.on('close', () => {
+            closed += 1
+        })
+    })
+    const key = await boardWithThreeCards(page, 'leave-return')
+    await openFullPage(page, 'Alpha')
+    await expect(page).toHaveURL(pageUrl(key, 1))
+    await expect.poll(() => opened - closed).toBe(1)
+    // The board the bare /a/boards first landed on parked when this one was
+    // created, so sockets already closed are not this trip's.
+    const openedBefore = opened
+    const closedBefore = closed
+    const composer = visibleCardPage(page).getByTestId('boards-comment-composer')
+    await composer.getByRole('button', { name: 'Write a comment' }).click()
+    const editor = composer.locator('.ProseMirror')
+    await expect(editor).toBeFocused()
+    await editor.pressSequentially('Draft survives a trip')
+    await expect(editor).toContainText('Draft survives a trip')
+
+    await navigateToPackage(page, 'settings')
+    await navigateToPackage(page, 'boards')
+
+    await expect(page).toHaveURL(pageUrl(key, 1))
+    await expect(visibleCardPage(page).getByTestId('boards-detail-key')).toHaveText(`${key}-1`)
+    await expect(editor).toContainText('Draft survives a trip')
+    expect(opened).toBe(openedBefore)
+    expect(closed).toBe(closedBefore)
+})
+
+// The board on screen picked again from the sidebar is not a new step: a push
+// would stack a second copy of it, and Back would seem to do nothing.
+test('picking the board on screen in the sidebar adds no history', async ({ page }) => {
+    await login(page)
+    await navigateToPackage(page, 'boards')
+    const firstKey = `SAMEA${uniqueNumber() % 100000}`
+    const secondKey = `SAMEB${uniqueNumber() % 100000}`
+    const second = `same-b-${uniqueStamp()}`
+    await createBoard(page, `same-a-${uniqueStamp()}`, firstKey)
+    await createBoard(page, second, secondKey)
+    await expect(page).toHaveURL(new RegExp(`/a/boards/${secondKey}$`))
+
+    await openBoardNamed(page, second)
+    await expect(page).toHaveURL(new RegExp(`/a/boards/${secondKey}$`))
+
+    await page.goBack()
+    await expect(page).toHaveURL(new RegExp(`/a/boards/${firstKey}$`))
+})
+
+// A page link whose board does not exist says so. The card child cannot
+// resolve anything without its board, and a page draws an opaque screen, so
+// the board's not-found has to show over the card children, not under them.
+test('a page link on a missing board says the board is missing', async ({ page }) => {
+    await login(page)
+    await navigateToPackage(page, 'boards')
+    // An initial-load deep link is the subject, not in-app navigation.
+    await page.goto(`/a/boards/GONE${uniqueNumber() % 100000}/12`)
+    const notFound = page.getByText('This board doesn’t exist or you don’t have access to it')
+    await expect(notFound).toBeVisible()
+    // Visible is not enough: an opaque page laid over it still counts as
+    // visible. The press point has to land on the message itself.
+    await expect.poll(() => isOnTop(notFound)).toBe(true)
+})
+
+/**
+ * Whether `target` is painted on top at its centre.
+ *
+ * Hit-testing skips `pointer-events: none`, and the board's card children sit
+ * in a layer with exactly that on web, so an opaque page laid over the message
+ * would not be hit and the message would read as on top. Every element is made
+ * hit-testable for the one probe, so the hit is what is drawn there.
+ */
+function isOnTop(target: Locator): Promise<boolean> {
+    return target.evaluate(element => {
+        const probe = document.createElement('style')
+        probe.textContent = '* { pointer-events: auto !important; }'
+        document.head.append(probe)
+        const box = element.getBoundingClientRect()
+        const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+        probe.remove()
+        return hit !== null && element.contains(hit)
+    })
+}
 
 async function expectBareBoard(page: Page, key: string) {
     await expect(page).toHaveURL(new RegExp(`/a/boards/${key}$`))
