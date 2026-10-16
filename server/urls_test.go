@@ -23,8 +23,8 @@ func TestCardURLSpellsTheKeyAsTheChildSegment(t *testing.T) {
 	}
 }
 
-// A board with no slug has no keys; the card's id is the child segment, which
-// the client peeks and respells to the key once the card is numbered.
+// A board with no slug has no keys, so the card's id is the child segment and
+// stays so: the client peeks it by id.
 func TestCardURLFallsBackToTheIDSegment(t *testing.T) {
 	env := setupMentionFlushEnv(t)
 

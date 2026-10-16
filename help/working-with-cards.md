@@ -30,10 +30,14 @@ close a card and return to the board in one step, press **Esc** or use the ✕ i
 its corner; with a panel you can also click the board behind it. To move to the
 next or previous card, press **j** or **k**. Each of those is a step too.
 
+A link to a card on another board opens that board with the card in it. It
+replaces the card you opened the link from, so the back button then returns you
+to the first board with no card open.
+
 To give a card the whole screen, click the expand button (the arrows in the top
 corner). That works from either the panel or the window, and the back button
-returns you to the card as it was. A card that is still being saved has no number yet and
-shows no expand button until it does.
+returns you to the card as it was. A card that is still being saved has no
+number yet and shows no expand button until it does.
 
 To make the panel wider, drag its left edge. It remembers the width you set, and
 it will not go narrower than its normal size.

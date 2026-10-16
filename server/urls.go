@@ -30,10 +30,11 @@ func appBase(app core.App) string {
 // notification should land the reader on the board, which is the view carrying
 // context.
 //
-// A card with no key — its board has no slug, or the server has not numbered
-// it — is spelled "/a/boards/<board>/<id>"; the client peeks it and respells
-// it to the key once the number arrives. Falls back to the package root rather
-// than ever returning a URL that will not resolve.
+// A card with no key is spelled "/a/boards/<board>/<id>", which the client
+// peeks. A card the server has not numbered yet is respelled to its key once
+// the number arrives; a card on a board with no slug never has a key, so it
+// keeps the id spelling. Falls back to the package root rather than ever
+// returning a URL that will not resolve.
 func cardURL(app core.App, cardID string) string {
 	card, err := app.FindRecordById("boards_cards", cardID)
 	if err != nil {
