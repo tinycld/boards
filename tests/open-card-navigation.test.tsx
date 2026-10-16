@@ -11,7 +11,7 @@ import {
 } from '../tinycld/boards/hooks/useCardNavigation'
 import { useCardSelection } from '../tinycld/boards/hooks/useCardSelection'
 import { useOpenRelatedCard } from '../tinycld/boards/hooks/useOpenRelatedCard'
-import { topCardSegment } from '../tinycld/boards/hooks/useTopCardSegment'
+import { cardParam } from '../tinycld/boards/hooks/useTopCardSegment'
 
 // Every writer reaches the router through useCardNavigation, so what the router
 // records is the whole contract: a push for a card, one dismissTo for leaving.
@@ -99,37 +99,10 @@ describe('opening a card from a row inside an open card', () => {
 })
 
 describe('the card on top of the board', () => {
-    const state = {
-        routes: [
-            {
-                key: 'app',
-                state: {
-                    routes: [
-                        {
-                            key: 'layout',
-                            state: {
-                                index: 3,
-                                routes: [
-                                    { key: 'i', params: {} },
-                                    { key: 'a', params: { card: 'PL-1' } },
-                                    { key: 'b', params: { card: 'PL-2' } },
-                                    { key: 'c', params: { card: 'PL-3' } },
-                                ],
-                            },
-                        },
-                    ],
-                },
-            },
-        ],
-    }
-
-    it('is the focused child of the layout’s own stack', () => {
-        expect(topCardSegment(state, 'layout')).toBe('PL-3')
-    })
-
-    it('is empty with no child stack yet, or for another layout', () => {
-        expect(topCardSegment(undefined, 'layout')).toBe('')
-        expect(topCardSegment(state, 'other')).toBe('')
+    it('is the card param of the focused child, empty on the index child', () => {
+        expect(cardParam({ boardSlug: 'PL', card: 'PL-3' })).toBe('PL-3')
+        expect(cardParam({ boardSlug: 'PL' })).toBe('')
+        expect(cardParam(undefined)).toBe('')
     })
 })
 

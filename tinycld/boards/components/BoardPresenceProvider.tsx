@@ -35,8 +35,15 @@ const BoardPresenceContext = createContext<BoardPresenceValue>({
 })
 
 /**
- * Holds the board's single presence room, so the header's avatar stack and the
- * per-card clusters read one connection rather than opening one each.
+ * Holds the board's single room — awareness AND the board document — so the
+ * header's avatar stack, the per-card clusters and every open card's
+ * description read one connection rather than opening one each.
+ *
+ * Mounted ONCE per board, in the board layout route (`[boardSlug]/_layout`),
+ * never by a card child: a peek, a modal and any number of stacked pages are
+ * children of that layout and share this room, so opening or stepping cards
+ * neither opens a socket nor reconnects the document. `cardId` is the top
+ * child's card, which is what peers see this user looking at.
  *
  * A React context rather than a Zustand store, against the usual house rule for
  * shared UI state: what is being shared is a live socket handle scoped to the

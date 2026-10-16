@@ -3,8 +3,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, waitFor } from '@testing-library/react'
 import { setResolvedAddress } from '@tinycld/core/lib/server-address'
 import { OverlayProvider } from '@tinycld/core/ui/overlay'
-import { createElement, type ReactNode, useEffect } from 'react'
+import { createElement, Fragment, type ReactNode, useEffect } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { useBoardPresenceContext } from '../tinycld/boards/components/BoardPresenceProvider'
 
 afterEach(cleanup)
 
@@ -18,7 +19,16 @@ const h = vi.hoisted(() => ({
     redirects: [] as unknown[],
     stacks: 0,
     sockets: [] as string[],
+    // What each card child (a peek, a page) read from the room it sits in.
+    docs: [] as (object | null)[],
 }))
+
+// A card child's view of the room: the document its description binds to.
+function RoomProbe() {
+    const { doc } = useBoardPresenceContext()
+    h.docs.push(doc)
+    return null
+}
 
 vi.mock('expo-router', () => {
     const router = {
@@ -33,7 +43,14 @@ vi.mock('expo-router', () => {
     const Stack = Object.assign(
         () => {
             h.stacks += 1
-            return null
+            // Two children, as a peek with a page stacked on it: the layout's
+            // Stack renders its routes inside the room.
+            return createElement(
+                Fragment,
+                null,
+                createElement(RoomProbe, { key: 'peek' }),
+                createElement(RoomProbe, { key: 'page' })
+            )
         },
         { Screen: () => null }
     )
@@ -50,8 +67,7 @@ vi.mock('expo-router', () => {
             useEffect(effect, [effect])
         },
         useNavigation: () => ({ isFocused: () => true, addListener: () => () => {} }),
-        useRoute: () => ({ key: 'layout' }),
-        useRootNavigationState: () => ({ routes: [{ key: 'layout' }] }),
+        useGlobalSearchParams: () => h.params,
         usePathname: () => '/a/boards/PL',
         useSegments: () => [],
     }
@@ -237,6 +253,7 @@ describe('the board layout route', () => {
         h.redirects = []
         h.stacks = 0
         h.sockets = []
+        h.docs = []
     })
 
     it('mounts the board chrome, the child stack and exactly one room', async () => {
@@ -249,6 +266,17 @@ describe('the board layout route', () => {
         expect(h.stacks).toBeGreaterThan(0)
         await waitFor(() => expect(h.sockets).toHaveLength(1))
         expect(h.sockets[0]).toContain('p1')
+    })
+
+    it('shares the layout’s room and document with every card child', async () => {
+        await mountLayout('PL')
+
+        // Each render of the two probes appends a pair; the room's document
+        // arrives after the first, so compare the latest pair.
+        await waitFor(() => expect(h.docs.at(-1)).not.toBeNull())
+        const [peek, page] = h.docs.slice(-2)
+        expect(peek).toBe(page)
+        expect(h.sockets).toHaveLength(1)
     })
 
     // The old spelling put the key where the board goes.

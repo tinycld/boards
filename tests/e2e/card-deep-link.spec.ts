@@ -1,10 +1,12 @@
-import { expect, type Page, test } from '@playwright/test'
+import { expect, type Page, test, type WebSocket } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
 import {
     addCard,
     addSubtask,
     cardSurface,
     createBoard,
+    openBoard,
+    openBoardNamed,
     openCard,
     uniqueNumber,
     uniqueStamp,
@@ -172,6 +174,73 @@ test('j, goBack, Escape lands on the board with the card peeked', async ({ page 
     await expect(page).toHaveURL(new RegExp(`/a/boards/${key}-1$`))
     await expect(visibleCardPage(page)).toHaveCount(0)
     await expect(cardSurface(page).getByTestId('boards-detail-key')).toHaveText(`${key}-1`)
+})
+
+// One room per board, however many card views are stacked on it: the peek, the
+// page expanded from it and the pages j pushes are children of the board's
+// layout, which owns the socket. `page.on('websocket')` sees every socket the
+// tab opens; a board whose cards opened their own would show two or more live.
+test('peek, page and j share the board’s one realtime socket', async ({ page }) => {
+    const live = new Set<WebSocket>()
+    let opened = 0
+    page.on('websocket', socket => {
+        if (!socket.url().includes('/api/realtime/boards/')) return
+        opened += 1
+        live.add(socket)
+        socket.on('close', () => live.delete(socket))
+    })
+    const key = await boardWithThreeCards(page, 'one-socket')
+    await expect.poll(() => live.size).toBe(1)
+    const openedForBoard = opened
+
+    await openCard(page, 'Alpha')
+    expect(live.size).toBe(1)
+
+    await page.getByLabel('Open full page').click()
+    await expect(visibleCardPage(page).getByText('Description', { exact: true })).toBeVisible()
+    expect(live.size).toBe(1)
+
+    await page.keyboard.press('j')
+    await expect(page).toHaveURL(new RegExp(`/a/boards/${key}/2$`))
+    await expect(visibleCardPage(page).getByTestId('boards-detail-key')).toHaveText(`${key}-2`)
+    await page.keyboard.press('j')
+    await expect(page).toHaveURL(new RegExp(`/a/boards/${key}/3$`))
+    await expect(visibleCardPage(page).getByTestId('boards-detail-key')).toHaveText(`${key}-3`)
+
+    expect(live.size).toBe(1)
+    expect(opened).toBe(openedForBoard)
+})
+
+// Switching boards from the sidebar replaces the board screen: the other
+// board's URL carries no card, and the first board's peek does not follow.
+// What Back does afterwards is pinned at the end.
+test('switching boards from the sidebar lands on the other board without a card', async ({
+    page,
+}) => {
+    await login(page)
+    await navigateToPackage(page, 'boards')
+    const first = `swap-a-${uniqueStamp()}`
+    const second = `swap-b-${uniqueStamp()}`
+    const firstKey = `SWAPA${uniqueNumber() % 100000}`
+    const secondKey = `SWAPB${uniqueNumber() % 100000}`
+    await createBoard(page, first, firstKey)
+    await addCard(page, 0, 'Alpha')
+    await createBoard(page, second, secondKey)
+    await openBoard(page, first, 'Alpha')
+    await openCard(page, 'Alpha')
+    await expect(page).toHaveURL(new RegExp(`/a/boards/${firstKey}/${firstKey}-1$`))
+
+    await openBoardNamed(page, second)
+    await expect(page).toHaveURL(new RegExp(`/a/boards/${secondKey}$`))
+    await expect(cardSurface(page)).toHaveCount(0)
+
+    // Pinned as observed, not as designed: the switch replaces the board
+    // screen, and the browser's Back does not return to the first board's
+    // peek or its bare board — it leaves the app for the blank page the tab
+    // started on. The switch is a replace, so the history entries of the board
+    // left are gone.
+    await page.goBack()
+    await expect(page).toHaveURL('about:blank')
 })
 
 async function boardWithThreeCards(page: Page, name: string): Promise<string> {

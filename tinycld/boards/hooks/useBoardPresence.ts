@@ -37,8 +37,10 @@ export interface RemoteCardsPresence extends BoardsPresenceState {
  * Live presence for a board: who else has it open, and which card each of them
  * is looking at.
  *
- * The room carries awareness only — no shared document — so the server side is
- * an authorize handler and nothing else (boards/server/realtime.go).
+ * The room carries awareness AND the board's shared document (one fragment per
+ * card; see BoardPresenceProvider), so this hook is called once per board, from
+ * the board layout route, and every card view reads the result through context.
+ * The server side is boards/server/realtime.go.
  */
 export function useBoardPresence(projectId: string, cardId: string | null) {
     // Non-throwing: BoardColumn calls the mutation hooks unconditionally, so
