@@ -27,14 +27,13 @@ import { isRecordId, parseCardKey } from './card-key'
 export interface BoardSegment {
     /** Uppercased: slugs are stored uppercase and a URL is retyped from memory. */
     slug: string
-    /** 0 when the segment names only a board. */
-    cardNumber: number
 }
 
+/** The board a board segment names; the old `PL-12` spelling names board PL. */
 export function parseBoardSegment(segment: string): BoardSegment {
     const key = parseCardKey(segment)
-    if (key) return { slug: key.slug, cardNumber: key.number }
-    return { slug: segment.trim().toUpperCase(), cardNumber: 0 }
+    if (key) return { slug: key.slug }
+    return { slug: segment.trim().toUpperCase() }
 }
 
 /**

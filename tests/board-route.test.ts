@@ -28,27 +28,27 @@ import {
  */
 describe('parseBoardSegment', () => {
     it('reads a bare slug as a board', () => {
-        expect(parseBoardSegment('PL')).toEqual({ slug: 'PL', cardNumber: 0 })
+        expect(parseBoardSegment('PL')).toEqual({ slug: 'PL' })
     })
 
-    it('reads a key as a board AND a card', () => {
-        expect(parseBoardSegment('PL-12')).toEqual({ slug: 'PL', cardNumber: 12 })
+    it('reads the old key spelling as its board', () => {
+        expect(parseBoardSegment('PL-12')).toEqual({ slug: 'PL' })
     })
 
     // A URL is typed from memory as often as it is pasted.
     it('uppercases, so a retyped URL reaches the same board', () => {
-        expect(parseBoardSegment('pl')).toEqual({ slug: 'PL', cardNumber: 0 })
-        expect(parseBoardSegment('pl-3')).toEqual({ slug: 'PL', cardNumber: 3 })
+        expect(parseBoardSegment('pl')).toEqual({ slug: 'PL' })
+        expect(parseBoardSegment('pl-3')).toEqual({ slug: 'PL' })
     })
 
     // The sibling route must never read as a card — a key needs digits after
     // the hyphen — so it is safe by the parsing rule rather than by name.
     it('does not read my-cards as a key', () => {
-        expect(parseBoardSegment('my-cards').cardNumber).toBe(0)
+        expect(parseBoardSegment('my-cards').slug).toBe('MY-CARDS')
     })
 
     it('does not read a record id as a key', () => {
-        expect(parseBoardSegment('r8f3k2m9x1p7q4w').cardNumber).toBe(0)
+        expect(parseBoardSegment('r8f3k2m9x1p7q4w').slug).toBe('R8F3K2M9X1P7Q4W')
     })
 })
 

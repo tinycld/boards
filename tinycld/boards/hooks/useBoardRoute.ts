@@ -47,10 +47,7 @@ export interface BoardRoute {
 }
 
 export function useBoardRoute(routeSegment: string): BoardRoute {
-    const { slug, cardNumber: keyNumber } = useMemo(
-        () => parseBoardSegment(routeSegment),
-        [routeSegment]
-    )
+    const slug = useMemo(() => parseBoardSegment(routeSegment).slug, [routeSegment])
 
     // By id OR by slug in the board's one query, so a board resolves the
     // moment its OPTIMISTIC row lands — the instant it is created — rather
@@ -58,12 +55,7 @@ export function useBoardRoute(routeSegment: string): BoardRoute {
     // board that never had a slug. The rows and the tree are two calls here
     // rather than one useBoardContent because the reader's view below is
     // keyed by the project id the rows resolve.
-    //
-    // Keyed on the BOARD half of the segment: `PL-12` and `PL` are the same
-    // board, so opening or closing a card must not become a new query — that
-    // re-fetched the board and flashed the loading state over it on every
-    // card open.
-    const rows = useBoardRows({ segment: keyNumber ? slug : routeSegment, slug })
+    const rows = useBoardRows({ segment: routeSegment, slug })
     const projectRow = rows.rows?.project
     const projectId = projectRow?.id ?? ''
 
