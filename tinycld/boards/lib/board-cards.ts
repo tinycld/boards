@@ -47,6 +47,20 @@ export function neighborCardId(
 }
 
 /**
+ * The card j/k on a full page lands on: the neighbour, when it has a page. A
+ * neighbour the server has not numbered has no page URL yet, so the step waits.
+ */
+export function pageNeighbor(
+    project: BoardProject,
+    cardId: string,
+    delta: number
+): BoardCardView | null {
+    const next = neighborCardId(project, cardId, delta)
+    const card = next ? findCardEntry(project, next)?.card : undefined
+    return card?.number ? card : null
+}
+
+/**
  * The card j/k lands on from `cardId`: its neighbour, or — for a card the
  * project does not hold, which a filter hid after it was opened — the first
  * card for a step forward and the last for a step back, so the keys keep

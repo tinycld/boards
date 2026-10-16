@@ -73,8 +73,9 @@ test.describe('a card the server has not saved yet', () => {
         await addCard(page, 0, 'opened early')
         await openCard(page, 'opened early')
         await expect(page).toHaveURL(new RegExp(`/a/boards/${key}/[a-z0-9]{15}$`))
-        // Not numbered, so there is no page to expand to yet.
-        await expect(cardSurface(page).getByLabel('Open full page')).toHaveCount(0)
+        // Not numbered, so there is no page to expand to yet: the control
+        // waits, disabled, rather than appearing once the number lands.
+        await expect(cardSurface(page).getByLabel('Waiting for a card number')).toBeDisabled()
 
         release()
         await expect(cardSurface(page).getByTestId('boards-detail-key')).toHaveText(`${key}-1`)
@@ -92,7 +93,7 @@ test.describe('a card the server has not saved yet', () => {
         const release = await holdRequests(page, 'POST', CARD_CREATE)
         await addCard(page, 0, 'paged early')
         await openCard(page, 'paged early')
-        await expect(cardSurface(page).getByLabel('Open full page')).toHaveCount(0)
+        await expect(cardSurface(page).getByLabel('Waiting for a card number')).toBeDisabled()
 
         release()
         await cardSurface(page).getByLabel('Open full page').click()

@@ -90,7 +90,7 @@ function CardPeekPanel({
         [fullProject]
     )
 
-    const expandCard = expandAction(navigation, entry.card)
+    const expand = expandAction(navigation, entry.card)
 
     return (
         <>
@@ -127,7 +127,7 @@ function CardPeekPanel({
                         entry={entry}
                         canEdit={canEdit}
                         onDismiss={closeCard}
-                        onExpand={expandCard}
+                        expand={expand}
                         onClose={closeCard}
                         displayMode="peek"
                         onToggleDisplayMode={() => setCardDisplayMode('modal')}

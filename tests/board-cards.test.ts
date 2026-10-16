@@ -4,6 +4,7 @@ import {
     findCardEntry,
     flattenCards,
     neighborCardId,
+    pageNeighbor,
     stepCardId,
 } from '../tinycld/boards/lib/board-cards'
 import type { BoardCardView, BoardProject } from '../tinycld/boards/types'
@@ -95,6 +96,40 @@ describe('neighborCardId', () => {
 
     it('returns null for unknown cards', () => {
         expect(neighborCardId(project(), 'nope', 1)).toBeNull()
+    })
+})
+
+describe('pageNeighbor', () => {
+    function numbered(numbers: Record<string, number>): BoardProject {
+        const base = project()
+        return {
+            ...base,
+            lists: base.lists.map(list => ({
+                ...list,
+                cards: list.cards.map(c => ({ ...c, number: numbers[c.id] ?? 0 })),
+            })),
+        }
+    }
+
+    it('steps to a numbered neighbour, which has a page', () => {
+        expect(pageNeighbor(numbered({ a: 1, b: 2, c: 3 }), 'b', 1)?.id).toBe('c')
+    })
+
+    // An unnumbered card's page has no URL yet, so the step waits for it.
+    it('steps nowhere when the neighbour has no number yet', () => {
+        expect(pageNeighbor(numbered({ a: 1, b: 2 }), 'b', 1)).toBeNull()
+    })
+
+    it('steps nowhere past the ends', () => {
+        expect(pageNeighbor(numbered({ a: 1, b: 2, c: 3 }), 'c', 1)).toBeNull()
+    })
+
+    it('steps back nowhere when the previous neighbour has no number yet', () => {
+        expect(pageNeighbor(numbered({ b: 2, c: 3 }), 'b', -1)).toBeNull()
+    })
+
+    it('steps nowhere from a card the project does not hold', () => {
+        expect(pageNeighbor(numbered({ a: 1, b: 2, c: 3 }), 'nope', 1)).toBeNull()
     })
 })
 

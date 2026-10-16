@@ -2,9 +2,14 @@ import { Tooltip } from '@tinycld/core/components/Tooltip'
 import { forwardRef, type ReactNode } from 'react'
 import { Pressable, type View } from 'react-native'
 
+const BUTTON_CLASS =
+    'w-7 h-7 items-center justify-center rounded-[7px] hover:bg-foreground/5 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring'
+
 interface IconButtonProps {
     label: string
     onPress?: () => void
+    /** Greyed out and inert; the tooltip still shows `label`, which says why. */
+    disabled?: boolean
     children: ReactNode
 }
 
@@ -18,7 +23,7 @@ interface IconButtonProps {
  * measurement ref to the Fragment and the menu would never open.
  */
 export const IconButton = forwardRef<View, IconButtonProps>(function IconButton(
-    { label, onPress, children },
+    { label, onPress, disabled, children },
     ref
 ) {
     return (
@@ -28,7 +33,10 @@ export const IconButton = forwardRef<View, IconButtonProps>(function IconButton(
                 accessibilityRole="button"
                 accessibilityLabel={label}
                 onPress={onPress}
-                className="w-7 h-7 items-center justify-center rounded-[7px] hover:bg-foreground/5 web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+                disabled={disabled}
+                accessibilityState={{ disabled }}
+                aria-disabled={disabled}
+                className={disabled ? `${BUTTON_CLASS} opacity-40` : BUTTON_CLASS}
             >
                 {children}
             </Pressable>

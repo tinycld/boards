@@ -77,13 +77,21 @@ describe('paths', () => {
         expect(cardPagePath('PL', { id: 'c12', number: 12 })).toBe('boards/PL/12')
     })
 
-    // A card still saving has no number yet; its page is addressed by its id,
-    // so opening it does not depend on how fast the server answers.
-    it('links a card to its page by number, or by id before it is numbered', () => {
+    // A page is spelled by number only: the id is the peek's spelling, so an
+    // unnumbered card's "page" would open as a peek.
+    it('cardPagePath refuses an unnumbered card', () => {
+        expect(() => cardPagePath('PL', { id: 'abcdefghijklmno', number: 0 })).toThrow()
+    })
+
+    // A card still saving has no number and so no page yet; a link to it
+    // opens its peek, so the link works before the server answers.
+    it('links a card to its page by number, or to its peek before it is numbered', () => {
         const orgHref = (path: string, extra?: Record<string, string>): Href => appHref(path, extra)
         const board = { id: 'p1', slug: 'PL' }
         expect(cardHref(orgHref, board, { id: 'c12', number: 12 })).toEqual(appHref('boards/PL/12'))
-        expect(cardHref(orgHref, board, { id: 'c0', number: 0 })).toEqual(appHref('boards/PL/c0'))
+        expect(cardHref(orgHref, board, { id: 'abcdefghijklmno', number: 0 })).toEqual(
+            peekHref(orgHref, 'PL', { key: '', id: 'abcdefghijklmno' })
+        )
     })
 
     it('peeks by key, else by record id', () => {
@@ -96,7 +104,7 @@ describe('paths', () => {
         expect(boardHref(org, 'PL')).toBe('/a/boards/PL')
     })
 
-    it('pages by number, else by id', () => {
+    it('pages by number, else peeks by id', () => {
         const org = (path: string): Href => `/a/${path}` as Href
         expect(cardHref(org, { id: 'b', slug: 'pl' }, { id: 'x', number: 12 })).toBe(
             '/a/boards/pl/12'

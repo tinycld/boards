@@ -8,7 +8,7 @@ import { type RefObject, useId, useMemo, useRef } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useCardNavigation } from '../hooks/useCardNavigation'
 import { useProjectRole } from '../hooks/useProjectRole'
-import { type CardEntry, findCardEntry, flattenCards, neighborCardId } from '../lib/board-cards'
+import { type CardEntry, findCardEntry, flattenCards, pageNeighbor } from '../lib/board-cards'
 import type { BoardProject } from '../types'
 import { CardDetail } from './detail/CardDetail'
 import { CardHeaderToolbar } from './detail/CardHeaderToolbar'
@@ -111,11 +111,9 @@ function usePageShortcuts(
     const shortcuts = useMemo<Shortcut[]>(() => {
         const idOf = (name: string) => `boards.page.${name}#${instance}`
         const step = (delta: number) => {
-            const next = neighborCardId(project, cardId, delta)
-            const entry = next ? findCardEntry(project, next) : null
-            if (!entry) return
+            const next = pageNeighbor(project, cardId, delta)
             // A push, so Back steps back through the cards j/k walked.
-            openPage?.(entry.card)
+            if (next) openPage?.(next)
         }
         // Mirrors the peek's binding at this scope, so `e` means the same thing
         // whichever surface the card is open on.

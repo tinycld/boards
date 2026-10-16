@@ -4,6 +4,7 @@ import * as Clipboard from 'expo-clipboard'
 import { Link2, Maximize2, MoreHorizontal, PanelRight, Square, X } from 'lucide-react-native'
 import type { ReactNode } from 'react'
 import { View } from 'react-native'
+import type { ExpandAction } from '../../hooks/useCardNavigation'
 import type { CardEntry } from '../../lib/board-cards'
 import type { CardDisplayMode } from '../../stores/boards-ui-store'
 import type { BoardProject } from '../../types'
@@ -21,8 +22,8 @@ interface CardHeaderToolbarProps {
     onDismiss: () => void
     /** Pinned before the stepper — the full page puts its back button here. */
     leadingItems?: ToolbarItem[]
-    /** Promotes the card to its full page; the peek and the modal. */
-    onExpand?: () => void
+    /** Promotes the card to its full page; the peek and the modal (see expandAction). */
+    expand?: ExpandAction
     /** Closes the view; the peek and the modal. */
     onClose?: () => void
     /**
@@ -72,7 +73,7 @@ function CardHeaderRow({
     entry,
     canEdit,
     leadingItems,
-    onExpand,
+    expand,
     onClose,
     displayMode,
     onToggleDisplayMode,
@@ -84,7 +85,7 @@ function CardHeaderRow({
         entry,
         canEdit,
         leadingItems,
-        onExpand,
+        expand,
         displayMode,
         onToggleDisplayMode,
     })
@@ -127,7 +128,7 @@ function useCardHeaderItems({
     entry,
     canEdit,
     leadingItems = [],
-    onExpand,
+    expand,
     displayMode,
     onToggleDisplayMode,
 }: Pick<
@@ -136,7 +137,7 @@ function useCardHeaderItems({
     | 'entry'
     | 'canEdit'
     | 'leadingItems'
-    | 'onExpand'
+    | 'expand'
     | 'displayMode'
     | 'onToggleDisplayMode'
 >) {
@@ -190,16 +191,25 @@ function useCardHeaderItems({
             overflow: { label: mode.label, icon: mode.icon, onPress: onToggleDisplayMode },
         })
     }
-    if (onExpand) {
+    if (expand) {
         items.push({
             type: 'custom',
             key: 'expand',
             element: (
-                <IconButton label="Open full page" onPress={onExpand}>
+                <IconButton
+                    label={expand.label}
+                    onPress={expand.onPress}
+                    disabled={expand.isDisabled}
+                >
                     <Maximize2 size={14} color={mutedColor} strokeWidth={2.2} />
                 </IconButton>
             ),
-            overflow: { label: 'Open full page', icon: Maximize2, onPress: onExpand },
+            overflow: {
+                label: expand.label,
+                icon: Maximize2,
+                onPress: expand.onPress,
+                isDisabled: expand.isDisabled,
+            },
         })
     }
     return items

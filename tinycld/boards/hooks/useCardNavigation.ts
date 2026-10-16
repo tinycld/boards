@@ -84,8 +84,10 @@ export function useRouterCardNavigation(
                 if (board === segment && isOnTop(card.id, 'peek')) return
                 router.push(peekHref(orgHref, board, card))
             },
-            // A card the server has not numbered is spelled by its record id,
-            // which is its peek's URL; callers offer no page for one.
+            // A card the server has not numbered has no page URL; an
+            // unnumbered card's Expand is disabled (expandAction), j/k on a page
+            // stops at it (pageNeighbor) and a row opens its peek
+            // (useOpenRelatedCard), so this never receives one.
             openPage: card => {
                 if (!isOnTop(card.id, 'page')) router.push(orgHref(cardPagePath(segment, card)))
             },
@@ -96,16 +98,26 @@ export function useRouterCardNavigation(
     }, [router, orgHref, segment])
 }
 
+export interface ExpandAction {
+    onPress: () => void
+    isDisabled: boolean
+    label: string
+}
+
 /**
- * What a surface's Expand control does, or undefined to omit the control: there
- * is no page where the navigation has none (the public board), and none for a
- * card the server has not numbered yet.
+ * What a surface's Expand control does, or undefined to omit it: there is no
+ * page where the navigation has none (the public board). A card the server has
+ * not numbered yet has no page URL either, but the control stays, disabled, so
+ * it does not appear a moment after the card opens.
  */
 export function expandAction(
     navigation: CardNavigation,
     card: { id: string; number: number }
-): (() => void) | undefined {
+): ExpandAction | undefined {
     const { openPage } = navigation
-    if (!openPage || !card.number) return undefined
-    return () => openPage(card)
+    if (!openPage) return undefined
+    if (!card.number) {
+        return { onPress: () => {}, isDisabled: true, label: 'Waiting for a card number' }
+    }
+    return { onPress: () => openPage(card), isDisabled: false, label: 'Open full page' }
 }

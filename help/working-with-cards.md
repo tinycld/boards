@@ -36,7 +36,7 @@ button returns you to the card you came from.
 To give a card the whole screen, click the expand button (the arrows in the top
 corner). That works from either the panel or the window, and the back button
 returns you to the card as it was. A card that is still being saved has no
-number yet and shows no expand button until it does.
+number yet; its expand button waits, greyed out, until the number arrives.
 
 To make the panel wider, drag its left edge. It remembers the width you set, and
 it will not go narrower than its normal size.

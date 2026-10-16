@@ -58,23 +58,26 @@ export function boardPath(segment: string): string {
     return `boards/${segment}`
 }
 
-/**
- * The path of `card`'s full page: `boards/PL/12`, or `boards/PL/<id>` while
- * the server has not numbered it, so a card still saving has a page too.
- */
-export function cardPagePath(segment: string, card: { id: string; number: number }): string {
-    return `boards/${segment}/${card.number || card.id}`
+/** The path of `card`'s full page. A page is spelled by number only: an id is the peek's spelling. */
+export function cardPagePath(segment: string, card: { number: number }): string {
+    if (!card.number) throw new Error('a page needs a numbered card')
+    return `boards/${segment}/${card.number}`
 }
 
 type HrefBuilder = (path: string, extra?: Record<string, string>) => Href
 
-/** A link to `card`'s full page (see cardPagePath). */
+/**
+ * A link to `card` from outside its board: its full page, or its peek while the
+ * server has not numbered it, so the link opens the card before it has a page.
+ */
 export function cardHref(
     orgHref: HrefBuilder,
     board: { id: string; slug: string },
     card: { id: string; number: number }
 ): Href {
-    return orgHref(cardPagePath(boardSegment(board), card))
+    const segment = boardSegment(board)
+    if (!card.number) return peekHref(orgHref, segment, { key: '', id: card.id })
+    return orgHref(cardPagePath(segment, card))
 }
 
 /** The [card] segment that peeks `card` on its board: the key, else the record id. */

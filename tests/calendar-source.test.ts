@@ -109,8 +109,8 @@ describe('buildDueItems', () => {
     })
 
     // A board with no slug is addressed by id; a card the server has not
-    // numbered yet is addressed by its own id.
-    it('spells the page by board id without a slug, and by card id without a number', () => {
+    // numbered yet has no page, so it links to its peek, spelled by its id.
+    it('spells the page by board id without a slug, and links the peek without a number', () => {
         const [noSlug, noNumber] = buildDueItems(
             [
                 {

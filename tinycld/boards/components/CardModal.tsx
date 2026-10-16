@@ -103,7 +103,7 @@ function CardModalWindow({
                     entry={entry}
                     canEdit={canEdit}
                     onDismiss={closeCard}
-                    onExpand={expandAction(navigation, entry.card)}
+                    expand={expandAction(navigation, entry.card)}
                     onClose={closeCard}
                     displayMode="modal"
                     onToggleDisplayMode={() => setCardDisplayMode('peek')}

@@ -57,10 +57,13 @@ describe('card navigation', () => {
         expect(h.router.push).toHaveBeenCalledWith('/a/boards/PL/12')
     })
 
-    it('offers no Expand for a card with no number, which has no page URL', () => {
+    it('disables Expand for a card with no number, which has no page URL yet', () => {
         const navigation = boardNavigation()
-        expect(expandAction(navigation, { id: 'abcdefghijklmno', number: 0 })).toBeUndefined()
-        expandAction(navigation, { id: 'c12', number: 12 })?.()
+        const waiting = expandAction(navigation, { id: 'abcdefghijklmno', number: 0 })
+        expect(waiting).toMatchObject({ isDisabled: true, label: 'Waiting for a card number' })
+        waiting?.onPress()
+        expect(h.router.push).not.toHaveBeenCalled()
+        expandAction(navigation, { id: 'c12', number: 12 })?.onPress()
         expect(h.router.push).toHaveBeenCalledWith('/a/boards/PL/12')
     })
 
@@ -118,13 +121,13 @@ describe('card navigation', () => {
 describe('opening a card from a row inside an open card', () => {
     const card = { id: 'c12', key: 'PL-12', number: 12 }
 
-    function open(variant: CardFormValue['variant']) {
+    function open(variant: CardFormValue['variant'], target = card) {
         const wrapper = ({ children }: { children: ReactNode }) => (
             <Navigation>
                 <CardFormProvider value={{ variant } as CardFormValue}>{children}</CardFormProvider>
             </Navigation>
         )
-        renderHook(() => useOpenRelatedCard(), { wrapper }).result.current(card)
+        renderHook(() => useOpenRelatedCard(), { wrapper }).result.current(target)
     }
 
     function Navigation({ children }: { children: ReactNode }) {
@@ -143,6 +146,13 @@ describe('opening a card from a row inside an open card', () => {
     it('pushes the peek from a peek', () => {
         open('peek')
         expect(h.router.push).toHaveBeenCalledWith('/a/boards/PL/PL-12')
+    })
+
+    // A card the server has not numbered has no page yet, so from a page it
+    // opens as a peek rather than waiting.
+    it('pushes the peek from a page for a card with no number', () => {
+        open('page', { id: 'abcdefghijklmno', key: '', number: 0 })
+        expect(h.router.push).toHaveBeenCalledWith('/a/boards/PL/abcdefghijklmno')
     })
 })
 

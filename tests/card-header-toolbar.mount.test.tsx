@@ -155,7 +155,7 @@ function ExpandableToolbar({ target }: { target: BoardCardView }) {
             entry={{ card: target, list }}
             canEdit={false}
             onDismiss={() => {}}
-            onExpand={expandAction(navigation, target)}
+            expand={expandAction(navigation, target)}
         />
     )
 }
@@ -163,15 +163,24 @@ function ExpandableToolbar({ target }: { target: BoardCardView }) {
 describe('the Expand control', () => {
     it('is offered for a numbered card', () => {
         const { container } = render(<ExpandableToolbar target={card} />, { wrapper })
-        expect(expandItems(container).length).toBeGreaterThan(0)
+        const [item] = expandItems(container)
+        const button = item?.querySelector('[accessibilitylabel="Open full page"]')
+        expect(button).not.toBeNull()
+        expect(button?.getAttribute('aria-disabled')).not.toBe('true')
     })
 
-    it('is not offered for a card with no number, which has no page URL', () => {
+    // Present from the moment the card opens, so it does not jump into the row
+    // when the number arrives; disabled until then, since there is no page URL.
+    it('waits, disabled, for a card with no number', () => {
         const { container } = render(
             <ExpandableToolbar target={{ ...card, key: '', number: 0 }} />,
             { wrapper }
         )
-        expect(expandItems(container)).toEqual([])
+        const [item] = expandItems(container)
+        const button = item?.querySelector('[accessibilitylabel="Waiting for a card number"]')
+        expect(button?.getAttribute('aria-disabled')).toBe('true')
+        // The tooltip still names it, which is how a reader learns why.
+        expect(item?.querySelector('[data-tooltip="Waiting for a card number"]')).not.toBeNull()
     })
 })
 
