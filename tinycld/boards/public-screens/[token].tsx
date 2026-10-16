@@ -140,6 +140,9 @@ export default function PublicBoardScreen() {
 function usePublicCardNavigation(): CardNavigation {
     const openPublicCard = useBoardsUIStore(s => s.openPublicCard)
     const closePublicCard = useBoardsUIStore(s => s.closePublicCard)
+    // The store outlives the screen: without this, the same share link opened
+    // again in the session came back with the old card peeked.
+    useEffect(() => closePublicCard, [closePublicCard])
     return useMemo(
         () => ({
             openPeek: card => openPublicCard(card.id),
