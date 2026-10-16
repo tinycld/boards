@@ -13,7 +13,7 @@ import { uploadCardFiles } from './useAttachmentMutations'
  * is closed, so without the toast a failed drop would vanish silently.
  *
  * `acceptsFiles` is the board's gate (useFaceAttachmentsGate): a card whose
- * type hides Attachments takes no drop.
+ * type hides Attachments takes no drop, and says so when a file lands.
  */
 export function useCardFileDrop(
     cardId: string,
@@ -23,14 +23,33 @@ export function useCardFileDrop(
 ) {
     const { user } = useAuth({ throwIfAnon: false })
     const userId = user?.id ?? ''
+    const canAttach = canEdit && userId !== ''
     const { isDragging, dropRef } = useFileDrop({
-        isEnabled: canEdit && userId !== '',
+        // Asked at drag time: the gate resolves the card's type then, so a
+        // refusing face never lights up.
+        isEnabled: () => canAttach && acceptsFiles(cardId),
         onFiles: files => {
-            if (!acceptsFiles(cardId)) return
             void attachDroppedFiles(cardId, projectId, userId, files)
+        },
+        // Only the type's refusal is worth a word: a read-only reader's drop
+        // stays as silent as before.
+        onRefused: files => {
+            if (canAttach) notifyRefused(cardId, files)
         },
     })
     return { isDropTarget: isDragging, dropRef }
+}
+
+function notifyRefused(cardId: string, files: File[]) {
+    // Reported through attachment_failed: core's event list is closed and must
+    // not learn a new package event; the title says this was a refusal.
+    notify.emit({
+        event: 'boards.attachment_failed',
+        title: 'No attachments on this card',
+        body: "This card's type hides Attachments",
+        durationMs: 4000,
+        data: { card: cardId, name: files[0]?.name ?? '' },
+    })
 }
 
 async function attachDroppedFiles(

@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { useUploadStore } from '@tinycld/core/file-viewer/upload-store'
+import type { DispatchInput, NotifyChannel } from '@tinycld/core/lib/notify/channels/types'
+import { __setChannelsForTests } from '@tinycld/core/lib/notify/dispatcher'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // A file dropped on a card FACE over local-only stores: c-plain is on the
@@ -102,24 +104,41 @@ import { CARD_HOST_KEY } from '../tinycld/boards/forms/hosts'
 import { useCardFileDrop } from '../tinycld/boards/hooks/useCardFileDrop'
 import { useFaceAttachmentsGate } from '../tinycld/boards/hooks/useFaceAttachmentsGate'
 
+/** Every notification the face raised, as the toast channel received it. */
+const notified: DispatchInput[] = []
+
+const recordingChannel = (name: NotifyChannel['name']): NotifyChannel => ({
+    name,
+    dispatch: input => {
+        notified.push(input)
+    },
+})
+
 beforeEach(() => {
     h.sent.length = 0
+    notified.length = 0
     useUploadStore.setState({ uploadingFiles: [] })
     vi.stubGlobal('XMLHttpRequest', RecordingXhr)
+    __setChannelsForTests({
+        toast: recordingChannel('toast'),
+        bell: recordingChannel('bell'),
+        os: recordingChannel('os'),
+    })
 })
 
 afterEach(() => {
     cleanup()
     vi.unstubAllGlobals()
+    __setChannelsForTests(null)
     for (const el of document.body.querySelectorAll('[data-face]')) el.remove()
 })
 
 /** A card face as the board draws it: the board holds the gate, the face takes the drop. */
-function mountFace(cardId: string) {
+function mountFace(cardId: string, canEdit = true) {
     const { result } = renderHook(() => {
         const types = useFormsOfHost(CARD_HOST_KEY)
         const acceptsFiles = useFaceAttachmentsGate()
-        return { types, drop: useCardFileDrop(cardId, 'p1', true, acceptsFiles) }
+        return { types, drop: useCardFileDrop(cardId, 'p1', canEdit, acceptsFiles) }
     })
     const face = document.createElement('div')
     face.setAttribute('data-face', cardId)
@@ -128,14 +147,17 @@ function mountFace(cardId: string) {
     return { face, result }
 }
 
-function dropFile(face: HTMLElement) {
-    const event = new Event('drop', { bubbles: true, cancelable: true })
+function fileDrag(type: 'dragenter' | 'drop', face: HTMLElement) {
+    const event = new Event(type, { bubbles: true, cancelable: true })
     const file = new File(['x'], 'notes.txt', { type: 'text/plain' })
     Object.defineProperty(event, 'dataTransfer', { value: { types: ['Files'], files: [file] } })
     act(() => {
         face.dispatchEvent(event)
     })
 }
+
+const dragEnter = (face: HTMLElement) => fileDrag('dragenter', face)
+const dropFile = (face: HTMLElement) => fileDrag('drop', face)
 
 const uploadsFor = (cardId: string) =>
     useUploadStore.getState().uploadingFiles.filter(f => f.scopeId === cardId)
@@ -144,15 +166,20 @@ describe('a file dropped on a card face', () => {
     it('attaches to a card whose type shows Attachments', async () => {
         const { face, result } = mountFace('c-plain')
         await waitFor(() => expect(result.current.types.isReady).toBe(true))
+        dragEnter(face)
+        expect(result.current.drop.isDropTarget).toBe(true)
         dropFile(face)
         await waitFor(() => expect(h.sent).toHaveLength(1))
         expect(h.sent[0].get('card')).toBe('c-plain')
         await waitFor(() => expect(uploadsFor('c-plain').map(f => f.status)).toEqual(['done']))
+        expect(notified).toEqual([])
     })
 
-    it('uploads nothing to a card whose type hides Attachments', async () => {
+    it('uploads nothing to a card whose type hides Attachments, shows no ring, and says why', async () => {
         const { face, result } = mountFace('c-nofiles')
         await waitFor(() => expect(result.current.types.isReady).toBe(true))
+        dragEnter(face)
+        expect(result.current.drop.isDropTarget).toBe(false)
         dropFile(face)
         // The upload store's add runs synchronously at the start of an upload,
         // so an empty store after the drop means none started.
@@ -161,5 +188,24 @@ describe('a file dropped on a card face', () => {
         })
         expect(uploadsFor('c-nofiles')).toEqual([])
         expect(h.sent).toEqual([])
+        expect(notified.map(n => [n.event, n.title, n.body])).toEqual([
+            [
+                'boards.attachment_failed',
+                'No attachments on this card',
+                "This card's type hides Attachments",
+            ],
+        ])
+        expect(notified[0].data).toEqual({ card: 'c-nofiles', name: 'notes.txt' })
+    })
+
+    it('stays silent for a reader who cannot edit', async () => {
+        const { face, result } = mountFace('c-plain', false)
+        await waitFor(() => expect(result.current.types.isReady).toBe(true))
+        dragEnter(face)
+        expect(result.current.drop.isDropTarget).toBe(false)
+        dropFile(face)
+        expect(uploadsFor('c-plain')).toEqual([])
+        expect(h.sent).toEqual([])
+        expect(notified).toEqual([])
     })
 })

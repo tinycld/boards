@@ -254,8 +254,9 @@ If you change your mind and add nothing, the section tidies itself away again
 and its button comes back. Once a section holds something it stays on the card
 for good, and its button disappears from the row.
 
-Dropping a file onto a card always works, whether or not the attachments
-section is showing — the section appears to receive it.
+Dropping a file onto a card works whenever its type shows the Attachments
+section, even before the section is on the card — it appears to receive the
+file. A type that hides the section refuses the drop.
 
 ## Card priority
 

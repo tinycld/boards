@@ -15,13 +15,18 @@ files under that field, not under Attachments.
 
 On a computer you can also drag files straight onto the open card — anywhere on
 it will do, and a dashed outline appears to confirm the card will take them.
-This works whether or not the attachments section is showing: the section
-appears to receive the file.
+This works whenever the card's type shows the Attachments section, even before
+the section is on the card: the section appears to receive the file.
 
 You don't even have to open the card first: drop a file onto any card on the
 board and it attaches there. The card you are over highlights so you can see
 which one will take the file, and its paperclip count updates when the upload
 finishes.
+
+A card whose type hides the Attachments section takes no files. Only the card
+on the board explains this: it does not light up, and a dropped file is refused
+with a note. The open card shows no outline and no note. See
+[Card types](help://boards:card-types).
 
 An image dropped onto a card's *description* does a little more: it uploads as
 an attachment and appears in the text right where you dropped it. See
