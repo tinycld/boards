@@ -82,17 +82,17 @@ function useStoreHydrated(): boolean {
  * rather than a `.get()`, so a cold load waits for the collection to sync
  * instead of dropping the card and landing on the last board.
  */
-function useFocusedLink(focused: string): { isLoading: boolean; href: Href | null } {
+export function useFocusedLink(focused: string): { isLoading: boolean; href: Href | null } {
     const orgHref = useOrgHref()
     const [cardsCollection, projectsCollection] = useStore('boards_cards', 'boards_projects')
-    const isKey = parseCardKey(focused) !== null
+    const key = parseCardKey(focused)
     // A query with the board as a relation rather than `.get()`: both
     // collections sync on demand, so this is what fetches a row this client
     // has not loaded — the card by id, then its board by id. A relation, not
     // a join: a join pushes every board id into the card request, which past
     // ~200 boards exceeds PocketBase's filter limit.
     const { data: rows, isLoading } = useBoardLiveQuery(query => {
-        if (!focused || isKey) return null
+        if (!focused || key) return null
         return query
             .from({ card: cardsCollection })
             .where(({ card }) => eq(card.id, focused))
@@ -108,16 +108,21 @@ function useFocusedLink(focused: string): { isLoading: boolean; href: Href | nul
     })
 
     if (!focused) return { isLoading: false, href: null }
-    if (isKey) return { isLoading: false, href: orgHref(boardPath(focused)) }
+    if (key) {
+        return {
+            isLoading: false,
+            href: peekHref(orgHref, key.slug, { key: formatCardKey(key.slug, key.number), id: '' }),
+        }
+    }
     if (isLoading) return { isLoading: true, href: null }
     const row = rows?.[0]
     if (!row) return { isLoading: false, href: null }
     // Every card has a board; until its row lands, keep waiting rather than
     // dropping the card and landing on the last board.
     if (!row.project) return { isLoading: true, href: null }
-    const key = formatCardKey(row.project.slug, row.card.number)
+    const cardKey = formatCardKey(row.project.slug, row.card.number)
     return {
         isLoading: false,
-        href: peekHref(orgHref, boardSegment(row.project), { key, id: row.card.id }),
+        href: peekHref(orgHref, boardSegment(row.project), { key: cardKey, id: row.card.id }),
     }
 }

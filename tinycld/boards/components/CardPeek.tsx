@@ -7,7 +7,7 @@ import { type RefObject, useMemo, useRef, useState } from 'react'
 import { Platform, Pressable, StyleSheet, useWindowDimensions, type View } from 'react-native'
 import { GestureDetector } from 'react-native-gesture-handler'
 import Animated from 'react-native-reanimated'
-import { useCardNavigation } from '../hooks/useCardNavigation'
+import { expandAction, useCardNavigation } from '../hooks/useCardNavigation'
 import { useCardSurfaceShortcuts } from '../hooks/useCardSurfaceShortcuts'
 import { useIsRouteFocused } from '../hooks/useIsRouteFocused'
 import { useProjectRole } from '../hooks/useProjectRole'
@@ -49,7 +49,8 @@ const HANDLE_VISUAL_WIDTH = 4
 const HANDLE_HIT_SLOP = 8
 
 function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardEntry }) {
-    const { leave: closeCard, openPage } = useCardNavigation()
+    const navigation = useCardNavigation()
+    const closeCard = navigation.leave
     const setCardDisplayMode = useBoardsUIStore(s => s.setCardDisplayMode)
     const { canEdit } = useProjectRole(project.id)
     const insets = useDeviceInsets()
@@ -79,7 +80,7 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
         [project]
     )
 
-    const expandCard = () => openPage(entry.card)
+    const expandCard = expandAction(navigation, entry.card)
 
     return (
         <>

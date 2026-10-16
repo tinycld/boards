@@ -108,9 +108,6 @@ export default function PublicBoardScreen() {
 
     if (!project) return <LinkGone reason="missing" />
     const openEntry = publicOpenCardId ? findCardEntry(project, publicOpenCardId) : null
-    const openCard = publicOpenCardId
-        ? { cardId: publicOpenCardId, surface: 'peek' as const }
-        : null
 
     return (
         <View className="flex-1 bg-background">
@@ -127,7 +124,7 @@ export default function PublicBoardScreen() {
                 onSignedIn={() => setShareToken(null)}
             />
             <CardNavigationProvider value={navigation}>
-                <BoardOpenCardProvider value={openCard}>
+                <BoardOpenCardProvider value={publicOpenCardId}>
                     <BoardCanvas project={project} />
                     <CardPeek project={project} entry={openEntry} />
                 </BoardOpenCardProvider>
@@ -138,7 +135,7 @@ export default function PublicBoardScreen() {
 
 /**
  * The public board's card navigation: its peek is a store field, not a route,
- * and there is no page to open, so a page request peeks too.
+ * and there is no page to open.
  */
 function usePublicCardNavigation(): CardNavigation {
     const openPublicCard = useBoardsUIStore(s => s.openPublicCard)
@@ -146,7 +143,6 @@ function usePublicCardNavigation(): CardNavigation {
     return useMemo(
         () => ({
             openPeek: card => openPublicCard(card.id),
-            openPage: card => openPublicCard(card.id),
             leave: closePublicCard,
         }),
         [openPublicCard, closePublicCard]

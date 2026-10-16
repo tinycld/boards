@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { CardFormProvider, type CardFormValue } from '../tinycld/boards/forms/CardFormContext'
 import {
     CardNavigationProvider,
+    expandAction,
     useCardNavigation,
     useRouterCardNavigation,
 } from '../tinycld/boards/hooks/useCardNavigation'
@@ -26,8 +27,8 @@ beforeEach(() => {
     h.router.dismissTo.mockClear()
 })
 
-function boardNavigation() {
-    return renderHook(() => useRouterCardNavigation('PL')).result.current
+function boardNavigation(topCardSegment = 'PL-1') {
+    return renderHook(() => useRouterCardNavigation('PL', topCardSegment)).result.current
 }
 
 describe('card navigation', () => {
@@ -47,13 +48,30 @@ describe('card navigation', () => {
     })
 
     it('opens a page with a push', () => {
-        boardNavigation().openPage({ id: 'c12', number: 12 })
+        boardNavigation().openPage?.({ id: 'c12', number: 12 })
         expect(h.router.push).toHaveBeenCalledWith('/a/boards/PL/12')
     })
 
-    it('peeks a card with no number, which has no page URL', () => {
-        boardNavigation().openPage({ id: 'abcdefghijklmno', number: 0 })
-        expect(h.router.push).toHaveBeenCalledWith('/a/boards/PL/abcdefghijklmno')
+    it('offers no Expand for a card with no number, which has no page URL', () => {
+        const navigation = boardNavigation()
+        expect(expandAction(navigation, { id: 'abcdefghijklmno', number: 0 })).toBeUndefined()
+        expandAction(navigation, { id: 'c12', number: 12 })?.()
+        expect(h.router.push).toHaveBeenCalledWith('/a/boards/PL/12')
+    })
+
+    it('offers no Expand where there are no pages (the public board)', () => {
+        const publicNavigation = { openPeek: vi.fn(), leave: vi.fn() }
+        expect(expandAction(publicNavigation, { id: 'c12', number: 12 })).toBeUndefined()
+    })
+
+    it('leaves nothing to leave when no card is open', () => {
+        boardNavigation('').leave()
+        expect(h.router.dismissTo).not.toHaveBeenCalled()
+    })
+
+    it('leaves an unresolved card, which is how a not-found gets out', () => {
+        boardNavigation('PL-999').leave()
+        expect(h.router.dismissTo).toHaveBeenCalledWith('/a/boards/PL')
     })
 
     it('leaves to the board in one step', () => {
@@ -81,7 +99,7 @@ describe('opening a card from a row inside an open card', () => {
 
     function Navigation({ children }: { children: ReactNode }) {
         return (
-            <CardNavigationProvider value={useRouterCardNavigation('PL')}>
+            <CardNavigationProvider value={useRouterCardNavigation('PL', '')}>
                 {children}
             </CardNavigationProvider>
         )

@@ -28,7 +28,6 @@ import { selectBoardSort, useBoardsUIStore } from '../stores/boards-ui-store'
 import type { BoardCardView, BoardProject } from '../types'
 import { useMoveCard } from './useCardMutations'
 import { useCardNavigation } from './useCardNavigation'
-import { useBoardOpenCard } from './useOpenCard'
 
 /** Fraction of the canvas width scrolled per auto-scroll tick. */
 const EDGE_JUMP_RATIO = 0.15
@@ -75,10 +74,6 @@ export function useBoardDnd(project: BoardProject, canEdit: boolean): BoardDnd {
     const measureFnsRef = useRef(new Map<string, () => void>())
     const isDraggingRef = useRef(false)
     const { leave } = useCardNavigation()
-    // Read when a drag starts, by a handler registered before the card opened.
-    const openCard = useBoardOpenCard()
-    const openCardRef = useRef(openCard)
-    openCardRef.current = openCard
     const scrollOffsetRef = useRef(0)
     const viewportWidthRef = useRef(0)
     const edgeDirectionRef = useRef<EdgeDirection>(0)
@@ -187,7 +182,7 @@ export function useBoardDnd(project: BoardProject, canEdit: boolean): BoardDnd {
         // The peek overlay doesn't block Drax hit-testing, so a drop "on" it
         // would land in whatever column it covers. Grabbing a card also means
         // the user is done reading — close it.
-        if (openCardRef.current) leave()
+        leave()
         // Drax's own hover and phantom-slot visuals own the board during a
         // drag; a stale ring left behind on the lifted card competes with them.
         if (ui.focusedCardId || ui.focusedColumnId) ui.focusCard(null)

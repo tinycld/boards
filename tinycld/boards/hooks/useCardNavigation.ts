@@ -1,6 +1,6 @@
 import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { useRouter } from 'expo-router'
-import { createContext, useContext, useMemo } from 'react'
+import { createContext, useContext, useMemo, useRef } from 'react'
 import { boardHref, cardPagePath, peekHref } from '../lib/board-route'
 
 /**
@@ -14,9 +14,9 @@ export interface CardNavigation {
      * route, for a card the open board does not hold.
      */
     openPeek: (card: { key: string; id: string }, board?: string) => void
-    /** Open `card`'s full page. */
-    openPage: (card: { id: string; number: number }) => void
-    /** Close whatever card is open: back to the board, one step. */
+    /** Open `card`'s full page; absent where there are no pages (the public board). */
+    openPage?: (card: { id: string; number: number }) => void
+    /** Close whatever card is open, back to the board in one step; does nothing with none open. */
     leave: () => void
 }
 
@@ -45,10 +45,18 @@ export function useOptionalCardNavigation(): CardNavigation | null {
     return useContext(CardNavigationContext)
 }
 
-/** The navigation of a board's own route: `segment` is the board's URL segment. */
-export function useRouterCardNavigation(segment: string): CardNavigation {
+/**
+ * The navigation of a board's own route: `segment` is the board's URL segment,
+ * `topCardSegment` the `[card]` child on top of it, '' for none (a card that
+ * names nothing here still counts: leaving it is how a reader gets out of a
+ * not-found). The returned value is stable across changes of the open card — it reads it at call time — so no writer re-renders
+ * when a card opens or closes.
+ */
+export function useRouterCardNavigation(segment: string, topCardSegment: string): CardNavigation {
     const router = useRouter()
     const orgHref = useOrgHref()
+    const openRef = useRef(topCardSegment)
+    openRef.current = topCardSegment
     return useMemo(() => {
         const openPeek = (card: { key: string; id: string }, board = segment) =>
             router.push(peekHref(orgHref, board, card))
@@ -56,11 +64,26 @@ export function useRouterCardNavigation(segment: string): CardNavigation {
             openPeek,
             // A card the server has not numbered has no page URL: its page
             // spelling would be its record id, which is a peek's.
-            openPage: card =>
-                card.number
-                    ? router.push(orgHref(cardPagePath(segment, card)))
-                    : openPeek({ key: '', id: card.id }),
-            leave: () => router.dismissTo(boardHref(orgHref, segment)),
+            // A card the server has not numbered is spelled by its record id,
+            // which is its peek's URL; callers offer no page for one.
+            openPage: card => router.push(orgHref(cardPagePath(segment, card))),
+            leave: () => {
+                if (openRef.current) router.dismissTo(boardHref(orgHref, segment))
+            },
         }
     }, [router, orgHref, segment])
+}
+
+/**
+ * What a surface's Expand control does, or undefined to omit the control: there
+ * is no page where the navigation has none (the public board), and none for a
+ * card the server has not numbered yet.
+ */
+export function expandAction(
+    navigation: CardNavigation,
+    card: { id: string; number: number }
+): (() => void) | undefined {
+    const { openPage } = navigation
+    if (!openPage || !card.number) return undefined
+    return () => openPage(card)
 }

@@ -28,7 +28,6 @@ import { useBoardsUIStore } from '../stores/boards-ui-store'
 import type { BoardCardView } from '../types'
 import { useSetCardSprint } from './useCardMutations'
 import { useCardNavigation } from './useCardNavigation'
-import { useBoardOpenCard } from './useOpenCard'
 
 /** Fraction of the viewport height scrolled per auto-scroll tick. */
 const EDGE_JUMP_RATIO = 0.15
@@ -73,10 +72,6 @@ export function useBacklogDnd(backlog: Backlog, canEdit: boolean): BacklogDnd {
     const measureFnsRef = useRef(new Map<string, () => void>())
     const isDraggingRef = useRef(false)
     const { leave } = useCardNavigation()
-    // Read when a drag starts, by a handler registered before the card opened.
-    const openCard = useBoardOpenCard()
-    const openCardRef = useRef(openCard)
-    openCardRef.current = openCard
     const scrollOffsetRef = useRef(0)
     const viewportHeightRef = useRef(0)
     const edgeDirectionRef = useRef<EdgeDirection>(0)
@@ -149,7 +144,7 @@ export function useBacklogDnd(backlog: Backlog, canEdit: boolean): BacklogDnd {
         useWorkspaceStore.getState().setEdgeSwipeSuspended(true)
         const ui = useBoardsUIStore.getState()
         ui.setCardDragging(true)
-        if (openCardRef.current) leave()
+        leave()
         if (ui.focusedCardId || ui.focusedColumnId) ui.focusCard(null)
     }
 

@@ -115,7 +115,7 @@ function usePageShortcuts(
             const entry = next ? findCardEntry(project, next) : null
             if (!entry) return
             // A push, so Back steps back through the cards j/k walked.
-            openPage(entry.card)
+            openPage?.(entry.card)
         }
         // Mirrors the peek's binding at this scope, so `e` means the same thing
         // whichever surface the card is open on.

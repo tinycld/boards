@@ -71,7 +71,7 @@ function useVisitedBoard(projectId: string) {
 function BoardWithCards({ layout }: { layout: BoardLayoutValue }) {
     const { project, fullProject, segment, isArchived, cardCount } = layout
     const topCardSegment = useTopCardSegment()
-    const navigation = useRouterCardNavigation(segment)
+    const navigation = useRouterCardNavigation(segment, topCardSegment)
     // Resolved on the whole board, so a filter never makes the open card vanish.
     const openCard = useMemo(
         () => resolveOpenCard(fullProject, topCardSegment),
@@ -81,7 +81,7 @@ function BoardWithCards({ layout }: { layout: BoardLayoutValue }) {
     return (
         <BoardLayoutProvider value={layout}>
             <CardNavigationProvider value={navigation}>
-                <BoardOpenCardProvider value={openCard}>
+                <BoardOpenCardProvider value={openCard?.cardId ?? null}>
                     <BoardRoom project={project} cardId={openCard?.cardId ?? null}>
                         <BoardChrome
                             project={project}

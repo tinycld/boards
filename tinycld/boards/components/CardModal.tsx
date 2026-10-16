@@ -1,7 +1,7 @@
 import { Dialog } from '@tinycld/core/ui/dialog'
 import { useMemo, useRef } from 'react'
 import { View } from 'react-native'
-import { CardNavigationProvider, useCardNavigation } from '../hooks/useCardNavigation'
+import { CardNavigationProvider, expandAction, useCardNavigation } from '../hooks/useCardNavigation'
 import { useCardSurfaceShortcuts } from '../hooks/useCardSurfaceShortcuts'
 import { useIsRouteFocused } from '../hooks/useIsRouteFocused'
 import { useProjectRole } from '../hooks/useProjectRole'
@@ -51,7 +51,7 @@ export function CardModal({ project, entry }: CardModalProps) {
 
 function CardModalWindow({ project, entry }: { project: BoardProject; entry: CardEntry }) {
     const navigation = useCardNavigation()
-    const { leave: closeCard, openPage } = navigation
+    const closeCard = navigation.leave
     const setCardDisplayMode = useBoardsUIStore(s => s.setCardDisplayMode)
     const { canEdit } = useProjectRole(project.id)
     const titleRef = useRef<EditableTextHandle>(null)
@@ -93,7 +93,7 @@ function CardModalWindow({ project, entry }: { project: BoardProject; entry: Car
                     entry={entry}
                     canEdit={canEdit}
                     onDismiss={closeCard}
-                    onExpand={() => openPage(entry.card)}
+                    onExpand={expandAction(navigation, entry.card)}
                     onClose={closeCard}
                     displayMode="modal"
                     onToggleDisplayMode={() => setCardDisplayMode('peek')}

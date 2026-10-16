@@ -8,22 +8,25 @@ import { useBoardLayout } from './useBoardLayout'
 /** A card on screen over the board, and which surface it is on. */
 export type OpenCard = { cardId: string; surface: 'peek' | 'page' } | null
 
-const BoardOpenCardContext = createContext<OpenCard>(null)
+const BoardOpenCardContext = createContext<string | null>(null)
 
 /**
- * The card on top of the board, published by the layout (or by the public
- * board's own store) for what sits beside the card children rather than in
- * one: a face's highlight, the drag hooks.
+ * The id of the card on top of the board, published by the layout (or by the
+ * public board's own store) for what sits beside the card children rather than
+ * in one: a face's highlight.
+ *
+ * A string, not the resolved card: a string is equal to itself across renders,
+ * so a board data change republishes nothing and re-renders no reader.
  */
 export const BoardOpenCardProvider = BoardOpenCardContext.Provider
 
 /**
- * The card open over this board right now — the top child's — for the board's
- * own readers. A card child reads its own with `useOpenCard`, which stays
- * correct while another child covers it.
+ * Whether `cardId` is the card open over this board right now — the top
+ * child's. A card child reads its own with `useOpenCard`, which stays correct
+ * while another child covers it.
  */
-export function useBoardOpenCard(): OpenCard {
-    return useContext(BoardOpenCardContext)
+export function useIsBoardCardOpen(cardId: string): boolean {
+    return useContext(BoardOpenCardContext) === cardId
 }
 
 /**

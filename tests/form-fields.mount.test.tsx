@@ -156,7 +156,7 @@ function mount(ui: ReactNode, canEdit = true) {
 // open card pushes is what the router records.
 function BoardNavigation({ children }: { children: ReactNode }) {
     return (
-        <CardNavigationProvider value={useRouterCardNavigation('OTTER')}>
+        <CardNavigationProvider value={useRouterCardNavigation('OTTER', '')}>
             {children}
         </CardNavigationProvider>
     )

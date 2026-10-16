@@ -12,7 +12,7 @@ export function useOpenRelatedCard() {
     const { variant } = useCardFormContext()
     const { openPage, openPeek } = useCardNavigation()
     return (card: { id: string; key: string; number: number }) => {
-        if (variant === 'page') openPage(card)
+        if (variant === 'page' && openPage) openPage(card)
         else openPeek(card)
     }
 }
