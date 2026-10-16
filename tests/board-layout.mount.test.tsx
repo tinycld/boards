@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, waitFor } from '@testing-library/react'
+import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { setResolvedAddress } from '@tinycld/core/lib/server-address'
 import { OverlayProvider } from '@tinycld/core/ui/overlay'
-import { createElement, Fragment, type ReactNode, useEffect } from 'react'
+import { createElement, Fragment, type ReactNode, useEffect, useSyncExternalStore } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useBoardPresenceContext } from '../tinycld/boards/components/BoardPresenceProvider'
 
@@ -21,12 +21,34 @@ const h = vi.hoisted(() => ({
     sockets: [] as string[],
     // What each card child (a peek, a page) read from the room it sits in.
     docs: [] as (object | null)[],
+    // How many times a card child mounted: a remount would lose the child
+    // route a reader had open on the board.
+    childMounts: 0,
+    // Whether the board's screen is the one on screen; another board pushed
+    // over it blurs it.
+    isFocused: true,
+    focusListeners: new Set<() => void>(),
 }))
+
+function setFocused(isFocused: boolean) {
+    act(() => {
+        h.isFocused = isFocused
+        for (const listener of h.focusListeners) listener()
+    })
+}
+
+function subscribeToFocus(listener: () => void) {
+    h.focusListeners.add(listener)
+    return () => h.focusListeners.delete(listener)
+}
 
 // A card child's view of the room: the document its description binds to.
 function RoomProbe() {
     const { doc } = useBoardPresenceContext()
     h.docs.push(doc)
+    useEffect(() => {
+        h.childMounts += 1
+    }, [])
     return null
 }
 
@@ -67,6 +89,7 @@ vi.mock('expo-router', () => {
             useEffect(effect, [effect])
         },
         useNavigation: () => ({ isFocused: () => true, addListener: () => () => {} }),
+        useIsFocused: () => useSyncExternalStore(subscribeToFocus, () => h.isFocused),
         useGlobalSearchParams: () => h.params,
         usePathname: () => '/a/boards/PL',
         useSegments: () => [],
@@ -254,6 +277,8 @@ describe('the board layout route', () => {
         h.stacks = 0
         h.sockets = []
         h.docs = []
+        h.childMounts = 0
+        h.isFocused = true
     })
 
     it('mounts the board chrome, the child stack and exactly one room', async () => {
@@ -263,6 +288,7 @@ describe('the board layout route', () => {
 
         await waitFor(() => expect(byTestId('boards-board-room')).toHaveLength(1))
         expect(byTestId('boards-board-name')[0]?.textContent).toContain('Planning')
+        expect(byTestId('boards-board-parked')).toHaveLength(0)
         expect(h.stacks).toBeGreaterThan(0)
         await waitFor(() => expect(h.sockets).toHaveLength(1))
         expect(h.sockets[0]).toContain('p1')
@@ -277,6 +303,42 @@ describe('the board layout route', () => {
         const [peek, page] = h.docs.slice(-2)
         expect(peek).toBe(page)
         expect(h.sockets).toHaveLength(1)
+    })
+
+    // Another board pushed over this one leaves it mounted beneath. Parked, it
+    // holds nothing: no room (so no socket), no board view and its queries.
+    it('parks a blurred board: a placeholder, no room and no board view', async () => {
+        h.isFocused = false
+        const view = await mountLayout('PL')
+        const byTestId = (id: string) => view.container.querySelectorAll(`[testid="${id}"]`)
+
+        await waitFor(() => expect(byTestId('boards-board-parked')).toHaveLength(1))
+        expect(byTestId('boards-board-room')).toHaveLength(0)
+        expect(byTestId('boards-board-name')).toHaveLength(0)
+        expect(h.sockets).toHaveLength(0)
+        expect(h.docs.every(doc => doc === null)).toBe(true)
+    })
+
+    it('keeps the card children mounted across blur and focus', async () => {
+        const view = await mountLayout('PL')
+        const byTestId = (id: string) => view.container.querySelectorAll(`[testid="${id}"]`)
+        await waitFor(() => expect(byTestId('boards-board-room')).toHaveLength(1))
+        await waitFor(() => expect(h.sockets).toHaveLength(1))
+        const mounts = h.childMounts
+        expect(mounts).toBeGreaterThan(0)
+
+        setFocused(false)
+        await waitFor(() => expect(byTestId('boards-board-parked')).toHaveLength(1))
+        expect(byTestId('boards-board-room')).toHaveLength(0)
+
+        setFocused(true)
+        await waitFor(() => expect(byTestId('boards-board-room')).toHaveLength(1))
+        expect(byTestId('boards-board-parked')).toHaveLength(0)
+        // The room was left on blur and is joined again on focus.
+        await waitFor(() => expect(h.sockets).toHaveLength(2))
+        // The children's Stack was never torn down, so the card the reader had
+        // open on this board is still its child route.
+        expect(h.childMounts).toBe(mounts)
     })
 
     // The old spelling put the key where the board goes.

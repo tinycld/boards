@@ -1,17 +1,17 @@
 import { eq } from '@tanstack/db'
 import { DocumentTitle } from '@tinycld/core/components/DocumentTitle'
 import { LoadingState } from '@tinycld/core/components/LoadingState'
+import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { useStore } from '@tinycld/core/lib/pocketbase'
-import { useFocusEffect, useLocalSearchParams } from 'expo-router'
+import { type Href, Redirect, useLocalSearchParams } from 'expo-router'
 import { materialize } from 'pbtsdb'
-import { useCallback, useSyncExternalStore } from 'react'
+import { useSyncExternalStore } from 'react'
 import { View } from 'react-native'
 import { NoBoards } from '../components/EmptyBoard'
 import { NewBoardDialog } from '../components/NewBoardDialog'
 import { resolveActiveProjectId, useBoardList } from '../hooks/useActiveBoard'
 import { useBoardLiveQuery } from '../hooks/useBoardLiveQuery'
-import { useLandOnBoard } from '../hooks/useLandOnBoard'
-import { boardSegment, paramString, peekSegment } from '../lib/board-route'
+import { boardHref, boardSegment, paramString, peekHref } from '../lib/board-route'
 import { formatCardKey, parseCardKey } from '../lib/card-key'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
 
@@ -30,19 +30,13 @@ import { useBoardsUIStore } from '../stores/boards-ui-store'
  */
 export default function BoardsIndex() {
     const params = useLocalSearchParams<{ focused?: string }>()
+    const orgHref = useOrgHref()
     const { projects, archivedProjects, projectsLoading } = useBoardList()
     const activeProjectId = useBoardsUIStore(s => s.activeProjectId)
     const isHydrated = useStoreHydrated()
     const focusedLink = useFocusedLink(paramString(params.focused))
-    const isLoading = projectsLoading || !isHydrated || focusedLink.isLoading
 
-    const projectId = resolveActiveProjectId(activeProjectId, projects, archivedProjects)
-    const board = [...projects, ...archivedProjects].find(p => p.id === projectId)
-    const lastBoard = board ? { segment: boardSegment(board), card: '' } : null
-    const landing = isLoading ? null : (focusedLink.target ?? lastBoard)
-    useLandOnFocus(landing)
-
-    if (isLoading || landing) {
+    if (projectsLoading || !isHydrated || focusedLink.isLoading) {
         return (
             <View className="flex-1 bg-background">
                 <DocumentTitle pkg="Boards" title="Boards" />
@@ -51,34 +45,22 @@ export default function BoardsIndex() {
         )
     }
 
+    // A replace, not a push: this route only passes the reader on, so it
+    // leaves no history entry of its own. Back from the board returns to what
+    // was on screen before — the board (and card) a search hit or a
+    // notification was followed from, which stays beneath, parked.
+    if (focusedLink.href) return <Redirect href={focusedLink.href} />
+
+    const projectId = resolveActiveProjectId(activeProjectId, projects, archivedProjects)
+    const board = [...projects, ...archivedProjects].find(p => p.id === projectId)
+    if (board) return <Redirect href={boardHref(orgHref, boardSegment(board))} />
+
     return (
         <View className="flex-1 bg-background">
             <DocumentTitle pkg="Boards" title="Boards" />
             <NoBoards />
             <NewBoardDialog />
         </View>
-    )
-}
-
-type BoardTarget = { segment: string; card: string }
-
-/**
- * Go to `target` once it is known, while this screen is the one on screen.
- *
- * Not a `<Redirect>`: that is a replace, and the singular board does not cover
- * a replace, so from an open board (search and notifications push this route
- * over it) it mounted a second board layout over the first, with its own
- * queries and its own room. Landing rewrites the stack around one fresh board
- * instead (useLandOnBoard).
- */
-function useLandOnFocus(target: BoardTarget | null) {
-    const landOnBoard = useLandOnBoard()
-    const segment = target?.segment ?? ''
-    const card = target?.card ?? ''
-    useFocusEffect(
-        useCallback(() => {
-            if (segment) landOnBoard(segment, card)
-        }, [landOnBoard, segment, card])
     )
 }
 
@@ -104,10 +86,8 @@ function useStoreHydrated(): boolean {
  * rather than a `.get()`, so a cold load waits for the collection to sync
  * instead of dropping the card and landing on the last board.
  */
-export function useFocusedLink(focused: string): {
-    isLoading: boolean
-    target: BoardTarget | null
-} {
+export function useFocusedLink(focused: string): { isLoading: boolean; href: Href | null } {
+    const orgHref = useOrgHref()
     const [cardsCollection, projectsCollection] = useStore('boards_cards', 'boards_projects')
     const key = parseCardKey(focused)
     // A query with the board as a relation rather than `.get()`: both
@@ -131,25 +111,22 @@ export function useFocusedLink(focused: string): {
             }))
     })
 
-    if (!focused) return { isLoading: false, target: null }
+    if (!focused) return { isLoading: false, href: null }
     if (key) {
         return {
             isLoading: false,
-            target: { segment: key.slug, card: formatCardKey(key.slug, key.number) },
+            href: peekHref(orgHref, key.slug, { key: formatCardKey(key.slug, key.number), id: '' }),
         }
     }
-    if (isLoading) return { isLoading: true, target: null }
+    if (isLoading) return { isLoading: true, href: null }
     const row = rows?.[0]
-    if (!row) return { isLoading: false, target: null }
+    if (!row) return { isLoading: false, href: null }
     // Every card has a board; until its row lands, keep waiting rather than
     // dropping the card and landing on the last board.
-    if (!row.project) return { isLoading: true, target: null }
+    if (!row.project) return { isLoading: true, href: null }
     const cardKey = formatCardKey(row.project.slug, row.card.number)
     return {
         isLoading: false,
-        target: {
-            segment: boardSegment(row.project),
-            card: peekSegment({ key: cardKey, id: row.card.id }),
-        },
+        href: peekHref(orgHref, boardSegment(row.project), { key: cardKey, id: row.card.id }),
     }
 }

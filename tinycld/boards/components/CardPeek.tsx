@@ -326,13 +326,18 @@ function PeekBackdrop({
 /**
  * Everything that counts as "inside" the peek beyond its own panel node.
  *
- * TWO kinds, and both are load-bearing:
+ * THREE kinds, and all are load-bearing:
  *
  * CARDS — a board face or a list/backlog row. Pressing one already SWAPS the
  * peek's content, so dismissing on it too would close the panel the press was
  * about to fill. `pointerdown` fires before the card's `onPress`, so without
  * this the close wins and clicking from one card to the next just shuts the
  * peek.
+ *
+ * THE BOARDS SIDEBAR — a board or My cards picked there is pushed over this
+ * board, which stays beneath with this card open, so Back returns to it.
+ * Dismissing first would pop the card on the way out and Back would find the
+ * board bare.
  *
  * PORTALED SURFACES — the mention popover renders through `createPortal` to
  * `document.body` so it can float over the editor, which puts it outside the
@@ -351,7 +356,7 @@ function insideNodes(): Node[] {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return []
     return Array.from(
         document.querySelectorAll(
-            '[data-testid^="board-card-"], [data-testid^="boards-row-"], [data-testid="boards-mention-popover"]'
+            '[data-testid^="board-card-"], [data-testid^="boards-row-"], [data-testid="boards-sidebar"], [data-testid="boards-mention-popover"]'
         )
     )
 }

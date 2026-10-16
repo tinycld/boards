@@ -17,32 +17,17 @@ import { cardParam } from '../tinycld/boards/hooks/useTopCardSegment'
 
 // Every writer reaches the router through useCardNavigation, so what the router
 // records is the whole contract: a push for a card, one dismissTo for leaving.
-// A card on another board is the exception: it rewrites the boards stack the
-// board's own screen sits in (useLandOnBoard), so that stack is here too.
 const h = vi.hoisted(() => ({
     router: { push: vi.fn(), dismissTo: vi.fn() },
-    navigation: {
-        getState: () => ({
-            key: 'boards',
-            index: 1,
-            routes: [
-                { key: 'mine', name: 'my-cards' },
-                { key: 'pl', name: '[boardSlug]', params: { boardSlug: 'PL' } },
-            ],
-        }),
-        reset: vi.fn(),
-    },
 }))
 
 vi.mock('expo-router', () => ({
     useRouter: () => h.router,
-    useNavigation: () => h.navigation,
 }))
 
 beforeEach(() => {
     h.router.push.mockClear()
     h.router.dismissTo.mockClear()
-    h.navigation.reset.mockClear()
 })
 
 function boardNavigation(topCardSegment = 'PL-1', topCard: OpenCard = null) {
@@ -60,25 +45,11 @@ describe('card navigation', () => {
         expect(h.router.push).toHaveBeenCalledWith('/a/boards/PL/abcdefghijklmno')
     })
 
-    it('peeks a card of another board on that board, landed on fresh', () => {
+    // Pushed, so the board left stays beneath (parked) and Back returns to it
+    // with the card it had open.
+    it('peeks a card of another board with a push of that board', () => {
         boardNavigation().openPeek({ key: 'OTTER-3', id: 'c3' }, 'OTTER')
-        expect(h.router.push).not.toHaveBeenCalled()
-        expect(h.navigation.reset).toHaveBeenCalledWith({
-            key: 'boards',
-            index: 1,
-            routes: [
-                { key: 'mine', name: 'my-cards' },
-                {
-                    key: expect.stringMatching(/^board-/),
-                    name: '[boardSlug]',
-                    params: {
-                        boardSlug: 'OTTER',
-                        screen: '[card]',
-                        params: { boardSlug: 'OTTER', card: 'OTTER-3' },
-                    },
-                },
-            ],
-        })
+        expect(h.router.push).toHaveBeenCalledWith('/a/boards/OTTER/OTTER-3')
     })
 
     it('opens a page with a push', () => {

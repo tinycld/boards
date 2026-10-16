@@ -190,9 +190,8 @@ function ResolvedFar({ link, isOnThisBoard }: { link: CardLinkView; isOnThisBoar
     // A card on ANOTHER board cannot open in this board's peek: CardPeek
     // resolves its id through `findCardEntry(project, …)`, which only knows
     // this board, so the peek would render nothing and the press would look
-    // broken. So the press lands on the other board's own route with the card
-    // peeked over it (useLandOnBoard). The landing replaces this card's entry,
-    // so Back does not return to this card.
+    // broken. So the press pushes the other board's own route with the card
+    // peeked over it; Back returns to this card.
     const open = () => {
         if (isOnThisBoard) openCard(far)
         else if (far.key) openPeek(far, parseCardKey(far.key)?.slug ?? far.key)

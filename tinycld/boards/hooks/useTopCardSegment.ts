@@ -12,9 +12,8 @@ import { useGlobalSearchParams } from 'expo-router'
  * a card opened on a board reached from the sidebar, so presence never learned
  * the card.
  *
- * Only meaningful while the board is the focused screen; a blurred board's
- * room has left (useRealtimeRoom's useLeaveOnBlur) and its frozen tree does
- * not render.
+ * Only meaningful while the board is the focused screen; a blurred board is
+ * parked (screens/[boardSlug]/_layout.tsx) and resolves no card from it.
  */
 export function useTopCardSegment(): string {
     return cardParam(useGlobalSearchParams())

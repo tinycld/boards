@@ -1,6 +1,6 @@
 import { useOrgHref } from '@tinycld/core/lib/org-routes'
-import { Redirect, Stack, useLocalSearchParams } from 'expo-router'
-import { type ReactNode, useEffect, useMemo } from 'react'
+import { Redirect, Stack, useIsFocused, useLocalSearchParams } from 'expo-router'
+import { useEffect, useMemo } from 'react'
 import { Platform, StyleSheet, View } from 'react-native'
 import { BoardChrome, BoardLoading, BoardNotFound } from '../../components/BoardChrome'
 import { BoardPresenceProvider } from '../../components/BoardPresenceProvider'
@@ -12,7 +12,6 @@ import { cardParam, useTopCardSegment } from '../../hooks/useTopCardSegment'
 import { paramString, parseCardSegment, peekHref } from '../../lib/board-route'
 import { formatCardKey, parseCardKey } from '../../lib/card-key'
 import { useBoardsUIStore } from '../../stores/boards-ui-store'
-import type { BoardProject } from '../../types'
 
 /**
  * A board — `/a/boards/PL` — and every card opened on it.
@@ -24,6 +23,11 @@ import type { BoardProject } from '../../types'
  * the board or opening a second room — and the browser's Back walks the
  * cards a reader opened.
  *
+ * Boards stack: going to another board pushes it over this one, so Back
+ * returns here with the card that was open. While covered, this board is
+ * PARKED (see BoardWithCards): it holds no queries and no room, so a stack of
+ * boards costs one board's worth of either.
+ *
  * The old spelling `/a/boards/PL-12` lands here too, as a board segment that
  * parses as a key, and is redirected to `/a/boards/PL/PL-12`.
  */
@@ -32,17 +36,7 @@ export default function BoardLayout() {
     const boardSlug = paramString(params.boardSlug)
     const legacy = parseCardKey(boardSlug)
     const orgHref = useOrgHref()
-    const { project, fullProject, isLoading, segment, isArchived, cardCount } = useBoardRoute(
-        legacy ? legacy.slug : boardSlug
-    )
-    useVisitedBoard(project?.id ?? '')
-    const layout = useMemo(
-        () =>
-            project && fullProject
-                ? { project, fullProject, segment, isArchived, cardCount }
-                : null,
-        [project, fullProject, segment, isArchived, cardCount]
-    )
+    const isFocused = useIsFocused()
 
     // The key alone is enough to spell the new URL, so the redirect does not
     // wait for the board; the card child resolves the key once it has.
@@ -50,11 +44,7 @@ export default function BoardLayout() {
         const key = formatCardKey(legacy.slug, legacy.number)
         return <Redirect href={peekHref(orgHref, legacy.slug, { key, id: '' })} />
     }
-    // Loading is checked FIRST: without it, a cold load renders not-found for
-    // a frame before the query settles.
-    if (isLoading) return <BoardLoading />
-    if (!layout) return <BoardNotFound />
-    return <BoardWithCards layout={layout} />
+    return <BoardWithCards boardSlug={boardSlug} isFocused={isFocused} />
 }
 
 /**
@@ -68,62 +58,98 @@ function useVisitedBoard(projectId: string) {
     }, [projectId, setActiveProject])
 }
 
-function BoardWithCards({ layout }: { layout: BoardLayoutValue }) {
-    const { project, fullProject, segment, isArchived, cardCount } = layout
+/**
+ * The board's queries, its room and the children's Stack over its view.
+ *
+ * Parked (not focused), the board resolves nothing — an empty segment runs no
+ * query and an empty room id opens no socket — and shows a placeholder. The
+ * providers and the Stack stay in the tree all the same: the Stack's state
+ * (the card a reader had open here) lives in the navigator, which a remount
+ * would throw away, so nothing above it may come and go. The card children
+ * render nothing while there is no board to read (screens/[boardSlug]/[card]).
+ */
+function BoardWithCards({ boardSlug, isFocused }: { boardSlug: string; isFocused: boolean }) {
+    const { project, fullProject, isLoading, segment, isArchived, cardCount } = useBoardRoute(
+        isFocused ? boardSlug : ''
+    )
+    useVisitedBoard(project?.id ?? '')
+    const layout = useMemo(
+        () =>
+            project && fullProject && !isLoading
+                ? { project, fullProject, segment, isArchived, cardCount }
+                : null,
+        [project, fullProject, isLoading, segment, isArchived, cardCount]
+    )
     const topCardSegment = useTopCardSegment()
     // Resolved on the whole board, so a filter never makes the open card vanish.
     const openCard = useMemo(
-        () => resolveOpenCard(fullProject, topCardSegment),
-        [fullProject, topCardSegment]
+        () => (layout ? resolveOpenCard(layout.fullProject, topCardSegment) : null),
+        [layout, topCardSegment]
     )
     const navigation = useRouterCardNavigation(segment, topCardSegment, openCard)
+    const openCardId = openCard?.cardId ?? null
+    const face = boardFace(isFocused, isLoading, layout)
 
+    // The room is mounted here so every card child — a peek, the modal, a
+    // page stacked three deep — shares it rather than opening its own socket
+    // and document.
     return (
         <BoardLayoutProvider value={layout}>
             <CardNavigationProvider value={navigation}>
-                <BoardOpenCardProvider value={openCard?.cardId ?? null}>
-                    <BoardRoom project={project} cardId={openCard?.cardId ?? null}>
-                        <BoardChrome
-                            project={project}
-                            isArchived={isArchived}
-                            cardCount={cardCount}
-                        />
-                        <View
-                            pointerEvents={childStackPointerEvents(topCardSegment)}
-                            style={StyleSheet.absoluteFill}
-                        >
-                            <Stack screenOptions={CHILD_OPTIONS}>
-                                <Stack.Screen name="[card]" options={cardScreenOptions} />
-                            </Stack>
+                <BoardOpenCardProvider value={openCardId}>
+                    <BoardPresenceProvider projectId={layout?.project.id ?? ''} cardId={openCardId}>
+                        <View className="flex-1">
+                            <BoardLayoutBody face={face} layout={layout} />
+                            <View
+                                pointerEvents={childStackPointerEvents(topCardSegment)}
+                                style={StyleSheet.absoluteFill}
+                            >
+                                <Stack screenOptions={CHILD_OPTIONS}>
+                                    <Stack.Screen name="[card]" options={cardScreenOptions} />
+                                </Stack>
+                            </View>
                         </View>
-                    </BoardRoom>
+                    </BoardPresenceProvider>
                 </BoardOpenCardProvider>
             </CardNavigationProvider>
         </BoardLayoutProvider>
     )
 }
 
-/**
- * The board's one room. Mounted in the layout so every card child — a peek,
- * the modal, a page stacked three deep — shares it rather than opening its
- * own socket and document.
- */
-function BoardRoom({
-    project,
-    cardId,
-    children,
-}: {
-    project: BoardProject
-    cardId: string | null
-    children: ReactNode
-}) {
+type BoardFace = 'parked' | 'loading' | 'not-found' | 'board'
+
+// Loading is checked before not-found: without it, a cold load renders
+// not-found for a frame before the query settles.
+function boardFace(
+    isFocused: boolean,
+    isLoading: boolean,
+    layout: BoardLayoutValue | null
+): BoardFace {
+    if (!isFocused) return 'parked'
+    if (isLoading) return 'loading'
+    if (!layout) return 'not-found'
+    return 'board'
+}
+
+/** What the board draws beneath its card children. */
+function BoardLayoutBody({ face, layout }: { face: BoardFace; layout: BoardLayoutValue | null }) {
+    if (face === 'parked') return <ParkedBoard />
+    if (face === 'loading') return <BoardLoading />
+    if (face === 'not-found' || !layout) return <BoardNotFound />
     return (
-        <BoardPresenceProvider projectId={project.id} cardId={cardId}>
-            <View testID="boards-board-room" className="flex-1">
-                {children}
-            </View>
-        </BoardPresenceProvider>
+        <View testID="boards-board-room" className="flex-1">
+            <BoardChrome
+                project={layout.project}
+                isArchived={layout.isArchived}
+                cardCount={layout.cardCount}
+            />
+        </View>
     )
+}
+
+/** A covered board: nothing to draw, as nothing shows it. */
+function ParkedBoard() {
+    return <View className="flex-1 bg-background" testID="boards-board-parked" />
 }
 
 /**

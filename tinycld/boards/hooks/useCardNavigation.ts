@@ -1,8 +1,7 @@
 import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { useRouter } from 'expo-router'
 import { createContext, useContext, useMemo, useRef } from 'react'
-import { boardHref, cardPagePath, peekHref, peekSegment } from '../lib/board-route'
-import { useLandOnBoard } from './useLandOnBoard'
+import { boardHref, cardPagePath, peekHref } from '../lib/board-route'
 import type { OpenCard } from './useOpenCard'
 
 /**
@@ -13,9 +12,9 @@ import type { OpenCard } from './useOpenCard'
 export interface CardNavigation {
     /**
      * Peek `card` over its board. `board` is the segment of ANOTHER board's
-     * route, for a card the open board does not hold: that board is landed on
-     * fresh (useLandOnBoard), which on web replaces the open card's history
-     * entry rather than pushing one.
+     * route, for a card the open board does not hold: that board is pushed with
+     * the card over it, and this one stays beneath, parked, so Back returns to
+     * it with its card.
      */
     openPeek: (card: { key: string; id: string }, board?: string) => void
     /** Open `card`'s full page; absent where there are no pages (the public board). */
@@ -70,7 +69,6 @@ export function useRouterCardNavigation(
 ): CardNavigation {
     const router = useRouter()
     const orgHref = useOrgHref()
-    const landOnBoard = useLandOnBoard()
     // Written during render so the memoized navigation never goes stale; only
     // handlers read it, and a discarded render can at worst leave a newer value,
     // which costs one extra dismissTo or one skipped push of the card on top.
@@ -83,8 +81,8 @@ export function useRouterCardNavigation(
         }
         return {
             openPeek: (card, board = segment) => {
-                if (board !== segment) landOnBoard(board, peekSegment(card))
-                else if (!isOnTop(card.id, 'peek')) router.push(peekHref(orgHref, segment, card))
+                if (board === segment && isOnTop(card.id, 'peek')) return
+                router.push(peekHref(orgHref, board, card))
             },
             // A card the server has not numbered is spelled by its record id,
             // which is its peek's URL; callers offer no page for one.
@@ -95,7 +93,7 @@ export function useRouterCardNavigation(
                 if (openRef.current.segment) router.dismissTo(boardHref(orgHref, segment))
             },
         }
-    }, [router, orgHref, segment, landOnBoard])
+    }, [router, orgHref, segment])
 }
 
 /**

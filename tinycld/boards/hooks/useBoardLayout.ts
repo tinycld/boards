@@ -32,6 +32,15 @@ const BoardLayoutContext = createContext<BoardLayoutValue | null>(null)
 
 export const BoardLayoutProvider = BoardLayoutContext.Provider
 
+/**
+ * The board, or null while the layout has none to give: loading, not found, or
+ * parked under another screen. For the card child route, which the layout's
+ * Stack keeps mounted through all three.
+ */
+export function useOptionalBoardLayout(): BoardLayoutValue | null {
+    return useContext(BoardLayoutContext)
+}
+
 export function useBoardLayout(): BoardLayoutValue {
     const value = useContext(BoardLayoutContext)
     if (!value) throw new Error('useBoardLayout is only available under the board layout route')

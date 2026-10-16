@@ -264,10 +264,11 @@ export function useCreateProject(options: { onError?: (error: unknown) => void }
         }),
         // The board is in the URL, so "open the new board" is a navigation.
         // Its optimistic row is already in the local store, which is what the
-        // board route resolves against, so the screen renders it at once.
+        // board route resolves against, so the screen renders it at once. A
+        // push, as from the sidebar (sidebar.tsx says why not `navigate`).
         onSuccess: (projectId, input) => {
             closeNewBoard()
-            router.navigate(orgHref(boardPath(input.slug || projectId)))
+            router.push(orgHref(boardPath(input.slug || projectId)))
         },
         // Omitted when the caller passes nothing, so the default error toast +
         // Sentry report stay in place. A form caller passes
