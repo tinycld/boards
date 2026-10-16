@@ -13,6 +13,7 @@ import {
     dragColumn,
     stableBoxOf,
     travelTo,
+    uniqueStamp,
 } from './helpers'
 
 // Every spec creates its own uniquely-named board (three default lists:
@@ -21,7 +22,7 @@ import {
 
 let run = 0
 async function freshBoard(page: import('@playwright/test').Page, label: string): Promise<string> {
-    const name = `dnd-${label}-${Date.now()}-${run++}`
+    const name = `dnd-${label}-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     return name
 }

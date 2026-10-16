@@ -66,7 +66,6 @@ export function DetailAttachments({
         useAttachmentMutations(cardId, projectId, currentUserId)
     const uploads = useUploadsForScope(cardId)
     const { pickFiles } = usePickFiles()
-    const mutedColor = useThemeColor('muted')
 
     const [previewIndex, setPreviewIndex] = useState<number | null>(null)
     const [pendingDelete, setPendingDelete] = useState<BoardAttachment | null>(null)
@@ -125,6 +124,18 @@ export function DetailAttachments({
     const settled = new Set(attachments.map(a => a.id))
     const inFlight = uploads.filter(u => !settled.has(u.id))
 
+    const lastIndex = sources.length - 1
+    const previewNav = {
+        onNext:
+            previewIndex !== null && previewIndex < lastIndex
+                ? () => setPreviewIndex(previewIndex + 1)
+                : undefined,
+        onPrevious:
+            previewIndex !== null && previewIndex > 0
+                ? () => setPreviewIndex(previewIndex - 1)
+                : undefined,
+    }
+
     const confirmDelete = () => {
         if (!pendingDelete) return
         deleteAttachment.mutate(pendingDelete.id, { onSuccess: () => setPendingDelete(null) })
@@ -139,9 +150,7 @@ export function DetailAttachments({
                 >
                     Attachments
                 </Text>
-                {attachments.length > 0 ? (
-                    <Text className="text-[12px] font-medium text-muted">{attachments.length}</Text>
-                ) : null}
+                <AttachmentCount count={attachments.length} />
             </View>
 
             {attachments.map((attachment, index) => (
@@ -170,33 +179,14 @@ export function DetailAttachments({
                 />
             ))}
 
-            {canEdit ? (
-                <Pressable
-                    onPress={attach}
-                    accessibilityRole="button"
-                    accessibilityLabel="Attach file"
-                    testID="boards-attach-file"
-                    className="flex-row items-center gap-1.5 mt-1 py-1.5 active:opacity-60"
-                >
-                    <Plus size={14} color={mutedColor} strokeWidth={2.2} />
-                    <Text className="text-[13px] text-muted">Attach file</Text>
-                </Pressable>
-            ) : null}
+            <AttachButton isVisible={canEdit} onPress={attach} />
 
             <PreviewModal
                 isVisible={activeSource !== null}
                 source={activeSource}
                 onClose={() => setPreviewIndex(null)}
-                onNext={
-                    previewIndex !== null && previewIndex < sources.length - 1
-                        ? () => setPreviewIndex(previewIndex + 1)
-                        : undefined
-                }
-                onPrevious={
-                    previewIndex !== null && previewIndex > 0
-                        ? () => setPreviewIndex(previewIndex - 1)
-                        : undefined
-                }
+                onNext={previewNav.onNext}
+                onPrevious={previewNav.onPrevious}
                 onDownload={activeSource ? () => downloadFile(activeSource) : undefined}
                 actions={previewActions}
             />
@@ -212,6 +202,28 @@ export function DetailAttachments({
                 isSubmitting={deleteAttachment.isPending}
             />
         </View>
+    )
+}
+
+function AttachmentCount({ count }: { count: number }) {
+    if (count === 0) return null
+    return <Text className="text-[12px] font-medium text-muted">{count}</Text>
+}
+
+function AttachButton({ isVisible, onPress }: { isVisible: boolean; onPress: () => void }) {
+    const mutedColor = useThemeColor('muted')
+    if (!isVisible) return null
+    return (
+        <Pressable
+            onPress={onPress}
+            accessibilityRole="button"
+            accessibilityLabel="Attach file"
+            testID="boards-attach-file"
+            className="flex-row items-center gap-1.5 mt-1 py-1.5 active:opacity-60"
+        >
+            <Plus size={14} color={mutedColor} strokeWidth={2.2} />
+            <Text className="text-[13px] text-muted">Attach file</Text>
+        </Pressable>
     )
 }
 

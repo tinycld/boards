@@ -1,10 +1,19 @@
+import { useFormsOfHost } from '@tinycld/core/lib/forms/use-forms-of-host'
 import { notify } from '@tinycld/core/lib/notify'
+import { useStore } from '@tinycld/core/lib/pocketbase'
+import { useRecord } from '@tinycld/core/lib/use-record'
 import { ConfirmDialog } from '@tinycld/core/ui/ConfirmDialog'
 import { Menu } from '@tinycld/core/ui/menu'
-import { Archive, ArrowRightLeft, Copy, GitPullRequest, Trash2 } from 'lucide-react-native'
+import { Archive, ArrowRightLeft, Copy, GitPullRequest, Shapes, Trash2 } from 'lucide-react-native'
 import { useState } from 'react'
+import { CARD_HOST_KEY } from '../../forms/hosts'
 import { useWritableProjects } from '../../hooks/useActiveBoard'
-import { useArchiveCard, useDeleteCard, useDuplicateCard } from '../../hooks/useCardMutations'
+import {
+    useArchiveCard,
+    useDeleteCard,
+    useDuplicateCard,
+    useUpdateCard,
+} from '../../hooks/useCardMutations'
 import { rankForInsert } from '../../lib/move'
 import { useBoardsUIStore } from '../../stores/boards-ui-store'
 import type { BoardCardView, BoardListView } from '../../types'
@@ -21,8 +30,8 @@ interface CardActionsInput {
 }
 
 /**
- * The card's "Card actions" menu — duplicate, move, archive and delete — split
- * into the rows and the dialogs they open.
+ * The card's "Card actions" menu — duplicate, move, change type, archive and
+ * delete — split into the rows and the dialogs they open.
  *
  * The rows render inside a `Menu` (the header toolbar's More menu), and a
  * menu unmounts its rows the moment one is chosen. A dialog owned by a row
@@ -49,6 +58,7 @@ export function useCardActions({ card, list, projectId, onDismiss }: CardActions
     // No other board to move to → the item is offered disabled rather than
     // hidden, so the capability is discoverable.
     const hasOtherBoards = useWritableProjects().some(project => project.id !== projectId)
+    const types = useCardTypes(cardId)
 
     const duplicate = () => {
         const index = list.cards.findIndex(c => c.id === cardId)
@@ -77,6 +87,7 @@ export function useCardActions({ card, list, projectId, onDismiss }: CardActions
         projectId,
         onDismiss,
         hasOtherBoards,
+        types,
         duplicate,
         archive,
         requestMove: () => setIsMoving(true),
@@ -93,7 +104,49 @@ export function useCardActions({ card, list, projectId, onDismiss }: CardActions
     }
 }
 
+/**
+ * The types a card can change to: the host's forms that are not archived,
+ * with the card's own marked. A card on an archived type keeps it until
+ * someone picks another; the archived one is no longer offered.
+ */
+export function useCardTypes(cardId: string) {
+    const { forms, defaultForm } = useFormsOfHost(CARD_HOST_KEY)
+    const [cardsCollection] = useStore('boards_cards')
+    const { record } = useRecord(cardsCollection, cardId)
+    const updateCard = useUpdateCard()
+    // An empty column is the server's window before it fills the default.
+    const currentId = record?.form || defaultForm?.id
+    const choices = forms
+        .filter(form => !form.archived)
+        .map(form => ({ id: form.id, name: form.name, isCurrent: form.id === currentId }))
+    return {
+        choices,
+        // Nothing to change to: one type, and the card already has it.
+        isOffered: choices.some(choice => !choice.isCurrent),
+        change: (formId: string) => updateCard.mutate({ cardId, form: formId }),
+    }
+}
+
 type CardActions = ReturnType<typeof useCardActions>
+
+/** "Change type": a submenu of the card's types (a section in a sheet). */
+export function ChangeTypeRows({ types }: { types: ReturnType<typeof useCardTypes> }) {
+    if (!types.isOffered) return null
+    const rows = types.choices.map(choice => (
+        <Menu.Item
+            key={choice.id}
+            label={choice.name}
+            isSelected={choice.isCurrent}
+            onSelect={() => types.change(choice.id)}
+            testID={`card-change-type-${choice.id}`}
+        />
+    ))
+    return (
+        <Menu.Sub label="Change type" icon={Shapes} testID="card-change-type">
+            {rows}
+        </Menu.Sub>
+    )
+}
 
 /** The menu rows. Must render inside a `Menu`. */
 export function CardActionRows({ actions }: { actions: CardActions }) {
@@ -106,6 +159,7 @@ export function CardActionRows({ actions }: { actions: CardActions }) {
                 isDisabled={!actions.hasOtherBoards}
                 onSelect={actions.requestMove}
             />
+            <ChangeTypeRows types={actions.types} />
             <Menu.Item
                 label="Link pull request…"
                 icon={GitPullRequest}

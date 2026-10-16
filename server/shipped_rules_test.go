@@ -109,6 +109,14 @@ func TestCardsShippedRules_CarryTheirGuards(t *testing.T) {
 		{"boards_attachments", "create", `uploaded_by = @request.auth.id`,
 			"provenance on a file blob, and the basis of the uploader-or-owner delete rule"},
 
+		// --- the child-row board pin on create (2090000102) ---
+		{"boards_checklist_items", "create", `card.project = project`,
+			"every rule reads the row's own project, so without it a writer on board A could hang an item stamped project = A off a card of board B: B's card counts it while B's members cannot read it"},
+		{"boards_attachments", "create", `card.project = project`,
+			"the same hole for a file: an attachment stamped with the writer's board on another board's card, counted in that card's attachment_count"},
+		{"boards_comments", "create", `card.project = project`,
+			"the same hole for a comment (2090000103): a comment stamped with the commenter's board on another board's card, counted by that card and run through its mention flow while its members cannot read it"},
+
 		// --- the bootstrap branch ---
 		{"boards_project_members", "create", `project.boards_project_members_via_project.id = ""`,
 			`PocketBase's empty-back-relation idiom, and the reason a fresh project can get its first owner without a privileged Go hook. This is the ONE intentional bare "=" in the file (see the ?!= sweep below, which deliberately does not generalize to bare =)`},

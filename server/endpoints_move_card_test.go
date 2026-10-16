@@ -1,12 +1,18 @@
 package boards
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"testing"
 
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tests"
+
+	"tinycld.org/core/markdown"
+	"tinycld.org/core/realtime"
+	"tinycld.org/core/yjsdoc"
 )
 
 // The cross-board move endpoint, mounted through the SAME route table
@@ -735,4 +741,90 @@ func TestMoveCard_RestampsPRLinkProject(t *testing.T) {
 			}
 		},
 	}.run(t, env.cardsEnv)
+}
+
+// openRoom seeds a board's document on a shared runtime, as the broker does
+// when the first client joins.
+func openRoom(t *testing.T, runtime *yjsdoc.Runtime, projectID string) realtime.DocHandle {
+	t.Helper()
+	handle, err := runtime.NewDoc(projectID)
+	if err != nil {
+		t.Fatalf("open document for %s: %v", projectID, err)
+	}
+	if err := runtime.Seed(context.Background(), projectID, handle); err != nil {
+		t.Fatalf("seed %s: %v", projectID, err)
+	}
+	return handle
+}
+
+func TestMoveCard_HandsCustomFragmentsToTheTargetRoom(t *testing.T) {
+	// Both rooms are open. The target was seeded before the card arrived, so
+	// without the handoff its custom fragment would be empty and the first
+	// keystroke there would replace the stored value. The source keeps a
+	// stale copy that must never write to a card it no longer owns.
+	env := setupMoveEnv(t)
+	form := cardsForm(t, env.app, bugDefinitionJSON)
+	card := cardsCardOfForm(t, env.cardsEnv, "Typed", form)
+	setFields(t, env.app, card, map[string]any{"steps": "Stored steps."})
+
+	state := newBoardDocState()
+	runtime := yjsdoc.NewRuntime()
+	runtime.SetBootstrap(makeBootstrap(env.app, state))
+	source := openRoom(t, runtime, env.project.Id)
+	openRoom(t, runtime, env.target.Id)
+	rt := &boardRealtime{state: state, runtime: runtime}
+
+	req{
+		method:  http.MethodPost,
+		url:     "/api/boards/cards/" + card.Id + "/move",
+		token:   env.editorToken,
+		body:    moveBody(env),
+		want:    http.StatusOK,
+		content: []string{`"steps":"Stored steps."`},
+		before:  func(e *core.ServeEvent) { bindCardRoutes(e, rt) },
+	}.run(t, env.cardsEnv)
+
+	steps := customFragment(card.Id, "md", "steps")
+	var pm markdown.PMNode
+	if err := json.Unmarshal(readNamedFragment(t, runtime.HandleFor(env.target.Id), steps), &pm); err != nil {
+		t.Fatal(err)
+	}
+	if got := markdown.FromPM(&pm); got != "Stored steps.\n" {
+		t.Errorf("target fragment = %q, want the stored steps", got)
+	}
+
+	// An edit to the card in the stale source room after the move.
+	notes := customFragment(card.Id, "html", "notes")
+	writeNamedFragment(t, source, notes, "<p>Typed in the old room.</p>")
+	// Seeded so the final check is true only if the flush forgot it.
+	state.setBaseline(env.project.Id, notes, "stale\n")
+	if err := makeFlush(env.app, state)(t.Context(), env.project.Id, source); err != nil {
+		t.Fatalf("source flush: %v", err)
+	}
+	fields := fieldsOf(t, env.cardsEnv, card.Id)
+	if fields["steps"] != "Stored steps." || len(fields) != 1 {
+		t.Errorf("the source room wrote to the moved card: %v", fields)
+	}
+	// The handoff silenced the stale steps fragment; the refused edit's
+	// baseline is forgotten rather than recorded as stored.
+	if !state.matchesBaseline(env.project.Id, steps, "Stored steps.\n") {
+		t.Error("the source room's steps fragment was not silenced by the handoff")
+	}
+	if !state.matchesBaseline(env.project.Id, notes, "") {
+		t.Error("the refused source edit kept a baseline")
+	}
+	// The kept baseline silences stale edits, but the card is no longer on
+	// the source board: the parked room must fingerprint as the records do,
+	// or its checkpoint is thrown away and the board re-seeds for nothing.
+	parked, err := makeFingerprint(env.app, state)(env.project.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := makeFingerprint(env.app, newBoardDocState())(env.project.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parked != fresh {
+		t.Error("the moved card still shapes the source room's fingerprint")
+	}
 }

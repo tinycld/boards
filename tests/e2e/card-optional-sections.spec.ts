@@ -1,7 +1,14 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, closeCardPeek, createBoard } from './helpers'
+import {
+    addCard,
+    boardCard,
+    closeCardPeek,
+    createBoard,
+    uniqueNumber,
+    uniqueStamp,
+} from './helpers'
 
 // Attachments, Checklist, Sub-tasks and Links are opt-in: hidden until the card
 // has one, or until the reader asks for one from the chip row.
@@ -19,7 +26,7 @@ const OTHER = 'Ship the client'
 
 let run = 0
 async function freshBoard(page: Page): Promise<string> {
-    const name = `sections-${Date.now()}-${run++}`
+    const name = `sections-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     return name
 }
@@ -158,8 +165,8 @@ test.describe('optional card sections', () => {
     // a chip beside it claiming the card is bare. Navigating in-app cannot
     // reach this — the queries are already warm by the time the peek opens.
     test('a checklist survives a cold load of the card URL', async ({ page }) => {
-        const key = `SEC${Date.now() % 100000}`
-        await createBoard(page, `sections-cold-${Date.now()}`, key)
+        const key = `SEC${uniqueNumber() % 100000}`
+        await createBoard(page, `sections-cold-${uniqueStamp()}`, key)
         await addCard(page, 0, CARD)
         await openCard(page, CARD)
 
@@ -179,8 +186,8 @@ test.describe('optional card sections', () => {
     })
 
     test('a link survives a cold load of the card URL', async ({ page }) => {
-        const key = `SEL${Date.now() % 100000}`
-        await createBoard(page, `sections-cold-link-${Date.now()}`, key)
+        const key = `SEL${uniqueNumber() % 100000}`
+        await createBoard(page, `sections-cold-link-${uniqueStamp()}`, key)
         await addCard(page, 0, CARD)
         await addCard(page, 0, OTHER)
         await openCard(page, CARD)
@@ -207,8 +214,8 @@ test.describe('optional card sections', () => {
     // array is filtered by the reader's board filter and is not necessarily
     // delivered on a cold load, so counting it loses the section.
     test('a sub-task survives a cold load of the card URL', async ({ page }) => {
-        const key = `SES${Date.now() % 100000}`
-        await createBoard(page, `sections-cold-sub-${Date.now()}`, key)
+        const key = `SES${uniqueNumber() % 100000}`
+        await createBoard(page, `sections-cold-sub-${uniqueStamp()}`, key)
         await addCard(page, 0, CARD)
         await openCard(page, CARD)
 

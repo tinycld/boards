@@ -1,6 +1,6 @@
 import { expect, type Page, test } from '@playwright/test'
 import { isPackageLinked, login, navigateToPackage, packageScreen } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard } from './helpers'
+import { addCard, boardCard, createBoard, uniqueStamp } from './helpers'
 
 // Boards' calendar event source, driven end to end through the UI: a due date
 // set on a card appears on the calendar grid, clicking it opens the card, and
@@ -27,11 +27,11 @@ test.describe('Boards — due dates on the calendar', () => {
     test('a due card shows on the grid, opens on click, and the feed toggles off', async ({
         page,
     }) => {
-        const title = `Due on calendar ${Date.now()}`
+        const title = `Due on calendar ${uniqueStamp()}`
 
         await login(page)
         await navigateToPackage(page, 'boards')
-        await createBoard(page, `Calendar feed ${Date.now()}`)
+        await createBoard(page, `Calendar feed ${uniqueStamp()}`)
         await addCard(page, 0, title)
 
         await boardCard(page, title).click()

@@ -648,6 +648,7 @@ async function seedCards(
             estimate: card.estimate ?? 0,
             epic: card.epic ? (epicIds[card.epic] ?? '') : '',
             archived: false,
+            fields: {},
         })
 
         if (card.checklist?.length) {

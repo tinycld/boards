@@ -1,7 +1,6 @@
 package boards
 
 import (
-	"log/slog"
 	"regexp"
 
 	"github.com/pocketbase/dbx"
@@ -121,7 +120,7 @@ func notifyDescriptionMentions(app core.App, projectID, cardID, prev, next strin
 			dbx.HashExp{"project": projectID, "user": userID},
 		)
 		if err != nil {
-			slog.Warn("cards: could not check membership for a description mention",
+			activityLog.Warn("could not check membership for a description mention",
 				"projectID", projectID, "cardID", cardID, "userID", userID, "error", err)
 			continue
 		}

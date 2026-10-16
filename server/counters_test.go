@@ -75,6 +75,30 @@ func TestCardsCounters_RecountReflectsAttachments(t *testing.T) {
 	}
 }
 
+// A card type's file field keeps its files in boards_attachments too, named by
+// `field`. They are the field's value, not the card's attachments, so the face
+// counter leaves them out.
+func TestCardsCounters_AttachmentCountSkipsFileFieldRows(t *testing.T) {
+	env := setupCardsEnv(t)
+
+	cardsAttachment(t, env.app, env.project, env.card, env.editor, "notes.txt")
+	shot := cardsAttachment(t, env.app, env.project, env.card, env.editor, "shot.png")
+	shot.Set("field", "screenshot")
+	if err := env.app.Save(shot); err != nil {
+		t.Fatalf("name the field: %v", err)
+	}
+
+	recountCard(env.app, env.card.Id)
+
+	fresh, err := env.app.FindRecordById("boards_cards", env.card.Id)
+	if err != nil {
+		t.Fatalf("re-read card: %v", err)
+	}
+	if got := fresh.GetInt("attachment_count"); got != 1 {
+		t.Errorf("attachment_count = %d, want 1 — a file field's row was counted", got)
+	}
+}
+
 // Same exposure as the comment_count case: attachment_count is not a relation,
 // so no rule pins it and a member can write it directly. The recount is what
 // corrects it.

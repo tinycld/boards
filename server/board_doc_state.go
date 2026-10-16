@@ -4,11 +4,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"sort"
+	"strings"
 	"sync"
 )
 
 // boardDocState tracks, per open board room, what the server believes each
-// card's description already says on disk.
+// card fragment (a description, or a custom collaborative field) already says
+// on disk.
 //
 // The flush path compares a freshly serialized fragment against this baseline
 // to decide whether a row actually changed. That matters for three reasons:
@@ -27,7 +29,28 @@ type boardDocState struct {
 }
 
 type boardEntry struct {
-	// baseline maps card id → sha256 of the markdown last known to be stored.
+	// baseline maps fragment name → sha256 of the text last known to be
+	// stored. Keyed by fragment, not card: one card has several fragments,
+	// and each one is written to the row on its own.
+	//
+	// An entry lives in one of two ways:
+	//
+	//   - For a card on the board, from seed or save until the document is
+	//     evicted. It decides what a flush writes and shapes the fingerprint.
+	//   - For a card moved to another board, from the move until the source
+	//     document is evicted (drop forgets it with the rest). The fragment
+	//     lingers in the document, so the entry keeps a stale edit to it from
+	//     looking changed. It must not shape the fingerprint: the records no
+	//     longer hold the card, so a stored checkpoint would never match them
+	//     and the board would re-seed for nothing.
+	//
+	// A card moved or deleted while the document is parked therefore changes
+	// the fingerprint, and the board re-seeds at reopen. A re-seed discards
+	// any edit not flushed when the room emptied: a park after a failed or
+	// skipped teardown flush, or a client's offline edits to the parked
+	// document. That is accepted: the fingerprint exists to re-seed when the
+	// board changed outside the room, and keeping the card in it only moves
+	// the mismatch to the stored checkpoint once the document is evicted.
 	baseline map[string]string
 }
 
@@ -52,82 +75,108 @@ func (s *boardDocState) drop(projectID string) {
 	delete(s.boards, projectID)
 }
 
+// has reports whether the board has a document (open or parked).
+func (s *boardDocState) has(projectID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.boards[projectID] != nil
+}
+
 // fingerprint summarizes what the document believes is stored for every
-// card, from the baselines, so the broker can tell a parked or stored
-// document from the records. Reports false when the board has no entry
+// fragment, from the baselines, so the broker can tell a parked or stored
+// document from the records. onBoard holds the ids of the cards now on the
+// board; a fragment of any other card is left out, as the records leave it
+// out (see boardEntry.baseline). Reports false when the board has no entry
 // (no document was seeded, or it was evicted).
-func (s *boardDocState) fingerprint(projectID string) (string, bool) {
+func (s *boardDocState) fingerprint(projectID string, onBoard map[string]bool) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	entry := s.boards[projectID]
 	if entry == nil {
 		return "", false
 	}
-	return fingerprintOf(entry.baseline), true
+	kept := make(map[string]string, len(entry.baseline))
+	for fragment, h := range entry.baseline {
+		if cardID, _, _, ok := parseCardFragment(fragment); ok && onBoard[cardID] {
+			kept[fragment] = h
+		}
+	}
+	return fingerprintOf(kept), true
 }
 
-// fingerprintOf hashes a card → description-hash map in a stable order.
-// A card with an empty description is left out, so it matches the record
-// query bootstrap runs (description != ”).
+// fingerprintOf hashes a fragment → text-hash map in a stable order. An
+// empty fragment is left out, so it matches bootstrap, which seeds no
+// fragment for empty stored text.
+//
+// Each fragment is hashed without its `card:` prefix, so a description is
+// hashed under its bare card id as it was before baselines were keyed by
+// fragment. A board with no custom fields therefore keeps the fingerprint its
+// stored checkpoint was written under, and an upgrade does not discard every
+// checkpoint (with any edits a failed flush left only there).
 func fingerprintOf(hashes map[string]string) string {
-	empty := hashMarkdown("")
-	ids := make([]string, 0, len(hashes))
-	for id, h := range hashes {
+	empty := hashText("")
+	byName := make(map[string]string, len(hashes))
+	for fragment, h := range hashes {
 		if h == empty {
 			continue
 		}
-		ids = append(ids, id)
+		byName[strings.TrimPrefix(fragment, cardFragmentPrefix)] = h
 	}
-	sort.Strings(ids)
+	names := make([]string, 0, len(byName))
+	for name := range byName {
+		names = append(names, name)
+	}
+	sort.Strings(names)
 	sum := sha256.New()
-	for _, id := range ids {
-		sum.Write([]byte(id))
+	for _, name := range names {
+		sum.Write([]byte(name))
 		sum.Write([]byte{0})
-		sum.Write([]byte(hashes[id]))
+		sum.Write([]byte(byName[name]))
 		sum.Write([]byte{0})
 	}
 	return hex.EncodeToString(sum.Sum(nil))
 }
 
-// setBaseline records what a card's description now says on disk.
-func (s *boardDocState) setBaseline(projectID, cardID, markdown string) {
+// setBaseline records what a fragment's text now says on disk.
+func (s *boardDocState) setBaseline(projectID, fragment, text string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	entry := s.boards[projectID]
 	if entry == nil {
 		return
 	}
-	entry.baseline[cardID] = hashMarkdown(markdown)
+	entry.baseline[fragment] = hashText(text)
 }
 
-// matchesBaseline reports whether the given markdown is what the server last
-// saw stored for this card. An unknown card is treated as having an empty
-// description, so a card created while the room is live is written on its
-// first real edit rather than being skipped forever.
-func (s *boardDocState) matchesBaseline(projectID, cardID, markdown string) bool {
+// matchesBaseline reports whether the given text is what the server last saw
+// stored for this fragment. An unknown fragment is treated as empty, so a
+// card created while the room is live is written on its first real edit
+// rather than being skipped forever.
+func (s *boardDocState) matchesBaseline(projectID, fragment, text string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	entry := s.boards[projectID]
 	if entry == nil {
 		return false
 	}
-	known, ok := entry.baseline[cardID]
+	known, ok := entry.baseline[fragment]
 	if !ok {
-		known = hashMarkdown("")
+		known = hashText("")
 	}
-	return known == hashMarkdown(markdown)
+	return known == hashText(text)
 }
 
-// forgetCard drops a card's baseline — used when its record has gone away.
-func (s *boardDocState) forgetCard(projectID, cardID string) {
+// forget drops a fragment's baseline — used when the flush must not write it
+// (its card has gone, belongs to another board, or does not declare it).
+func (s *boardDocState) forget(projectID, fragment string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if entry := s.boards[projectID]; entry != nil {
-		delete(entry.baseline, cardID)
+		delete(entry.baseline, fragment)
 	}
 }
 
-func hashMarkdown(markdown string) string {
-	sum := sha256.Sum256([]byte(markdown))
+func hashText(text string) string {
+	sum := sha256.Sum256([]byte(text))
 	return hex.EncodeToString(sum[:])
 }

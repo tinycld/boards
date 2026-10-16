@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, createBoard } from './helpers'
+import { addCard, createBoard, uniqueStamp } from './helpers'
 
 // The board as a table: the same cards as rows, headers that sort, the
 // keyboard walking rows, and the choice surviving a reload.
@@ -13,7 +13,7 @@ const BRAVO = 'Bravo row'
 
 let run = 0
 async function freshBoard(page: Page): Promise<string> {
-    const name = `table-${Date.now()}-${run++}`
+    const name = `table-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     return name
 }

@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, closeCardPeek, createBoard } from './helpers'
+import { addCard, addSubtask, boardCard, closeCardPeek, createBoard, uniqueStamp } from './helpers'
 
 // Sub-tasks end to end: the composer creates a real card, the parent's face
 // shows the rollup, the child's face shows the parent chip, and moving the
@@ -18,7 +18,7 @@ const CHILD = 'Write the headline'
 
 let run = 0
 async function freshBoard(page: Page): Promise<string> {
-    const name = `subtasks-${Date.now()}-${run++}`
+    const name = `subtasks-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     return name
 }
@@ -30,31 +30,6 @@ function peek(page: Page) {
 async function openCard(page: Page, title: string) {
     await boardCard(page, title).click()
     await expect(peek(page).getByText('Description', { exact: true })).toBeVisible()
-}
-
-async function addSubtask(page: Page, parentTitle: string, title: string) {
-    await openCard(page, parentTitle)
-    // The section is opt-in: on a card with NO sub-tasks yet it is collapsed
-    // behind its chip, and revealing it opens the composer in the same click.
-    // A card that already has one keeps the section open, so the in-section
-    // composer button is the one to press — this helper files both the first
-    // sub-task and the second.
-    const inSection = peek(page).getByRole('button', { name: 'Add sub-task' })
-    if (await inSection.isVisible().catch(() => false)) {
-        await inSection.click()
-    } else {
-        await peek(page)
-            .getByTestId('boards-section-chips')
-            .getByRole('button', { name: 'Sub-tasks' })
-            .click()
-    }
-    await peek(page).getByPlaceholder('What needs doing?').fill(title)
-    await page.keyboard.press('Enter')
-    // The row is what proves the card exists, not the composer clearing.
-    await expect(
-        peek(page).getByTestId('boards-subtask-row').filter({ hasText: title })
-    ).toBeVisible()
-    await closeCardPeek(page)
 }
 
 /** The parent's rollup pill, read off its face on the board. */

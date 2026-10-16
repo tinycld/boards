@@ -1,10 +1,29 @@
 import { useAuth } from '@tinycld/core/lib/auth'
 import { toDateString } from '@tinycld/core/lib/dates'
+import { parseFormRows } from '@tinycld/core/lib/forms/use-forms-of-host'
 import { mutation, useMutation } from '@tinycld/core/lib/mutations'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { newRecordId } from 'pbtsdb/core'
+import { CARD_HOST_KEY } from '../forms/hosts'
 import type { CardPriority } from '../lib/priority'
-import type { BoardCardView } from '../types'
+import { rankBetween } from '../lib/rank'
+import { stripFileFields } from '../lib/strip-file-fields'
+import type { BoardCardView, BoardsCards } from '../types'
+
+export type CardFormColumns = Pick<
+    BoardsCards,
+    | 'description'
+    | 'due'
+    | 'due_has_time'
+    | 'start'
+    | 'assignees'
+    | 'labels'
+    | 'reporter'
+    | 'priority'
+    | 'estimate'
+    | 'epic'
+    | 'sprint'
+>
 
 export interface CreateCardInput {
     /** The column the card is added to. */
@@ -20,6 +39,14 @@ export interface CreateCardInput {
      * it only ever passes the open card's id.
      */
     parent?: string
+    /** The card's type; empty lets the server fill the default. */
+    formId?: string
+    /** Custom field values, keyed by field key. */
+    fields?: Record<string, unknown>
+    /** Built-in columns the create dialog collected, laid over the defaults. */
+    columns?: Partial<CardFormColumns>
+    /** Checklist items typed before the card existed; inserted after it. */
+    checklist?: { text: string; done: boolean }[]
 }
 
 export interface MoveCardInput {
@@ -72,6 +99,10 @@ export interface UpdateCardInput {
      * (1980000018); the server also refuses a completed sprint.
      */
     sprint?: string
+    /** The card's type (a forms row id). */
+    form?: string
+    /** Custom field values, written whole. */
+    fields?: Record<string, unknown>
 }
 
 /**
@@ -94,7 +125,7 @@ export function useCreateCard(projectId: string) {
     // session and the affordances that would invoke them are already gated
     // off. Throwing here made merely RENDERING a shared board an error.
     const { user } = useAuth({ throwIfAnon: false })
-    const [cardsCollection] = useStore('boards_cards')
+    const [cardsCollection, itemsCollection] = useStore('boards_cards', 'boards_checklist_items')
 
     return useMutation<string, Error, CreateCardInput>({
         mutationKey: ['boards', 'card', 'create'],
@@ -145,7 +176,25 @@ export function useCreateCard(projectId: string) {
                 // And in the backlog: a sprint is chosen from the backlog
                 // view or the detail row.
                 sprint: '',
+                ...input.columns,
+                // Empty form lets core's host hook fill the default type.
+                form: input.formId ?? '',
+                fields: input.fields ?? {},
             })
+
+            let previous: string | null = null
+            for (const item of input.checklist ?? []) {
+                const position = rankBetween(previous, null)
+                previous = position
+                yield itemsCollection.insert({
+                    id: newRecordId(),
+                    card: cardId,
+                    project: projectId,
+                    title: item.text,
+                    position,
+                    is_done: item.done,
+                })
+            }
 
             return cardId
         }),
@@ -173,12 +222,29 @@ export interface DuplicateCardInput {
  */
 export function useDuplicateCard(projectId: string) {
     const { user } = useAuth({ throwIfAnon: false })
-    const [cardsCollection, itemsCollection] = useStore('boards_cards', 'boards_checklist_items')
+    const [cardsCollection, itemsCollection, formsCollection] = useStore(
+        'boards_cards',
+        'boards_checklist_items',
+        'forms'
+    )
 
     return useMutation<string, Error, DuplicateCardInput>({
         mutationKey: ['boards', 'card', 'duplicate'],
         mutationFn: mutation(function* ({ card, position }: DuplicateCardInput) {
             const cardId = newRecordId()
+            const source = cardsCollection.get(card.id)
+            const fields = source?.fields ?? {}
+            // Read at call time: a render-time snapshot could be empty while
+            // the forms load, and falling back to "copy every field" would
+            // keep the source card's attachment ids. Refuse instead.
+            const forms = parseFormRows(
+                formsCollection.toArray.filter(f => f.host === CARD_HOST_KEY)
+            )
+            const formId = source?.form || forms.find(f => f.is_default)?.id
+            const def = forms.find(f => f.id === formId)?.definition
+            if (!def && Object.keys(fields).length > 0) {
+                throw new Error('Cannot duplicate this card until its form has loaded')
+            }
             yield cardsCollection.insert({
                 id: cardId,
                 project: projectId,
@@ -213,6 +279,10 @@ export function useDuplicateCard(projectId: string) {
                 // The copy joins the same sprint — a duplicate is more of the
                 // same planned work, not a fresh idea for the backlog.
                 sprint: card.sprint?.id ?? '',
+                // Read from the row: the card view does not carry them. The
+                // source is the open card, so its row is in the store.
+                form: source?.form ?? '',
+                fields: stripFileFields(fields, def),
                 // pr_state / pr_review_state are omitted (collections.ts), so
                 // PR links are NOT copied: a duplicate is a new card with no
                 // pull request of its own, the same reasoning that excludes
@@ -268,6 +338,8 @@ export function useUpdateCard() {
                 if (input.parent !== undefined) draft.parent = input.parent
                 if (input.epic !== undefined) draft.epic = input.epic
                 if (input.sprint !== undefined) draft.sprint = input.sprint
+                if (input.form !== undefined) draft.form = input.form
+                if (input.fields !== undefined) draft.fields = input.fields
             })
         }),
     })

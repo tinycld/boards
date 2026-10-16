@@ -1,7 +1,14 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, cardsInColumn, createBoard } from './helpers'
+import {
+    addCard,
+    boardCard,
+    cardsInColumn,
+    createBoard,
+    sectionControl,
+    uniqueStamp,
+} from './helpers'
 
 // The editor path: every field on an open card that an owner can change.
 //
@@ -24,7 +31,7 @@ const CARD_TITLE = 'Ship the release'
 
 let run = 0
 async function freshBoard(page: Page, label: string): Promise<string> {
-    const name = `edit-${label}-${Date.now()}-${run++}`
+    const name = `edit-${label}-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     return name
 }
@@ -62,14 +69,10 @@ async function addChecklistItems(page: Page, titles: string[]) {
     // has an item keeps the section open, so the in-section button is the one to
     // press.
     const inSection = peek(page).getByRole('button', { name: 'Add checklist item' })
-    if (await inSection.isVisible().catch(() => false)) {
-        await inSection.click()
-    } else {
-        await peek(page)
-            .getByTestId('boards-section-chips')
-            .getByRole('button', { name: 'Checklist' })
-            .click()
-    }
+    const chip = peek(page).getByTestId('boards-section-chips').getByRole('button', {
+        name: 'Checklist',
+    })
+    await (await sectionControl(inSection, chip)).click()
     for (const title of titles) {
         await page.keyboard.type(title)
         await page.keyboard.press('Enter')

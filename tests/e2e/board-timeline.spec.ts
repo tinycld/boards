@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, closeCardPeek, createBoard } from './helpers'
+import { addCard, boardCard, closeCardPeek, createBoard, uniqueStamp } from './helpers'
 
 // The timeline view: only dated cards are drawn, a start→due card is a bar,
 // j/k walk the drawn rows, Enter opens the peek, and the choice of view is
@@ -45,7 +45,7 @@ test.describe('Boards — timeline view', () => {
     })
 
     test('draws dated cards, walks them, opens one, and remembers the view', async ({ page }) => {
-        const board = `timeline-${Date.now()}`
+        const board = `timeline-${uniqueStamp()}`
         await createBoard(page, board)
         await addCard(page, 0, DATED)
         await addCard(page, 0, SPAN)

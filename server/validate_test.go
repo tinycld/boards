@@ -139,3 +139,46 @@ func TestValidateUpdate_PositionMigrationsOnlyForCards(t *testing.T) {
 		t.Errorf("a card's migration root was rejected: %v", err)
 	}
 }
+
+func TestValidateUpdate_AcceptsCustomFieldFragments(t *testing.T) {
+	for _, fragment := range []string{
+		"card:abc123:md:steps",
+		"card:abc123:html:notes",
+		"card:abc123:md:repro_steps2",
+		"__tiptap_position_migrations:root:card:abc123:md:steps",
+		"__tiptap_position_migrations:root:card:abc123:html:notes",
+	} {
+		t.Run(fragment, func(t *testing.T) {
+			if err := validateUpdate("board", updateWriting(t, fragment)); err != nil {
+				t.Errorf("a custom field edit was rejected: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateUpdate_RejectsOtherKeyedShapes(t *testing.T) {
+	for _, fragment := range []string{
+		"card:abc123:md:",                           // no key
+		"card:abc123:pdf:steps",                     // unknown format
+		"card:abc123:md:Steps",                      // keys are lowercase
+		"card:abc123:md:2steps",                     // keys start with a letter
+		"card:abc123:md:steps:x",                    // trailing segment
+		"card:abc123:md:st-eps",                     // not a key character
+		"card:abc123:steps",                         // no format
+		"card::md:steps",                            // no card id
+		"card:abc123:md:" + strings.Repeat("k", 41), // longer than a key may be
+		"__tiptap_position_migrations:root:card:abc123:pdf:steps",
+		"__tiptap_position_migrations:root:card:abc123:md:",
+		"__tiptap_position_migrations:root:card:abc123:md:Steps",
+		"card:abc123\n",
+		"card:abc123:md:steps\n",
+		"__tiptap_position_migrations:item:1:2:md:steps",
+		"__tiptap_position_migrations:root:card:abc123:md:steps\n",
+	} {
+		t.Run(fragment, func(t *testing.T) {
+			if err := validateUpdate("board", updateWriting(t, fragment)); err == nil {
+				t.Errorf("update writing root %q was accepted", fragment)
+			}
+		})
+	}
+}

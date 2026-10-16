@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, cardsInColumn, createBoard } from './helpers'
+import { addCard, boardCard, cardsInColumn, createBoard, uniqueStamp } from './helpers'
 
 // The way back from archive, for cards and for boards, and the one
 // destructive board action. Before this panel existed the only restore path
@@ -14,7 +14,7 @@ const CARD_TITLE = 'Retire the old banner'
 
 let run = 0
 async function freshBoard(page: Page): Promise<string> {
-    const name = `archive-${Date.now()}-${run++}`
+    const name = `archive-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     return name
 }

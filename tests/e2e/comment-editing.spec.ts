@@ -6,7 +6,16 @@ import {
     signInAsCollaborator,
     TEST_COLLABORATOR_EMAIL,
 } from '@tinycld/core/e2e-helpers'
-import { addCard, closeCardPeek, createBoard, openBoard, openCard, shareBoard } from './helpers'
+import { openEditor } from './editor-helpers'
+import {
+    addCard,
+    closeCardPeek,
+    createBoard,
+    openBoard,
+    openCard,
+    shareBoard,
+    uniqueStamp,
+} from './helpers'
 
 // Editing your own comments in place: clicking the body (or the hover Edit
 // action) swaps the rendered markdown for the rich editor with the formatting
@@ -19,7 +28,7 @@ const CARD_TITLE = 'Retro notes'
 
 let run = 0
 async function freshBoard(page: Page, label: string): Promise<string> {
-    const name = `commentedit-${label}-${Date.now()}-${run++}`
+    const name = `commentedit-${label}-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     return name
 }
@@ -59,10 +68,10 @@ async function typeInto(page: Page, editor: ReturnType<Page['locator']>, body: s
 }
 
 async function postComment(page: Page, body: string) {
-    const editor = composerEditor(page)
-    if (!(await editor.isVisible())) {
-        await composer(page).getByRole('button', { name: 'Write a comment' }).click()
-    }
+    const editor = await openEditor(
+        composerEditor(page),
+        composer(page).getByRole('button', { name: 'Write a comment' })
+    )
     await typeInto(page, editor, body)
     await page.keyboard.press('ControlOrMeta+Enter')
     await expect(editor).toHaveText('')
@@ -269,10 +278,10 @@ test.describe('Boards — editing comments', () => {
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
 
-        const editor = composerEditor(page)
-        if (!(await editor.isVisible())) {
-            await composer(page).getByRole('button', { name: 'Write a comment' }).click()
-        }
+        const editor = await openEditor(
+            composerEditor(page),
+            composer(page).getByRole('button', { name: 'Write a comment' })
+        )
         await typeInto(page, editor, 'Ship it today')
         for (let i = 0; i < 'today'.length; i++) {
             await page.keyboard.press('Shift+ArrowLeft')

@@ -22,6 +22,7 @@ import { rankForAppend, rankForReorder } from '../lib/move'
 import type { ReactionGroup } from '../lib/reactions'
 import { formatWipCount, type WipState, wipState } from '../lib/wip'
 import { selectBoardSort, useBoardsUIStore } from '../stores/boards-ui-store'
+import { useCardCreateStore } from '../stores/card-create-store'
 import type { BoardCardView, BoardListRank, BoardListView } from '../types'
 import { BoardCard } from './BoardCard'
 import { CardComposer } from './CardComposer'
@@ -109,6 +110,8 @@ interface BoardColumnProps {
      * a hook would put a board query behind every face.
      */
     agingDays: number
+    /** The board's file-drop gate (useFaceAttachmentsGate). Stable. */
+    acceptsFiles: (cardId: string) => boolean
 }
 
 type DropSide = 'before' | 'after'
@@ -128,6 +131,7 @@ export const BoardColumn = memo(function BoardColumn({
     registerMeasure,
     canEdit,
     agingDays,
+    acceptsFiles,
     reactionsForCard,
     onToggleReaction,
     reactorName,
@@ -152,6 +156,7 @@ export const BoardColumn = memo(function BoardColumn({
     // only that column re-renders.
     const isComposerOpen = useBoardsUIStore(s => s.composerOpenListId === list.id)
     const openComposer = useBoardsUIStore(s => s.openComposer)
+    const openCreate = useCardCreateStore(s => s.open)
 
     // This outer DraxView is the column-drag receiver, so its bounds go stale
     // the same way the card container's do when the canvas scrolls mid-drag.
@@ -287,6 +292,13 @@ export const BoardColumn = memo(function BoardColumn({
                                 list={list}
                                 listOrder={listOrder}
                                 onRename={() => setIsRenaming(true)}
+                                onNewCard={() =>
+                                    openCreate({
+                                        projectId,
+                                        listId: list.id,
+                                        position: rankForAppend(list.cards),
+                                    })
+                                }
                             />
                         ) : null}
                     </View>
@@ -312,6 +324,7 @@ export const BoardColumn = memo(function BoardColumn({
                         canEdit={canEdit}
                         isSorted={isSorted}
                         agingDays={agingDays}
+                        acceptsFiles={acceptsFiles}
                         reactionsForCard={reactionsForCard}
                         onToggleReaction={onToggleReaction}
                         reactorName={reactorName}
@@ -787,6 +800,8 @@ interface ColumnCardsProps {
     isSorted: boolean
     /** The board's aging threshold — see BoardColumnProps. */
     agingDays: number
+    /** The board's file-drop gate — see BoardColumnProps. */
+    acceptsFiles: (cardId: string) => boolean
 }
 
 /**
@@ -813,6 +828,7 @@ const ColumnCards = memo(function ColumnCards({
     canEdit,
     isSorted,
     agingDays,
+    acceptsFiles,
     reactionsForCard,
     onToggleReaction,
     reactorName,
@@ -932,6 +948,7 @@ const ColumnCards = memo(function ColumnCards({
                                 category={list.category}
                                 canDrag={canEdit}
                                 agingDays={agingDays}
+                                acceptsFiles={acceptsFiles}
                                 reactions={reactionsForCard(card.id)}
                                 onToggleReaction={onToggleReaction}
                                 reactorName={reactorName}

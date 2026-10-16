@@ -31,7 +31,8 @@ import type { BoardActivity, BoardAttachment, BoardChecklistItem, BoardComment }
  * Every hook that reads a card's children (useCardDetail, useCardWatch,
  * useCommentReactions, useCardLinks, usePrLinks) calls this with the same
  * card id, so they share the one query rather than each racing the parent
- * fetch with a filtered request of their own.
+ * fetch with a filtered request of their own: one fetch, N live
+ * subscriptions.
  *
  * `isReady` is the query having actually SETTLED, and it exists to gate
  * EDITING, not just display. An unsettled query is indistinguishable from a
@@ -208,6 +209,12 @@ export function useCardDetail(cardId: string) {
     const attachments = useMemo<BoardAttachment[]>(
         () =>
             (attachmentRows ?? [])
+                // The card's own files only: a type's file field keeps its
+                // files in the same collection, named by `field`, and lists
+                // them in its own cell. Filtered here, not in the query: the
+                // include rides the card's one relation fetch, and a second
+                // predicate there turns it into a list request of its own.
+                .filter(joined => !joined.attachment.field)
                 .map(joined => ({
                     id: joined.attachment.id,
                     fileName: joined.attachment.file,

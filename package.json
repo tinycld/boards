@@ -1,6 +1,6 @@
 {
     "name": "@tinycld/boards",
-    "version": "0.3.1",
+    "version": "0.4.0",
     "private": true,
     "type": "module",
     "description": "Kanban boards for tracking work across lists.",
@@ -22,7 +22,9 @@
         "./notify-events": "./tinycld/boards/notify-events.ts",
         "./search-adapter": "./tinycld/boards/search-adapter.ts",
         "./calendar-source": "./tinycld/boards/calendar-source.ts",
-        "./calendar-sprint-source": "./tinycld/boards/calendar-sprint-source.ts"
+        "./calendar-sprint-source": "./tinycld/boards/calendar-sprint-source.ts",
+        "./forms": "./tinycld/boards/forms/hosts.ts",
+        "./forms-ui": "./tinycld/boards/forms/ui.ts"
     },
     "scripts": {
         "typecheck": "tinycld-pkg typecheck",

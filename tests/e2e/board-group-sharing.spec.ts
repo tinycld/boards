@@ -6,7 +6,7 @@ import {
     signInAsCollaborator,
     TEST_COLLABORATOR_EMAIL,
 } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard, openBoard } from './helpers'
+import { addCard, boardCard, createBoard, openBoard, uniqueStamp } from './helpers'
 
 // Group sharing end to end, all through the UI:
 //   owner creates a group in Settings → Groups and adds the collaborator,
@@ -63,7 +63,7 @@ async function shareBoardWithGroup(page: Page, boardName: string, groupName: str
 test.describe('Boards — sharing with a group', () => {
     test('group members see the board; leaving the group removes it', async ({ page }) => {
         await login(page)
-        const stamp = Date.now()
+        const stamp = uniqueStamp()
         const groupName = `Launch crew ${stamp}`
         const boardName = `group-share-${stamp}`
 

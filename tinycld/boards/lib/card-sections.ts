@@ -92,11 +92,19 @@ export function visibleSections({ has, isReady, revealed }: SectionState): Secti
     const visible: SectionKey[] = []
     const chips: SectionKey[] = []
     for (const key of SECTION_KEYS) {
-        if (has[key] || revealed.has(key)) {
+        if (isSectionShown(has[key], revealed.has(key))) {
             visible.push(key)
         } else if (isReady[key]) {
             chips.push(key)
         }
     }
     return { visible, chips }
+}
+
+/**
+ * Whether one section renders: it has content, or the reader opened it. The
+ * rule `visibleSections` applies to each key, for a section deciding alone.
+ */
+export function isSectionShown(has: boolean, isRevealed: boolean): boolean {
+    return has || isRevealed
 }

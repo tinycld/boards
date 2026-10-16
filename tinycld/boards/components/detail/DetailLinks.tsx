@@ -3,9 +3,9 @@ import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useRouter } from 'expo-router'
 import { Link2, Lock, X } from 'lucide-react-native'
 import { Pressable, Text, View } from 'react-native'
+import { useOpenRelatedCard } from '../../hooks/useOpenRelatedCard'
 import { type CardLinkView, groupLinks, type LinkType } from '../../lib/card-links'
 import { isClosedCategory } from '../../lib/list-category'
-import { useBoardsUIStore } from '../../stores/boards-ui-store'
 import type { BoardCardView } from '../../types'
 import { LinkPicker } from './LinkPicker'
 
@@ -180,7 +180,7 @@ function RedactedFar() {
 }
 
 function ResolvedFar({ link, isOnThisBoard }: { link: CardLinkView; isOnThisBoard: boolean }) {
-    const openCard = useBoardsUIStore(s => s.openCard)
+    const openCard = useOpenRelatedCard()
     const router = useRouter()
     const orgHref = useOrgHref()
     const mutedColor = useThemeColor('muted')
@@ -194,7 +194,7 @@ function ResolvedFar({ link, isOnThisBoard }: { link: CardLinkView; isOnThisBoar
     // broken. `/a/boards/<KEY>` opens the other board with the card peeked —
     // a real navigation, so Back returns here.
     const open = () => {
-        if (isOnThisBoard) openCard(far.id)
+        if (isOnThisBoard) openCard(far)
         else if (far.key) router.push(orgHref(`boards/${far.key}`))
     }
     const isDone = isClosedCategory(far.listCategory)
@@ -207,7 +207,11 @@ function ResolvedFar({ link, isOnThisBoard }: { link: CardLinkView; isOnThisBoar
             className="flex-row items-center gap-2 flex-1 active:opacity-60"
         >
             <Link2 size={13} color={isDone ? successColor : mutedColor} strokeWidth={2.2} />
-            {far.key ? <Text className="text-[11px] font-medium text-muted">{far.key}</Text> : null}
+            {far.key ? (
+                <Text testID="boards-card-key" className="text-[11px] font-medium text-muted">
+                    {far.key}
+                </Text>
+            ) : null}
             <Text
                 className={`flex-1 text-[13px] ${isDone ? 'text-muted line-through' : 'text-foreground'}`}
                 numberOfLines={1}

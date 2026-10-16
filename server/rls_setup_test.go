@@ -152,6 +152,7 @@ func buildCardsTemplate(t *testing.T) string {
 	}
 
 	stubGroupsCollection(t, app)
+	stubFormsCollection(t, app)
 
 	rlstest.Apply(t, app, rlstest.MigrationsDir(t, "../pb-migrations"))
 
@@ -180,6 +181,26 @@ func stubGroupsCollection(t *testing.T, app core.App) {
 	groups.Fields.Add(&core.TextField{Name: "name", Required: true})
 	if err := app.Save(groups); err != nil {
 		t.Fatalf("stub groups collection: %v", err)
+	}
+}
+
+// stubFormsCollection creates core's forms collection, which the card
+// form column (2090000100) names as its relation target. Only the columns
+// boards reads are stubbed.
+func stubFormsCollection(t *testing.T, app core.App) {
+	t.Helper()
+	forms := core.NewBaseCollection("forms")
+	forms.Fields.Add(
+		&core.TextField{Name: "host"},
+		&core.TextField{Name: "name"},
+		&core.TextField{Name: "slug"},
+		&core.JSONField{Name: "definition"},
+		&core.BoolField{Name: "is_default"},
+		&core.BoolField{Name: "archived"},
+		&core.NumberField{Name: "order"},
+	)
+	if err := app.Save(forms); err != nil {
+		t.Fatalf("stub forms collection: %v", err)
 	}
 }
 
@@ -390,6 +411,14 @@ func cardsChecklistItem(t *testing.T, app core.App, project, card *core.Record, 
 // validation rather than landing with an empty file.
 func cardsAttachment(t *testing.T, app core.App, project, card, uploader *core.Record, name string) *core.Record {
 	t.Helper()
+	return cardsFieldAttachment(t, app, project, card, uploader, name, "")
+}
+
+// cardsFieldAttachment is cardsAttachment for a file a custom file field
+// uploaded: `field` names the key it belongs to, and is empty for a plain
+// attachment.
+func cardsFieldAttachment(t *testing.T, app core.App, project, card, uploader *core.Record, name, field string) *core.Record {
+	t.Helper()
 	col, err := app.FindCollectionByNameOrId("boards_attachments")
 	if err != nil {
 		t.Fatalf("find boards_attachments: %v", err)
@@ -405,6 +434,7 @@ func cardsAttachment(t *testing.T, app core.App, project, card, uploader *core.R
 	r.Set("file", f)
 	r.Set("size", len(body))
 	r.Set("uploaded_by", uploader.Id)
+	r.Set("field", field)
 	if err := app.Save(r); err != nil {
 		t.Fatalf("save attachment %s: %v", name, err)
 	}

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, createBoard } from './helpers'
+import { addCard, createBoard, uniqueStamp } from './helpers'
 
 // Renaming a board from the header's Board actions menu.
 //
@@ -10,7 +10,7 @@ import { addCard, createBoard } from './helpers'
 // the sidebar, which reads the same record.
 
 let run = 0
-const boardName = () => `rename-${Date.now()}-${run++}`
+const boardName = () => `rename-${uniqueStamp()}-${run++}`
 
 test.beforeEach(async ({ page }) => {
     await login(page)

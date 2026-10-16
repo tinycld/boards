@@ -1,7 +1,14 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, cardsInColumn, closeCardPeek, createBoard } from './helpers'
+import {
+    addCard,
+    boardCard,
+    cardsInColumn,
+    closeCardPeek,
+    createBoard,
+    uniqueStamp,
+} from './helpers'
 
 // Estimates end to end: the picker writes the field, the face shows the pill,
 // the column header sums what it shows, the filter and sort read it, and the
@@ -16,7 +23,7 @@ const BRAVO = 'Bravo task'
 
 let run = 0
 async function freshBoard(page: Page): Promise<string> {
-    const name = `estimate-${Date.now()}-${run++}`
+    const name = `estimate-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     return name
 }

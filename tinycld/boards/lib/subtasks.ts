@@ -86,3 +86,14 @@ export function subtasksComplete(
 ): boolean {
     return card.subtaskTotal > 0 && card.subtaskDone === card.subtaskTotal
 }
+
+/**
+ * Whether the sub-task section has content. The SERVER'S count first: `cards` is the board
+ * as this surface sees it — filtered by the reader's board filter, and on a
+ * cold load not necessarily delivered yet — so a card whose children are
+ * absent from it still has sub-tasks. `subtaskTotal` rides on the card record
+ * and is authoritative; the children are the optimistic window before it counts.
+ */
+export function hasSubtaskSection(cards: BoardCardView[], card: BoardCardView): boolean {
+    return card.subtaskTotal > 0 || childrenOf(cards, card).length > 0
+}

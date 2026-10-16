@@ -116,6 +116,7 @@ func setupMentionFlushEnv(t *testing.T) *mentionFlushEnv {
 	}
 
 	stubGroupsCollection(t, app)
+	stubFormsCollection(t, app)
 
 	rlstest.Apply(t, app, rlstest.MigrationsDir(t, "../pb-migrations"))
 

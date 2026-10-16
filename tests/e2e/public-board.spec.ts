@@ -1,7 +1,14 @@
 import type { Browser, Page } from '@playwright/test'
 import { chromium, expect, test } from '@playwright/test'
 import { login, navigateToPackage, signInAsCollaborator } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard } from './helpers'
+import {
+    addCard,
+    boardCard,
+    createBoard,
+    mintShareLink,
+    openShareDialog,
+    uniqueStamp,
+} from './helpers'
 
 // A board opened by share link, end to end through the UI.
 //
@@ -19,41 +26,12 @@ import { addCard, boardCard, createBoard } from './helpers'
 
 const CARD_TITLE = 'Ship the newsletter'
 
-async function openShareDialog(page: Page, boardName: string) {
-    await page.getByRole('button', { name: 'Share board' }).click()
-    await expect(page.getByText(`Share “${boardName}”`)).toBeVisible()
-}
-
 /** Dismiss the share dialog and wait for it to be gone. Its backdrop swallows
  *  clicks on the shell behind it, so anything that reaches for the rail
  *  afterwards has to know the dialog actually closed. */
 async function closeShareDialog(page: Page) {
     await page.getByRole('button', { name: 'Done', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Done', exact: true })).toHaveCount(0)
-}
-
-/**
- * Mint a link at `role` and return the URL the dialog offers.
- *
- * Reads the URL from the panel rather than the clipboard: clipboard access
- * needs a permission grant that differs per browser, and the text the dialog
- * shows IS what a person would copy.
- */
-async function mintShareLink(page: Page, boardName: string, role: string): Promise<string> {
-    await openShareDialog(page, boardName)
-
-    await expect(page.getByText('General access')).toBeVisible()
-    if (role !== 'Viewer') {
-        await page.getByRole('button', { name: 'Change what the link allows' }).click()
-        await page.getByRole('menuitem', { name: role }).click()
-    }
-    await page.getByRole('button', { name: 'Create share link' }).click()
-
-    const url = page.getByText(/\/p\/boards\//)
-    await expect(url).toBeVisible()
-    const text = (await url.textContent())?.trim()
-    if (!text) throw new Error('the dialog rendered no share URL')
-    return text
 }
 
 /**
@@ -184,7 +162,7 @@ test.describe('Boards — a board opened by share link', () => {
     }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        const board = `Launch plan ${Date.now()}`
+        const board = `Launch plan ${uniqueStamp()}`
         await createBoard(page, board)
         await addCard(page, 0, CARD_TITLE)
 
@@ -217,7 +195,7 @@ test.describe('Boards — a board opened by share link', () => {
     test('the roster stays hidden from a link visitor', async ({ page, browser }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        const board = `Private roster ${Date.now()}`
+        const board = `Private roster ${uniqueStamp()}`
         await createBoard(page, board)
         await addCard(page, 0, CARD_TITLE)
 
@@ -239,7 +217,7 @@ test.describe('Boards — a board opened by share link', () => {
     test('an editor link offers a sign-in, a viewer link does not', async ({ page, browser }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        const board = `Contributors welcome ${Date.now()}`
+        const board = `Contributors welcome ${uniqueStamp()}`
         await createBoard(page, board)
         await addCard(page, 0, CARD_TITLE)
 
@@ -285,8 +263,8 @@ test.describe('Boards — a board opened by share link', () => {
         // boards earlier runs left it, so a fixed "Stranger own board" would
         // collide and the "not my own board" assertion below would be reading
         // a leftover rather than this run's.
-        const ownerBoard = `Owner board ${Date.now()}`
-        const strangerBoard = `Stranger own board ${Date.now()}`
+        const ownerBoard = `Owner board ${uniqueStamp()}`
+        const strangerBoard = `Stranger own board ${uniqueStamp()}`
         await createBoard(page, ownerBoard)
         await addCard(page, 0, CARD_TITLE)
 
@@ -342,7 +320,7 @@ test.describe('Boards — a board opened by share link', () => {
     test('revoking a link closes it immediately', async ({ page, browser }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        const board = `Short lived ${Date.now()}`
+        const board = `Short lived ${uniqueStamp()}`
         await createBoard(page, board)
         await addCard(page, 0, CARD_TITLE)
 
@@ -370,7 +348,7 @@ test.describe('Boards — a board opened by share link', () => {
     }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        const board = `Embedded plan ${Date.now()}`
+        const board = `Embedded plan ${uniqueStamp()}`
         await createBoard(page, board)
         await addCard(page, 0, CARD_TITLE)
 
@@ -405,7 +383,7 @@ test.describe('Boards — a board opened by share link', () => {
     }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        const board = `Embed opt-in ${Date.now()}`
+        const board = `Embed opt-in ${uniqueStamp()}`
         await createBoard(page, board)
         await addCard(page, 0, CARD_TITLE)
 
@@ -425,7 +403,7 @@ test.describe('Boards — a board opened by share link', () => {
     test('an owner is offered the embed code only once a link may be framed', async ({ page }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        const board = `Embed code ${Date.now()}`
+        const board = `Embed code ${uniqueStamp()}`
         await createBoard(page, board)
 
         // An ordinary link names no sites, so there is nothing to embed and no
@@ -437,7 +415,7 @@ test.describe('Boards — a board opened by share link', () => {
     test('a real iframe on an allowed site renders the board', async ({ page }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        const board = `Framed allowed ${Date.now()}`
+        const board = `Framed allowed ${uniqueStamp()}`
         await createBoard(page, board)
         await addCard(page, 0, CARD_TITLE)
 
@@ -455,7 +433,7 @@ test.describe('Boards — a board opened by share link', () => {
     test('a real iframe on a site the link never named is blocked', async ({ page }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        const board = `Framed refused ${Date.now()}`
+        const board = `Framed refused ${uniqueStamp()}`
         await createBoard(page, board)
         await addCard(page, 0, CARD_TITLE)
 

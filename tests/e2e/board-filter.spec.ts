@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, cardsInColumn, createBoard } from './helpers'
+import { addCard, boardCard, cardsInColumn, createBoard, uniqueStamp } from './helpers'
 
 // Filtering and sorting, read back from the board: hidden cards are gone from
 // the column, the count says how many, the keyboard skips them, and a sort
@@ -14,7 +14,7 @@ const BRAVO = 'Bravo task'
 
 let run = 0
 async function freshBoard(page: Page): Promise<string> {
-    const name = `filter-${Date.now()}-${run++}`
+    const name = `filter-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     return name
 }

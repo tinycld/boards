@@ -2,6 +2,7 @@ import { ResponsiveToolbar, type ToolbarItem } from '@tinycld/core/components/Re
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import * as Clipboard from 'expo-clipboard'
 import { Link2, Maximize2, MoreHorizontal, PanelRight, Square, X } from 'lucide-react-native'
+import type { ReactNode } from 'react'
 import { View } from 'react-native'
 import type { CardEntry } from '../../lib/board-cards'
 import type { CardDisplayMode } from '../../stores/boards-ui-store'
@@ -42,23 +43,42 @@ interface CardHeaderToolbarProps {
  * Card actions menu as the row narrows, from the right. Close stays pinned at
  * the edge.
  */
-export function CardHeaderToolbar({
-    project,
-    entry,
-    canEdit,
-    onDismiss,
-    leadingItems,
-    onExpand,
-    onClose,
-    displayMode,
-    onToggleDisplayMode,
-}: CardHeaderToolbarProps) {
+export function CardHeaderToolbar(props: CardHeaderToolbarProps) {
+    // A viewer has no actions, so the component that queries for them (the
+    // card's types among them) is never mounted for one.
+    if (props.canEdit) return <EditableCardHeader {...props} />
+    return <CardHeaderRow {...props} />
+}
+
+function EditableCardHeader(props: CardHeaderToolbarProps) {
+    const { project, entry, onDismiss } = props
     const actions = useCardActions({
         card: entry.card,
         list: entry.list,
         projectId: project.id,
         onDismiss,
     })
+    return (
+        <CardHeaderRow
+            {...props}
+            moreMenu={<CardActionRows actions={actions} />}
+            dialogs={<CardActionDialogs actions={actions} isVisible />}
+        />
+    )
+}
+
+function CardHeaderRow({
+    project,
+    entry,
+    canEdit,
+    leadingItems,
+    onExpand,
+    onClose,
+    displayMode,
+    onToggleDisplayMode,
+    moreMenu,
+    dialogs,
+}: CardHeaderToolbarProps & { moreMenu?: ReactNode; dialogs?: ReactNode }) {
     const items = useCardHeaderItems({
         project,
         entry,
@@ -70,7 +90,6 @@ export function CardHeaderToolbar({
     })
     const rightItems = useCloseItem(onClose)
     const mutedColor = useThemeColor('muted')
-    const moreMenu = canEdit ? <CardActionRows actions={actions} /> : undefined
 
     return (
         <View className="pt-3 pb-2">
@@ -87,7 +106,7 @@ export function CardHeaderToolbar({
                 height={32}
                 className="pl-4 pr-3"
             />
-            <CardActionDialogs actions={actions} isVisible={canEdit} />
+            {dialogs}
         </View>
     )
 }

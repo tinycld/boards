@@ -126,10 +126,11 @@ const STICKY_HEADER = { position: 'sticky', top: 0, zIndex: 10 } as unknown as V
  * binding lasts for the mount, which is why CardDetail is keyed on the card id
  * rather than this being keyed itself.
  *
- * Returns two slots rather than one tree: the header has to be a DIRECT child
- * of CardDetail's ScrollView for `stickyHeaderIndices` to pin it on native, so
- * the caller places the halves separately. One hook still owns the editor, so
- * there is no second source of `commands` to keep in step.
+ * Returns two slots rather than one tree: the header is the card form's
+ * pinned row (DescriptionHeader), a direct child of the form's ScrollView so
+ * `stickyHeaderIndices` pins it, and the body is the description field's cell,
+ * so the caller places the halves separately. One hook still owns the editor,
+ * so there is no second source of `commands` to keep in step.
  */
 export function useDescriptionEditor({
     cardId,
@@ -241,10 +242,11 @@ export function useDescriptionEditor({
             },
             onSubmitShortcut: () => cancelRef.current(),
             onImageDrop,
-            // Undefined before the room is ready: useRichEditor treats a missing
-            // collab option as a plain local editor, which is exactly the
-            // non-collaborative fallback, and it starts collaborating the moment a
-            // doc arrives (the extension list rebuilds on the document identity).
+            // Undefined while the room has no doc: useRichEditor treats a missing
+            // collab option as a plain local editor, the non-collaborative
+            // fallback. The shared editor reads these options when a surface
+            // acquires it, not as they change, so a doc that arrives during an
+            // open session binds at the next acquire, not mid-session.
             //
             // `awareness` and `identity` resolve on their own schedules and are
             // deliberately NOT rebuild inputs — useRichEditor reads them live at
@@ -338,12 +340,13 @@ function DescriptionHeader({
         // editor never shifts under the caret. justify-center keeps the
         // 16px label optically centered in the 40px the toolbar needs.
         //
-        // Sticky lives HERE rather than on the toolbar: this row is always
-        // present, so there is always a box to pin. `position: sticky` is
-        // web-only (RN has no such value), hence the Platform guard —
-        // native pins the same row through CardDetail's
-        // stickyHeaderIndices. Every ancestor must also stay
-        // overflow-visible or RN-Web's default clipping silently kills it.
+        // This row is always present, so there is always a box to pin. The
+        // card form pins it on both platforms: it is the form's pinned row,
+        // a direct child of the form's ScrollView, which `stickyHeaderIndices`
+        // sticks (react-native-web through its own sticky wrapper). The
+        // web-only STICKY_HEADER style is inert inside that row, whose height
+        // is its own; it stays because the row's look on web was checked with
+        // it in place.
         <View
             className="justify-center bg-card"
             style={

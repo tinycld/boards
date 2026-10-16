@@ -10,6 +10,7 @@ import { BoardCanvas } from '../../components/BoardCanvas'
 import { BoardHeader } from '../../components/BoardHeader'
 import { BoardPresenceProvider } from '../../components/BoardPresenceProvider'
 import { BoardBacklog } from '../../components/backlog/BoardBacklog'
+import { CardCreateDialog } from '../../components/CardCreateDialog'
 import { CardSurface } from '../../components/CardSurface'
 import { NewBoardDialog } from '../../components/NewBoardDialog'
 import { ProjectWash } from '../../components/ProjectWash'
@@ -100,6 +101,7 @@ function BoardBody({ project, isArchived, cardCount }: BoardBodyProps) {
                 <ArchivedBoardBanner project={project} isVisible={isArchived} />
                 <BoardView project={project} viewMode={viewMode} />
                 <CardSurface project={project} />
+                <CardCreateDialog projectId={project.id} />
                 <ArchivedCardsPanel project={project} />
                 <NewBoardDialog />
             </View>

@@ -2,10 +2,10 @@ import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { CircleCheck, CircleDashed } from 'lucide-react-native'
 import { Pressable, Text, View } from 'react-native'
 import { useCreateCard } from '../../hooks/useCardMutations'
+import { useOpenRelatedCard } from '../../hooks/useOpenRelatedCard'
 import { isClosedCategory } from '../../lib/list-category'
 import { rankForAppend } from '../../lib/move'
 import { childrenOf } from '../../lib/subtasks'
-import { useBoardsUIStore } from '../../stores/boards-ui-store'
 import type { BoardCardView } from '../../types'
 import { CardComposer } from '../CardComposer'
 
@@ -112,7 +112,7 @@ export function DetailSubtasks({
  * would disagree with the board the moment someone picked a different one.
  */
 function SubtaskRow({ card }: { card: BoardCardView }) {
-    const openCard = useBoardsUIStore(s => s.openCard)
+    const openCard = useOpenRelatedCard()
     const mutedColor = useThemeColor('muted')
     const successColor = useThemeColor('success')
     const isDone = isClosedCategory(card.listCategory)
@@ -120,7 +120,7 @@ function SubtaskRow({ card }: { card: BoardCardView }) {
     return (
         <Pressable
             testID="boards-subtask-row"
-            onPress={() => openCard(card.id)}
+            onPress={() => openCard(card)}
             className="flex-row items-center gap-2 py-1.5 active:opacity-60"
         >
             {isDone ? (
@@ -129,7 +129,9 @@ function SubtaskRow({ card }: { card: BoardCardView }) {
                 <CircleDashed size={14} color={mutedColor} strokeWidth={2.2} />
             )}
             {card.key ? (
-                <Text className="text-[11px] font-medium text-muted">{card.key}</Text>
+                <Text testID="boards-card-key" className="text-[11px] font-medium text-muted">
+                    {card.key}
+                </Text>
             ) : null}
             <Text
                 className={`flex-1 text-[13px] ${isDone ? 'text-muted line-through' : 'text-foreground'}`}

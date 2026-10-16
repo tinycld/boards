@@ -5,6 +5,7 @@ import { SortableBoardContainer } from 'react-native-drax'
 import { useBoardCardReactions } from '../hooks/useBoardCardReactions'
 import { useBoardDnd } from '../hooks/useBoardDnd'
 import { useBoardShortcuts } from '../hooks/useBoardShortcuts'
+import { useFaceAttachmentsGate } from '../hooks/useFaceAttachmentsGate'
 import { useProjectRole } from '../hooks/useProjectRole'
 import { useReactorNames } from '../hooks/useReactorNames'
 import { useSelectionOrder } from '../hooks/useSelectionOrder'
@@ -28,6 +29,7 @@ export function BoardCanvas({ project }: { project: BoardProject }) {
     // decide delete-vs-insert, and this is where they already are. The tiles
     // get a stable callback, not a query.
     const toggleReaction = useToggleCardReaction(project.id, currentUserId)
+    const acceptsFiles = useFaceAttachmentsGate()
 
     const { canEdit } = useProjectRole(project.id)
     const dnd = useBoardDnd(project, canEdit)
@@ -46,8 +48,13 @@ export function BoardCanvas({ project }: { project: BoardProject }) {
             draxViewProps={dnd.monitorProps}
         >
             <ScrollView
+                testID="boards-board"
                 ref={dnd.canvasRef}
                 horizontal
+                // A tap on a column's buttons (the composer's expand) acts at
+                // once instead of only dismissing the keyboard, which would
+                // blur — and close — an empty composer first.
+                keyboardShouldPersistTaps="handled"
                 className="flex-1"
                 onScroll={dnd.onCanvasScroll}
                 scrollEventThrottle={32}
@@ -94,6 +101,7 @@ export function BoardCanvas({ project }: { project: BoardProject }) {
                             registerMeasure={dnd.registerColumnMeasure}
                             canEdit={canEdit}
                             agingDays={project.agingDays}
+                            acceptsFiles={acceptsFiles}
                             reactionsForCard={reactionsForCard}
                             onToggleReaction={toggleReaction}
                             reactorName={reactorName}

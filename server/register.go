@@ -4,6 +4,7 @@ import (
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
 
+	"tinycld.org/core/forms"
 	"tinycld.org/core/fts"
 	"tinycld.org/core/groups"
 	"tinycld.org/core/oauth"
@@ -11,43 +12,78 @@ import (
 	"tinycld.org/core/sharequota"
 )
 
-// ftsConfig is the cards FTS index/search config, driving both the index-sync
-// hooks and the /api/boards/search route. The fts_boards virtual table is created
-// by pb-migrations/1980000002; this only reads and writes it.
+// ftsConfigFor is the cards FTS index/search config, driving both the
+// index-sync hooks and the search routes. The fts_boards virtual table is
+// created by pb-migrations/2090000101; this only reads and writes it.
 //
 // description is markdown source rather than HTML, so it is indexed verbatim.
-var ftsConfig = fts.Config{
-	Slug:       "boards",
-	Collection: "boards_cards",
-	Table:      "fts_boards",
-	Columns: []fts.Column{
-		{FTS: "title", Field: "title"},
-		{FTS: "description", Field: "description"},
-	},
-	Scope: fts.MemberScope{
-		Table:       "boards_project_members",
-		MemberField: "project",
-		UserField:   "user",
-		RecordField: "project",
-	},
-	Output: []fts.OutputColumn{
-		{Name: "title"},
-		{Name: "project"},
-		{Name: "list"},
-		// The card key's numeric half, so a palette row can show OTTER-123.
-		//
-		// Deliberately an OUTPUT column and NOT an indexed one. FTS5 cannot
-		// ALTER-add a column, so indexing the key would mean dropping,
-		// recreating and backfilling fts_boards — real risk to the only search
-		// index boards has — and it would not even work well: `porter
-		// unicode61` splits OTTER-123 on the hyphen, so the full key would
-		// match every card on the OTTER board plus everything mentioning
-		// "123". Exact-key lookup belongs to the URL resolver
-		// (hooks/useCardRoute.ts), which is the right shape for it.
-		{Name: "number", Type: "number"},
-	},
-	// Someone typing `/` wants active work, not history.
-	ExcludeField: "archived",
+// fields is computed: what a card's custom values mean depends on its type,
+// another row, which is why the config needs the app.
+func ftsConfigFor(app core.App) fts.Config {
+	return fts.Config{
+		Slug:       "boards",
+		Collection: "boards_cards",
+		Table:      "fts_boards",
+		Columns: []fts.Column{
+			{FTS: "title", Field: "title"},
+			{FTS: "description", Field: "description"},
+			{FTS: "fields", Text: customFieldsText(app)},
+		},
+		Scope: fts.MemberScope{
+			Table:       "boards_project_members",
+			MemberField: "project",
+			UserField:   "user",
+			RecordField: "project",
+		},
+		Output: []fts.OutputColumn{
+			{Name: "title"},
+			{Name: "project"},
+			{Name: "list"},
+			// The card key's numeric half, so a palette row can show OTTER-123.
+			//
+			// Deliberately an OUTPUT column and NOT an indexed one. FTS5 cannot
+			// ALTER-add a column, so indexing the key would mean dropping,
+			// recreating and backfilling fts_boards — real risk to the only search
+			// index boards has — and it would not even work well: `porter
+			// unicode61` splits OTTER-123 on the hyphen, so the full key would
+			// match every card on the OTTER board plus everything mentioning
+			// "123". Exact-key lookup belongs to the URL resolver
+			// (hooks/useCardRoute.ts), which is the right shape for it.
+			{Name: "number", Type: "number"},
+		},
+		// Someone typing `/` wants active work, not history.
+		ExcludeField: "archived",
+	}
+}
+
+// shareVisitorFormsClause vouches, to core's forms read rules, for an
+// anonymous share-link visitor: a form is readable when a card of a shared
+// board uses it. A shared board's card renders through its type, so the
+// visitor needs that type's labels and rules, and no other form.
+//
+// It is written from the forms record's side, and each link term walks the
+// same path to one share link, so PocketBase evaluates them on the same joined
+// row (an inactive link with the right token beside an active one with another
+// token admits no one). The terms:
+//   - the header is set. Without it the token term compares a link's token
+//     with NULL, which PocketBase rewrites to also match a missing value, and
+//     a form no shared card uses joins only missing link rows. is_active would
+//     refuse that row as well, but the clause must not rest on a side effect
+//     of another term;
+//   - then 1980000003's token check, as the token() helper in
+//     pb-migrations/2040000001 writes it. token: the visitor carries this
+//     link's token (lib/share-token.ts sends it as X-Share-Token on every
+//     request); is_active: the owner has not turned the link off; expires_at:
+//     the link has no expiry, or it has not passed.
+const shareVisitorFormsClause = `@request.headers.x_share_token != ""` +
+	` && boards_cards_via_form.project.boards_share_links_via_project.token ?= @request.headers.x_share_token` +
+	` && boards_cards_via_form.project.boards_share_links_via_project.is_active ?= true` +
+	` && (boards_cards_via_form.project.boards_share_links_via_project.expires_at ?= "" || boards_cards_via_form.project.boards_share_links_via_project.expires_at ?> @now)`
+
+// registerFormReaders is the one place boards vouches for anonymous form
+// readers, so the tests that compose the rules register what Register does.
+func registerFormReaders() {
+	forms.RegisterPublicReader(shareVisitorFormsClause)
 }
 
 // Register wires server-side behavior for the Boards package. Core's generator
@@ -107,6 +143,11 @@ func registerShared(app *pocketbase.PocketBase) {
 	}); err != nil {
 		shareLog.Error("could not register the attachment download meter", "err", err)
 	}
+
+	// A share-link visitor reads the types of the shared board's cards. Core's
+	// forms rules need a session and cannot name us, so we hand it the clause
+	// that vouches for the visitor; it is composed in on serve.
+	registerFormReaders()
 
 	// What happens to a departing user's boards data: authorship reassigns,
 	// and a board the leaver alone owns gets a new owner. See offboard.go.
@@ -192,7 +233,7 @@ func registerShared(app *pocketbase.PocketBase) {
 	// would also mount GET /api/boards/search. Boards has no in-app search box,
 	// so the federated /api/search is its only reader; a per-package route
 	// would be dead on arrival.
-	fts.RegisterSync(app, ftsConfig)
+	fts.RegisterSync(app, ftsConfigFor(app))
 
 	// Boards' contribution to the federated GET /api/search. Registered here
 	// rather than in Register so a hosted tenant and a self-hosted deployment

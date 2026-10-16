@@ -1,6 +1,15 @@
 import { expect, type Page, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, cardSurface, closeCardPeek, createBoard, openCard } from './helpers'
+import {
+    addCard,
+    boardCard,
+    cardSurface,
+    closeCardPeek,
+    createBoard,
+    openCard,
+    uniqueNumber,
+    uniqueStamp,
+} from './helpers'
 
 // Peek vs. modal: which surface a card opens on, and that the choice sticks.
 //
@@ -15,8 +24,8 @@ import { addCard, boardCard, cardSurface, closeCardPeek, createBoard, openCard }
 let run = 0
 
 async function freshBoard(page: Page, label: string): Promise<string> {
-    const key = `MODE${(Date.now() % 10000) + run}`
-    await createBoard(page, `mode-${label}-${Date.now()}-${run++}`, key)
+    const key = `MODE${(uniqueNumber() % 10000) + run}`
+    await createBoard(page, `mode-${label}-${uniqueStamp()}-${run++}`, key)
     return key
 }
 

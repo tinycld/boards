@@ -1,0 +1,368 @@
+// @vitest-environment happy-dom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { OverlayProvider } from '@tinycld/core/ui/overlay'
+import type { ReactNode } from 'react'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+
+afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+})
+
+// The full-form dialog over local-only collections: the forms store offers a
+// default "Card" type and a "Bug" type that adds a required Severity select,
+// and the card and its checklist rows land in their own stores.
+
+type StoreRow = { id: string } & Record<string, unknown>
+
+const h = vi.hoisted(() => ({
+    stores: {} as Record<string, { toArray: StoreRow[] }>,
+}))
+
+vi.mock('@tinycld/core/lib/auth', () => ({
+    useAuth: () => ({ user: { id: 'u1' }, isLoggedIn: true }),
+}))
+
+vi.mock('@tinycld/core/components/workspace/useBreakpoint', () => ({
+    useBreakpoint: () => 'desktop',
+}))
+
+// The host's UI module loads every section, and the reactions section's emoji
+// picker loads FlashList, whose CommonJS build reaches the real react-native.
+// No section renders before the card exists, so a list that draws nothing is enough.
+vi.mock('@shopify/flash-list', () => ({ FlashList: () => null }))
+
+vi.mock('@tinycld/core/lib/forms/use-form-hosts', async () => {
+    const { hostDefListSchema } = await import('@tinycld/core/lib/forms/host')
+    const { default: hosts } = await import('../tinycld/boards/forms/hosts')
+    const [def] = hostDefListSchema.parse(hosts)
+    const host = {
+        ...def,
+        pkgSlug: 'boards',
+        pkgName: 'Boards',
+        ui: async () => (await import('../tinycld/boards/forms/ui')).default,
+    }
+    return { useFormHost: (key: string | undefined) => (key === host.key ? host : undefined) }
+})
+
+vi.mock('@tinycld/core/lib/pocketbase', async () => {
+    const { BasicIndex, createCollection, localOnlyCollectionOptions } = await import(
+        '@tanstack/db'
+    )
+    const { hostDefListSchema, defaultDefinitionFor } = await import('@tinycld/core/lib/forms/host')
+    const { default: hosts } = await import('../tinycld/boards/forms/hosts')
+    const [host] = hostDefListSchema.parse(hosts)
+    const base = defaultDefinitionFor(host)
+    const severity = {
+        key: 'severity',
+        kind: 'select',
+        page: 'main',
+        label: 'Severity',
+        width: 'full',
+        required: true,
+        hidden: false,
+        options: [
+            { value: 'low', label: 'Low' },
+            { value: 'high', label: 'High' },
+        ],
+    }
+    const form = (
+        id: string,
+        name: string,
+        order: number,
+        definition: unknown,
+        archived = false
+    ) => ({
+        id,
+        host: host.key,
+        name,
+        slug: name.toLowerCase(),
+        is_default: order === 0,
+        archived,
+        order,
+        definition,
+    })
+    const user = (id: string, name: string) => ({
+        id,
+        name,
+        email: `${id}@test.local`,
+        avatar: '',
+        avatar_crop: '',
+        avatar_color: '',
+        avatar_emoji: '',
+    })
+    const mk = (id: string, initialData: { id: string }[]) => {
+        const collection = createCollection({
+            ...localOnlyCollectionOptions({ id, getKey: (r: { id: string }) => r.id, initialData }),
+            autoIndex: 'eager',
+            defaultIndexType: BasicIndex,
+        })
+        return Object.assign(collection, { fetchRelations: () => collection })
+    }
+    Object.assign(h.stores, {
+        forms: mk('forms', [
+            form('f-card', 'Card', 0, base),
+            form('f-bug', 'Bug', 1, { ...base, fields: [...base.fields, severity] }),
+            // A default the card's priority column does not store: the form
+            // accepts it (priority is a custom built-in), the card row cannot.
+            form('f-odd', 'Odd', 2, { ...base, defaults: { priority: 'critical' } }),
+            // Archived types are not offered, so no pill shows for it.
+            form('f-old', 'Retired', 3, base, true),
+        ]),
+        boards_projects: mk('boards_projects', [
+            { id: 'p1', name: 'Otters', slug: 'OTTER', sprints_enabled: false },
+        ]),
+        boards_labels: mk('boards_labels', [
+            { id: 'l1', project: 'p1', name: 'Urgent', color: '#ff0000' },
+            { id: 'l2', project: 'p1', name: 'Design', color: '#0000ff' },
+        ]),
+        boards_epics: mk('boards_epics', []),
+        boards_sprints: mk('boards_sprints', []),
+        boards_cards: mk('boards_cards', []),
+        boards_checklist_items: mk('boards_checklist_items', []),
+        // Two board members, and an org user who is not on the board.
+        users: mk('users', [
+            user('u1', 'Maya Kim'),
+            user('u2', 'Jonas Reyes'),
+            user('u3', 'Org Outsider'),
+        ]),
+        boards_project_members: mk('boards_project_members', [
+            { id: 'm1', project: 'p1', user: 'u1' },
+            { id: 'm2', project: 'p1', user: 'u2' },
+        ]),
+    })
+    return {
+        useStore: (...names: string[]) => names.map(n => h.stores[n]),
+        // Core's user picker resolves its collection by name.
+        collectionByName: (name: string) => h.stores[name],
+        // A picked member's avatar asks for a file URL; signed out, it asks nothing.
+        pb: {
+            authStore: { isValid: false },
+            files: { getURL: () => '', getToken: async () => '' },
+        },
+    }
+})
+
+import { log } from '@tinycld/core/lib/logger'
+import { CardCreateDialog } from '../tinycld/boards/components/CardCreateDialog'
+import { useCardCreateStore } from '../tinycld/boards/stores/card-create-store'
+
+const q = (container: ParentNode, id: string) =>
+    container.querySelector(`[testID="${id}"]`) as HTMLElement | null
+
+function wrapper({ children }: { children: ReactNode }) {
+    return (
+        <QueryClientProvider client={new QueryClient()}>
+            <OverlayProvider>{children}</OverlayProvider>
+        </QueryClientProvider>
+    )
+}
+
+/** Core's select input is a list of option buttons: press the one with this label. */
+async function pickSelect(container: HTMLElement, key: string, label: string) {
+    const input = await waitFor(() => {
+        const found = q(container, `form-input-${key}`)
+        if (!found) throw new Error(`no input for ${key}`)
+        return found
+    })
+    const option = [...input.querySelectorAll('rn-pressable')].find(el => el.textContent === label)
+    if (!option) throw new Error(`no option "${label}" in ${key}`)
+    fireEvent.click(option)
+}
+
+function addChecklistItem(container: HTMLElement, text: string) {
+    const input = q(container, 'form-input-checklist-new') as HTMLElement
+    fireEvent.input(input, { target: { value: text } })
+    fireEvent(input, new Event('SubmitEditing'))
+}
+
+function typeTitle(container: HTMLElement, title: string) {
+    fireEvent.input(q(container, 'form-input-title') as HTMLElement, { target: { value: title } })
+}
+
+const byLabel = (container: ParentNode, label: string) =>
+    container.querySelector(`[accessibilityLabel="${label}"]`) as HTMLElement | null
+
+// The host's `ui()` is a dynamic import of forms/ui, whose module graph takes
+// most of a second to load cold when the whole suite runs in parallel: longer
+// than `waitFor`'s default, measured at 0.8-1 s. Loading it once up front
+// leaves the waits below measuring the hook, not the module load.
+beforeAll(async () => {
+    await import('../tinycld/boards/forms/ui')
+})
+
+describe('CardCreateDialog', () => {
+    it('renders nothing while no column is targeted', () => {
+        useCardCreateStore.getState().close()
+        const { container } = render(<CardCreateDialog projectId="p1" />, { wrapper })
+        expect(q(container, 'card-create-dialog')).toBeNull()
+    })
+
+    it('stays closed on a board other than the one the target names', () => {
+        useCardCreateStore.getState().open({ projectId: 'pA', listId: 'lA', position: 'a0' })
+        const { container } = render(<CardCreateDialog projectId="p1" />, { wrapper })
+        expect(q(container, 'card-create-dialog')).toBeNull()
+    })
+
+    it('clears the target when it leaves the screen', () => {
+        useCardCreateStore.getState().open({ projectId: 'p1', listId: 'l1', position: 'a0' })
+        const { unmount } = render(<CardCreateDialog projectId="p1" />, { wrapper })
+        unmount()
+        expect(useCardCreateStore.getState().target).toBeNull()
+    })
+
+    it('closes on cancel, and again once the card is created', async () => {
+        useCardCreateStore.getState().close()
+        const { container } = render(<CardCreateDialog projectId="p1" />, { wrapper })
+        act(() =>
+            useCardCreateStore.getState().open({ projectId: 'p1', listId: 'l1', position: 'a1' })
+        )
+        await waitFor(() => expect(q(container, 'form-input-title')).toBeTruthy())
+        expect((q(container, 'form-input-title') as HTMLInputElement).value).toBe('')
+
+        fireEvent.click(byLabel(container, 'Close') as HTMLElement)
+        await waitFor(() => expect(q(container, 'card-create-dialog')).toBeNull())
+
+        act(() =>
+            useCardCreateStore.getState().open({ projectId: 'p1', listId: 'l1', position: 'a1' })
+        )
+        await waitFor(() => expect(q(container, 'form-input-title')).toBeTruthy())
+        fireEvent.input(q(container, 'form-input-title') as HTMLElement, {
+            target: { value: 'Signup fails' },
+        })
+        await waitFor(() => expect(q(container, 'form-wizard-next')).toBeTruthy())
+        fireEvent.click(q(container, 'form-wizard-next') as HTMLElement)
+        await waitFor(() => expect(useCardCreateStore.getState().target).toBeNull())
+        expect(
+            h.stores.boards_cards.toArray.some(
+                c => c.title === 'Signup fails' && c.position === 'a1'
+            )
+        ).toBe(true)
+    })
+
+    it("offers the board's members, not the org, as assignees and reporter", async () => {
+        useCardCreateStore.getState().open({ projectId: 'p1', listId: 'l1', position: 'a0' })
+        const { container, getByText, queryByText } = render(<CardCreateDialog projectId="p1" />, {
+            wrapper,
+        })
+        const reporter = await waitFor(() => {
+            const cell = q(container, 'form-field-reporter')
+            if (!cell) throw new Error('no reporter cell')
+            return cell
+        })
+        typeTitle(container, 'Pick people')
+        // The reporter menu closes on a pick; the assignee menu stays open for
+        // the next one, so it goes second.
+        fireEvent.click(getByText('Set reporter', { container: reporter }) as HTMLElement)
+        await waitFor(() => expect(queryByText('Jonas Reyes')).toBeTruthy())
+        expect(queryByText('Org Outsider')).toBeNull()
+        fireEvent.click(getByText('Jonas Reyes'))
+        await waitFor(() => expect(queryByText('Maya Kim')).toBeNull())
+
+        const assignees = q(container, 'form-field-assignees') as HTMLElement
+        fireEvent.click(getByText('Assign', { container: assignees }) as HTMLElement)
+        await waitFor(() => expect(queryByText('Maya Kim')).toBeTruthy())
+        expect(queryByText('Org Outsider')).toBeNull()
+        fireEvent.click(getByText('Maya Kim'))
+
+        fireEvent.click(q(container, 'form-wizard-next') as HTMLElement)
+        await waitFor(() => expect(useCardCreateStore.getState().target).toBeNull())
+        const card = h.stores.boards_cards.toArray.find(c => c.title === 'Pick people')
+        expect(card).toMatchObject({ assignees: ['u1'], reporter: 'u2' })
+    })
+
+    it('creates a card of the picked type with its custom values and checklist rows', async () => {
+        useCardCreateStore.getState().open({ projectId: 'p1', listId: 'l1', position: 'a0' })
+        const { container, getByText, queryAllByText } = render(
+            <CardCreateDialog projectId="p1" />,
+            { wrapper }
+        )
+        await waitFor(() => expect(q(container, 'form-field-title')).toBeTruthy())
+        typeTitle(container, 'Login fails')
+        expect(container.querySelectorAll('[accessibilityRole="tab"]')).toHaveLength(3)
+
+        fireEvent.click(getByText('Bug'))
+        await waitFor(() => expect(q(container, 'form-field-severity')).toBeTruthy())
+        expect((q(container, 'form-input-title') as HTMLInputElement).value).toBe('Login fails')
+
+        // Create with Severity empty: the form refuses and says why.
+        fireEvent.click(q(container, 'form-wizard-next') as HTMLElement)
+        // Once in the error summary and once under the field.
+        await waitFor(() => expect(queryAllByText('Severity is required')).toHaveLength(2))
+        expect(useCardCreateStore.getState().target).not.toBeNull()
+
+        await pickSelect(container, 'severity', 'High')
+        addChecklistItem(container, 'Reproduce on staging')
+        fireEvent.click(q(container, 'form-wizard-next') as HTMLElement)
+        await waitFor(() => expect(useCardCreateStore.getState().target).toBeNull())
+
+        const card = h.stores.boards_cards.toArray.find(c => c.title === 'Login fails')
+        expect(card).toMatchObject({
+            project: 'p1',
+            list: 'l1',
+            position: 'a0',
+            form: 'f-bug',
+            fields: { severity: 'high' },
+        })
+        const items = h.stores.boards_checklist_items.toArray
+        expect(items).toEqual([
+            expect.objectContaining({
+                card: card?.id,
+                project: 'p1',
+                title: 'Reproduce on staging',
+                is_done: false,
+            }),
+        ])
+    })
+
+    it('logs a column value the card cannot store and keeps the dialog open', async () => {
+        const logError = vi.spyOn(log, 'error').mockImplementation(() => {})
+        useCardCreateStore.getState().open({ projectId: 'p1', listId: 'l1', position: 'a0' })
+        const { container, getByText } = render(<CardCreateDialog projectId="p1" />, {
+            wrapper,
+        })
+        await waitFor(() => expect(q(container, 'form-field-title')).toBeTruthy())
+        typeTitle(container, 'Odd one')
+        fireEvent.click(getByText('Odd'))
+        const selected = (id: string) => q(container, id)?.getAttribute('aria-selected') === 'true'
+        await waitFor(() => expect(selected('card-type-f-odd')).toBe(true))
+        expect(selected('card-type-f-card')).toBe(false)
+
+        fireEvent.click(q(container, 'form-wizard-next') as HTMLElement)
+        await waitFor(() => expect(logError).toHaveBeenCalledTimes(1))
+        expect(logError.mock.calls[0][0]).toBe('boards.create')
+        expect(useCardCreateStore.getState().target).not.toBeNull()
+        expect(q(container, 'card-create-dialog')).toBeTruthy()
+        expect(h.stores.boards_cards.toArray.some(c => c.title === 'Odd one')).toBe(false)
+    })
+
+    it('stores the labels picked in the dialog on the card', async () => {
+        useCardCreateStore.getState().open({ projectId: 'p1', listId: 'l1', position: 'a0' })
+        const { container, getByText } = render(<CardCreateDialog projectId="p1" />, { wrapper })
+        const cell = await waitFor(() => {
+            const found = q(container, 'form-field-labels')
+            if (!found) throw new Error('no labels cell')
+            return found
+        })
+        typeTitle(container, 'Labelled')
+        fireEvent.click(getByText('Add label', { container: cell }) as HTMLElement)
+        await waitFor(() => expect(getByText('Urgent')).toBeTruthy())
+        fireEvent.click(getByText('Urgent'))
+        await waitFor(() => expect(getByText('Design')).toBeTruthy())
+        fireEvent.click(getByText('Design'))
+
+        fireEvent.click(q(container, 'form-wizard-next') as HTMLElement)
+        await waitFor(() => expect(useCardCreateStore.getState().target).toBeNull())
+        const card = h.stores.boards_cards.toArray.find(c => c.title === 'Labelled')
+        expect(card?.labels).toEqual(['l1', 'l2'])
+    })
+
+    it('says so when the host has no card types', async () => {
+        const forms = h.stores.forms as unknown as { delete: (ids: string[]) => void }
+        forms.delete(h.stores.forms.toArray.map(row => row.id))
+        useCardCreateStore.getState().open({ projectId: 'p1', listId: 'l1', position: 'a0' })
+        const { getByText } = render(<CardCreateDialog projectId="p1" />, { wrapper })
+        await waitFor(() => expect(getByText(/No card types are available/)).toBeTruthy())
+    })
+})

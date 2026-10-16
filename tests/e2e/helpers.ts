@@ -1,5 +1,72 @@
 import type { Locator, Page } from '@playwright/test'
-import { expect } from '@playwright/test'
+import { expect, test } from '@playwright/test'
+
+/**
+ * Type `text` at the very end of a collaborative editor inside `surface`.
+ *
+ * Gated on the editor being BOUND and EDITABLE: `data-collab-ready` is set on
+ * an instance built with the shared document, and `contenteditable` is
+ * ProseMirror's own word on whether it takes input. Typing before both hold
+ * sends keys to a surface that drops them, which is what the retry loops this
+ * replaced were papering over. Moving to the end first keeps the typed text
+ * contiguous whatever the click landed on.
+ */
+export async function typeIntoCollab(page: Page, surface: Locator, text: string) {
+    const editor = surface.locator('.ProseMirror[data-collab-ready="true"][contenteditable="true"]')
+    await expect(editor).toBeVisible()
+    await editor.click()
+    await page.keyboard.press('ControlOrMeta+End')
+    await page.keyboard.type(text)
+}
+
+/**
+ * The text of a collaborative surface: its editor when one is open, else
+ * whatever `surface` renders in its place.
+ *
+ * Collaborator carets are removed first. The caret extension injects each
+ * remote user's NAME into the document as a widget, so raw text would read
+ * "Confirmed." split around "Test User" and every assertion would depend on who
+ * else happens to be connected.
+ */
+export async function collabText(surface: Locator): Promise<string> {
+    return surface.first().evaluate(element => {
+        const root = element.querySelector('.ProseMirror') ?? element
+        const clone = root.cloneNode(true) as HTMLElement
+        for (const caret of clone.querySelectorAll(
+            '[class*="collaboration-carets"], [class*="collaboration-cursor"]'
+        )) {
+            caret.remove()
+        }
+        return clone.textContent ?? ''
+    })
+}
+
+/**
+ * Wait for a collaborative surface to contain `text`. Edits arrive over a
+ * WebSocket, so this polls the read rather than asserting once.
+ */
+export async function expectCollabText(surface: Locator, text: string, timeout = 15_000) {
+    await expect.poll(() => collabText(surface), { timeout }).toContain(text)
+}
+
+/**
+ * A suffix no concurrently running test shares.
+ *
+ * `Date.now()` alone is not unique: under `--repeat-each`, two workers start
+ * the same test in the same millisecond and mint the same board name, and so
+ * the same key, which the database rejects as a duplicate. The worker index
+ * separates the copies that run at the same time; the clock separates the ones
+ * one worker runs in turn.
+ */
+export function uniqueStamp(): string {
+    return `${Date.now()}-${test.info().workerIndex}`
+}
+
+/** `uniqueStamp` as a number, for names built with arithmetic. The worker
+ * index lives in the last two digits, so a modulus keeps it. */
+export function uniqueNumber(): number {
+    return Date.now() * 100 + test.info().workerIndex
+}
 
 /**
  * A board key that no other spec will pick.
@@ -92,11 +159,15 @@ export function cardSurface(page: Page, mode: CardSurfaceMode = 'peek'): Locator
 }
 
 /** Open a card and wait for its body — the click alone proves nothing
- *  about the detail having mounted. */
+ *  about the detail having mounted.
+ *
+ *  The heading is looked for inside the card's surface: a screen visited
+ *  earlier can stay mounted behind the board (the forms builder's canvas has a
+ *  "Description" cell of its own), and a page-wide match would find it too. */
 export async function openCard(page: Page, title: string, mode: CardSurfaceMode = 'peek') {
     await boardCard(page, title).click()
     await expect(cardSurface(page, mode)).toBeVisible()
-    await expect(page.getByText('Description', { exact: true })).toBeVisible()
+    await expect(cardSurface(page, mode).getByText('Description', { exact: true })).toBeVisible()
 }
 
 /**
@@ -114,6 +185,31 @@ export async function openCard(page: Page, title: string, mode: CardSurfaceMode 
 export async function closeCardPeek(page: Page, mode: CardSurfaceMode = 'peek') {
     await page.getByRole('button', { name: 'Close' }).click()
     await expect(cardSurface(page, mode)).toHaveCount(0)
+}
+
+/**
+ * File `title` as a sub-task of `parentTitle` through the parent's peek, and
+ * close the peek again.
+ *
+ * The section is opt-in: on a card with NO sub-tasks yet it is collapsed
+ * behind its chip, and revealing it opens the composer in the same click. A
+ * card that already has one keeps the section open, so the in-section
+ * composer button is the one to press. This helper files both the first
+ * sub-task and the second.
+ */
+export async function addSubtask(page: Page, parentTitle: string, title: string) {
+    await openCard(page, parentTitle)
+    const peek = cardSurface(page)
+    const inSection = peek.getByRole('button', { name: 'Add sub-task' })
+    const chip = peek.getByTestId('boards-section-chips').getByRole('button', {
+        name: 'Sub-tasks',
+    })
+    await (await sectionControl(inSection, chip)).click()
+    await peek.getByPlaceholder('What needs doing?').fill(title)
+    await page.keyboard.press('Enter')
+    // The row is what proves the card exists, not the composer clearing.
+    await expect(peek.getByTestId('boards-subtask-row').filter({ hasText: title })).toBeVisible()
+    await closeCardPeek(page)
 }
 
 /**
@@ -624,8 +720,8 @@ export async function dragCardToSection(page: Page, row: Locator, sectionTitle: 
  * an icon and a word of room, the menu row a full phrase.
  */
 export async function clickBulkAction(page: Page, testID: string, label: string) {
-    const onBar = page.getByTestId(testID)
-    if (await onBar.isVisible().catch(() => false)) {
+    const onBar = await fittedBulkControl(page, testID)
+    if ((await onBar.count()) > 0) {
         await onBar.click()
         return
     }
@@ -643,13 +739,25 @@ export async function clickBulkAction(page: Page, testID: string, label: string)
  * caller ends up looking at the same rows and picks by name.
  */
 export async function openBulkPicker(page: Page, testID: string, label: string) {
-    const onBar = page.getByTestId(testID)
-    if (await onBar.isVisible().catch(() => false)) {
+    const onBar = await fittedBulkControl(page, testID)
+    if ((await onBar.count()) > 0) {
         await onBar.click()
         return
     }
     await openBulkMore(page)
     await page.getByRole('menuitem', { name: label, exact: true }).hover()
+}
+
+/**
+ * The bulk bar's control `testID`, once the bar has fitted its items to its
+ * width. Until then every item is rendered at zero opacity (which a visibility
+ * check does not see), and once fitted a folded item leaves the DOM, so the
+ * opacity is the signal that makes "is it on the bar" a settled question.
+ */
+async function fittedBulkControl(page: Page, testID: string) {
+    const bar = page.getByTestId('boards-bulk-bar')
+    await expect(bar.getByTestId('toolbar-row').first()).toHaveCSS('opacity', '1')
+    return bar.getByTestId(testID)
 }
 
 /** The bulk bar's own overflow trigger, scoped so it never matches the header's. */
@@ -677,4 +785,122 @@ export async function pickEmoji(page: Page, unified: string, query?: string) {
     const cell = page.getByTestId(`emoji-pick-${unified}`)
     await cell.waitFor({ state: 'visible' })
     await cell.click()
+}
+
+/**
+ * Open a board from the sidebar by name and wait for its header to name it.
+ * For a board with no cards yet, which `openBoard` cannot gate on.
+ */
+export async function openBoardNamed(page: Page, name: string) {
+    await page.getByTestId('package-sidebar-mounted').getByText(name, { exact: true }).click()
+    await expect(page.getByTestId('boards-board-name').filter({ visible: true })).toHaveText(name)
+}
+
+/**
+ * The control that reveals an opt-in section: the in-section button once the
+ * section is open, else its chip. Waits for one of them first, so the choice
+ * is made on a rendered card and not a half-built one.
+ */
+export async function sectionControl(inSection: Locator, chip: Locator): Promise<Locator> {
+    await expect(inSection.or(chip).first()).toBeVisible()
+    return (await inSection.count()) > 0 ? inSection : chip
+}
+
+/**
+ * Open the full create form from a column's menu ("New card…"), then type the
+ * title into the dialog's own title field.
+ */
+export async function openCreateDialog(page: Page, columnIndex: number, title: string) {
+    await page
+        .getByRole('button', { name: / list actions$/ })
+        .nth(columnIndex)
+        .click()
+    await page.getByTestId('boards-column-new-card').click()
+    const dialog = page.getByTestId('card-create-dialog')
+    await expect(dialog).toBeVisible()
+    await dialog.getByTestId('form-input-title').fill(title)
+}
+
+/**
+ * Pick a card type in the open create dialog.
+ *
+ * The dialog shows pills for up to four types and a menu past that. Types are
+ * org-wide and every spec that builds one adds to them, so which of the two
+ * renders depends on what else ran first; both are waited for, then whichever
+ * rendered is used.
+ */
+export async function pickCardType(page: Page, name: string) {
+    const dialog = page.getByTestId('card-create-dialog')
+    const pill = dialog.getByRole('tab', { name, exact: true })
+    const menu = dialog.getByTestId('card-type-menu')
+    await expect(pill.or(menu)).toBeVisible()
+    // Pills and menu are exclusive, and one is rendered by now. The picker's
+    // rule (pills up to four types, a menu beyond) is checked against the
+    // options each one actually offers, not against the branch taken.
+    if ((await menu.count()) > 0) {
+        await menu.click()
+        const rows = page.getByTestId(/^card-type-menu-/)
+        await expect(rows.first()).toBeVisible()
+        expect(await rows.count()).toBeGreaterThan(4)
+        await rows.filter({ has: page.getByText(name, { exact: true }) }).click()
+        await expect(menu).toContainText(name)
+        return
+    }
+    expect(await dialog.getByRole('tab').count()).toBeLessThanOrEqual(4)
+    await pill.click()
+    await expect(pill).toHaveAttribute('aria-selected', 'true')
+}
+
+/** A choice field's options, in a form cell. */
+function choiceInput(scope: Page | Locator, key: string): Locator {
+    return scope.getByTestId(`form-input-${key}`)
+}
+
+/** Choose the option labelled `label` on a choice field. */
+export async function pickOption(scope: Page | Locator, key: string, label: string) {
+    await choiceInput(scope, key).getByText(label, { exact: true }).click()
+}
+
+/** The option a choice field has checked; its text is the option's label. */
+export function selectedOption(scope: Page | Locator, key: string): Locator {
+    return choiceInput(scope, key).locator('[aria-checked="true"]')
+}
+
+/** Change the open card's type from its actions menu. */
+export async function changeType(page: Page, name: string, mode: CardSurfaceMode = 'peek') {
+    await cardSurface(page, mode).getByRole('button', { name: 'Card actions' }).click()
+    await page.getByTestId('card-change-type').hover()
+    await page
+        .getByTestId(/^card-change-type-/)
+        .filter({ has: page.getByText(name, { exact: true }) })
+        .click()
+}
+
+export async function openShareDialog(page: Page, boardName: string) {
+    await page.getByRole('button', { name: 'Share board' }).click()
+    await expect(page.getByText(`Share “${boardName}”`)).toBeVisible()
+}
+
+/**
+ * Mint a link at `role` and return the URL the dialog offers.
+ *
+ * Reads the URL from the panel rather than the clipboard: clipboard access
+ * needs a permission grant that differs per browser, and the text the dialog
+ * shows IS what a person would copy. Leaves the dialog open.
+ */
+export async function mintShareLink(page: Page, boardName: string, role: string): Promise<string> {
+    await openShareDialog(page, boardName)
+
+    await expect(page.getByText('General access')).toBeVisible()
+    if (role !== 'Viewer') {
+        await page.getByRole('button', { name: 'Change what the link allows' }).click()
+        await page.getByRole('menuitem', { name: role }).click()
+    }
+    await page.getByRole('button', { name: 'Create share link' }).click()
+
+    const url = page.getByText(/\/p\/boards\//)
+    await expect(url).toBeVisible()
+    const text = (await url.textContent())?.trim()
+    if (!text) throw new Error('the dialog rendered no share URL')
+    return text
 }

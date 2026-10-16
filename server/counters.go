@@ -107,7 +107,9 @@ func recountCard(app core.App, cardID string) {
 		app.Logger().Warn("cards: comment recount failed", "card", cardID, "error", err)
 		return
 	}
-	attachmentCount, err := countRows(app, "boards_attachments", dbx.HashExp{"card": cardID})
+	// The card's own files: a file field's rows (`field` set) are the field's
+	// value, listed in its cell, not attachments the face counts.
+	attachmentCount, err := countRows(app, "boards_attachments", dbx.HashExp{"card": cardID, "field": ""})
 	if err != nil {
 		app.Logger().Warn("cards: attachment recount failed", "card", cardID, "error", err)
 		return

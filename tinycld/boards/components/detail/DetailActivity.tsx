@@ -149,6 +149,10 @@ function ActivityRow({ item, context }: { item: BoardActivity; context: Activity
     const avatar = useAvatarUrl(
         actor ? { id: actor.id, avatar: actor.avatar, avatar_crop: actor.avatarCrop } : null
     )
+    // A link row ends in the other card's key; it gets its own span so the key
+    // can be told apart from the rest of the sentence.
+    const linkedKey = linkedCardKey(item, context, text)
+    const leadText = linkedKey ? text.slice(0, -linkedKey.length) : text
     const who = actor ? `${actor.firstName} ${actor.lastName}`.trim() : 'Automatically'
     const timestamp = item.created ? formatRelativeDate(item.created) : 'Just now'
 
@@ -157,6 +161,7 @@ function ActivityRow({ item, context }: { item: BoardActivity; context: Activity
             <View className="w-[26px] items-center">
                 {actor ? (
                     <Avatar
+                        testID="boards-avatar"
                         name={`${actor.firstName} ${actor.lastName ?? ''}`.trim()}
                         email={actor.email}
                         colorKey={actor.id}
@@ -170,11 +175,25 @@ function ActivityRow({ item, context }: { item: BoardActivity; context: Activity
                 )}
             </View>
             <Text className="flex-1 min-w-0 text-[12.5px] text-muted" numberOfLines={2}>
-                <Text className="font-semibold text-foreground">{who}</Text> {text}
+                <Text className="font-semibold text-foreground">{who}</Text> {leadText}
+                <LinkedKey value={linkedKey} />
             </Text>
-            <Text className="shrink-0 text-[11.5px] text-muted">{timestamp}</Text>
+            <Text testID="boards-timestamp" className="shrink-0 text-[11.5px] text-muted">
+                {timestamp}
+            </Text>
         </View>
     )
+}
+
+function LinkedKey({ value }: { value: string }) {
+    if (!value) return null
+    return <Text testID="boards-card-key">{value}</Text>
+}
+
+function linkedCardKey(item: BoardActivity, context: ActivityContext, text: string): string {
+    if (item.kind !== 'link_added' && item.kind !== 'link_removed') return ''
+    const key = context.cards.find(card => card.id === item.to)?.key ?? ''
+    return key && text.endsWith(key) ? key : ''
 }
 
 function CommentCount({ count }: { count: number }) {
@@ -257,7 +276,9 @@ function CommentRow({
             <Text numberOfLines={1} className="shrink text-[13px] font-semibold text-foreground">
                 {comment.author.firstName} {comment.author.lastName}
             </Text>
-            <Text className="shrink-0 text-[11.5px] text-muted">{timestamp}</Text>
+            <Text testID="boards-timestamp" className="shrink-0 text-[11.5px] text-muted">
+                {timestamp}
+            </Text>
             <EditedMarker comment={comment} />
             <CommentActions
                 color={mutedColor}
@@ -274,6 +295,7 @@ function CommentRow({
     return (
         <View className="flex-row gap-2.5 group">
             <Avatar
+                testID="boards-avatar"
                 name={`${comment.author.firstName} ${comment.author.lastName ?? ''}`.trim()}
                 email={comment.author.email}
                 colorKey={comment.author.id}

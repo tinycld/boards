@@ -1,7 +1,8 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, createBoard, openCard } from './helpers'
+import { openEditor } from './editor-helpers'
+import { addCard, createBoard, openCard, uniqueStamp } from './helpers'
 
 // Comment bodies are stored as Markdown and render as Markdown, matching how
 // descriptions already behave. The composer is the rich editor: markdown
@@ -16,7 +17,7 @@ const CARD_TITLE = 'Ship the release'
 
 let run = 0
 async function freshBoard(page: Page, label: string): Promise<string> {
-    const name = `comment-${label}-${Date.now()}-${run++}`
+    const name = `comment-${label}-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     return name
 }
@@ -35,12 +36,10 @@ function composerEditor(page: Page) {
  * for the life of the card.
  */
 async function openComposer(page: Page) {
-    const editor = composerEditor(page)
-    if (!(await editor.isVisible())) {
-        await composer(page).getByRole('button', { name: 'Write a comment' }).click()
-    }
-    await expect(editor).toBeVisible()
-    return editor
+    return openEditor(
+        composerEditor(page),
+        composer(page).getByRole('button', { name: 'Write a comment' })
+    )
 }
 
 /**

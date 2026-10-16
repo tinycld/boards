@@ -1,7 +1,7 @@
 const manifest = {
     name: 'Boards',
     slug: 'boards',
-    version: '0.3.1',
+    version: '0.4.0',
     description: 'Kanban boards for tracking work across lists.',
     routes: { directory: 'screens' },
     // Share links open at /p/boards/<token>, outside the workspace shell
@@ -78,6 +78,10 @@ const manifest = {
         module: 'tinycld.org/packages/boards/cli',
     },
     collections: { register: 'collections', types: 'types' },
+    // Cards are a forms host: `forms` is the data the generator reads in Node
+    // (server/form_hosts.json), `forms-ui` the components the form
+    // renderer mounts. Settings → Forms lists "Card" under Boards.
+    forms: { hosts: 'forms', ui: 'forms-ui' },
     // Trigger + action catalog for workflow rules. The Go side
     // (server/automation.go) resolves owners through board membership and
     // gates card-completed to a list marked done.
@@ -87,7 +91,7 @@ const manifest = {
     // an issue" item is gated off entirely — boards was the only member missing
     // it, so the affordance simply did not exist here.
     repository: { url: 'https://github.com/tinycld/boards' },
-    peerVersions: { '@tinycld/core': '>=0.7.1 <0.8.0' },
+    peerVersions: { '@tinycld/core': '>=0.8.0 <0.9.0' },
 }
 
 export default manifest

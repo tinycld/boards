@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard, dragCardToSection } from './helpers'
+import { addCard, boardCard, createBoard, dragCardToSection, uniqueStamp } from './helpers'
 
 // The sprint scope: on a board that plans in sprints, the canvas, table and
 // timeline show one sprint's cards (the active one by default), and the
@@ -22,7 +22,7 @@ test.describe('Boards — sprint scope', () => {
     })
 
     test('the pill scopes the canvas to a sprint, the backlog, or everything', async ({ page }) => {
-        await createBoard(page, `scope-${Date.now()}-${run++}`)
+        await createBoard(page, `scope-${uniqueStamp()}-${run++}`)
         await page.getByLabel('Board actions').click()
         await page.getByTestId('boards-settings').click()
         await page.getByLabel('Plan work in sprints').click()

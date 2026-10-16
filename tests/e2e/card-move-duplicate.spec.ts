@@ -1,7 +1,15 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, cardsInColumn, createBoard } from './helpers'
+import {
+    addCard,
+    boardCard,
+    cardsInColumn,
+    createBoard,
+    sectionControl,
+    uniqueNumber,
+    uniqueStamp,
+} from './helpers'
 
 // Duplicating a card on its board and moving one to another board, read
 // back from the boards themselves: the copy sits beside the original with the
@@ -15,11 +23,11 @@ const CARD_TITLE = 'Plan the offsite'
 let run = 0
 async function freshBoard(page: Page, key: string): Promise<string> {
     run += 1
-    const name = `${key.toLowerCase()}-${Date.now()}-${run}`
+    const name = `${key.toLowerCase()}-${uniqueStamp()}-${run}`
     await createBoard(
         page,
         name,
-        `${key}${(Date.now() % 100000).toString(36)}`.toUpperCase().slice(0, 10)
+        `${key}${(uniqueNumber() % 100000).toString(36)}`.toUpperCase().slice(0, 10)
     )
     return name
 }
@@ -39,14 +47,10 @@ async function addChecklistItems(page: Page, titles: string[]) {
     // has an item keeps the section open, so the in-section button is the one to
     // press.
     const inSection = peek(page).getByRole('button', { name: 'Add checklist item' })
-    if (await inSection.isVisible().catch(() => false)) {
-        await inSection.click()
-    } else {
-        await peek(page)
-            .getByTestId('boards-section-chips')
-            .getByRole('button', { name: 'Checklist' })
-            .click()
-    }
+    const chip = peek(page).getByTestId('boards-section-chips').getByRole('button', {
+        name: 'Checklist',
+    })
+    await (await sectionControl(inSection, chip)).click()
     const input = peek(page).getByPlaceholder('Add an item')
     for (const title of titles) {
         await input.fill(title)

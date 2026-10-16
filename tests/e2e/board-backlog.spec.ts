@@ -1,6 +1,13 @@
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard, dragCardBelow, dragCardToSection } from './helpers'
+import {
+    addCard,
+    boardCard,
+    createBoard,
+    dragCardBelow,
+    dragCardToSection,
+    uniqueStamp,
+} from './helpers'
 
 // The backlog view: sprints are opt-in per board, so every spec enables them
 // through Board settings first, then plans a sprint and moves cards into it
@@ -9,7 +16,7 @@ import { addCard, boardCard, createBoard, dragCardBelow, dragCardToSection } fro
 
 let run = 0
 async function freshSprintBoard(page: import('@playwright/test').Page, label: string) {
-    const name = `sprint-${label}-${Date.now()}-${run++}`
+    const name = `sprint-${label}-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     await page.getByLabel('Board actions').click()
     await page.getByTestId('boards-settings').click()

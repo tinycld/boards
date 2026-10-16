@@ -6,7 +6,16 @@ import {
     signInAsCollaborator,
     TEST_COLLABORATOR_EMAIL,
 } from '@tinycld/core/e2e-helpers'
-import { addCard, closeCardPeek, createBoard, openBoard, openCard, shareBoard } from './helpers'
+import { openEditor } from './editor-helpers'
+import {
+    addCard,
+    closeCardPeek,
+    createBoard,
+    openBoard,
+    openCard,
+    shareBoard,
+    uniqueStamp,
+} from './helpers'
 
 // The formatting toolbar over a card description. It exists so the markdown
 // commands are discoverable by clicking rather than only by knowing the syntax.
@@ -23,7 +32,7 @@ const CARD_TITLE = 'Release checklist'
 
 let run = 0
 async function freshBoard(page: Page, label: string): Promise<string> {
-    const name = `toolbar-${label}-${Date.now()}-${run++}`
+    const name = `toolbar-${label}-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     return name
 }
@@ -43,10 +52,7 @@ function descriptionEditor(page: Page) {
  */
 async function openDescription(page: Page) {
     const editor = descriptionEditor(page)
-    if (await editor.isVisible().catch(() => false)) return editor
-    await page.getByRole('button', { name: 'Edit description' }).click()
-    await expect(editor).toBeVisible()
-    return editor
+    return openEditor(editor, page.getByRole('button', { name: 'Edit description' }))
 }
 
 function boldButton(page: Page) {

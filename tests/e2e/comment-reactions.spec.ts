@@ -6,7 +6,7 @@ import {
     signInAsCollaborator,
     TEST_COLLABORATOR_EMAIL,
 } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard, openBoard, pickEmoji } from './helpers'
+import { addCard, boardCard, createBoard, openBoard, pickEmoji, uniqueStamp } from './helpers'
 
 // Reactions end to end: the picker files one, the chip counts it and takes
 // it back, a second commentor's reaction raises the count for both, and a
@@ -121,7 +121,7 @@ test.describe('Boards — comment reactions', () => {
     test('a reaction is added, counted, kept through an edit, and taken back', async ({ page }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        await createBoard(page, `react-${Date.now()}`)
+        await createBoard(page, `react-${uniqueStamp()}`)
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
         await postComment(page, COMMENT)
@@ -150,7 +150,7 @@ test.describe('Boards — comment reactions', () => {
     test('any emoji can be found by search and used', async ({ page }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        await createBoard(page, `react-search-${Date.now()}`)
+        await createBoard(page, `react-search-${uniqueStamp()}`)
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
         await postComment(page, COMMENT)
@@ -169,7 +169,7 @@ test.describe('Boards — comment reactions', () => {
     test('a skin tone counts as its own reaction', async ({ page }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        await createBoard(page, `react-tone-${Date.now()}`)
+        await createBoard(page, `react-tone-${uniqueStamp()}`)
         await addCard(page, 0, CARD_TITLE)
         await openCard(page, CARD_TITLE)
         await postComment(page, COMMENT)
@@ -201,12 +201,12 @@ test.describe('Boards — comment reactions', () => {
     test('a second commentor raises the count', async ({ page }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        const boardName = `react-two-${Date.now()}`
+        const boardName = `react-two-${uniqueStamp()}`
         // A card title unique to this RUN. The notification body carries the
         // card's title, and that is what makes this test's notification
         // identifiable among the reaction notifications the earlier tests in
         // this file leave on the shared fixture account.
-        const cardTitle = `${CARD_TITLE} ${Date.now()}`
+        const cardTitle = `${CARD_TITLE} ${uniqueStamp()}`
         await createBoard(page, boardName)
         await addCard(page, 0, cardTitle)
         await addMemberToBoard(page, boardName, TEST_COLLABORATOR_EMAIL, 'Commentor')
@@ -259,7 +259,7 @@ test.describe('Boards — comment reactions', () => {
     test('a viewer only looks', async ({ page }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        const boardName = `react-view-${Date.now()}`
+        const boardName = `react-view-${uniqueStamp()}`
         await createBoard(page, boardName)
         await addCard(page, 0, CARD_TITLE)
         await addMemberToBoard(page, boardName, TEST_COLLABORATOR_EMAIL, 'Viewer')

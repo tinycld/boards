@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, columnHeader, createBoard } from './helpers'
+import { addCard, boardCard, columnHeader, createBoard, uniqueStamp } from './helpers'
 
 // List status end to end: the column menu sets it, the header and the card
 // faces read it back, the filter's status facet narrows by it, and the board
@@ -15,7 +15,7 @@ const BRAVO = 'Bravo task'
 
 let run = 0
 async function freshBoard(page: Page): Promise<string> {
-    const name = `status-${Date.now()}-${run++}`
+    const name = `status-${uniqueStamp()}-${run++}`
     await createBoard(page, name)
     return name
 }

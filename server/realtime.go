@@ -2,12 +2,10 @@ package boards
 
 import (
 	"fmt"
-	"log/slog"
 
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 
-	"tinycld.org/core/markdown"
 	"tinycld.org/core/realtime"
 	"tinycld.org/core/yjsdoc"
 )
@@ -24,7 +22,8 @@ import (
 //
 // The room carries BOTH ephemeral awareness and a shared document. That works
 // because a Y.Doc is a container of named types: the board's document holds one
-// XmlFragment per card (`card:<id>`), and awareness rides the same socket
+// XmlFragment per card description (`card:<id>`) and per collaborative field
+// of a card's type (`card:<id>:<md|html>:<key>`), and awareness rides the same socket
 // discriminated by message type. Presence and every open description therefore
 // cost one connection per person, not one per card.
 //
@@ -83,7 +82,7 @@ func registerRealtime(app core.App) *boardRealtime {
 	// and its checkpoint row removed.
 	app.OnRecordAfterDeleteSuccess("boards_projects").BindFunc(func(e *core.RecordEvent) error {
 		if err := realtime.DropRoom(roomKindBoards, e.Record.Id); err != nil {
-			slog.Warn("cards: could not drop the document of a deleted board",
+			activityLog.Warn("could not drop the document of a deleted board",
 				"projectID", e.Record.Id, "err", err)
 		}
 		return e.Next()
@@ -93,32 +92,63 @@ func registerRealtime(app core.App) *boardRealtime {
 }
 
 // makeFingerprint identifies the records a board's document was seeded
-// from. While the document exists (open or parked) the baselines say what
-// it believes is stored, and a change made to the records outside the room
-// shows up as a difference at the next open. With no document, the rows
-// themselves are hashed, normalized the way bootstrap normalizes them, so
-// a document seeded from these rows and flushed unchanged matches.
+// from. While the document exists (open or parked) the baselines of the
+// cards still on the board say what it believes is stored, and a change made
+// to the records outside the room shows up as a difference at the next open.
+// With no document, the rows themselves are hashed per fragment, normalized
+// the way bootstrap normalizes them, so a document seeded from these rows and
+// flushed unchanged matches.
+//
+// A card moved off the board or deleted while the document is parked leaves
+// the fingerprint, so the reopen re-seeds. That discards edits not flushed
+// when the room emptied (a park after a failed or skipped teardown flush, or a
+// client's offline edits to the parked document). It is accepted: re-seeding
+// on a change made outside the room is what the fingerprint is for, and
+// keeping the card in it would only make the stored checkpoint mismatch the
+// records once the document is evicted. See boardEntry.baseline.
 func makeFingerprint(app core.App, state *boardDocState) realtime.FingerprintFn {
 	return func(projectID string) (string, error) {
-		if fp, ok := state.fingerprint(projectID); ok {
-			return fp, nil
+		if state.has(projectID) {
+			onBoard, err := boardCardIDs(app, projectID)
+			if err != nil {
+				return "", fmt.Errorf("cards: fingerprint of board %s: %w", projectID, err)
+			}
+			// An eviction between the two reads falls through to the rows.
+			if fp, ok := state.fingerprint(projectID, onBoard); ok {
+				return fp, nil
+			}
 		}
-		records, err := app.FindRecordsByFilter(
-			"boards_cards",
-			"project = {:project} && description != ''",
-			"", 0, 0,
-			dbx.Params{"project": projectID},
-		)
+		records, err := seedableCards(app, projectID)
 		if err != nil {
 			return "", fmt.Errorf("cards: fingerprint of board %s: %w", projectID, err)
 		}
+		cache := newFormCache(app)
 		hashes := make(map[string]string, len(records))
 		for _, record := range records {
-			description := record.GetString("description")
-			hashes[record.Id] = hashMarkdown(markdown.FromPM(markdown.ToPM(description)))
+			for _, seed := range cardSeeds(record, cache) {
+				hashes[seed.fragment] = hashText(normalizedText(seed.format, seed.text))
+			}
 		}
 		return fingerprintOf(hashes), nil
 	}
+}
+
+// boardCardIDs lists every card on a board, whatever it holds: a card whose
+// text was emptied outside the room must still count, so its baseline shows
+// the change.
+func boardCardIDs(app core.App, projectID string) (map[string]bool, error) {
+	var ids []string
+	err := app.DB().Select("id").From("boards_cards").
+		Where(dbx.HashExp{"project": projectID}).
+		Column(&ids)
+	if err != nil {
+		return nil, err
+	}
+	onBoard := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		onBoard[id] = true
+	}
+	return onBoard, nil
 }
 
 // makeAuthorize gates connections: any non-disabled member of the board may

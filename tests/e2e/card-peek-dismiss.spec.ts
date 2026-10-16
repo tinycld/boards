@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, columnHeader, createBoard, openCard } from './helpers'
+import { addCard, boardCard, columnHeader, createBoard, openCard, uniqueStamp } from './helpers'
 
 /**
  * Pressing the board behind the peek dismisses it.
@@ -23,7 +23,7 @@ test.describe('the card peek', () => {
     })
 
     test('closes when the board behind it is pressed', async ({ page }) => {
-        await createBoard(page, `peek-dismiss-${Date.now()}`)
+        await createBoard(page, `peek-dismiss-${uniqueStamp()}`)
         await addCard(page, 0, 'Dismissable card')
         await openCard(page, 'Dismissable card')
 
@@ -53,7 +53,7 @@ test.describe('the card peek', () => {
      * landed on, so the panel ends up showing the second card.
      */
     test('a click on another card swaps the peek to it', async ({ page }) => {
-        await createBoard(page, `peek-swap-${Date.now()}`)
+        await createBoard(page, `peek-swap-${uniqueStamp()}`)
         await addCard(page, 0, 'First card')
         await addCard(page, 0, 'Second card')
         await openCard(page, 'First card')
@@ -69,7 +69,7 @@ test.describe('the card peek', () => {
     // must never dismiss it — otherwise the panel would close the instant
     // anyone tried to use it.
     test('stays open when the panel itself is pressed', async ({ page }) => {
-        await createBoard(page, `peek-inside-${Date.now()}`)
+        await createBoard(page, `peek-inside-${uniqueStamp()}`)
         await addCard(page, 0, 'Kept open card')
         await openCard(page, 'Kept open card')
 

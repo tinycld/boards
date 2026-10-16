@@ -8,7 +8,7 @@ import { useNavigateBack } from '@tinycld/core/lib/use-navigate-back'
 import { useDeviceInsets } from '@tinycld/core/lib/use-safe-area'
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router'
 import { ChevronLeft } from 'lucide-react-native'
-import { type RefObject, useEffect, useMemo, useRef } from 'react'
+import { type RefObject, useCallback, useEffect, useId, useMemo, useRef } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { BoardPresenceProvider } from '../../components/BoardPresenceProvider'
 import { CardDetail } from '../../components/detail/CardDetail'
@@ -18,38 +18,53 @@ import { ProjectWash } from '../../components/ProjectWash'
 import { useBoardRoute } from '../../hooks/useBoardRoute'
 import { useProjectRole } from '../../hooks/useProjectRole'
 import { type CardEntry, findCardEntry, flattenCards, neighborCardId } from '../../lib/board-cards'
-import { boardPath, cardPagePath, paramString, parseCardNumber } from '../../lib/board-route'
+import {
+    boardPath,
+    cardPagePath,
+    paramString,
+    parseCardNumber,
+    peekHref,
+} from '../../lib/board-route'
 import type { BoardProject } from '../../types'
 
 function usePageShortcuts(
     project: BoardProject,
     segment: string,
     cardId: string,
-    goBack: () => void,
+    leaveToBoard: () => void,
     canEdit: boolean,
     titleRef: RefObject<EditableTextHandle | null>
 ) {
     const router = useRouter()
     const orgHref = useOrgHref()
-    // A second Escape while the back navigation is in flight slips past
-    // router.canGoBack() and surfaces a GO_BACK error toast — leave at most
-    // once per mounted card page.
+    // A second Escape while the navigation is in flight would act on a page
+    // already leaving (with router.back() it surfaced a GO_BACK error toast);
+    // leave at most once per mounted card page.
     const leavingRef = useRef(false)
     const scopeOwner = useShortcutScope('thread')
+    // One id per page INSTANCE. j/k and the rows stack card pages, and the
+    // registry keys shortcuts by id: with shared ids the page on top replaced
+    // the page under it, and its unmount on Back deleted them, so the page
+    // Back returned to answered no key. Separate ids leave each page its own
+    // entries; the matcher and the help overlay already pick the focused one
+    // by its scope id.
+    const instance = useId()
 
     const shortcuts = useMemo<Shortcut[]>(() => {
+        const idOf = (name: string) => `boards.page.${name}#${instance}`
         const step = (delta: number) => {
             const next = neighborCardId(project, cardId, delta)
             const entry = next ? findCardEntry(project, next) : null
             if (!entry) return
-            router.replace(orgHref(cardPagePath(segment, entry.card)))
+            // A push, so Back steps back through the cards j/k walked.
+            router.push(orgHref(cardPagePath(segment, entry.card)))
         }
         // Mirrors the peek's binding at this scope, so `e` means the same thing
         // whichever surface the card is open on.
         const editTitle: Shortcut[] = canEdit
             ? [
                   {
-                      id: 'boards.page.editTitle',
+                      id: idOf('editTitle'),
                       keys: 'e',
                       scope: 'thread',
                       group: 'Boards',
@@ -61,7 +76,7 @@ function usePageShortcuts(
         return [
             ...editTitle,
             {
-                id: 'boards.page.back',
+                id: idOf('back'),
                 keys: 'Escape',
                 scope: 'thread',
                 group: 'Boards',
@@ -69,11 +84,11 @@ function usePageShortcuts(
                 run: () => {
                     if (leavingRef.current) return
                     leavingRef.current = true
-                    goBack()
+                    leaveToBoard()
                 },
             },
             {
-                id: 'boards.page.next',
+                id: idOf('next'),
                 keys: 'j',
                 scope: 'thread',
                 group: 'Boards',
@@ -81,7 +96,7 @@ function usePageShortcuts(
                 run: () => step(1),
             },
             {
-                id: 'boards.page.prev',
+                id: idOf('prev'),
                 keys: 'k',
                 scope: 'thread',
                 group: 'Boards',
@@ -89,7 +104,7 @@ function usePageShortcuts(
                 run: () => step(-1),
             },
         ]
-    }, [project, segment, cardId, goBack, router, orgHref, canEdit, titleRef])
+    }, [project, segment, cardId, leaveToBoard, router, orgHref, canEdit, titleRef, instance])
     useRegisterShortcuts(shortcuts, scopeOwner)
 }
 
@@ -150,6 +165,28 @@ export default function CardDetailScreen() {
 }
 
 /**
+ * Leave the card pages for this card's board in one step, with this card
+ * peeked there.
+ *
+ * j/k and the sub-task and link rows each push a card page, so `router.back()`
+ * would step back ONE card, while Escape and the back button say "Back to
+ * board". `dismissTo` pops to the board screen below, or replaces this page
+ * with the board when none is below (a link followed straight to a card). The
+ * card stays open in the board's peek: a page expanded from the peek returns
+ * to it, and after j/k the reader lands on the card they were reading. On the
+ * card pages, the browser's Back still walks the cards.
+ */
+function useLeaveToBoard(segment: string, card: { key: string; id: string }) {
+    const router = useRouter()
+    const orgHref = useOrgHref()
+    const { key, id } = card
+    return useCallback(
+        () => router.dismissTo(peekHref(orgHref, segment, { key, id })),
+        [router, orgHref, segment, key, id]
+    )
+}
+
+/**
  * Respell `/PL/<id>` as `/PL/12` once the server numbers the card, so the
  * address reads like every other card page. setParams rather than replace,
  * which would remount the page and end the editing session.
@@ -172,13 +209,16 @@ interface CardPageProps {
     segment: string
     entry: CardEntry
     cardId: string
+    /** Back one entry: what closing a card that is gone (deleted, moved) does. */
     navigateBack: () => void
 }
 
 function CardPage({ project, segment, entry, cardId, navigateBack }: CardPageProps) {
+    // Escape and the back button: straight to the board, this card peeked.
+    const leaveToBoard = useLeaveToBoard(segment, entry.card)
     const { canEdit } = useProjectRole(project.id)
     const titleRef = useRef<EditableTextHandle>(null)
-    usePageShortcuts(project, segment, cardId, navigateBack, canEdit, titleRef)
+    usePageShortcuts(project, segment, cardId, leaveToBoard, canEdit, titleRef)
     const insets = useDeviceInsets()
     // Board order — see CardPeek.
     const boardCards = useMemo(
@@ -190,12 +230,12 @@ function CardPage({ project, segment, entry, cardId, navigateBack }: CardPagePro
         {
             type: 'custom',
             key: 'back',
-            element: <BackButton label={project.name} onPress={navigateBack} />,
+            element: <BackButton label={project.name} onPress={leaveToBoard} />,
         },
     ]
 
     return (
-        <View className="flex-1 bg-background">
+        <View testID="boards-card-page" className="flex-1 bg-background">
             <DocumentTitle pkg="Boards" title={entry.card.title} />
             <ProjectWash color={project.color} bleedRight={insets.right} />
             <CardHeaderToolbar
@@ -212,6 +252,7 @@ function CardPage({ project, segment, entry, cardId, navigateBack }: CardPagePro
                 card={entry.card}
                 variant="page"
                 projectId={project.id}
+                projectSlug={project.slug}
                 projectLabels={project.labels}
                 projectEpics={project.epics}
                 projectSprints={project.sprints}
