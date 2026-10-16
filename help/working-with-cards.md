@@ -31,8 +31,10 @@ its corner; with a panel you can also click the board behind it. To move to the
 next or previous card, press **j** or **k**. Each of those is a step too.
 
 A link to a card on another board opens that board with the card in it. It
-replaces the card you opened the link from, so the back button then returns you
-to the first board with no card open.
+takes the place of the card you opened the link from, so the back button skips
+that card: it returns to the step before it, such as the previous card if you
+got there with **j** or **k**. On a phone or tablet, the board you left is not
+kept, so the back button does not return to it.
 
 To give a card the whole screen, click the expand button (the arrows in the top
 corner). That works from either the panel or the window, and the back button
