@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BoardCard } from '../tinycld/boards/components/BoardCard'
 import * as selection from '../tinycld/boards/hooks/useCardSelection'
 import { BoardOpenCardProvider } from '../tinycld/boards/hooks/useOpenCard'
+import { useBoardsUIStore } from '../tinycld/boards/stores/boards-ui-store'
 import type { BoardCardView } from '../tinycld/boards/types'
 
 afterEach(cleanup)
@@ -84,12 +85,27 @@ const ring = (container: HTMLElement) =>
     )
 
 describe('the open card ring', () => {
+    it('covers the focus border, so an open and focused card shows one ring', () => {
+        useBoardsUIStore.getState().focusCard('1')
+        const { container } = render(<Board open="1" />)
+        const face = container.querySelector('[testid="board-card-1"]')
+        // The focus colour is still on the border; the overlay paints over it.
+        expect(face?.className).toContain('border-muted-foreground')
+        expect(ring(container)).toEqual(['boards-card-open-1'])
+        expect(container.querySelector('[testid="boards-card-open-1"]')?.className).toContain(
+            '-inset-px'
+        )
+        useBoardsUIStore.getState().focusCard(null)
+    })
+
     it('follows the open card without re-rendering any card face', () => {
         const renders = vi.spyOn(selection, 'useCardSelection')
         const { container, rerender } = render(<Board open="1" />, {
             wrapper: ({ children }) => <>{children}</>,
         })
         expect(ring(container)).toEqual(['boards-card-open-1'])
+        // The spy counts a face's render, or the zero below proves nothing.
+        expect(renders).toHaveBeenCalledTimes(3)
         renders.mockClear()
 
         act(() => rerender(<Board open="2" />))

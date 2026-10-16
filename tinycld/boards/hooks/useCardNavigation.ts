@@ -49,12 +49,15 @@ export function useOptionalCardNavigation(): CardNavigation | null {
  * The navigation of a board's own route: `segment` is the board's URL segment,
  * `topCardSegment` the `[card]` child on top of it, '' for none (a card that
  * names nothing here still counts: leaving it is how a reader gets out of a
- * not-found). The returned value is stable across changes of the open card — it reads it at call time — so no writer re-renders
- * when a card opens or closes.
+ * not-found). The returned value is stable across changes of the open card — it
+ * reads it at call time — so no writer re-renders when a card opens or closes.
  */
 export function useRouterCardNavigation(segment: string, topCardSegment: string): CardNavigation {
     const router = useRouter()
     const orgHref = useOrgHref()
+    // Written during render so the memoized navigation never goes stale; only
+    // handlers read it, and a discarded render can at worst leave a newer value,
+    // which costs one extra dismissTo.
     const openRef = useRef(topCardSegment)
     openRef.current = topCardSegment
     return useMemo(() => {
@@ -62,8 +65,6 @@ export function useRouterCardNavigation(segment: string, topCardSegment: string)
             router.push(peekHref(orgHref, board, card))
         return {
             openPeek,
-            // A card the server has not numbered has no page URL: its page
-            // spelling would be its record id, which is a peek's.
             // A card the server has not numbered is spelled by its record id,
             // which is its peek's URL; callers offer no page for one.
             openPage: card => router.push(orgHref(cardPagePath(segment, card))),

@@ -103,13 +103,14 @@ function useCardPress(card: { id: string; key: string }) {
 }
 
 /**
- * The open card already wears the solid ring, so focus only shows while the
- * peek is closed — otherwise the card you are reading carries two rings and
- * neither reads as meaningful. A hovering OS file drop outranks both: it is
- * the only transient state, and the ring is what tells the user which card
- * will receive the files.
+ * The border colour of a card at rest, by state. The open card is not on this
+ * ladder: its ring is the `OpenRing` overlay, drawn OVER the border, so it
+ * covers whichever colour wins here and the card you are reading carries one
+ * ring, not two. A hovering OS file drop outranks the rest: it is the only
+ * transient state, and the ring is what tells the user which card will receive
+ * the files.
  *
- * Selection sits above focus and below open: a selected card is a stronger
+ * Selection sits above focus: a selected card is a stronger
  * statement than the cursor merely resting on one. It is the only rung that
  * also tints the BACKGROUND (see `cardSelectedClass`) rather than only
  * recolouring the border — a selection has to stay legible across a run of
@@ -476,13 +477,9 @@ function CardKey({ cardKey }: { cardKey: string }) {
 }
 
 /**
- * Zero-size marker for the drop-hover state, same rationale as FocusMarker: a
- * border class is not queryable from the e2e, and the `cards-` prefix keeps it
- * out of the `board-card-` face selectors.
- */
-/**
  * The solid ring the open card wears. Its own leaf, so opening a card re-renders
- * these tiny components rather than every card face on the board.
+ * these tiny components rather than every card face on the board. Inset by the
+ * border's width so it paints over it, covering a focus or selection colour.
  */
 function OpenRing({ cardId }: { cardId: string }) {
     if (!useIsBoardCardOpen(cardId)) return null
@@ -490,11 +487,16 @@ function OpenRing({ cardId }: { cardId: string }) {
         <View
             pointerEvents="none"
             testID={`boards-card-open-${cardId}`}
-            className="absolute inset-0 rounded-[10px] border border-ring"
+            className="absolute -inset-px rounded-[10px] border border-ring"
         />
     )
 }
 
+/**
+ * Zero-size marker for the drop-hover state, same rationale as FocusMarker: a
+ * border class is not queryable from the e2e, and the `cards-` prefix keeps it
+ * out of the `board-card-` face selectors.
+ */
 function DropMarker({ isDropTarget, cardId }: { isDropTarget: boolean; cardId: string }) {
     if (!isDropTarget) return null
     return <View testID={`boards-card-dropping-${cardId}`} />
