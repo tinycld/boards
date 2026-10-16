@@ -5,11 +5,13 @@ import { useAuth } from '@tinycld/core/lib/auth'
 import { setRealtimeEnabled } from '@tinycld/core/lib/realtime-enabled'
 import { setShareToken } from '@tinycld/core/lib/share-token'
 import { Redirect, useLocalSearchParams } from 'expo-router'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { BoardCanvas } from '../components/BoardCanvas'
 import { CardPeek } from '../components/CardPeek'
 import { useBoardContent } from '../hooks/useActiveBoard'
+import { type CardNavigation, CardNavigationProvider } from '../hooks/useCardNavigation'
+import { BoardOpenCardProvider } from '../hooks/useOpenCard'
 import { useProjectRole } from '../hooks/useProjectRole'
 import { type ShareLinkSignInRole, useShareLinkMeta } from '../hooks/useShareLinkMeta'
 import { findCardEntry } from '../lib/board-cards'
@@ -60,7 +62,8 @@ export default function PublicBoardScreen() {
     const meta = useShareLinkMeta(token)
     // The public board keeps its peek in the store, with no URL: it has no
     // board layout route to stack card children under.
-    const openCardId = useBoardsUIStore(s => s.openCardId)
+    const publicOpenCardId = useBoardsUIStore(s => s.publicOpenCardId)
+    const navigation = usePublicCardNavigation()
 
     // Realtime is on by default, so an embed must opt OUT rather than in — the
     // same shape as the token install above, and for the same reason: by the
@@ -104,7 +107,10 @@ export default function PublicBoardScreen() {
     }
 
     if (!project) return <LinkGone reason="missing" />
-    const openEntry = openCardId ? findCardEntry(project, openCardId) : null
+    const openEntry = publicOpenCardId ? findCardEntry(project, publicOpenCardId) : null
+    const openCard = publicOpenCardId
+        ? { cardId: publicOpenCardId, surface: 'peek' as const }
+        : null
 
     return (
         <View className="flex-1 bg-background">
@@ -120,9 +126,30 @@ export default function PublicBoardScreen() {
                 signInRole={meta.signInRole}
                 onSignedIn={() => setShareToken(null)}
             />
-            <BoardCanvas project={project} />
-            <CardPeek project={project} entry={openEntry} />
+            <CardNavigationProvider value={navigation}>
+                <BoardOpenCardProvider value={openCard}>
+                    <BoardCanvas project={project} />
+                    <CardPeek project={project} entry={openEntry} />
+                </BoardOpenCardProvider>
+            </CardNavigationProvider>
         </View>
+    )
+}
+
+/**
+ * The public board's card navigation: its peek is a store field, not a route,
+ * and there is no page to open, so a page request peeks too.
+ */
+function usePublicCardNavigation(): CardNavigation {
+    const openPublicCard = useBoardsUIStore(s => s.openPublicCard)
+    const closePublicCard = useBoardsUIStore(s => s.closePublicCard)
+    return useMemo(
+        () => ({
+            openPeek: card => openPublicCard(card.id),
+            openPage: card => openPublicCard(card.id),
+            leave: closePublicCard,
+        }),
+        [openPublicCard, closePublicCard]
     )
 }
 

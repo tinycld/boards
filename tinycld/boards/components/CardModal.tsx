@@ -1,13 +1,11 @@
-import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { Dialog } from '@tinycld/core/ui/dialog'
-import { useRouter } from 'expo-router'
 import { useMemo, useRef } from 'react'
 import { View } from 'react-native'
+import { CardNavigationProvider, useCardNavigation } from '../hooks/useCardNavigation'
 import { useCardSurfaceShortcuts } from '../hooks/useCardSurfaceShortcuts'
 import { useIsRouteFocused } from '../hooks/useIsRouteFocused'
 import { useProjectRole } from '../hooks/useProjectRole'
 import { type CardEntry, flattenCards } from '../lib/board-cards'
-import { cardHref } from '../lib/board-route'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
 import type { BoardProject } from '../types'
 import { BoardPresenceBridge, useBoardPresenceContext } from './BoardPresenceProvider'
@@ -52,13 +50,13 @@ export function CardModal({ project, entry }: CardModalProps) {
 }
 
 function CardModalWindow({ project, entry }: { project: BoardProject; entry: CardEntry }) {
-    const router = useRouter()
-    const orgHref = useOrgHref()
-    const closeCard = useBoardsUIStore(s => s.closeCard)
+    const navigation = useCardNavigation()
+    const { leave: closeCard, openPage } = navigation
     const setCardDisplayMode = useBoardsUIStore(s => s.setCardDisplayMode)
     const { canEdit } = useProjectRole(project.id)
     const titleRef = useRef<EditableTextHandle>(null)
-    // Read HERE, outside the Dialog, and re-published inside it. The board's
+    // Read HERE, outside the Dialog, and re-published inside it (navigation
+    // too, below). The board's
     // provider is an ancestor of this component but not of the portal the
     // Dialog renders into — on native that severs the context outright, and
     // the description would silently drop to a private, non-collaborative
@@ -89,41 +87,43 @@ function CardModalWindow({ project, entry }: { project: BoardProject; entry: Car
             presentation="dialog"
             testID="boards-card-modal"
         >
-            <CardHeaderToolbar
-                project={project}
-                entry={entry}
-                canEdit={canEdit}
-                onDismiss={closeCard}
-                onExpand={() => router.push(cardHref(orgHref, project, entry.card))}
-                onClose={closeCard}
-                displayMode="modal"
-                onToggleDisplayMode={() => setCardDisplayMode('peek')}
-            />
-            {/* The dialog's `full` size is a FIXED height, so the detail below
+            <CardNavigationProvider value={navigation}>
+                <CardHeaderToolbar
+                    project={project}
+                    entry={entry}
+                    canEdit={canEdit}
+                    onDismiss={closeCard}
+                    onExpand={() => openPage(entry.card)}
+                    onClose={closeCard}
+                    displayMode="modal"
+                    onToggleDisplayMode={() => setCardDisplayMode('peek')}
+                />
+                {/* The dialog's `full` size is a FIXED height, so the detail below
                 has to be told to fill it — without this the ScrollView sizes to
                 its content and the window's lower half is empty background. */}
-            <View className="flex-1 overflow-hidden">
-                <BoardPresenceBridge value={presence}>
-                    <CardDetail
-                        // Remounts on card switch: the description editor binds to
-                        // ONE Yjs fragment for its lifetime, so switching cards has
-                        // to tear it down and rebind. See CardPeek.
-                        key={entry.card.id}
-                        card={entry.card}
-                        variant="modal"
-                        projectId={project.id}
-                        projectSlug={project.slug}
-                        projectLabels={project.labels}
-                        projectEpics={project.epics}
-                        projectSprints={project.sprints}
-                        sprintsEnabled={project.sprintsEnabled}
-                        projectMembers={project.members}
-                        projectLists={project.lists}
-                        projectCards={boardCards}
-                        titleRef={titleRef}
-                    />
-                </BoardPresenceBridge>
-            </View>
+                <View className="flex-1 overflow-hidden">
+                    <BoardPresenceBridge value={presence}>
+                        <CardDetail
+                            // Remounts on card switch: the description editor binds to
+                            // ONE Yjs fragment for its lifetime, so switching cards has
+                            // to tear it down and rebind. See CardPeek.
+                            key={entry.card.id}
+                            card={entry.card}
+                            variant="modal"
+                            projectId={project.id}
+                            projectSlug={project.slug}
+                            projectLabels={project.labels}
+                            projectEpics={project.epics}
+                            projectSprints={project.sprints}
+                            sprintsEnabled={project.sprintsEnabled}
+                            projectMembers={project.members}
+                            projectLists={project.lists}
+                            projectCards={boardCards}
+                            titleRef={titleRef}
+                        />
+                    </BoardPresenceBridge>
+                </View>
+            </CardNavigationProvider>
         </Dialog>
     )
 }

@@ -6,6 +6,10 @@ import { OverlayProvider } from '@tinycld/core/ui/overlay'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CardHeaderToolbar } from '../tinycld/boards/components/detail/CardHeaderToolbar'
+import {
+    CardNavigationProvider,
+    useRouterCardNavigation,
+} from '../tinycld/boards/hooks/useCardNavigation'
 import type { BoardCardView, BoardListView, BoardProject } from '../tinycld/boards/types'
 
 afterEach(() => {
@@ -105,10 +109,20 @@ const project: BoardProject = {
     unplacedCards: [],
 }
 
+function BoardNavigation({ children }: { children: ReactNode }) {
+    return (
+        <CardNavigationProvider value={useRouterCardNavigation('PL')}>
+            {children}
+        </CardNavigationProvider>
+    )
+}
+
 function wrapper({ children }: { children: ReactNode }) {
     return (
         <QueryClientProvider client={new QueryClient()}>
-            <OverlayProvider>{children}</OverlayProvider>
+            <OverlayProvider>
+                <BoardNavigation>{children}</BoardNavigation>
+            </OverlayProvider>
         </QueryClientProvider>
     )
 }

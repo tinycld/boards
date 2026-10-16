@@ -257,7 +257,7 @@ function BacklogRow({
             variant={isMobile ? 'stacked' : 'table'}
             isFocused={isFocused}
             isSelected={isSelected}
-            onPress={event => select(card.id, event)}
+            onPress={event => select(card, event)}
         />
     )
 }

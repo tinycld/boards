@@ -6,6 +6,7 @@ import { Platform, Pressable, ScrollView, Text, View } from 'react-native'
 import { SortableBoardContainer } from 'react-native-drax'
 import { useBacklogDnd } from '../../hooks/useBacklogDnd'
 import { useBoardShortcuts } from '../../hooks/useBoardShortcuts'
+import { useCardNavigation } from '../../hooks/useCardNavigation'
 import { useProjectRole } from '../../hooks/useProjectRole'
 import { useSelectionOrder } from '../../hooks/useSelectionOrder'
 import {
@@ -347,14 +348,14 @@ function CompletedRow({
     entry: BacklogSection['rows'][number]
     isMobile: boolean
 }) {
-    const openCard = useBoardsUIStore(s => s.openCard)
+    const { openPeek } = useCardNavigation()
     return (
         <CardRow
             card={entry.card}
             listName={entry.list.name}
             listCategory={entry.list.category}
             variant={isMobile ? 'stacked' : 'table'}
-            onPress={() => openCard(entry.card.id)}
+            onPress={() => openPeek(entry.card)}
         />
     )
 }

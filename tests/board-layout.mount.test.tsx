@@ -50,6 +50,8 @@ vi.mock('expo-router', () => {
             useEffect(effect, [effect])
         },
         useNavigation: () => ({ isFocused: () => true, addListener: () => () => {} }),
+        useRoute: () => ({ key: 'layout' }),
+        useRootNavigationState: () => ({ routes: [{ key: 'layout' }] }),
         usePathname: () => '/a/boards/PL',
         useSegments: () => [],
     }

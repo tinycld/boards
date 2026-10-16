@@ -2,8 +2,8 @@ import { useNavigation, useRouter } from 'expo-router'
 import { useEffect, useRef } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useBoardLayout } from '../hooks/useBoardLayout'
+import { useCardNavigation } from '../hooks/useCardNavigation'
 import { useIsRouteFocused } from '../hooks/useIsRouteFocused'
-import { useLeaveToBoard } from '../hooks/useLeaveToBoard'
 import { type OpenCard, useOpenCard } from '../hooks/useOpenCard'
 import { type CardEntry, findCardEntry } from '../lib/board-cards'
 import { parseCardSegment } from '../lib/board-route'
@@ -28,7 +28,7 @@ import { CardSurface } from './CardSurface'
 export function CardChild({ segment }: { segment: string }) {
     const { project, fullProject } = useBoardLayout()
     const open = useOpenCard()
-    const leaveToBoard = useLeaveToBoard()
+    const { leave: leaveToBoard } = useCardNavigation()
     useCanonicalSegment(fullProject, segment, open)
     useLeaveWhenCardGoes(open, leaveToBoard)
     const entry = open ? findCardEntry(fullProject, open.cardId) : null

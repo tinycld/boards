@@ -6,8 +6,9 @@ import { BoardChrome, BoardLoading, BoardNotFound } from '../../components/Board
 import { BoardPresenceProvider } from '../../components/BoardPresenceProvider'
 import { BoardLayoutProvider, type BoardLayoutValue } from '../../hooks/useBoardLayout'
 import { useBoardRoute } from '../../hooks/useBoardRoute'
-import { resolveOpenCard } from '../../hooks/useOpenCard'
-import { cardParam, useOpenCardSync } from '../../hooks/useOpenCardSync'
+import { CardNavigationProvider, useRouterCardNavigation } from '../../hooks/useCardNavigation'
+import { BoardOpenCardProvider, resolveOpenCard } from '../../hooks/useOpenCard'
+import { cardParam, useTopCardSegment } from '../../hooks/useTopCardSegment'
 import { paramString, parseCardSegment, peekHref } from '../../lib/board-route'
 import { formatCardKey, parseCardKey } from '../../lib/card-key'
 import { useBoardsUIStore } from '../../stores/boards-ui-store'
@@ -69,22 +70,35 @@ function useVisitedBoard(projectId: string) {
 
 function BoardWithCards({ layout }: { layout: BoardLayoutValue }) {
     const { project, fullProject, segment, isArchived, cardCount } = layout
-    const { topCardSegment, screenListeners } = useOpenCardSync(fullProject, segment)
-    const openCardId = resolveOpenCard(fullProject, topCardSegment)?.cardId ?? null
+    const topCardSegment = useTopCardSegment()
+    const navigation = useRouterCardNavigation(segment)
+    // Resolved on the whole board, so a filter never makes the open card vanish.
+    const openCard = useMemo(
+        () => resolveOpenCard(fullProject, topCardSegment),
+        [fullProject, topCardSegment]
+    )
 
     return (
         <BoardLayoutProvider value={layout}>
-            <BoardRoom project={project} openCardId={openCardId}>
-                <BoardChrome project={project} isArchived={isArchived} cardCount={cardCount} />
-                <View
-                    pointerEvents={childStackPointerEvents(topCardSegment)}
-                    style={StyleSheet.absoluteFill}
-                >
-                    <Stack screenOptions={CHILD_OPTIONS} screenListeners={screenListeners}>
-                        <Stack.Screen name="[card]" options={cardScreenOptions} />
-                    </Stack>
-                </View>
-            </BoardRoom>
+            <CardNavigationProvider value={navigation}>
+                <BoardOpenCardProvider value={openCard}>
+                    <BoardRoom project={project} cardId={openCard?.cardId ?? null}>
+                        <BoardChrome
+                            project={project}
+                            isArchived={isArchived}
+                            cardCount={cardCount}
+                        />
+                        <View
+                            pointerEvents={childStackPointerEvents(topCardSegment)}
+                            style={StyleSheet.absoluteFill}
+                        >
+                            <Stack screenOptions={CHILD_OPTIONS}>
+                                <Stack.Screen name="[card]" options={cardScreenOptions} />
+                            </Stack>
+                        </View>
+                    </BoardRoom>
+                </BoardOpenCardProvider>
+            </CardNavigationProvider>
         </BoardLayoutProvider>
     )
 }
@@ -96,15 +110,15 @@ function BoardWithCards({ layout }: { layout: BoardLayoutValue }) {
  */
 function BoardRoom({
     project,
-    openCardId,
+    cardId,
     children,
 }: {
     project: BoardProject
-    openCardId: string | null
+    cardId: string | null
     children: ReactNode
 }) {
     return (
-        <BoardPresenceProvider projectId={project.id} openCardId={openCardId}>
+        <BoardPresenceProvider projectId={project.id} cardId={cardId}>
             <View testID="boards-board-room" className="flex-1">
                 {children}
             </View>

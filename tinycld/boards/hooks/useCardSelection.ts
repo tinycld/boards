@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { type GestureResponderEvent, Platform } from 'react-native'
 import { clickAction, type SelectionModifiers } from '../lib/selection-gesture'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
+import { useOptionalCardNavigation } from './useCardNavigation'
 
 /**
  * RN does not type the modifier flags on a press event, but react-native-web
@@ -30,13 +31,14 @@ function modifiersOf(event: GestureResponderEvent): SelectionModifiers {
  * screen — see `selectionOrderIds`.
  */
 export function useCardSelection() {
-    const openCard = useBoardsUIStore(s => s.openCard)
+    const navigation = useOptionalCardNavigation()
     const selectSingle = useBoardsUIStore(s => s.selectSingle)
     const selectToggle = useBoardsUIStore(s => s.selectToggle)
     const selectRange = useBoardsUIStore(s => s.selectRange)
 
     return useCallback(
-        (cardId: string, event: GestureResponderEvent) => {
+        (card: { key: string; id: string }, event: GestureResponderEvent) => {
+            const cardId = card.id
             // Releasing a web drag can synthesize a trailing click on whatever
             // sits under the pointer. Swallowing it keeps a drop from popping
             // the peek open OR from re-aiming the selection. Read imperatively:
@@ -51,14 +53,14 @@ export function useCardSelection() {
             // card exactly as it always has.
             if (Platform.OS !== 'web') {
                 if (isSelectMode) selectToggle(cardId)
-                else openCard(cardId)
+                else navigation?.openPeek(card)
                 return
             }
 
             const action = clickAction(modifiersOf(event), selectedCardIds)
             switch (action.type) {
                 case 'open':
-                    openCard(cardId)
+                    navigation?.openPeek(card)
                     return
                 case 'single':
                     selectSingle(cardId)
@@ -70,6 +72,6 @@ export function useCardSelection() {
                     selectRange(cardId, selectionOrderIds)
             }
         },
-        [openCard, selectSingle, selectToggle, selectRange]
+        [navigation, selectSingle, selectToggle, selectRange]
     )
 }

@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from 'expo-router'
-import { useMemo } from 'react'
+import { createContext, useContext, useMemo } from 'react'
 import { flattenCards } from '../lib/board-cards'
 import { paramString, parseCardSegment } from '../lib/board-route'
 import type { BoardProject } from '../types'
@@ -7,6 +7,24 @@ import { useBoardLayout } from './useBoardLayout'
 
 /** A card on screen over the board, and which surface it is on. */
 export type OpenCard = { cardId: string; surface: 'peek' | 'page' } | null
+
+const BoardOpenCardContext = createContext<OpenCard>(null)
+
+/**
+ * The card on top of the board, published by the layout (or by the public
+ * board's own store) for what sits beside the card children rather than in
+ * one: a face's highlight, the drag hooks.
+ */
+export const BoardOpenCardProvider = BoardOpenCardContext.Provider
+
+/**
+ * The card open over this board right now — the top child's — for the board's
+ * own readers. A card child reads its own with `useOpenCard`, which stays
+ * correct while another child covers it.
+ */
+export function useBoardOpenCard(): OpenCard {
+    return useContext(BoardOpenCardContext)
+}
 
 /**
  * The card this route's `[card]` segment names, resolved on THIS board — all

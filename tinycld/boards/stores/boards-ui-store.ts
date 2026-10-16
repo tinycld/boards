@@ -24,10 +24,14 @@ export function slotBefore(listId: string): AddListSlot {
 interface BoardsUIState {
     activeProjectId: string | null
     setActiveProject: (projectId: string) => void
-    /** Card shown in the side peek; null when the peek is closed. */
-    openCardId: string | null
-    openCard: (cardId: string) => void
-    closeCard: () => void
+    /**
+     * The card peeked on the public/embedded board, which has no board layout
+     * route to stack a card child under. Everywhere else the open card is the
+     * route (hooks/useCardNavigation.ts).
+     */
+    publicOpenCardId: string | null
+    openPublicCard: (cardId: string) => void
+    closePublicCard: () => void
     /**
      * The "New board" dialog. In the store rather than component state because
      * two places open it — the sidebar action and the no-boards empty state —
@@ -342,7 +346,7 @@ export const useBoardsUIStore = create<BoardsUIState>()(
             // Every action below is a concise arrow (`() => set({...})`), so it
             // RETURNS whatever `set` returns. Under `persist` that is the
             // AsyncStorage write's promise, which makes each action — all typed
-            // `=> void` — a thenable. `act(() => store.openCard(id))` in a test
+            // `=> void` — a thenable. `act(() => store.openPublicCard(id))` in a test
             // then sees a thenable, switches to async mode, and is never
             // awaited: React's act queue is left unflushed and the NEXT test's
             // mount effects silently never run. Discarding the return value
@@ -354,12 +358,6 @@ export const useBoardsUIStore = create<BoardsUIState>()(
             }
             return {
                 activeProjectId: null,
-                // The open card is NOT reset here: it is the route's
-                // (`/a/boards/PL/PL-12`), and the board layout writes it into
-                // this store as a card child takes focus. A visit records the
-                // board in that same commit, so a reset closed the card a deep
-                // link had just opened. A board switch replaces the board's
-                // whole route, card children included.
                 setActiveProject: projectId =>
                     set({
                         activeProjectId: projectId,
@@ -370,9 +368,9 @@ export const useBoardsUIStore = create<BoardsUIState>()(
                         selectedCardIds: new Set<string>(),
                         lastSelectedId: null,
                     }),
-                openCardId: null,
-                openCard: cardId => set({ openCardId: cardId }),
-                closeCard: () => set({ openCardId: null }),
+                publicOpenCardId: null,
+                openPublicCard: cardId => set({ publicOpenCardId: cardId }),
+                closePublicCard: () => set({ publicOpenCardId: null }),
                 isNewBoardOpen: false,
                 openNewBoard: () => set({ isNewBoardOpen: true }),
                 closeNewBoard: () => set({ isNewBoardOpen: false }),
@@ -549,7 +547,7 @@ export const useBoardsUIStore = create<BoardsUIState>()(
             // What persists is what the user would be annoyed to redo, and
             // what cannot mislead them if it comes back stale.
             //
-            // Excluded: a restored openCardId would reopen a peek on a card
+            // Excluded: a restored publicOpenCardId would reopen a peek on a card
             // that may have been deleted since, a restored dialog flag would
             // greet the user with a modal they did not ask for, and a restored
             // focus ring would point at a card that may have moved or gone. A

@@ -1,19 +1,17 @@
 import { useDragGesture } from '@tinycld/core/lib/gestures'
-import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useDeviceInsets } from '@tinycld/core/lib/use-safe-area'
 import { useOverlayLayer } from '@tinycld/core/ui/overlay'
 import { useSwipeToDismiss } from '@tinycld/core/ui/swipe-dismiss'
-import { useRouter } from 'expo-router'
 import { type RefObject, useMemo, useRef, useState } from 'react'
 import { Platform, Pressable, StyleSheet, useWindowDimensions, type View } from 'react-native'
 import { GestureDetector } from 'react-native-gesture-handler'
 import Animated from 'react-native-reanimated'
+import { useCardNavigation } from '../hooks/useCardNavigation'
 import { useCardSurfaceShortcuts } from '../hooks/useCardSurfaceShortcuts'
 import { useIsRouteFocused } from '../hooks/useIsRouteFocused'
 import { useProjectRole } from '../hooks/useProjectRole'
 import { type CardEntry, flattenCards } from '../lib/board-cards'
-import { cardHref } from '../lib/board-route'
 import { clampPeekWidth } from '../lib/peek-width'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
 import type { BoardProject } from '../types'
@@ -51,9 +49,7 @@ const HANDLE_VISUAL_WIDTH = 4
 const HANDLE_HIT_SLOP = 8
 
 function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardEntry }) {
-    const router = useRouter()
-    const orgHref = useOrgHref()
-    const closeCard = useBoardsUIStore(s => s.closeCard)
+    const { leave: closeCard, openPage } = useCardNavigation()
     const setCardDisplayMode = useBoardsUIStore(s => s.setCardDisplayMode)
     const { canEdit } = useProjectRole(project.id)
     const insets = useDeviceInsets()
@@ -83,7 +79,7 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
         [project]
     )
 
-    const expandCard = () => router.push(cardHref(orgHref, project, entry.card))
+    const expandCard = () => openPage(entry.card)
 
     return (
         <>

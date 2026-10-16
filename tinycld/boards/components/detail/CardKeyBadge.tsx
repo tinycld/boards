@@ -5,6 +5,8 @@ import * as Clipboard from 'expo-clipboard'
 import { Check, Link2 } from 'lucide-react-native'
 import { Platform, Pressable, Text, View } from 'react-native'
 import { useCopiedFlag } from '../../hooks/useCopiedFlag'
+import { boardPath, peekSegment } from '../../lib/board-route'
+import { parseCardKey } from '../../lib/card-key'
 
 /**
  * The card key in a detail header — the peek's and the full page's — with a
@@ -73,18 +75,19 @@ function CopyLinkButton({ cardKey }: { cardKey: string }) {
 }
 
 /**
- * The absolute URL that opens this card focused on its board.
+ * The absolute URL that opens this card peeked on its board.
  *
- * `?focused=` rather than the full-page `/a/boards/<key>` route: a link shared with
- * a colleague should land them on the BOARD with the card open beside it, which
- * is the view that carries context. The full page is a deliberate promotion the
- * reader can still make from there.
+ * The peek spelling (`/a/boards/PL/PL-12`) rather than the full-page one: a
+ * link shared with a colleague should land them on the BOARD with the card open
+ * beside it, which is the view that carries context. The full page is a
+ * deliberate promotion the reader can still make from there.
  *
  * Same origin resolution as shareLinkURL — window on web, the configured server
  * address on native, where there is no window to read.
  */
 export function focusedCardURL(cardKey: string): string {
-    const path = `${appHref('boards')}?focused=${encodeURIComponent(cardKey)}`
+    const slug = parseCardKey(cardKey)?.slug ?? cardKey
+    const path = appHref(`${boardPath(slug)}/${peekSegment({ key: cardKey, id: '' })}`)
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
         return `${window.location.origin}${path}`
     }

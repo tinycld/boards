@@ -51,16 +51,16 @@ const BoardPresenceContext = createContext<BoardPresenceValue>({
  */
 export function BoardPresenceProvider({
     projectId,
-    openCardId,
+    cardId,
     children,
 }: {
     projectId: string
-    openCardId: string | null
+    cardId: string | null
     children: ReactNode
 }) {
     const { awareness, peers, doc, isReady, isConnected, canEditDoc, identity } = useBoardPresence(
         projectId,
-        openCardId
+        cardId
     )
     // Memoized so a board re-render for any unrelated reason does not push a
     // new context value at every consumer.

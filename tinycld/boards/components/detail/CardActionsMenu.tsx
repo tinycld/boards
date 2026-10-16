@@ -14,8 +14,8 @@ import {
     useDuplicateCard,
     useUpdateCard,
 } from '../../hooks/useCardMutations'
+import { useCardNavigation } from '../../hooks/useCardNavigation'
 import { rankForInsert } from '../../lib/move'
-import { useBoardsUIStore } from '../../stores/boards-ui-store'
 import type { BoardCardView, BoardListView } from '../../types'
 import { LinkPrDialog } from './LinkPrDialog'
 import { MoveToBoardDialog } from './MoveToBoardDialog'
@@ -53,7 +53,7 @@ export function useCardActions({ card, list, projectId, onDismiss }: CardActions
     const archiveCard = useArchiveCard()
     const deleteCard = useDeleteCard()
     const duplicateCard = useDuplicateCard(projectId)
-    const openCard = useBoardsUIStore(s => s.openCard)
+    const { openPeek } = useCardNavigation()
     const cardId = card.id
     // No other board to move to → the item is offered disabled rather than
     // hidden, so the capability is discoverable.
@@ -64,7 +64,7 @@ export function useCardActions({ card, list, projectId, onDismiss }: CardActions
         const index = list.cards.findIndex(c => c.id === cardId)
         duplicateCard.mutate(
             { card, position: rankForInsert(list.cards, index + 1) },
-            { onSuccess: newId => openCard(newId) }
+            { onSuccess: newId => openPeek({ key: '', id: newId }) }
         )
     }
 

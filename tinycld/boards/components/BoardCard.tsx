@@ -19,6 +19,7 @@ import { type GestureResponderEvent, Pressable, Text, View } from 'react-native'
 import type { RemoteCardsPresence } from '../hooks/useBoardPresence'
 import { useCardFileDrop } from '../hooks/useCardFileDrop'
 import { useCardSelection } from '../hooks/useCardSelection'
+import { useBoardOpenCard } from '../hooks/useOpenCard'
 import { type AgingLevel, agingLevel } from '../lib/aging'
 import { dueStateFor } from '../lib/due-state'
 import { formatSchedule } from '../lib/due-time'
@@ -86,8 +87,9 @@ interface BoardCardProps {
     acceptsFiles: (cardId: string) => boolean
 }
 
-function useCardPress(cardId: string) {
-    const isOpen = useBoardsUIStore(s => s.openCardId === cardId)
+function useCardPress(card: { id: string; key: string }) {
+    const cardId = card.id
+    const isOpen = useBoardOpenCard()?.cardId === cardId
     // Per-card boolean, not the whole focus state: only the card whose ring
     // actually flips re-renders, so arrowing across the board never re-renders
     // a column and cannot disturb a live drag.
@@ -97,7 +99,7 @@ function useCardPress(cardId: string) {
     const isSelected = useBoardsUIStore(s => s.selectedCardIds.has(cardId))
     // Owns the drag guard and the open-vs-select decision; see the hook.
     const select = useCardSelection()
-    const onPress = (event: GestureResponderEvent) => select(cardId, event)
+    const onPress = (event: GestureResponderEvent) => select(card, event)
     return { isOpen, isFocused, isSelected, onPress }
 }
 
@@ -157,7 +159,7 @@ export function BoardCard({
     reactorName,
     currentUserId,
 }: BoardCardProps) {
-    const { isOpen, isFocused, isSelected, onPress } = useCardPress(card.id)
+    const { isOpen, isFocused, isSelected, onPress } = useCardPress(card)
     // canDrag doubles as the edit gate: both come from the same role check.
     const { isDropTarget, dropRef } = useCardFileDrop(card.id, projectId, canDrag, acceptsFiles)
     // Board-wide, so read here rather than threaded through BoardColumn —

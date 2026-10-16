@@ -71,9 +71,12 @@ import { ChecklistSection } from '../tinycld/boards/forms/sections/ChecklistSect
 import { SectionChipsSection } from '../tinycld/boards/forms/sections/SectionChipsSection'
 import { SubtasksSection } from '../tinycld/boards/forms/sections/SubtasksSection'
 import * as cardMutations from '../tinycld/boards/hooks/useCardMutations'
+import {
+    CardNavigationProvider,
+    useRouterCardNavigation,
+} from '../tinycld/boards/hooks/useCardNavigation'
 import type { CardLinkView } from '../tinycld/boards/lib/card-links'
 import { formatSchedule } from '../tinycld/boards/lib/due-time'
-import { useBoardsUIStore } from '../tinycld/boards/stores/boards-ui-store'
 
 const card: BoardCardView = {
     id: 'c1',
@@ -149,12 +152,24 @@ function mount(ui: ReactNode, canEdit = true) {
     )
 }
 
+// The board layout's own navigation, over the router stub: what a row inside an
+// open card pushes is what the router records.
+function BoardNavigation({ children }: { children: ReactNode }) {
+    return (
+        <CardNavigationProvider value={useRouterCardNavigation('OTTER')}>
+            {children}
+        </CardNavigationProvider>
+    )
+}
+
 function mountCard(ui: ReactNode, overrides: Partial<CardFormValue> = {}) {
     const queryClient = new QueryClient()
     return render(
         <QueryClientProvider client={queryClient}>
             <OverlayProvider>
-                <CardFormProvider value={cardForm(true, overrides)}>{ui}</CardFormProvider>
+                <BoardNavigation>
+                    <CardFormProvider value={cardForm(true, overrides)}>{ui}</CardFormProvider>
+                </BoardNavigation>
             </OverlayProvider>
         </QueryClientProvider>
     )
@@ -319,7 +334,8 @@ describe('optional sections', () => {
 
 // A row inside an open card opens its card where the reader is: on the full
 // page as the next card's page, stacked so Back returns; on the peek through
-// the store. Sub-task and link rows share the opener; both are pinned.
+// as that card's peek. Both are pushes, so Back returns; sub-task and link
+// rows share the opener and both are pinned.
 describe('opening a sub-task', () => {
     const child: BoardCardView = {
         ...card,
@@ -341,7 +357,6 @@ describe('opening a sub-task', () => {
     }
 
     afterEach(() => {
-        useBoardsUIStore.getState().closeCard()
         vi.mocked(router.push).mockClear()
     })
 
@@ -349,14 +364,12 @@ describe('opening a sub-task', () => {
         mountSubtasks('page')
         fireEvent.click(screen.getByText('Child'))
         expect(router.push).toHaveBeenCalledWith(appHref('boards/OTTER/8'))
-        expect(useBoardsUIStore.getState().openCardId).toBeNull()
     })
 
-    it('opens the sub-task through the store from the peek', () => {
+    it('pushes the sub-task’s peek from the peek', () => {
         mountSubtasks('peek')
         fireEvent.click(screen.getByText('Child'))
-        expect(useBoardsUIStore.getState().openCardId).toBe('c2')
-        expect(router.push).not.toHaveBeenCalled()
+        expect(router.push).toHaveBeenCalledWith(appHref('boards/OTTER/OTTER-8'))
     })
 })
 
@@ -391,7 +404,6 @@ describe('opening a linked card', () => {
     }
 
     afterEach(() => {
-        useBoardsUIStore.getState().closeCard()
         vi.mocked(router.push).mockClear()
     })
 
@@ -399,13 +411,11 @@ describe('opening a linked card', () => {
         mountLinks('page')
         fireEvent.click(screen.getByText('Far card'))
         expect(router.push).toHaveBeenCalledWith(appHref('boards/OTTER/8'))
-        expect(useBoardsUIStore.getState().openCardId).toBeNull()
     })
 
-    it('opens the far card through the store from the peek', () => {
+    it('pushes the far card’s peek from the peek', () => {
         mountLinks('peek')
         fireEvent.click(screen.getByText('Far card'))
-        expect(useBoardsUIStore.getState().openCardId).toBe('c2')
-        expect(router.push).not.toHaveBeenCalled()
+        expect(router.push).toHaveBeenCalledWith(appHref('boards/OTTER/OTTER-8'))
     })
 })

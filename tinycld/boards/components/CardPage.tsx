@@ -1,18 +1,14 @@
 import { DocumentTitle } from '@tinycld/core/components/DocumentTitle'
 import type { ToolbarItem } from '@tinycld/core/components/ResponsiveToolbar'
-import { useOrgHref } from '@tinycld/core/lib/org-routes'
 import { type Shortcut, useRegisterShortcuts, useShortcutScope } from '@tinycld/core/lib/shortcuts'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useDeviceInsets } from '@tinycld/core/lib/use-safe-area'
-import { useRouter } from 'expo-router'
 import { ChevronLeft } from 'lucide-react-native'
 import { type RefObject, useId, useMemo, useRef } from 'react'
 import { Pressable, Text, View } from 'react-native'
-import { useBoardLayout } from '../hooks/useBoardLayout'
-import { useLeaveToBoard } from '../hooks/useLeaveToBoard'
+import { useCardNavigation } from '../hooks/useCardNavigation'
 import { useProjectRole } from '../hooks/useProjectRole'
 import { type CardEntry, findCardEntry, flattenCards, neighborCardId } from '../lib/board-cards'
-import { cardPagePath } from '../lib/board-route'
 import type { BoardProject } from '../types'
 import { CardDetail } from './detail/CardDetail'
 import { CardHeaderToolbar } from './detail/CardHeaderToolbar'
@@ -40,7 +36,7 @@ export function CardPage({ project, cardId }: CardPageProps) {
 function CardPageBody({ project, entry }: { project: BoardProject; entry: CardEntry }) {
     // Escape, the back button, and a card that is gone (deleted, moved): all
     // straight to the board.
-    const leaveToBoard = useLeaveToBoard()
+    const { leave: leaveToBoard } = useCardNavigation()
     const { canEdit } = useProjectRole(project.id)
     const titleRef = useRef<EditableTextHandle>(null)
     usePageShortcuts(project, entry.card.id, leaveToBoard, canEdit, titleRef)
@@ -98,9 +94,7 @@ function usePageShortcuts(
     canEdit: boolean,
     titleRef: RefObject<EditableTextHandle | null>
 ) {
-    const router = useRouter()
-    const orgHref = useOrgHref()
-    const { segment } = useBoardLayout()
+    const { openPage } = useCardNavigation()
     // A second Escape while the navigation is in flight would act on a page
     // already leaving (with router.back() it surfaced a GO_BACK error toast);
     // leave at most once per mounted card page.
@@ -121,7 +115,7 @@ function usePageShortcuts(
             const entry = next ? findCardEntry(project, next) : null
             if (!entry) return
             // A push, so Back steps back through the cards j/k walked.
-            router.push(orgHref(cardPagePath(segment, entry.card)))
+            openPage(entry.card)
         }
         // Mirrors the peek's binding at this scope, so `e` means the same thing
         // whichever surface the card is open on.
@@ -168,7 +162,7 @@ function usePageShortcuts(
                 run: () => step(-1),
             },
         ]
-    }, [project, segment, cardId, leaveToBoard, router, orgHref, canEdit, titleRef, instance])
+    }, [project, cardId, leaveToBoard, openPage, canEdit, titleRef, instance])
     useRegisterShortcuts(shortcuts, scopeOwner)
 }
 
