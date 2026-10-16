@@ -189,6 +189,24 @@ test('j, goBack, Escape lands on the bare board', async ({ page }) => {
     await expectBareBoard(page, key)
 })
 
+// The same for peeks: the peek Back returns to answers its keys, though the
+// peek it uncovered shared nothing with it but the surface.
+test('j, goBack, j on the peek steps on from the card Back returned to', async ({ page }) => {
+    const key = await boardWithThreeCards(page, 'peek-keys')
+    await openCard(page, 'Alpha')
+
+    await page.keyboard.press('j')
+    await expect(page).toHaveURL(peekUrl(key, 2))
+    await page.goBack()
+    await expect(page).toHaveURL(peekUrl(key, 1))
+    await expect(cardSurface(page).getByTestId('boards-detail-key')).toHaveText(`${key}-1`)
+    await page.keyboard.press('j')
+    await expect(page).toHaveURL(peekUrl(key, 2))
+    await page.keyboard.press('Escape')
+
+    await expectBareBoard(page, key)
+})
+
 // Each peek is a navigation, so the browser's Back walks the cards in the
 // order they were opened and ends on the board.
 test('Back walks peeks, then the board', async ({ page }) => {
