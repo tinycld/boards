@@ -160,6 +160,18 @@ export function isCoveredByBoard(
  * or a page (`/a/boards/PL/12`), rather than the bare board.
  */
 export function pathNamesCard(pathname: string): boolean {
+    return cardSegmentOfPath(pathname) !== ''
+}
+
+/** The `[card]` segment `pathname` names on its board, '' for none. */
+export function cardSegmentOfPath(pathname: string): string {
     const [, , pkg, board = '', card = ''] = pathname.split('/')
-    return pkg === 'boards' && board !== '' && card !== ''
+    return pkg === 'boards' && board !== '' ? card : ''
+}
+
+/** The `[card]` param a child route carries, '' for the index child. */
+export function cardParam(params: object | undefined): string {
+    if (!params || !('card' in params)) return ''
+    const card = params.card
+    return typeof card === 'string' ? card : ''
 }

@@ -13,7 +13,7 @@ import {
 import { useCardSelection } from '../tinycld/boards/hooks/useCardSelection'
 import type { OpenCard } from '../tinycld/boards/hooks/useOpenCard'
 import { useOpenRelatedCard } from '../tinycld/boards/hooks/useOpenRelatedCard'
-import { cardParam } from '../tinycld/boards/hooks/useTopCardSegment'
+import { cardParam } from '../tinycld/boards/lib/board-route'
 
 // Every writer reaches the router through useCardNavigation, so what the router
 // records is the whole contract: a push for a card, one dismissTo for leaving.

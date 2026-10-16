@@ -8,6 +8,7 @@ import {
     boardSegment,
     cardHref,
     cardPagePath,
+    cardSegmentOfPath,
     isCoveredByBoard,
     parseBoardSegment,
     parseCardNumber,
@@ -179,5 +180,21 @@ describe('pathNamesCard', () => {
         expect(pathNamesCard('/a/boards/my-cards')).toBe(false)
         expect(pathNamesCard('/a/boards')).toBe(false)
         expect(pathNamesCard('/a/mail/inbox/x')).toBe(false)
+    })
+})
+
+// The board reads its open card from the URL. The route's params can keep a
+// card the reader already closed (see useTopCardSegment); the path cannot.
+describe('cardSegmentOfPath', () => {
+    it('reads the card a peek or a page names', () => {
+        expect(cardSegmentOfPath('/a/boards/PL/PL-12')).toBe('PL-12')
+        expect(cardSegmentOfPath('/a/boards/PL/12')).toBe('12')
+    })
+
+    it('reads the bare board, My cards and other packages as no card', () => {
+        expect(cardSegmentOfPath('/a/boards/PL')).toBe('')
+        expect(cardSegmentOfPath('/a/boards/my-cards')).toBe('')
+        expect(cardSegmentOfPath('/a/boards')).toBe('')
+        expect(cardSegmentOfPath('/a/mail/inbox/x')).toBe('')
     })
 })

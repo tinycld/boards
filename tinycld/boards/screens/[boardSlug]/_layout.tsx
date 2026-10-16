@@ -9,8 +9,14 @@ import { BoardLayoutProvider, type BoardLayoutValue } from '../../hooks/useBoard
 import { useBoardRoute } from '../../hooks/useBoardRoute'
 import { CardNavigationProvider, useRouterCardNavigation } from '../../hooks/useCardNavigation'
 import { BoardOpenCardProvider, resolveOpenCard } from '../../hooks/useOpenCard'
-import { cardParam, useTopCardSegment } from '../../hooks/useTopCardSegment'
-import { isCoveredByBoard, paramString, parseCardSegment, peekHref } from '../../lib/board-route'
+import { useTopCardSegment } from '../../hooks/useTopCardSegment'
+import {
+    cardParam,
+    isCoveredByBoard,
+    paramString,
+    parseCardSegment,
+    peekHref,
+} from '../../lib/board-route'
 import { formatCardKey, parseCardKey } from '../../lib/card-key'
 import { useBoardsUIStore } from '../../stores/boards-ui-store'
 
