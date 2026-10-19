@@ -258,7 +258,7 @@ POST   /api/boards/share-link/{token}/otp-verify
 ```
 
 Two more surfaces are registered through core rather than mounted here.
-Search: `server/register.go` calls `fts.RegisterSync` with its `ftsConfig` —
+Search: `server/register.go` calls `fts.RegisterSync` with `ftsConfigFor(app)` —
 index-sync hooks only, deliberately not `fts.Register`, so there is no
 `GET /api/boards/search`; boards has no in-app search box, and the federated
 `/api/search` behind the app's search palette (`/`, with a `boards:` chip) is
@@ -353,7 +353,7 @@ exactly what a developer runs locally.
 - `server/automation.go` — owner resolver, the done-list filter, and the param authorizer for the automation triggers
 - `server/oauth_scopes.go` — the `boards:read` / `boards:write` scopes and the
   collections and routes each admits to an OAuth caller
-- `server/search.go` — the federated-search source (the `ftsConfig` it queries
+- `server/search.go` — the federated-search source (the `ftsConfigFor(app)` config it queries
   lives in `server/register.go`)
 - `server/github_*.go`, `server/pr_rollup.go` — the GitHub App credential,
   webhook deliveries, link discovery, and the per-card PR state rollup
