@@ -268,17 +268,17 @@ func registerShareLinkEndpoints(app *pocketbase.PocketBase, rt *boardRealtime) {
 		jobs := background.For(app, "boards")
 		// A minute ticker for due-date notices.
 		jobs.Run("boards due notice sweep", func(ctx context.Context) {
-			sweepEvery(ctx, dueNoticeInterval, func(now time.Time) { checkDueNotices(app, now) })
+			sweepEvery(ctx, "due notices", dueNoticeInterval, func(now time.Time) { checkDueNotices(app, now) })
 		})
 		// A quarter-hour ticker archiving cards that have sat finished for
 		// longer than their board allows. See auto_archive.go.
 		jobs.Run("boards auto-archive sweep", func(ctx context.Context) {
-			sweepEvery(ctx, autoArchiveInterval, func(now time.Time) { sweepAutoArchive(app, now) })
+			sweepEvery(ctx, "auto-archive", autoArchiveInterval, func(now time.Time) { sweepAutoArchive(app, now) })
 		})
 		// A quarter-hour ticker for the sprint snapshots and the optional
 		// auto-start / auto-complete. See sprint_scheduler.go.
 		jobs.Run("boards sprint sweep", func(ctx context.Context) {
-			sweepEvery(ctx, sprintSweepInterval, func(now time.Time) { sweepSprints(app, now) })
+			sweepEvery(ctx, "sprints", sprintSweepInterval, func(now time.Time) { sweepSprints(app, now) })
 		})
 		return e.Next()
 	})

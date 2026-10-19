@@ -27,7 +27,7 @@ import (
 // cannot re-enter the rule that observed it.
 //
 // Never fails: a card that cannot be archived is logged and left for the
-// next sweep.
+// next sweep. A sweep stops when read-only mode starts (see sweepInterrupted).
 
 const autoArchiveInterval = 15 * time.Minute
 
@@ -59,6 +59,9 @@ func sweepAutoArchive(app core.App, now time.Time) {
 			continue
 		}
 		for _, card := range cards {
+			if sweepInterrupted() {
+				return
+			}
 			card.Set("archived", true)
 			if err := app.Save(card); err != nil {
 				activityLog.Warn("auto-archive failed", "card", card.Id, "error", err)

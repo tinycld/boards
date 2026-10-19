@@ -10,6 +10,7 @@ import (
 	"github.com/pocketbase/pocketbase/tools/types"
 
 	"tinycld.org/core/notify"
+	"tinycld.org/core/readonly"
 )
 
 // Due-date notices: "due soon" and "overdue", once each per due date.
@@ -72,18 +73,41 @@ const dueNoticeInterval = 60 * time.Second
 // sweepEvery runs sweep at once and then every interval, until ctx ends (the
 // app's terminate). The sweeps run as background jobs, which the terminate
 // waits for, so a sweep never queries a closed database.
-func sweepEvery(ctx context.Context, interval time.Duration, sweep func(now time.Time)) {
+//
+// A tick that falls while the server is read-only is skipped, not queued: a
+// sweep writes without a request, so the middleware cannot refuse it. The
+// next tick after the mode ends does the skipped work, because every sweep
+// reads what is due from the database (stamps, list_changed_at, sprint
+// dates), not from the tick. This is the rule core's cron guard keeps for
+// app.Cron() jobs.
+func sweepEvery(ctx context.Context, name string, interval time.Duration, sweep func(now time.Time)) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	sweep(time.Now())
+	tick := func() {
+		if readonly.Active() {
+			activityLog.Debug("sweep tick skipped: read-only", "sweep", name)
+			return
+		}
+		sweep(time.Now())
+	}
+	tick()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			sweep(time.Now())
+			tick()
 		}
 	}
+}
+
+// sweepInterrupted reports that read-only mode started after a sweep's tick
+// began. Each sweep checks it before each unit of work and stops, so it does
+// not keep writing into the pause; what it did not reach is still due at the
+// next tick after the mode ends. The check and the write are not atomic, so
+// a write already started finishes.
+func sweepInterrupted() bool {
+	return readonly.Active()
 }
 
 const pbDateFormat = "2006-01-02 15:04:05.000Z"
@@ -114,6 +138,9 @@ func checkDueNotices(app core.App, now time.Time) {
 	}
 
 	for _, card := range rows {
+		if sweepInterrupted() {
+			return
+		}
 		if cardInClosedList(app, card) {
 			continue
 		}
