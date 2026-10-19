@@ -1,11 +1,13 @@
 package boards
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/pocketbase/pocketbase/core"
 
+	"tinycld.org/core/background"
 	"tinycld.org/core/notify"
 )
 
@@ -35,10 +37,10 @@ import (
 // and is skipped here; everyone else watching gets boards_watched. The actor
 // is never told about their own action.
 //
-// The hooks hand off to a goroutine, as core's comment_mentions.go does — a
-// push dispatch can stall, and it must not delay the write's response. The
-// handlers themselves are synchronous and take the record, so the tests call
-// them directly.
+// The hooks hand off to a background job — a push dispatch can stall, and it
+// must not delay the write's response. The app's terminate waits for the
+// jobs. The handlers themselves are synchronous and take the record, so the
+// tests call them directly.
 
 const (
 	notifyTypeAssigned = "boards_assigned"
@@ -49,9 +51,13 @@ const (
 )
 
 func registerCardNotifications(app core.App) {
+	jobs := background.For(app, "boards")
 	app.OnRecordAfterUpdateSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
-		actor := actorOf(e.Record)
-		go notifyCardUpdate(app, e.Record, actor)
+		card := e.Record
+		actor := actorOf(card)
+		jobs.Run("boards card notification", func(context.Context) {
+			notifyCardUpdate(app, card, actor)
+		})
 		return e.Next()
 	})
 	app.OnRecordAfterCreateSuccess("boards_comments").BindFunc(func(e *core.RecordEvent) error {
@@ -61,11 +67,17 @@ func registerCardNotifications(app core.App) {
 		if isQuietImport(e.Record) {
 			return e.Next()
 		}
-		go notifyNewComment(app, e.Record)
+		comment := e.Record
+		jobs.Run("boards comment notification", func(context.Context) {
+			notifyNewComment(app, comment)
+		})
 		return e.Next()
 	})
 	app.OnRecordAfterCreateSuccess("boards_comment_reactions").BindFunc(func(e *core.RecordEvent) error {
-		go notifyReaction(app, e.Record)
+		reaction := e.Record
+		jobs.Run("boards reaction notification", func(context.Context) {
+			notifyReaction(app, reaction)
+		})
 		return e.Next()
 	})
 }
@@ -206,9 +218,13 @@ func notifyNewComment(app core.App, comment *core.Record) {
 // change on the sprint row, whoever made it — a person through the endpoint
 // or the sweep on the sprint's dates.
 func registerSprintNotifications(app core.App) {
+	jobs := background.For(app, "boards")
 	app.OnRecordAfterUpdateSuccess("boards_sprints").BindFunc(func(e *core.RecordEvent) error {
-		actor := actorOf(e.Record)
-		go notifySprintTransition(app, e.Record, actor)
+		sprint := e.Record
+		actor := actorOf(sprint)
+		jobs.Run("boards sprint notification", func(context.Context) {
+			notifySprintTransition(app, sprint, actor)
+		})
 		return e.Next()
 	})
 }

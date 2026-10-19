@@ -1,6 +1,7 @@
 package boards
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -65,23 +66,24 @@ func registerDueNotices(app core.App) {
 	})
 }
 
-func startDueNoticeScheduler(app core.App) {
-	ticker := time.NewTicker(60 * time.Second)
-	defer ticker.Stop()
-	checkDueNotices(app, time.Now())
-	for range ticker.C {
-		if !cardsAppIsLive(app) {
-			return
-		}
-		checkDueNotices(app, time.Now())
-	}
-}
+// dueNoticeInterval is the due-notice sweep's cadence.
+const dueNoticeInterval = 60 * time.Second
 
-// cardsAppIsLive mirrors calendar's appIsLive: a background goroutine can
-// outlive the app (the e2e harness resets the DB), and a record query on a
-// torn-down app panics rather than erroring.
-func cardsAppIsLive(app core.App) bool {
-	return app != nil && app.ConcurrentDB() != nil
+// sweepEvery runs sweep at once and then every interval, until ctx ends (the
+// app's terminate). The sweeps run as background jobs, which the terminate
+// waits for, so a sweep never queries a closed database.
+func sweepEvery(ctx context.Context, interval time.Duration, sweep func(now time.Time)) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	sweep(time.Now())
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			sweep(time.Now())
+		}
+	}
 }
 
 const pbDateFormat = "2006-01-02 15:04:05.000Z"
@@ -89,9 +91,6 @@ const pbDateFormat = "2006-01-02 15:04:05.000Z"
 // checkDueNotices runs one sweep as of `now`. Exposed with the clock as a
 // parameter so the tests can place a card on either side of a boundary.
 func checkDueNotices(app core.App, now time.Time) {
-	if !cardsAppIsLive(app) {
-		return
-	}
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	soonUntil := today.AddDate(0, 0, soonWindowDays+1) // exclusive: due < this is "soon"
 

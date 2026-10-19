@@ -31,24 +31,9 @@ import (
 
 const autoArchiveInterval = 15 * time.Minute
 
-func startAutoArchiveScheduler(app core.App) {
-	ticker := time.NewTicker(autoArchiveInterval)
-	defer ticker.Stop()
-	sweepAutoArchive(app, time.Now())
-	for range ticker.C {
-		if !cardsAppIsLive(app) {
-			return
-		}
-		sweepAutoArchive(app, time.Now())
-	}
-}
-
 // sweepAutoArchive runs one sweep as of `now`. Exposed with the clock as a
 // parameter so the tests can place a card on either side of the cutoff.
 func sweepAutoArchive(app core.App, now time.Time) {
-	if !cardsAppIsLive(app) {
-		return
-	}
 	projects, err := app.FindRecordsByFilter(
 		"boards_projects",
 		"archived = false && auto_archive_days > 0",
