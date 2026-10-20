@@ -9,7 +9,7 @@ import (
 )
 
 // Card notifications and auto-watching, through the real notify path. The
-// handlers are called directly (the hooks hand off to goroutines), on an env
+// handlers are called directly (the hooks hand off to background jobs), on an env
 // that also carries core's notifications collection.
 
 func addNotificationsCollection(t *testing.T, app *tests.TestApp) {

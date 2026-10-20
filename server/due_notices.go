@@ -1,6 +1,7 @@
 package boards
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/pocketbase/pocketbase/tools/types"
 
 	"tinycld.org/core/notify"
+	"tinycld.org/core/readonly"
 )
 
 // Due-date notices: "due soon" and "overdue", once each per due date.
@@ -65,23 +67,47 @@ func registerDueNotices(app core.App) {
 	})
 }
 
-func startDueNoticeScheduler(app core.App) {
-	ticker := time.NewTicker(60 * time.Second)
+// dueNoticeInterval is the due-notice sweep's cadence.
+const dueNoticeInterval = 60 * time.Second
+
+// sweepEvery runs sweep at once and then every interval, until ctx ends (the
+// app's terminate). The sweeps run as background jobs, which the terminate
+// waits for, so a sweep never queries a closed database.
+//
+// A tick that falls while the server is read-only is skipped, not queued: a
+// sweep writes without a request, so the middleware cannot refuse it. The
+// next tick after the mode ends does the skipped work, because every sweep
+// reads what is due from the database (stamps, list_changed_at, sprint
+// dates), not from the tick. This is the rule core's cron guard keeps for
+// app.Cron() jobs.
+func sweepEvery(ctx context.Context, name string, interval time.Duration, sweep func(now time.Time)) {
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	checkDueNotices(app, time.Now())
-	for range ticker.C {
-		if !cardsAppIsLive(app) {
+	tick := func() {
+		if readonly.Active() {
+			activityLog.Debug("sweep tick skipped: read-only", "sweep", name)
 			return
 		}
-		checkDueNotices(app, time.Now())
+		sweep(time.Now())
+	}
+	tick()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			tick()
+		}
 	}
 }
 
-// cardsAppIsLive mirrors calendar's appIsLive: a background goroutine can
-// outlive the app (the e2e harness resets the DB), and a record query on a
-// torn-down app panics rather than erroring.
-func cardsAppIsLive(app core.App) bool {
-	return app != nil && app.ConcurrentDB() != nil
+// sweepInterrupted reports that read-only mode started after a sweep's tick
+// began. Each sweep checks it before each unit of work and stops, so it does
+// not keep writing into the pause; what it did not reach is still due at the
+// next tick after the mode ends. The check and the write are not atomic, so
+// a write already started finishes.
+func sweepInterrupted() bool {
+	return readonly.Active()
 }
 
 const pbDateFormat = "2006-01-02 15:04:05.000Z"
@@ -89,9 +115,6 @@ const pbDateFormat = "2006-01-02 15:04:05.000Z"
 // checkDueNotices runs one sweep as of `now`. Exposed with the clock as a
 // parameter so the tests can place a card on either side of a boundary.
 func checkDueNotices(app core.App, now time.Time) {
-	if !cardsAppIsLive(app) {
-		return
-	}
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	soonUntil := today.AddDate(0, 0, soonWindowDays+1) // exclusive: due < this is "soon"
 
@@ -115,6 +138,9 @@ func checkDueNotices(app core.App, now time.Time) {
 	}
 
 	for _, card := range rows {
+		if sweepInterrupted() {
+			return
+		}
 		if cardInClosedList(app, card) {
 			continue
 		}

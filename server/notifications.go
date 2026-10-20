@@ -1,12 +1,15 @@
 package boards
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/pocketbase/pocketbase/core"
 
+	"tinycld.org/core/background"
 	"tinycld.org/core/notify"
+	"tinycld.org/core/readonly"
 )
 
 // Card notifications beyond @mentions: assignment, replies, and changes to a
@@ -35,10 +38,11 @@ import (
 // and is skipped here; everyone else watching gets boards_watched. The actor
 // is never told about their own action.
 //
-// The hooks hand off to a goroutine, as core's comment_mentions.go does — a
-// push dispatch can stall, and it must not delay the write's response. The
-// handlers themselves are synchronous and take the record, so the tests call
-// them directly.
+// The hooks hand off to a background job — a push dispatch can stall, and it
+// must not delay the write's response. The app's terminate waits for the
+// jobs. Each job waits out read-only mode before it writes (see
+// notifyWhenWritable). The handlers themselves are synchronous and take the
+// record, so the tests call them directly.
 
 const (
 	notifyTypeAssigned = "boards_assigned"
@@ -49,9 +53,13 @@ const (
 )
 
 func registerCardNotifications(app core.App) {
+	jobs := background.For(app, "boards")
 	app.OnRecordAfterUpdateSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
-		actor := actorOf(e.Record)
-		go notifyCardUpdate(app, e.Record, actor)
+		card := e.Record
+		actor := actorOf(card)
+		runNotification(jobs, "boards card notification", card.Id, func() {
+			notifyCardUpdate(app, card, actor)
+		})
 		return e.Next()
 	})
 	app.OnRecordAfterCreateSuccess("boards_comments").BindFunc(func(e *core.RecordEvent) error {
@@ -61,13 +69,47 @@ func registerCardNotifications(app core.App) {
 		if isQuietImport(e.Record) {
 			return e.Next()
 		}
-		go notifyNewComment(app, e.Record)
+		comment := e.Record
+		runNotification(jobs, "boards comment notification", comment.Id, func() {
+			notifyNewComment(app, comment)
+		})
 		return e.Next()
 	})
 	app.OnRecordAfterCreateSuccess("boards_comment_reactions").BindFunc(func(e *core.RecordEvent) error {
-		go notifyReaction(app, e.Record)
+		reaction := e.Record
+		runNotification(jobs, "boards reaction notification", reaction.Id, func() {
+			notifyReaction(app, reaction)
+		})
 		return e.Next()
 	})
+}
+
+const notifyDroppedMsg = "boards notification dropped: the server stayed read-only past the wait"
+
+// runNotification hands one notification to a background job that waits out
+// read-only mode before it writes.
+func runNotification(jobs *background.Jobs, job, recordID string, send func()) {
+	jobs.Run(job, func(ctx context.Context) {
+		notifyWhenWritable(ctx, job, recordID, send)
+	})
+}
+
+// notifyWhenWritable runs send once read-only mode is off. The record that
+// triggered it was written by a request already accepted, possibly just
+// before the server went read-only. A notification written while the mode is
+// on is lost if the next build rolls back, so it waits for the mode to end,
+// bounded by readonly.TailWait and by ctx, which ends when the app
+// terminates. A wait that ends first drops the notification.
+func notifyWhenWritable(ctx context.Context, job, recordID string, send func()) {
+	waitCtx, cancel := context.WithTimeout(ctx, readonly.TailWait)
+	defer cancel()
+	err := readonly.WhenWritable(waitCtx, func() error {
+		send()
+		return nil
+	})
+	if err != nil {
+		activityLog.Warn(notifyDroppedMsg, "job", job, "record", recordID, "err", err)
+	}
 }
 
 // notifyReaction tells a comment's author that someone reacted to it. Only
@@ -206,9 +248,13 @@ func notifyNewComment(app core.App, comment *core.Record) {
 // change on the sprint row, whoever made it — a person through the endpoint
 // or the sweep on the sprint's dates.
 func registerSprintNotifications(app core.App) {
+	jobs := background.For(app, "boards")
 	app.OnRecordAfterUpdateSuccess("boards_sprints").BindFunc(func(e *core.RecordEvent) error {
-		actor := actorOf(e.Record)
-		go notifySprintTransition(app, e.Record, actor)
+		sprint := e.Record
+		actor := actorOf(sprint)
+		runNotification(jobs, "boards sprint notification", sprint.Id, func() {
+			notifySprintTransition(app, sprint, actor)
+		})
 		return e.Next()
 	})
 }

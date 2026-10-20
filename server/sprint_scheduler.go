@@ -24,23 +24,8 @@ import (
 
 const sprintSweepInterval = 15 * time.Minute
 
-func startSprintScheduler(app core.App) {
-	ticker := time.NewTicker(sprintSweepInterval)
-	defer ticker.Stop()
-	sweepSprints(app, time.Now())
-	for range ticker.C {
-		if !cardsAppIsLive(app) {
-			return
-		}
-		sweepSprints(app, time.Now())
-	}
-}
-
 // sweepSprints runs one sweep as of `now`.
 func sweepSprints(app core.App, now time.Time) {
-	if !cardsAppIsLive(app) {
-		return
-	}
 	projects, err := app.FindRecordsByFilter(
 		"boards_projects", "archived = false && sprints_enabled = true", "", 0, 0)
 	if err != nil {
@@ -49,6 +34,9 @@ func sweepSprints(app core.App, now time.Time) {
 	}
 	today := utcDay(now)
 	for _, project := range projects {
+		if sweepInterrupted() {
+			return
+		}
 		sweepProjectSprints(app, project, now, today)
 	}
 }
