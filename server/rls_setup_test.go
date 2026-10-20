@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -181,25 +180,6 @@ func stubFormsCollection(app core.App) error {
 // ordering or on what the cloned seed data already contains.
 var fixtureUserSeq atomic.Uint64
 
-// fixturePassword returns the hash of the password every fixture user shares,
-// computed once per test binary. bcrypt took most of each test's time, and
-// several times that under -race, which put the package past go test's
-// 10-minute limit. The hash is a real one for the users collection's cost, so
-// ValidatePassword still accepts "Password123!".
-func fixturePassword(users *core.Collection) *core.PasswordFieldValue {
-	fixturePasswordOnce.Do(func() {
-		r := core.NewRecord(users)
-		r.SetPassword("Password123!")
-		fixturePasswordHash = r.GetString(core.FieldNamePassword + ":hash")
-	})
-	return &core.PasswordFieldValue{Hash: fixturePasswordHash}
-}
-
-var (
-	fixturePasswordOnce sync.Once
-	fixturePasswordHash string
-)
-
 func cardsUser(t *testing.T, app core.App, email, orgRole string) *core.Record {
 	t.Helper()
 	col, err := app.FindCollectionByNameOrId("users")
@@ -213,7 +193,7 @@ func cardsUser(t *testing.T, app core.App, email, orgRole string) *core.Record {
 	r.Set("name", "Test User")
 	r.Set("role", orgRole)
 	r.SetVerified(true)
-	r.SetRaw(core.FieldNamePassword, fixturePassword(col))
+	rlstest.SetPassword(r, "Password123!")
 	if err := app.Save(r); err != nil {
 		t.Fatalf("save user %s: %v", email, err)
 	}
