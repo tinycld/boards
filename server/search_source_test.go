@@ -1,6 +1,8 @@
 package boards
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"tinycld.org/core/search"
@@ -36,6 +38,23 @@ func TestSearchSourceMapsHitsToRows(t *testing.T) {
 	}
 	if result.Total != 1 {
 		t.Errorf("total = %d, want 1", result.Total)
+	}
+}
+
+// The aggregator cancels a source's context when its time is up or the app
+// terminates; the source must not run its query after that.
+func TestSearchSourceStopsWhenTheContextEnded(t *testing.T) {
+	app := setupSearchApp(t)
+	member, _, _ := seedProjectWithCard(t, app, "Ship the budget")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	result, err := searchCards(app, member, search.Query{Include: []string{"budget"}, Limit: 25, Ctx: ctx})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if len(result.Rows) != 0 {
+		t.Fatalf("rows = %+v, want none", result.Rows)
 	}
 }
 
