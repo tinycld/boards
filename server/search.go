@@ -1,14 +1,18 @@
 package boards
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 
 	"tinycld.org/core/fts"
+	"tinycld.org/core/logging"
 	"tinycld.org/core/search"
 )
+
+var searchLog = logging.ForPackage("boards")
 
 // searchSource contributes cards to the federated /api/search.
 //
@@ -38,6 +42,7 @@ func searchCards(app core.App, userID string, q search.Query) (search.Result, er
 		Exclude: joinTerms(q.Exclude),
 		Limit:   q.Limit,
 		Offset:  q.Offset,
+		Ctx:     q.Context(),
 	})
 	if err != nil {
 		return search.Result{}, err
@@ -48,7 +53,7 @@ func searchCards(app core.App, userID string, q search.Query) (search.Result, er
 	// for the page rather than widening the fts join: a page of hits spans a
 	// handful of boards at most, and a second collection in that join would
 	// push a boards-specific shape into core's generic query.
-	slugs := projectSlugs(app, hits)
+	slugs := projectSlugs(q.Context(), app, hits)
 
 	rows := make([]search.Row, 0, len(hits))
 	for _, hit := range hits {
@@ -85,7 +90,7 @@ func searchCards(app core.App, userID string, q search.Query) (search.Result, er
 // on a row that is otherwise complete, and a search that returns nothing
 // because a slug lookup failed would be a far worse outcome than one that
 // renders a few rows without their keys.
-func projectSlugs(app core.App, hits []fts.SearchResult) map[string]string {
+func projectSlugs(ctx context.Context, app core.App, hits []fts.SearchResult) map[string]string {
 	ids := make([]any, 0, len(hits))
 	seen := map[string]bool{}
 	for _, hit := range hits {
@@ -109,8 +114,12 @@ func projectSlugs(app core.App, hits []fts.SearchResult) map[string]string {
 		Select("id", "slug").
 		From("boards_projects").
 		Where(dbx.In("id", ids...)).
+		WithContext(ctx).
 		All(&rows); err != nil {
-		app.Logger().Warn("cards: search slug lookup failed", "error", err)
+		// An ended search is no lookup failure: nobody waits for the rows.
+		if ctx.Err() == nil {
+			searchLog.WarnContext(ctx, "search slug lookup failed", "error", err)
+		}
 		return map[string]string{}
 	}
 

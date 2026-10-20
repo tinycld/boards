@@ -57,7 +57,7 @@ type mentionsEnv struct {
 // core collides with it (1820000000).
 func coreMentionsDir(t *testing.T) string {
 	t.Helper()
-	src := rlstest.MigrationsDir(t, "../../tinycld/core/server/pb_migrations")
+	src := rlstest.CoreMigrationsDir(t)
 	dir := t.TempDir()
 	for _, name := range []string{
 		"1985000002_generalize_comment_mentions_target.js",
@@ -381,7 +381,7 @@ func TestCommentMentionsRLS_BoardsBranchSortsAfterCoreGeneralization(t *testing.
 	)
 
 	if _, err := os.Stat(filepath.Join(
-		rlstest.MigrationsDir(t, "../../tinycld/core/server/pb_migrations"), coreGeneralize,
+		rlstest.CoreMigrationsDir(t), coreGeneralize,
 	)); err != nil {
 		t.Fatalf("core generalizing migration missing: %v", err)
 	}
