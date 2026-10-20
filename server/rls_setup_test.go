@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -93,52 +92,33 @@ type cardsEnv struct {
 	guestToken     string
 }
 
-// newCardsApp builds a test app whose users collection carries the two fields
-// boards' rules read, with the shipped migrations applied.
+// cardsFixture is the migrated database the cards suites start from: the
+// bundled test data, the users fields and stub collections the migrations
+// need (prepareCardsBase), then the shipped migrations.
+//
+// Applying the migrations costs about 0.65s, and several hundred tests start
+// from it, which put the package past `go test`'s default 10-minute limit. So
+// the migrated database is built once per test binary and each test gets its
+// own copy of it: every test still starts from exactly the schema and rules
+// that ship, and nothing one test writes reaches another.
+var cardsFixture = rlstest.Fixture{
+	Base:           rlstest.BundledData,
+	Prepare:        prepareCardsBase,
+	MigrationsDirs: []string{"../pb-migrations"},
+}
+
+// prepareCardsBase adds the two users fields boards' rules read and stubs the
+// core collections its migrations name as relation targets.
 //
 // Order is load-bearing: `users.role` and `users.disabled` must exist BEFORE
 // the migrations run. Every cards rule conjoins `@request.auth.disabled != true`
 // and several read `@request.auth.role`; PocketBase validates a rule expression
 // against the live schema when the collection is saved, so a migration
 // referencing an unknown field fails to apply at all.
-//
-// Applying the migrations costs about 0.65s, and several hundred tests call
-// this, which put the package past `go test`'s default 10-minute limit. So the
-// migrated database is built once per test binary and each test gets its own
-// copy of it: every test still starts from exactly the schema and rules that
-// ship, and nothing one test writes reaches another.
-func newCardsApp(t *testing.T) *tests.TestApp {
-	t.Helper()
-	cardsTemplateOnce.Do(func() { cardsTemplateDir = buildCardsTemplate(t) })
-	if cardsTemplateDir == "" {
-		t.Fatal("the migrated template database failed to build in an earlier test")
-	}
-	app, err := tests.NewTestApp(cardsTemplateDir)
-	if err != nil {
-		t.Fatalf("NewTestApp from template: %v", err)
-	}
-	t.Cleanup(func() { app.Cleanup() })
-	return app
-}
-
-var (
-	cardsTemplateOnce sync.Once
-	cardsTemplateDir  string
-)
-
-// buildCardsTemplate returns the data dir of a migrated app whose database
-// connections are closed, ready for tests.NewTestApp to clone. TestMain
-// removes it.
-func buildCardsTemplate(t *testing.T) string {
-	t.Helper()
-	app, err := tests.NewTestApp()
-	if err != nil {
-		t.Fatalf("NewTestApp: %v", err)
-	}
-
+func prepareCardsBase(app core.App) error {
 	users, err := app.FindCollectionByNameOrId("users")
 	if err != nil {
-		t.Fatalf("find users: %v", err)
+		return fmt.Errorf("find users: %w", err)
 	}
 	users.Fields.Add(&core.SelectField{
 		Name:      "role",
@@ -148,47 +128,33 @@ func buildCardsTemplate(t *testing.T) string {
 	})
 	users.Fields.Add(&core.BoolField{Name: "disabled"})
 	if err := app.Save(users); err != nil {
-		t.Fatalf("add users.role/users.disabled: %v", err)
+		return fmt.Errorf("add users.role/users.disabled: %w", err)
 	}
 
-	stubGroupsCollection(t, app)
-	stubFormsCollection(t, app)
-
-	rlstest.Apply(t, app, rlstest.MigrationsDir(t, "../pb-migrations"))
-
-	if err := app.ClearBootstrap(); err != nil {
-		t.Fatalf("close template database: %v", err)
+	if err := stubGroupsCollection(app); err != nil {
+		return err
 	}
-	return app.DataDir()
-}
-
-func TestMain(m *testing.M) {
-	code := m.Run()
-	if cardsTemplateDir != "" {
-		_ = os.RemoveAll(cardsTemplateDir)
-	}
-	os.Exit(code)
+	return stubFormsCollection(app)
 }
 
 // stubGroupsCollection creates core's groups collection at the id
 // 2040000001 names as its relation target. Every fixture that applies
 // ../pb-migrations against a bare test app needs this first — the migration
 // fails to save otherwise ("The relation collection doesn't exist").
-func stubGroupsCollection(t *testing.T, app core.App) {
-	t.Helper()
+func stubGroupsCollection(app core.App) error {
 	groups := core.NewBaseCollection("groups")
 	groups.Id = "pbc_groups_01"
 	groups.Fields.Add(&core.TextField{Name: "name", Required: true})
 	if err := app.Save(groups); err != nil {
-		t.Fatalf("stub groups collection: %v", err)
+		return fmt.Errorf("stub groups collection: %w", err)
 	}
+	return nil
 }
 
 // stubFormsCollection creates core's forms collection, which the card
 // form column (2090000100) names as its relation target. Only the columns
 // boards reads are stubbed.
-func stubFormsCollection(t *testing.T, app core.App) {
-	t.Helper()
+func stubFormsCollection(app core.App) error {
 	forms := core.NewBaseCollection("forms")
 	forms.Fields.Add(
 		&core.TextField{Name: "host"},
@@ -200,8 +166,9 @@ func stubFormsCollection(t *testing.T, app core.App) {
 		&core.NumberField{Name: "order"},
 	)
 	if err := app.Save(forms); err != nil {
-		t.Fatalf("stub forms collection: %v", err)
+		return fmt.Errorf("stub forms collection: %w", err)
 	}
+	return nil
 }
 
 // fixtureUserSeq makes every fixture username unique within a process run.
@@ -213,6 +180,25 @@ func stubFormsCollection(t *testing.T, app core.App) {
 // removes the derivation entirely, so the outcome no longer depends on test
 // ordering or on what the cloned seed data already contains.
 var fixtureUserSeq atomic.Uint64
+
+// fixturePassword returns the hash of the password every fixture user shares,
+// computed once per test binary. bcrypt took most of each test's time, and
+// several times that under -race, which put the package past go test's
+// 10-minute limit. The hash is a real one for the users collection's cost, so
+// ValidatePassword still accepts "Password123!".
+func fixturePassword(users *core.Collection) *core.PasswordFieldValue {
+	fixturePasswordOnce.Do(func() {
+		r := core.NewRecord(users)
+		r.SetPassword("Password123!")
+		fixturePasswordHash = r.GetString(core.FieldNamePassword + ":hash")
+	})
+	return &core.PasswordFieldValue{Hash: fixturePasswordHash}
+}
+
+var (
+	fixturePasswordOnce sync.Once
+	fixturePasswordHash string
+)
 
 func cardsUser(t *testing.T, app core.App, email, orgRole string) *core.Record {
 	t.Helper()
@@ -227,7 +213,7 @@ func cardsUser(t *testing.T, app core.App, email, orgRole string) *core.Record {
 	r.Set("name", "Test User")
 	r.Set("role", orgRole)
 	r.SetVerified(true)
-	r.SetPassword("Password123!")
+	r.SetRaw(core.FieldNamePassword, fixturePassword(col))
 	if err := app.Save(r); err != nil {
 		t.Fatalf("save user %s: %v", email, err)
 	}
@@ -448,7 +434,7 @@ func cardsFieldAttachment(t *testing.T, app core.App, project, card, uploader *c
 // only mean something when there is more than one row to leak.
 func setupCardsEnv(t *testing.T) *cardsEnv {
 	t.Helper()
-	app := newCardsApp(t)
+	app := cardsFixture.NewApp(t)
 
 	env := &cardsEnv{app: app}
 	env.owner = cardsUser(t, app, "owner@test.local", "member")

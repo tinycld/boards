@@ -1,6 +1,7 @@
 package boards
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/pocketbase/pocketbase/core"
@@ -97,28 +98,37 @@ type mentionFlushEnv struct {
 	visitor *core.Record // NOT on the board — must never be notified
 }
 
+// mentionFlushFixture is cardsFixture with users.is_demo as well, which the
+// notify path reads.
+var mentionFlushFixture = rlstest.Fixture{
+	Base:           rlstest.BundledData,
+	Prepare:        prepareMentionFlushBase,
+	MigrationsDirs: []string{"../pb-migrations"},
+}
+
+func prepareMentionFlushBase(app core.App) error {
+	if err := prepareCardsBase(app); err != nil {
+		return err
+	}
+	users, err := app.FindCollectionByNameOrId("users")
+	if err != nil {
+		return fmt.Errorf("find users: %w", err)
+	}
+	users.Fields.Add(&core.BoolField{Name: "is_demo"})
+	if err := app.Save(users); err != nil {
+		return fmt.Errorf("add users.is_demo: %w", err)
+	}
+	return nil
+}
+
 func setupMentionFlushEnv(t *testing.T) *mentionFlushEnv {
 	t.Helper()
-	app := rlstest.NewApp(t)
+	app := mentionFlushFixture.NewApp(t)
 
 	users, err := app.FindCollectionByNameOrId("users")
 	if err != nil {
 		t.Fatalf("find users: %v", err)
 	}
-	users.Fields.Add(&core.SelectField{
-		Name: "role", Required: false, MaxSelect: 1,
-		Values: []string{"owner", "admin", "member", "guest"},
-	})
-	users.Fields.Add(&core.BoolField{Name: "disabled"})
-	users.Fields.Add(&core.BoolField{Name: "is_demo"})
-	if err := app.Save(users); err != nil {
-		t.Fatalf("save users: %v", err)
-	}
-
-	stubGroupsCollection(t, app)
-	stubFormsCollection(t, app)
-
-	rlstest.Apply(t, app, rlstest.MigrationsDir(t, "../pb-migrations"))
 
 	// NotifyUser writes here; boards' own migrations do not create it (it is
 	// core's), so build the shape the notify path uses.

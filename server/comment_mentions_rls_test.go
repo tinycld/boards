@@ -74,44 +74,33 @@ func coreMentionsDir(t *testing.T) string {
 	return dir
 }
 
+// mentionsFixture is the cards base plus core's staged mentions migrations
+// ahead of boards' own. It shares prepareCardsBase with cardsFixture: the
+// pre-migration prerequisites are the same, only the migration set differs.
+//
+// The dirs are applied in the order a boards-only boot reaches them, which is
+// filename order across the flat directory:
+//
+//	core  1985000002  (generalize — no-op with no table yet)
+//	core  1985000003  (creates comment_mentions, core-owned shape)
+//	boards 1986000000  (appends the branch that READS its columns)
+//
+// That ordering is a REQUIREMENT, not an observation: boards' file is
+// numbered 1986000000 precisely so it sorts after core's. Applying these
+// dirs in dependency order here would hide a mis-numbering — this suite
+// happens to agree with filename order, and must keep agreeing.
+func mentionsFixture(t *testing.T) rlstest.Fixture {
+	t.Helper()
+	return rlstest.Fixture{
+		Base:           rlstest.BundledData,
+		Prepare:        prepareCardsBase,
+		MigrationsDirs: []string{coreMentionsDir(t), "../pb-migrations"},
+	}
+}
+
 func setupMentionsEnv(t *testing.T) *mentionsEnv {
 	t.Helper()
-	app := rlstest.NewApp(t)
-
-	// users.role / users.disabled must exist before any migration runs — the
-	// rules read them and PocketBase validates against the live schema. Same
-	// prerequisite newCardsApp establishes; restated because the migration set
-	// here is different.
-	users, err := app.FindCollectionByNameOrId("users")
-	if err != nil {
-		t.Fatalf("find users: %v", err)
-	}
-	users.Fields.Add(&core.SelectField{
-		Name: "role", Required: false, MaxSelect: 1,
-		Values: []string{"owner", "admin", "member", "guest"},
-	})
-	users.Fields.Add(&core.BoolField{Name: "disabled"})
-	if err := app.Save(users); err != nil {
-		t.Fatalf("add users.role/users.disabled: %v", err)
-	}
-	stubGroupsCollection(t, app)
-	stubFormsCollection(t, app)
-
-	// Applied in the order a boards-only boot reaches them, which is filename
-	// order across the flat directory:
-	//
-	//	core  1985000002  (generalize — no-op with no table yet)
-	//	core  1985000003  (creates comment_mentions, core-owned shape)
-	//	boards 1986000000  (appends the branch that READS its columns)
-	//
-	// That ordering is a REQUIREMENT, not an observation: boards' file is
-	// numbered 1986000000 precisely so it sorts after core's. Applying these
-	// dirs in dependency order here would hide a mis-numbering — this suite
-	// happens to agree with filename order, and must keep agreeing.
-	rlstest.Apply(t, app,
-		coreMentionsDir(t),
-		rlstest.MigrationsDir(t, "../pb-migrations"),
-	)
+	app := mentionsFixture(t).NewApp(t)
 
 	env := &cardsEnv{app: app}
 	env.owner = cardsUser(t, app, "owner@test.local", "member")
@@ -274,24 +263,13 @@ func TestCommentMentionsRLS_UnknownCardRefused(t *testing.T) {
 // collections alone) rather than a replay of any real sibling's — proving the
 // contract without depending on which siblings this workspace has.
 func TestCommentMentionsRLS_AppendPreservesExistingBranch(t *testing.T) {
-	app := rlstest.NewApp(t)
-
-	users, err := app.FindCollectionByNameOrId("users")
-	if err != nil {
-		t.Fatalf("find users: %v", err)
-	}
-	users.Fields.Add(&core.SelectField{
-		Name: "role", Required: false, MaxSelect: 1,
-		Values: []string{"owner", "admin", "member", "guest"},
-	})
-	users.Fields.Add(&core.BoolField{Name: "disabled"})
-	if err := app.Save(users); err != nil {
-		t.Fatalf("add users.role/users.disabled: %v", err)
-	}
-	stubGroupsCollection(t, app)
-	stubFormsCollection(t, app)
-
-	rlstest.Apply(t, app, coreMentionsDir(t))
+	// Only core's stage comes from a template; boards' migrations must replay
+	// after the planted branch, so they cannot be part of it.
+	app := rlstest.Fixture{
+		Base:           rlstest.BundledData,
+		Prepare:        prepareCardsBase,
+		MigrationsDirs: []string{coreMentionsDir(t)},
+	}.NewApp(t)
 
 	const priorBranch = `(target_collection = "synthetic_pkg" && @request.auth.id != "")`
 	mentions, err := app.FindCollectionByNameOrId("comment_mentions")

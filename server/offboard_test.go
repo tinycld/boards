@@ -34,7 +34,7 @@ type boardsOffboardEnv struct {
 
 func setupBoardsOffboardApp(t *testing.T) *boardsOffboardEnv {
 	t.Helper()
-	app := newCardsApp(t)
+	app := cardsFixture.NewApp(t)
 	offboard.ResetReassignableForTesting()
 	offboard.ResetHandlersForTesting()
 	t.Cleanup(func() {

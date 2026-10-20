@@ -17,7 +17,7 @@ import (
 // separates card-completed from card-moved, and the native action handlers with
 // their relation authorizers.
 //
-// Run against the package's real migrations (newCardsApp / rlstest), because
+// Run against the package's real migrations (cardsFixture), because
 // both answers are only correct relative to the actual schema — `category`
 // lives on boards_lists, and membership on boards_project_members.
 
@@ -33,7 +33,7 @@ type cardsAutomationEnv struct {
 
 func setupCardsAutomation(t *testing.T) *cardsAutomationEnv {
 	t.Helper()
-	app := newCardsApp(t)
+	app := cardsFixture.NewApp(t)
 
 	owner := cardsUser(t, app, "owner@test.local", "member")
 	member := cardsUser(t, app, "member@test.local", "member")
