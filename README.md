@@ -340,7 +340,9 @@ exactly what a developer runs locally.
   GitHub panel), `help`, `tests`, `search`, two calendar `eventSources`
   (`boards-due`, `boards-sprints`), `quota` (attachments count against the
   storage ceiling by their `size` column), `migrations`, `server`, `cli`,
-  `collections`, `automation`, `seed`, `repository`, `peerVersions`
+  `collections`, `automation`, `notifications` (the notify event catalog in
+  `notify-events.ts`), `forms` (cards are a forms host: `forms/hosts.ts`,
+  `forms/ui.ts`), `seed`, `repository`, `peerVersions`
 - `package.json` — name, exports map, `tinycld-pkg` scripts, peer deps
 - `tsconfig.json` — extends the app shell's package tsconfig base
 - `vitest.config.ts` (and `playwright.config.ts` — full preset only) — thin configs spreading the app's
@@ -365,7 +367,8 @@ exactly what a developer runs locally.
   board list in step with membership grants and revocations),
   `public-screens/[token].tsx` (the share-link page at `/p/boards/<token>`,
   outside the app shell), `settings/github.tsx` (Settings → Account → GitHub),
-  `sidebar.tsx`, `search-adapter.ts`,
+  `sidebar.tsx`, `search-adapter.ts`, `notify-events.ts`, `forms/` (the card
+  form host, its fields and sections),
   `calendar-source.ts` + `calendar-sprint-source.ts`, `collections.ts`,
   `types.ts`, hooks, `lib/` (rank arithmetic, board projection, filtering,
   selection), `stores/`, and components grouped by area (`detail/`, `table/`,
