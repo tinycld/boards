@@ -6,6 +6,8 @@ import { OverlayProvider } from '@tinycld/core/ui/overlay'
 import { createElement, Fragment, type ReactNode, useEffect, useSyncExternalStore } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useBoardPresenceContext } from '../tinycld/boards/components/BoardPresenceProvider'
+import BoardLayout from '../tinycld/boards/screens/[boardSlug]/_layout'
+import { useBoardsUIStore } from '../tinycld/boards/stores/boards-ui-store'
 
 afterEach(cleanup)
 
@@ -274,15 +276,13 @@ function Providers({ children }: { children: ReactNode }) {
     )
 }
 
-async function mountLayout(boardSlug: string) {
+function mountLayout(boardSlug: string) {
     h.params = { boardSlug }
     // What the app's root gate resolves before any screen mounts.
     setResolvedAddress('http://localhost:7201')
     // The list view: the canvas's drag-and-drop library is a native module
     // the unit tests do not load, and the view is not what is under test.
-    const { useBoardsUIStore } = await import('../tinycld/boards/stores/boards-ui-store')
     useBoardsUIStore.getState().setViewMode('p1', 'list')
-    const { default: BoardLayout } = await import('../tinycld/boards/screens/[boardSlug]/_layout')
     return render(createElement(Providers, null, createElement(BoardLayout)))
 }
 
@@ -298,7 +298,7 @@ describe('the board layout route', () => {
     })
 
     it('mounts the board chrome, the child stack and exactly one room', async () => {
-        const view = await mountLayout('PL')
+        const view = mountLayout('PL')
         // The react-native stub renders a testID as a plain `testid` attribute.
         const byTestId = (id: string) => view.container.querySelectorAll(`[testid="${id}"]`)
 
@@ -311,7 +311,7 @@ describe('the board layout route', () => {
     })
 
     it('shares the layout’s room and document with every card child', async () => {
-        await mountLayout('PL')
+        mountLayout('PL')
 
         // Each render of the two probes appends a pair; the room's document
         // arrives after the first, so compare the latest pair.
@@ -325,7 +325,7 @@ describe('the board layout route', () => {
     // holds nothing: no room (so no socket), no board view and no queries.
     it('parks a board covered by a later board: a placeholder, no room and no board view', async () => {
         h.routes = [PL, OTTER]
-        const view = await mountLayout('PL')
+        const view = mountLayout('PL')
         const byTestId = (id: string) => view.container.querySelectorAll(`[testid="${id}"]`)
 
         await waitFor(() => expect(byTestId('boards-board-parked')).toHaveLength(1))
@@ -339,7 +339,7 @@ describe('the board layout route', () => {
     // it stays as it was — room, view and the card a reader was writing in —
     // for when they come back.
     it('keeps a blurred board that no board covers live', async () => {
-        const view = await mountLayout('PL')
+        const view = mountLayout('PL')
         const byTestId = (id: string) => view.container.querySelectorAll(`[testid="${id}"]`)
         await waitFor(() => expect(byTestId('boards-board-room')).toHaveLength(1))
         await waitFor(() => expect(h.sockets).toHaveLength(1))
@@ -356,7 +356,7 @@ describe('the board layout route', () => {
     })
 
     it('keeps the card children mounted across cover and uncover', async () => {
-        const view = await mountLayout('PL')
+        const view = mountLayout('PL')
         const byTestId = (id: string) => view.container.querySelectorAll(`[testid="${id}"]`)
         await waitFor(() => expect(byTestId('boards-board-room')).toHaveLength(1))
         await waitFor(() => expect(h.sockets).toHaveLength(1))
@@ -379,7 +379,7 @@ describe('the board layout route', () => {
 
     // The old spelling put the key where the board goes.
     it('redirects the old /a/boards/PL-12 to /a/boards/PL/PL-12', async () => {
-        await mountLayout('pl-12')
+        mountLayout('pl-12')
 
         await waitFor(() => expect(h.redirects).toHaveLength(1))
         expect(String(h.redirects[0])).toMatch(/\/boards\/PL\/PL-12$/)
