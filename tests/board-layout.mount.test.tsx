@@ -96,11 +96,13 @@ vi.mock('expo-router', () => {
         useNavigation: () => ({ isFocused: () => h.isFocused, addListener: () => () => {} }),
         useIsFocused: () => useSyncExternalStore(subscribeToNavigation, () => h.isFocused),
         useRoute: () => ({ key: 'pl', name: '[boardSlug]' }),
-        useGlobalSearchParams: () => h.params,
-        usePathname: () => '/a/boards/PL',
-        useSegments: () => [],
     }
 })
+
+// The URL, as the layout and the sidebar read it.
+vi.mock('@tinycld/core/lib/use-url', () => ({
+    useUrl: () => ({ pathname: '/a/boards/PL', params: h.params, href: '/a/boards/PL' }),
+}))
 
 // The boards stack's state, as the layout reads it to know whether a later
 // board covers it.

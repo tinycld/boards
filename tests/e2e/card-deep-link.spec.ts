@@ -172,6 +172,22 @@ test('Escape leaves in one step, from the peek and from the page', async ({ page
     await expectBareBoard(page, key)
 })
 
+// A card opened by a link and then closed must open again. Expo Router writes
+// a deep link's params onto every route of its path and keeps them after the
+// card closes, so the board read the closed card as still on top and the
+// press opened nothing (expo/expo#32241; core's useUrl reads the URL instead).
+// The `page.goto` is the subject: a cold load of the card's link.
+test('a card opened by a link, closed, opens again', async ({ page }) => {
+    const key = await boardWithThreeCards(page, 'link-reopen')
+    await page.goto(`/a/boards/${key}/${key}-1`)
+    await expect(cardSurface(page)).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expectBareBoard(page, key)
+
+    await openCard(page, 'Alpha')
+    await expect(page).toHaveURL(peekUrl(key, 1))
+})
+
 // Each stacked page owns its keys. The page j pushed shared its shortcut ids
 // with the page under it, and unmounting on Back deleted them, so the page
 // Back returned to answered no key at all.

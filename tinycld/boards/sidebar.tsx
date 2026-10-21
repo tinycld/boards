@@ -7,7 +7,8 @@ import {
 } from '@tinycld/core/components/sidebar-primitives'
 import { openHelpPackage } from '@tinycld/core/lib/help/open-help'
 import { useOrgHref } from '@tinycld/core/lib/org-routes'
-import { usePathname, useRouter } from 'expo-router'
+import { useUrl } from '@tinycld/core/lib/use-url'
+import { useRouter } from 'expo-router'
 import { Archive, HelpCircle, UserCheck } from 'lucide-react-native'
 import { View } from 'react-native'
 import { useBoardList } from './hooks/useActiveBoard'
@@ -23,7 +24,7 @@ export default function BoardsSidebar() {
     const openNewBoard = useBoardsUIStore(s => s.openNewBoard)
     const router = useRouter()
     const orgHref = useOrgHref()
-    const pathname = usePathname()
+    const { pathname } = useUrl()
     // The board is in the URL, so the highlight reads the URL: it cannot lag
     // behind the screen or disagree with it, and My cards — which names no
     // board — highlights nothing.
