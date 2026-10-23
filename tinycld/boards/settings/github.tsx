@@ -8,9 +8,9 @@ import { useToastStore } from '@tinycld/core/lib/stores/toast-store'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useMyLiveQuery } from '@tinycld/core/lib/use-my-live-query'
 import {
+    ButtonGroup,
     type Control,
     FormErrorSummary,
-    SelectInput,
     TextInput,
     useForm,
     type z,
@@ -374,7 +374,7 @@ function BoardPicker({
 }) {
     if (ownedProjects.length <= 1) return null
     return (
-        <SelectInput
+        <ButtonGroup
             control={control}
             name="project"
             label="Board"
