@@ -110,6 +110,8 @@ test.describe('Boards — list status', () => {
 
         await page.getByRole('button', { name: 'Board actions' }).click()
         await page.getByTestId('boards-settings').click()
-        await expect(page.getByLabel('Auto-archive finished cards after (days)', { exact: true })).toHaveValue('30')
+        await expect(
+            page.getByLabel('Auto-archive finished cards after (days)', { exact: true })
+        ).toHaveValue('30')
     })
 })

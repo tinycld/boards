@@ -101,7 +101,9 @@ test.describe('Boards — WIP limits and aging', () => {
         await page.getByRole('button', { name: 'To do list actions' }).click()
         await expect(page.getByTestId('boards-column-wip-limit')).toContainText('WIP limit: 4')
         await page.getByTestId('boards-column-wip-limit').click()
-        await expect(page.getByLabel('Cards allowed in this column', { exact: true })).toHaveValue('4')
+        await expect(page.getByLabel('Cards allowed in this column', { exact: true })).toHaveValue(
+            '4'
+        )
         await page.getByText('Cancel', { exact: true }).click()
 
         await setWipLimit(page, 'To do', '0')
@@ -121,7 +123,9 @@ test.describe('Boards — WIP limits and aging', () => {
 
         await page.getByRole('button', { name: 'Board actions' }).click()
         await page.getByTestId('boards-settings').click()
-        await expect(page.getByLabel('Highlight cards untouched for (days)', { exact: true })).toHaveValue('14')
+        await expect(
+            page.getByLabel('Highlight cards untouched for (days)', { exact: true })
+        ).toHaveValue('14')
     })
 
     // Off by default: a card created now is fresh, and no board that has not
