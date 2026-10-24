@@ -102,7 +102,7 @@ test.describe('Boards — list status', () => {
         await freshBoard(page)
         await page.getByRole('button', { name: 'Board actions' }).click()
         await page.getByTestId('boards-settings').click()
-        const field = page.getByLabel('Auto-archive finished cards after (days)')
+        const field = page.getByLabel('Auto-archive finished cards after (days)', { exact: true })
         await expect(field).toHaveValue('0')
         await field.fill('30')
         await page.getByTestId('boards-settings-save').click()
@@ -110,6 +110,8 @@ test.describe('Boards — list status', () => {
 
         await page.getByRole('button', { name: 'Board actions' }).click()
         await page.getByTestId('boards-settings').click()
-        await expect(page.getByLabel('Auto-archive finished cards after (days)')).toHaveValue('30')
+        await expect(
+            page.getByLabel('Auto-archive finished cards after (days)', { exact: true })
+        ).toHaveValue('30')
     })
 })

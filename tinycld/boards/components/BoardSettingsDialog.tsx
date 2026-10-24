@@ -1,10 +1,10 @@
 import { handleMutationErrorsWithForm } from '@tinycld/core/lib/errors'
 import { Dialog } from '@tinycld/core/ui/dialog'
 import {
+    ButtonGroup,
     type Control,
     FormErrorSummary,
     NumberInput,
-    SelectInput,
     Toggle,
     useForm,
     z,
@@ -187,7 +187,7 @@ function SprintFields({
                 label="Complete sprints automatically"
                 hint="The active sprint completes the day after it ends."
             />
-            <SelectInput
+            <ButtonGroup
                 control={control}
                 name="sprint_rollover"
                 label="Unfinished cards go to"
