@@ -205,7 +205,8 @@ reference](https://tinycld.org/docs/reference/cli-reference).
 
 All registered in `tinycld/boards/collections.ts` (the source of truth for the
 list) and created by the migrations in `pb-migrations/`. `project` is
-DENORMALIZED onto every content collection so a PB rule can resolve board
+DENORMALIZED onto every content collection (except `boards_card_links`, whose
+rules read the project through the linked cards) so a PB rule can resolve board
 membership in one hop instead of a back-relation chain:
 
 | Collection | Holds |
@@ -252,7 +253,7 @@ GET    /api/boards/share-links              list
 POST   /api/boards/share-link               mint
 PATCH  /api/boards/share-link/{id}          edit embed policy (domains, live)
 DELETE /api/boards/share-link/{id}          revoke
-GET    /api/boards/share-link/{token}       redeem
+GET    /api/boards/share-link/{token}       metadata (role, board, sign-in needed)
 POST   /api/boards/share-link/{token}/otp-request
 POST   /api/boards/share-link/{token}/otp-verify
 ```
