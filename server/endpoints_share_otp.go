@@ -366,11 +366,9 @@ func sendBoardOTPEmail(app core.App, toEmail, code, boardName string) error {
 	if boardName == "" {
 		boardName = "a shared board"
 	}
-	// The app handle is unused today; kept on the signature so per-app routing
-	// (suppressing mail for a demo tenant, say) can land without churn here.
-	_ = app
 	return guestauth.SendCode(
 		context.Background(),
+		app,
 		fmt.Sprintf("Your code to join %q", boardName),
 		fmt.Sprintf("Use this code to join %s:", boardName),
 		toEmail,
