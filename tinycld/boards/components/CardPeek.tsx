@@ -4,7 +4,13 @@ import { useDeviceInsets } from '@tinycld/core/lib/use-safe-area'
 import { useOverlayLayer } from '@tinycld/core/ui/overlay'
 import { useSwipeToDismiss } from '@tinycld/core/ui/swipe-dismiss'
 import { type RefObject, useMemo, useRef, useState } from 'react'
-import { Platform, Pressable, StyleSheet, useWindowDimensions, type View } from 'react-native'
+import {
+    Platform,
+    Pressable,
+    StyleSheet,
+    useWindowDimensions,
+    type ViewInstance,
+} from 'react-native'
 import { GestureDetector } from 'react-native-gesture-handler'
 import Animated from 'react-native-reanimated'
 import { expandAction, useCardNavigation } from '../hooks/useCardNavigation'
@@ -71,7 +77,7 @@ function CardPeekPanel({ project, entry }: { project: BoardProject; entry: CardE
     })
     // The panel's own node, so the layer stack knows what counts as INSIDE the
     // peek — a press in here must not dismiss it.
-    const panelRef = useRef<View>(null)
+    const panelRef = useRef<ViewInstance>(null)
     useCardSurfaceShortcuts(project, entry.card.id, canEdit, titleRef)
     // Board order, so the sub-task section and the parent picker list cards in
     // the order the board shows them.
@@ -267,7 +273,7 @@ function PeekBackdrop({
     panelRef,
 }: {
     onPress: () => void
-    panelRef: RefObject<View | null>
+    panelRef: RefObject<ViewInstance | null>
 }) {
     const overlayColor = useThemeColor('overlay-backdrop')
     const isRouteFocused = useIsRouteFocused()

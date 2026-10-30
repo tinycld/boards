@@ -30,6 +30,7 @@ export function useBoardList() {
     const [projectsCollection] = useStore('boards_projects')
 
     const { data: projects, isLoading: projectsLoading } = useLiveQuery({
+        queryKey: ['boards.board-list.live'],
         query: query =>
             query
                 .from({ project: projectsCollection })
@@ -37,6 +38,7 @@ export function useBoardList() {
                 .orderBy(({ project }) => project.name),
     })
     const { data: archivedProjects } = useLiveQuery({
+        queryKey: ['boards.board-list.archived'],
         query: query =>
             query
                 .from({ project: projectsCollection })
@@ -126,13 +128,15 @@ export function useMemberProjects() {
 export function useWritableProjects() {
     const { projects } = useBoardList()
     const [membersCollection] = useStore('boards_project_members')
-    const { data: mine } = useMyLiveQuery((query, { userId }) =>
-        query
-            .from({ member: membersCollection })
-            .where(({ member }) =>
-                and(eq(member.user, userId), inArray(member.role, ['owner', 'editor']))
-            )
-            .select(({ member }) => ({ project: member.project }))
+    const { data: mine } = useMyLiveQuery(
+        (query, { userId }) =>
+            query
+                .from({ member: membersCollection })
+                .where(({ member }) =>
+                    and(eq(member.user, userId), inArray(member.role, ['owner', 'editor']))
+                )
+                .select(({ member }) => ({ project: member.project })),
+        { queryKey: ['boards.writable-projects.members'] }
     )
     const writable = new Set((mine ?? []).map(m => m.project))
     return projects.filter(project => writable.has(project.id))
@@ -193,73 +197,76 @@ export function useBoardRows(selector: BoardSelector) {
     // pbtsdb serves only id subsets from the store); a plain id is served from
     // the store when the row is present. Either way the request carries the
     // back-relations, which is what fills the store for the includes.
-    const { data, isLoading } = useBoardLiveQuery(query => {
-        if (!key) return null
-        const boardProjects = projectsCollection.fetchRelations(
-            'boards_lists_via_project',
-            'boards_labels_via_project',
-            'boards_epics_via_project',
-            'boards_sprints_via_project',
-            'boards_cards_via_project',
-            'boards_card_reactions_via_project'
-        )
-        return query
-            .from({ project: boardProjects })
-            .where(({ project }) =>
-                slug ? or(eq(project.id, key), eq(project.slug, slug)) : eq(project.id, key)
+    const { data, isLoading } = useBoardLiveQuery(
+        query => {
+            if (!key) return null
+            const boardProjects = projectsCollection.fetchRelations(
+                'boards_lists_via_project',
+                'boards_labels_via_project',
+                'boards_epics_via_project',
+                'boards_sprints_via_project',
+                'boards_cards_via_project',
+                'boards_card_reactions_via_project'
             )
-            .select(({ project }) => ({
-                project,
-                lists: materialize(
-                    query
-                        .from({ list: listsCollection })
-                        .where(({ list }) => eq(list.project, project.id))
-                ),
-                cards: materialize(
-                    query
-                        .from({ card: cardsCollection })
-                        .where(({ card }) => eq(card.project, project.id))
-                ),
-                labels: materialize(
-                    query
-                        .from({ label: labelsCollection })
-                        .where(({ label }) => eq(label.project, project.id))
-                ),
-                epics: materialize(
-                    query
-                        .from({ epic: epicsCollection })
-                        .where(({ epic }) => eq(epic.project, project.id))
-                ),
-                sprints: materialize(
-                    query
-                        .from({ sprint: sprintsCollection })
-                        .where(({ sprint }) => eq(sprint.project, project.id))
-                ),
-                reactions: materialize(
-                    query
-                        .from({ reaction: reactionsCollection })
-                        .where(({ reaction }) => eq(reaction.project, project.id))
-                ),
-                // The roster, joined to users for names; the join reads the
-                // optimistic local store, so a just-added member renders
-                // before the realtime round-trip.
-                //
-                // A share-link visitor legally reads NOTHING here: the
-                // roster rule is member-AND-non-guest, and 1980000003
-                // deliberately adds no token disjunct to it. The avatar
-                // stack is empty for them, which is the point — a link must
-                // not hand out the org's member names and emails.
-                members: materialize(
-                    query
-                        .from({ member: membersCollection })
-                        .innerJoin({ user: usersCollection }, ({ member, user }) =>
-                            eq(member.user, user.id)
-                        )
-                        .where(({ member }) => eq(member.project, project.id))
-                ),
-            }))
-            .findOne()
-    })
+            return query
+                .from({ project: boardProjects })
+                .where(({ project }) =>
+                    slug ? or(eq(project.id, key), eq(project.slug, slug)) : eq(project.id, key)
+                )
+                .select(({ project }) => ({
+                    project,
+                    lists: materialize(
+                        query
+                            .from({ list: listsCollection })
+                            .where(({ list }) => eq(list.project, project.id))
+                    ),
+                    cards: materialize(
+                        query
+                            .from({ card: cardsCollection })
+                            .where(({ card }) => eq(card.project, project.id))
+                    ),
+                    labels: materialize(
+                        query
+                            .from({ label: labelsCollection })
+                            .where(({ label }) => eq(label.project, project.id))
+                    ),
+                    epics: materialize(
+                        query
+                            .from({ epic: epicsCollection })
+                            .where(({ epic }) => eq(epic.project, project.id))
+                    ),
+                    sprints: materialize(
+                        query
+                            .from({ sprint: sprintsCollection })
+                            .where(({ sprint }) => eq(sprint.project, project.id))
+                    ),
+                    reactions: materialize(
+                        query
+                            .from({ reaction: reactionsCollection })
+                            .where(({ reaction }) => eq(reaction.project, project.id))
+                    ),
+                    // The roster, joined to users for names; the join reads the
+                    // optimistic local store, so a just-added member renders
+                    // before the realtime round-trip.
+                    //
+                    // A share-link visitor legally reads NOTHING here: the
+                    // roster rule is member-AND-non-guest, and 1980000003
+                    // deliberately adds no token disjunct to it. The avatar
+                    // stack is empty for them, which is the point — a link must
+                    // not hand out the org's member names and emails.
+                    members: materialize(
+                        query
+                            .from({ member: membersCollection })
+                            .innerJoin({ user: usersCollection }, ({ member, user }) =>
+                                eq(member.user, user.id)
+                            )
+                            .where(({ member }) => eq(member.project, project.id))
+                    ),
+                }))
+                .findOne()
+        },
+        { queryKey: ['boards.board-rows', key, slug] }
+    )
     const users = useUserRows()
 
     return { rows: data ?? null, users, isLoading }

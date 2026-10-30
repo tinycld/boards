@@ -52,14 +52,17 @@ function useGitHubSettingsData() {
 
     // My owner rows, with the role in the request; the boards themselves are
     // the sidebar's list, which the list rule already sized.
-    const { data: owned } = useMyLiveQuery((query, { userId }) =>
-        query
-            .from({ member: membersCollection })
-            .where(({ member }) => and(eq(member.user, userId), eq(member.role, 'owner')))
-            .select(({ member }) => ({ project: member.project }))
+    const { data: owned } = useMyLiveQuery(
+        (query, { userId }) =>
+            query
+                .from({ member: membersCollection })
+                .where(({ member }) => and(eq(member.user, userId), eq(member.role, 'owner')))
+                .select(({ member }) => ({ project: member.project })),
+        { queryKey: ['boards.github-settings.owned'] }
     )
     // Every attached repo across my boards: the list rule is "a member".
     const { data: repoRows } = useLiveQuery({
+        queryKey: ['boards.github-settings.repos'],
         query: query => query.from({ repo: reposCollection }),
     })
 
@@ -321,7 +324,7 @@ function AddRepoForm({ ownedProjects }: { ownedProjects: { id: string; name: str
         onError: handleMutationErrorsWithForm({ setError, getValues }),
     })
 
-    const onSubmit = handleSubmit(data => create.mutate(data))
+    const onSubmit = () => void handleSubmit(data => create.mutate(data))()
     const canSubmit = !create.isPending && isValid
 
     return (

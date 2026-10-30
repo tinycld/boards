@@ -229,10 +229,11 @@ function CreateLabelForm({
         mode: 'onChange',
     })
 
-    const submit = handleSubmit(data => {
-        onCreate(data.name, data.color)
-        onClose()
-    })
+    const submit = () =>
+        void handleSubmit(data => {
+            onCreate(data.name, data.color)
+            onClose()
+        })()
     const inputBorder = errors.name ? 'border-danger' : 'border-border'
 
     return (

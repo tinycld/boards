@@ -95,21 +95,24 @@ export function useFocusedLink(focused: string): { isLoading: boolean; href: Hre
     // has not loaded — the card by id, then its board by id. A relation, not
     // a join: a join pushes every board id into the card request, which past
     // ~200 boards exceeds PocketBase's filter limit.
-    const { data: rows, isLoading } = useBoardLiveQuery(query => {
-        if (!focused || key) return null
-        return query
-            .from({ card: cardsCollection })
-            .where(({ card }) => eq(card.id, focused))
-            .select(({ card }) => ({
-                card,
-                project: materialize(
-                    query
-                        .from({ project: projectsCollection })
-                        .where(({ project }) => eq(project.id, card.project))
-                        .findOne()
-                ),
-            }))
-    })
+    const { data: rows, isLoading } = useBoardLiveQuery(
+        query => {
+            if (!focused || key) return null
+            return query
+                .from({ card: cardsCollection })
+                .where(({ card }) => eq(card.id, focused))
+                .select(({ card }) => ({
+                    card,
+                    project: materialize(
+                        query
+                            .from({ project: projectsCollection })
+                            .where(({ project }) => eq(project.id, card.project))
+                            .findOne()
+                    ),
+                }))
+        },
+        { queryKey: ['boards.focused-link', focused] }
+    )
 
     if (!focused) return { isLoading: false, href: null }
     if (key) {

@@ -42,41 +42,44 @@ export function useBoardPickerData(projectId: string): BoardPickerData {
         'boards_project_members',
         'users'
     )
-    const { data } = useBoardLiveQuery(query => {
-        if (!projectId) return null
-        return query
-            .from({ project: projectsCollection })
-            .where(({ project }) => eq(project.id, projectId))
-            .select(({ project }) => ({
-                sprintsEnabled: project.sprints_enabled,
-                labels: materialize(
-                    query
-                        .from({ label: labelsCollection })
-                        .where(({ label }) => eq(label.project, project.id))
-                ),
-                epics: materialize(
-                    query
-                        .from({ epic: epicsCollection })
-                        .where(({ epic }) => eq(epic.project, project.id))
-                ),
-                sprints: materialize(
-                    query
-                        .from({ sprint: sprintsCollection })
-                        .where(({ sprint }) => eq(sprint.project, project.id))
-                ),
-                // The roster the card detail's pickers offer (useActiveBoard):
-                // a card is assigned only to someone who can open the board.
-                members: materialize(
-                    query
-                        .from({ member: membersCollection })
-                        .innerJoin({ user: usersCollection }, ({ member, user }) =>
-                            eq(member.user, user.id)
-                        )
-                        .where(({ member }) => eq(member.project, project.id))
-                ),
-            }))
-            .findOne()
-    })
+    const { data } = useBoardLiveQuery(
+        query => {
+            if (!projectId) return null
+            return query
+                .from({ project: projectsCollection })
+                .where(({ project }) => eq(project.id, projectId))
+                .select(({ project }) => ({
+                    sprintsEnabled: project.sprints_enabled,
+                    labels: materialize(
+                        query
+                            .from({ label: labelsCollection })
+                            .where(({ label }) => eq(label.project, project.id))
+                    ),
+                    epics: materialize(
+                        query
+                            .from({ epic: epicsCollection })
+                            .where(({ epic }) => eq(epic.project, project.id))
+                    ),
+                    sprints: materialize(
+                        query
+                            .from({ sprint: sprintsCollection })
+                            .where(({ sprint }) => eq(sprint.project, project.id))
+                    ),
+                    // The roster the card detail's pickers offer (useActiveBoard):
+                    // a card is assigned only to someone who can open the board.
+                    members: materialize(
+                        query
+                            .from({ member: membersCollection })
+                            .innerJoin({ user: usersCollection }, ({ member, user }) =>
+                                eq(member.user, user.id)
+                            )
+                            .where(({ member }) => eq(member.project, project.id))
+                    ),
+                }))
+                .findOne()
+        },
+        { queryKey: ['boards.picker-data', projectId] }
+    )
     return useMemo(
         () => ({
             // The orders the board's own pickers use (buildBoardProject).

@@ -1,7 +1,7 @@
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { Plus } from 'lucide-react-native'
 import { forwardRef } from 'react'
-import { Pressable, Text, type View } from 'react-native'
+import { Pressable, Text, type ViewInstance } from 'react-native'
 
 /**
  * A dashed outline chip: "nothing here yet — tap to add".
@@ -15,7 +15,7 @@ import { Pressable, Text, type View } from 'react-native'
  * `onPress` and a ref — see the Value components in property-values.tsx.
  */
 export const GhostChip = forwardRef<
-    View,
+    ViewInstance,
     { label: string; onPress?: () => void; hasPlusIcon?: boolean }
 >(function GhostChip({ label, onPress, hasPlusIcon = false }, ref) {
     const mutedColor = useThemeColor('muted')

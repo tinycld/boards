@@ -84,7 +84,10 @@ export default function MyCardsScreen() {
     // it can filter to them.
     const { data: watcherRows, isLoading: watchersLoading } = useMyLiveQuery(
         (query, { userId: me }) =>
-            query.from({ watcher: watchersCollection }).where(({ watcher }) => eq(watcher.user, me))
+            query
+                .from({ watcher: watchersCollection })
+                .where(({ watcher }) => eq(watcher.user, me)),
+        { queryKey: ['boards.my-cards.watchers'] }
     )
     const watchedCardIds = useMemo(
         () => new Set((watcherRows ?? []).map(row => row.card)),
@@ -110,6 +113,7 @@ export default function MyCardsScreen() {
     // request fails with a 400 (a blank screen). A relation keeps the cards
     // request to the conditions below, and looks board and list up by id.
     const { data: joined } = useLiveQuery({
+        queryKey: ['boards.my-cards.cards', mode, userId, watchersLoading, watchedCardIds],
         query: query => {
             if (!myCardsQueryEnabled(mode, userId, watchersLoading, watchedCardIds)) return null
             return query
@@ -161,29 +165,38 @@ export default function MyCardsScreen() {
     // one, matching what toBoardLabel/toBoardEpic read; sprints does not —
     // toBoardSprint reads nearly every column, so a select there would add a
     // field list to keep in sync for almost no shape-narrowing benefit.
-    const { data: labels } = useBoardLiveQuery(query =>
-        query.from({ label: labelsCollection }).select(({ label }) => ({
-            id: label.id,
-            name: label.name,
-            color: label.color,
-        }))
+    const { data: labels } = useBoardLiveQuery(
+        query =>
+            query.from({ label: labelsCollection }).select(({ label }) => ({
+                id: label.id,
+                name: label.name,
+                color: label.color,
+            })),
+        { queryKey: ['boards.my-cards.labels'] }
     )
     // Shares useUsers.ts's query exactly — TanStack DB folds it into the one
     // subscription useActiveBoard already holds for the whole boards session,
     // so this costs nothing extra and stays narrowed by the same `.select()`.
     const users = useUserRows()
-    const { data: epics } = useBoardLiveQuery(query =>
-        query.from({ epic: epicsCollection }).select(({ epic }) => ({
-            id: epic.id,
-            title: epic.title,
-            color: epic.color,
-            position: epic.position,
-            archived: epic.archived,
-            points_total: epic.points_total,
-            points_done: epic.points_done,
-        }))
+    const { data: epics } = useBoardLiveQuery(
+        query =>
+            query.from({ epic: epicsCollection }).select(({ epic }) => ({
+                id: epic.id,
+                title: epic.title,
+                color: epic.color,
+                position: epic.position,
+                archived: epic.archived,
+                points_total: epic.points_total,
+                points_done: epic.points_done,
+            })),
+        { queryKey: ['boards.my-cards.epics'] }
     )
-    const { data: sprints } = useBoardLiveQuery(query => query.from({ sprint: sprintsCollection }))
+    const { data: sprints } = useBoardLiveQuery(
+        query => query.from({ sprint: sprintsCollection }),
+        {
+            queryKey: ['boards.my-cards.sprints'],
+        }
+    )
 
     const groups = useMemo(() => {
         const rows = buildMyCardRows({

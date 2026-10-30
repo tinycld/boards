@@ -60,14 +60,18 @@ function LinkPrForm({
         defaultValues: { url: '' },
     })
     const linkPr = useLinkPr(cardId, projectId)
-    const onSubmit = handleSubmit(values => {
-        const parsed = parsePrUrl(values.url)
-        if (!parsed) return
-        linkPr.mutate(
-            { ...parsed, url: values.url.trim() },
-            { onSuccess: onClose, onError: handleMutationErrorsWithForm({ setError, getValues }) }
-        )
-    })
+    const onSubmit = () =>
+        void handleSubmit(values => {
+            const parsed = parsePrUrl(values.url)
+            if (!parsed) return
+            linkPr.mutate(
+                { ...parsed, url: values.url.trim() },
+                {
+                    onSuccess: onClose,
+                    onError: handleMutationErrorsWithForm({ setError, getValues }),
+                }
+            )
+        })()
     const canSubmit = isValid && !linkPr.isPending
 
     return (

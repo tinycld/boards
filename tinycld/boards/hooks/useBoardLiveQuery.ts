@@ -1,5 +1,5 @@
 import type { Context, InitialQueryBuilder, QueryBuilder } from '@tanstack/db'
-import { useLiveQuery } from '@tanstack/react-db'
+import { type LiveQueryKey, useLiveQuery } from '@tanstack/react-db'
 
 /**
  * A live query that does not require a signed-in user.
@@ -22,10 +22,16 @@ import { useLiveQuery } from '@tanstack/react-db'
 export function useBoardLiveQuery<TContext extends Context>(
     queryFn: (q: InitialQueryBuilder) => QueryBuilder<TContext> | undefined | null,
     /**
-     * @deprecated Ignored. The query's identity comes from its IR, which holds
-     * every value the query captures, so a deps list adds nothing.
+     * `{ queryKey }` gives the query an explicit identity, the same option
+     * `useMyLiveQuery` takes: without it, react-db rebuilds and hashes the
+     * query on every render to find out whether it changed. The key must name
+     * every value the query captures, or a change to an unnamed value does not
+     * re-run it.
+     *
+     * An array is the deprecated deps list and is ignored.
      */
-    _deps?: unknown[]
+    options?: { queryKey: LiveQueryKey } | unknown[]
 ) {
-    return useLiveQuery({ query: q => queryFn(q) })
+    const queryKey = options && !Array.isArray(options) ? options.queryKey : undefined
+    return useLiveQuery({ queryKey, query: q => queryFn(q) })
 }

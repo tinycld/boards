@@ -18,7 +18,7 @@ import {
     Users,
 } from 'lucide-react-native'
 import { forwardRef, useState } from 'react'
-import { Platform, Pressable, Text, View } from 'react-native'
+import { Platform, Pressable, Text, View, type ViewInstance } from 'react-native'
 import { useUpdateProject } from '../hooks/useProjectMutations'
 import { useProjectRole } from '../hooks/useProjectRole'
 import { useBoardsUIStore, type ViewMode } from '../stores/boards-ui-store'
@@ -374,7 +374,7 @@ interface HeaderButtonProps {
  * onPress and the ref to the Fragment. One string serves the tooltip and the
  * accessibility label, so the two cannot drift when the label flips.
  */
-const HeaderButton = forwardRef<View, HeaderButtonProps>(function HeaderButton(
+const HeaderButton = forwardRef<ViewInstance, HeaderButtonProps>(function HeaderButton(
     { label, icon: Icon, color, testID, onPress },
     ref
 ) {

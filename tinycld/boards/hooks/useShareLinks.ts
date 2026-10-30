@@ -79,6 +79,7 @@ export function useShareLinks(projectId: string) {
     const [linksCollection] = useStore('boards_share_links')
 
     const { data } = useLiveQuery({
+        queryKey: ['boards.share-links', projectId],
         query: query =>
             projectId
                 ? query

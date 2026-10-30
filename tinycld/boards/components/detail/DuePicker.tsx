@@ -169,10 +169,11 @@ function TimeRow({
 
     // An empty field parses to null and writes nothing; "Clear time" is the
     // way to remove a time.
-    const commit = handleSubmit(({ time }) => {
-        const parsed = parseTimeText(time)
-        if (parsed) onChange(parsed)
-    })
+    const commit = () =>
+        void handleSubmit(({ time }) => {
+            const parsed = parseTimeText(time)
+            if (parsed) onChange(parsed)
+        })()
     const borderClass = errors.time ? 'border-danger' : 'border-border'
 
     return (
@@ -197,7 +198,7 @@ function TimeRow({
                                 onSubmitEditing={commit}
                                 onBlur={() => {
                                     field.onBlur()
-                                    void commit()
+                                    commit()
                                 }}
                                 placeholder="HH:MM"
                                 accessibilityLabel="Due time"

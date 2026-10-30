@@ -3,7 +3,7 @@ import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { Menu } from '@tinycld/core/ui/menu'
 import { ChevronDown, CircleCheck, Play, Timer } from 'lucide-react-native'
 import { forwardRef, useState } from 'react'
-import { Pressable, Text, type View } from 'react-native'
+import { Pressable, Text, type ViewInstance } from 'react-native'
 import { useProjectRole } from '../hooks/useProjectRole'
 import {
     activeSprint,
@@ -175,7 +175,7 @@ function activeSummary(sprint: BoardSprint): string {
  * DOES rather than repeating the label back.
  */
 const ScopeTrigger = forwardRef<
-    View,
+    ViewInstance,
     { label: string; mutedColor: string; foreground: string; onPress?: () => void }
 >(function ScopeTrigger({ label, mutedColor, foreground, onPress }, ref) {
     return (

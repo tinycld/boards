@@ -3,7 +3,7 @@ import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { Menu } from '@tinycld/core/ui/menu'
 import { Archive, Gauge, ListFilter, Tag, Timer, Users, X } from 'lucide-react-native'
 import { forwardRef, useState } from 'react'
-import { Pressable, Text, View } from 'react-native'
+import { Pressable, Text, View, type ViewInstance } from 'react-native'
 import { useCardBulkActions } from '../hooks/useCardBulkActions'
 import { allHave, partialCount, resolveSelection, sharedValue } from '../lib/board-selection'
 import { useBoardsUIStore } from '../stores/boards-ui-store'
@@ -317,7 +317,7 @@ interface BarButtonProps {
  * forwardRef because every button but Archive is a picker's trigger, which
  * is cloned with an `onPress` and the ref the surface anchors against.
  */
-const BarButton = forwardRef<View, BarButtonProps>(function BarButton(
+const BarButton = forwardRef<ViewInstance, BarButtonProps>(function BarButton(
     { icon: Icon, label, testID, onPress, partialCount = 0 },
     ref
 ) {

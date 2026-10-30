@@ -68,7 +68,7 @@ function NewBoardForm({ onClose }: { onClose: () => void }) {
 
     const color = watch('color')
     const slug = watch('slug')
-    const onSubmit = handleSubmit(values => createProject.mutate(values))
+    const onSubmit = () => void handleSubmit(values => createProject.mutate(values))()
     const canSubmit = isValid && !createProject.isPending
 
     return (

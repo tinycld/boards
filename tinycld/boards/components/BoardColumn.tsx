@@ -3,7 +3,7 @@ import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { PlainInput } from '@tinycld/core/ui/PlainInput'
 import { TriangleAlert } from 'lucide-react-native'
 import { memo, useCallback, useRef, useState } from 'react'
-import { Pressable, ScrollView, Text, View } from 'react-native'
+import { Pressable, ScrollView, type ScrollViewInstance, Text, View } from 'react-native'
 import type { DraxDragWithReceiverEventData, DraxMonitorEventData } from 'react-native-drax'
 import { DraxView, SortableContainer, SortableItem, useSortableList } from 'react-native-drax'
 import type { SharedValue } from 'react-native-reanimated'
@@ -834,7 +834,7 @@ const ColumnCards = memo(function ColumnCards({
     reactorName,
     currentUserId,
 }: ColumnCardsProps) {
-    const scrollRef = useRef<ScrollView>(null)
+    const scrollRef = useRef<ScrollViewInstance>(null)
     const moveCard = useMoveCard()
     const phantomSpace = useSharedValue(0)
 

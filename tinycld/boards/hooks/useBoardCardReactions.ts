@@ -25,12 +25,15 @@ export function useBoardCardReactions(projectId: string) {
     const { user } = useAuth({ throwIfAnon: false })
     const userId = user?.id ?? ''
 
-    const { data: rows } = useBoardLiveQuery(query => {
-        if (!projectId) return null
-        return query
-            .from({ reaction: reactionsCollection })
-            .where(({ reaction }) => eq(reaction.project, projectId))
-    })
+    const { data: rows } = useBoardLiveQuery(
+        query => {
+            if (!projectId) return null
+            return query
+                .from({ reaction: reactionsCollection })
+                .where(({ reaction }) => eq(reaction.project, projectId))
+        },
+        { queryKey: ['boards.card-reactions', projectId] }
+    )
     const byCard = useMemo(() => groupCardReactions(rows ?? [], userId), [rows, userId])
 
     // useCallback, and NO_REACTIONS is a module constant rather than a fresh

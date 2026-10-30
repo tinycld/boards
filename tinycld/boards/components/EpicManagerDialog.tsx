@@ -280,10 +280,11 @@ function CreateEpicForm({
         mode: 'onChange',
     })
 
-    const submit = handleSubmit(data => {
-        onCreate(data.title, data.color)
-        onClose()
-    })
+    const submit = () =>
+        void handleSubmit(data => {
+            onCreate(data.title, data.color)
+            onClose()
+        })()
     const inputBorder = errors.title ? 'border-danger' : 'border-border'
 
     return (

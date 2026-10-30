@@ -93,6 +93,7 @@ export function useEventSource({ start, end }: EventSourceRange): {
     // exceeds PocketBase's filter limit. So the archived-board check runs in
     // buildDueItems instead of the query.
     const { data: rows, isLoading } = useLiveQuery({
+        queryKey: ['boards.calendar.due-cards', startDay, dayAfterEnd],
         query: query =>
             query
                 .from({ card: cardsCollection })
