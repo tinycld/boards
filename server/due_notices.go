@@ -80,11 +80,11 @@ const dueNoticeInterval = 60 * time.Second
 // reads what is due from the database (stamps, list_changed_at, sprint
 // dates), not from the tick. This is the rule core's cron guard keeps for
 // app.Cron() jobs.
-func sweepEvery(ctx context.Context, name string, interval time.Duration, sweep func(now time.Time)) {
+func sweepEvery(ctx context.Context, app core.App, name string, interval time.Duration, sweep func(now time.Time)) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	tick := func() {
-		if readonly.Active() {
+		if readonly.Active(app) {
 			activityLog.Debug("sweep tick skipped: read-only", "sweep", name)
 			return
 		}
@@ -106,8 +106,8 @@ func sweepEvery(ctx context.Context, name string, interval time.Duration, sweep 
 // not keep writing into the pause; what it did not reach is still due at the
 // next tick after the mode ends. The check and the write are not atomic, so
 // a write already started finishes.
-func sweepInterrupted() bool {
-	return readonly.Active()
+func sweepInterrupted(app core.App) bool {
+	return readonly.Active(app)
 }
 
 const pbDateFormat = "2006-01-02 15:04:05.000Z"
@@ -138,7 +138,7 @@ func checkDueNotices(app core.App, now time.Time) {
 	}
 
 	for _, card := range rows {
-		if sweepInterrupted() {
+		if sweepInterrupted(app) {
 			return
 		}
 		if cardInClosedList(app, card) {

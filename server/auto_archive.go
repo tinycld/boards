@@ -59,7 +59,7 @@ func sweepAutoArchive(app core.App, now time.Time) {
 			continue
 		}
 		for _, card := range cards {
-			if sweepInterrupted() {
+			if sweepInterrupted(app) {
 				return
 			}
 			card.Set("archived", true)

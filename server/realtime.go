@@ -40,7 +40,7 @@ func registerRealtime(app core.App) *boardRealtime {
 	runtime.SetBootstrap(makeBootstrap(app, state))
 
 	checkpoints := realtime.NewPocketBaseCheckpointStore(app)
-	saveCoordinator := realtime.NewSaveCoordinator(makeFlush(app, state))
+	saveCoordinator := realtime.NewSaveCoordinator(app, makeFlush(app, state))
 	saveCoordinator.SetKind(roomKindBoards)
 
 	realtime.RegisterRoomKindWith(roomKindBoards, realtime.RoomKindOptions{
