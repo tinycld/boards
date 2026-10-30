@@ -271,7 +271,7 @@ func appendRelation(app core.App, req automation.ActionRequest, ref, field, id s
 	// terminates. `labels` is watched by no trigger today, but stamping is
 	// unconditional on purpose: that is a property of the current catalog, and a
 	// later card-labeled trigger would otherwise reopen the loop silently.
-	return automation.MarkEngineWrite(req, card.Id, func() error {
+	return automation.MarkEngineWrite(app, req, card.Id, func() error {
 		return app.SaveWithContext(req.Context(), card)
 	})
 }
@@ -356,7 +356,7 @@ func createCard(app core.App, req automation.ActionRequest) error {
 	// boards:card-created is a trigger, so this create re-enters the engine.
 	// Unstamped it would arrive as an ordinary user create at depth 0 and a
 	// create-on-create rule would never terminate — see appendRelation.
-	return automation.MarkEngineWrite(req, card.Id, func() error {
+	return automation.MarkEngineWrite(app, req, card.Id, func() error {
 		return app.SaveWithContext(req.Context(), card)
 	})
 }
@@ -420,7 +420,7 @@ func setDueDate(app core.App, req automation.ActionRequest) error {
 	// `due` is watched by boards:card-rescheduled (and the stamps by the two
 	// deadline triggers), so this write re-enters the engine — stamp it or a
 	// reschedule-on-reschedule rule never terminates.
-	return automation.MarkEngineWrite(req, card.Id, func() error {
+	return automation.MarkEngineWrite(app, req, card.Id, func() error {
 		return app.SaveWithContext(req.Context(), card)
 	})
 }
@@ -542,7 +542,7 @@ func addToActiveSprint(app core.App, req automation.ActionRequest) error {
 	card.Set("sprint", active.Id)
 	// `sprint` is watched by boards:card-sprint-changed, so this write
 	// re-enters the engine — stamp it or a file-on-file rule never terminates.
-	return automation.MarkEngineWrite(req, card.Id, func() error {
+	return automation.MarkEngineWrite(app, req, card.Id, func() error {
 		return app.SaveWithContext(req.Context(), card)
 	})
 }
