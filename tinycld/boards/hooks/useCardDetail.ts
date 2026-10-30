@@ -65,6 +65,7 @@ export function useCardChildren(cardId: string) {
     )
 
     const { data, isReady } = useLiveQuery({
+        queryKey: ['boards.card-children', cardId],
         query: query => {
             if (!cardId) return null
             const cardWithChildren = cardsCollection.fetchRelations(

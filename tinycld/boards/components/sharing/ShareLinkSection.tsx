@@ -241,17 +241,18 @@ function useMintForm(projectId: string) {
     })
     const change = { shouldValidate: true, shouldDirty: true }
 
-    const create = handleSubmit(data =>
-        createLink.mutate(
-            {
-                role: data.role,
-                expiresInDays: data.expiry,
-                embedDomains: data.embedDomains,
-                embedLive: data.embedLive,
-            },
-            { onError: err => setError('root', { message: err.message }) }
-        )
-    )
+    const create = () =>
+        void handleSubmit(data =>
+            createLink.mutate(
+                {
+                    role: data.role,
+                    expiresInDays: data.expiry,
+                    embedDomains: data.embedDomains,
+                    embedLive: data.embedLive,
+                },
+                { onError: err => setError('root', { message: err.message }) }
+            )
+        )()
 
     return {
         values: watch(),
@@ -599,17 +600,18 @@ function useEmbedEditor(projectId: string, link: ShareLinkRow) {
         setIsEditing(true)
     }
 
-    const save = handleSubmit(data =>
-        updateLink.mutate(
-            { linkId: link.id, ...data },
-            {
-                onSuccess: () => setIsEditing(false),
-                // The server's message names the origin it refused and why, so
-                // it is shown verbatim rather than replaced with a generic one.
-                onError: err => setError('root', { message: err.message }),
-            }
-        )
-    )
+    const save = () =>
+        void handleSubmit(data =>
+            updateLink.mutate(
+                { linkId: link.id, ...data },
+                {
+                    onSuccess: () => setIsEditing(false),
+                    // The server's message names the origin it refused and why, so
+                    // it is shown verbatim rather than replaced with a generic one.
+                    onError: err => setError('root', { message: err.message }),
+                }
+            )
+        )()
 
     return {
         isEditing,

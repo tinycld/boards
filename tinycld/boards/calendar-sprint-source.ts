@@ -74,6 +74,7 @@ export function useEventSource({ start, end }: EventSourceRange): {
     // the sprints request, which past ~200 boards exceeds PocketBase's filter
     // limit. So the board checks (live, sprints on) run in buildSprintItems.
     const { data: rows, isLoading } = useLiveQuery({
+        queryKey: ['boards.calendar.sprints', startDay, endDay],
         query: query =>
             query
                 .from({ sprint: sprintsCollection })

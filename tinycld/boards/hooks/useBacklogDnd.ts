@@ -5,7 +5,7 @@ import type {
     LayoutChangeEvent,
     NativeScrollEvent,
     NativeSyntheticEvent,
-    ScrollView,
+    ScrollViewInstance,
 } from 'react-native'
 import type {
     DraxMonitorDragDropEventData,
@@ -35,7 +35,7 @@ const EDGE_SCROLL_INTERVAL_MS = 250
 
 export interface BacklogDnd {
     board: SortableBoardHandle<BoardCardView>
-    scrollRef: React.RefObject<ScrollView | null>
+    scrollRef: React.RefObject<ScrollViewInstance | null>
     monitorProps: Partial<DraxViewProps>
     /** Sections register their Drax re-measure here (null to remove). */
     registerSectionMeasure: (key: string, measure: (() => void) | null) => void
@@ -67,7 +67,7 @@ export interface BacklogDnd {
  */
 export function useBacklogDnd(backlog: Backlog, canEdit: boolean): BacklogDnd {
     const setCardSprint = useSetCardSprint()
-    const scrollRef = useRef<ScrollView>(null)
+    const scrollRef = useRef<ScrollViewInstance>(null)
 
     const measureFnsRef = useRef(new Map<string, () => void>())
     const isDraggingRef = useRef(false)

@@ -4,7 +4,7 @@ import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { useAvatarUrl } from '@tinycld/core/lib/use-avatar-url'
 import { CalendarDays, Clock, Gauge, Layers, Timer } from 'lucide-react-native'
 import { forwardRef, type ReactNode } from 'react'
-import { Pressable, Text, View } from 'react-native'
+import { Pressable, Text, View, type ViewInstance } from 'react-native'
 import { dueStateFor, formatDueDate } from '../../lib/due-state'
 import { formatSchedule } from '../../lib/due-time'
 import { formatEstimate } from '../../lib/estimate'
@@ -34,48 +34,47 @@ export function PropertyRow({ name, children }: { name: string; children: ReactN
 }
 
 /** The sprint chip, and the SprintPicker's trigger — the EpicValue shape. */
-export const SprintValue = forwardRef<View, { sprint: BoardSprint | null; onPress?: () => void }>(
-    function SprintValue({ sprint, onPress }, ref) {
-        const mutedColor = useThemeColor('muted')
-        if (!sprint) {
-            if (!onPress) return <EmptyValue />
-            return <GhostChip ref={ref} label="Add to sprint" onPress={onPress} />
-        }
+export const SprintValue = forwardRef<
+    ViewInstance,
+    { sprint: BoardSprint | null; onPress?: () => void }
+>(function SprintValue({ sprint, onPress }, ref) {
+    const mutedColor = useThemeColor('muted')
+    if (!sprint) {
+        if (!onPress) return <EmptyValue />
+        return <GhostChip ref={ref} label="Add to sprint" onPress={onPress} />
+    }
 
-        const chipContent = (
-            <>
-                <Timer size={12} color={mutedColor} strokeWidth={2.2} />
-                <Text className="text-[12.5px] font-medium text-foreground">
-                    {sprintLabel(sprint)}
-                </Text>
-            </>
-        )
+    const chipContent = (
+        <>
+            <Timer size={12} color={mutedColor} strokeWidth={2.2} />
+            <Text className="text-[12.5px] font-medium text-foreground">{sprintLabel(sprint)}</Text>
+        </>
+    )
 
-        if (!onPress) {
-            return (
-                <View className="flex-row items-center gap-[5px] rounded-md px-2 py-[3px] bg-foreground/[0.06]">
-                    {chipContent}
-                </View>
-            )
-        }
-
+    if (!onPress) {
         return (
-            <Pressable
-                ref={ref}
-                accessibilityRole="button"
-                accessibilityLabel={`Sprint ${sprintLabel(sprint)}. Change sprint`}
-                testID="boards-detail-sprint"
-                onPress={onPress}
-                className="flex-row items-center gap-[5px] rounded-md px-2 py-[3px] bg-foreground/[0.06] web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
-            >
+            <View className="flex-row items-center gap-[5px] rounded-md px-2 py-[3px] bg-foreground/[0.06]">
                 {chipContent}
-            </Pressable>
+            </View>
         )
     }
-)
+
+    return (
+        <Pressable
+            ref={ref}
+            accessibilityRole="button"
+            accessibilityLabel={`Sprint ${sprintLabel(sprint)}. Change sprint`}
+            testID="boards-detail-sprint"
+            onPress={onPress}
+            className="flex-row items-center gap-[5px] rounded-md px-2 py-[3px] bg-foreground/[0.06] web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+        >
+            {chipContent}
+        </Pressable>
+    )
+})
 
 /** The epic chip, and the EpicPicker's trigger — the SprintValue shape. */
-export const EpicValue = forwardRef<View, { epic: BoardEpic | null; onPress?: () => void }>(
+export const EpicValue = forwardRef<ViewInstance, { epic: BoardEpic | null; onPress?: () => void }>(
     function EpicValue({ epic, onPress }, ref) {
         const mutedColor = useThemeColor('muted')
         if (!epic) {
@@ -112,7 +111,7 @@ export const EpicValue = forwardRef<View, { epic: BoardEpic | null; onPress?: ()
     }
 )
 
-export const EstimateValue = forwardRef<View, { estimate?: number; onPress?: () => void }>(
+export const EstimateValue = forwardRef<ViewInstance, { estimate?: number; onPress?: () => void }>(
     function EstimateValue({ estimate, onPress }, ref) {
         const mutedColor = useThemeColor('muted')
         if (estimate === undefined) {
@@ -155,42 +154,43 @@ export const EstimateValue = forwardRef<View, { estimate?: number; onPress?: () 
  * a Pressable root in every openable state so the picker's trigger has
  * something to clone onPress into, and a plain View when the card is read-only.
  */
-export const PriorityValue = forwardRef<View, { priority: CardPriority; onPress?: () => void }>(
-    function PriorityValue({ priority, onPress }, ref) {
-        if (priority === 'none') {
-            if (!onPress) return <EmptyValue />
-            return <GhostChip ref={ref} label="Set priority" onPress={onPress} />
-        }
+export const PriorityValue = forwardRef<
+    ViewInstance,
+    { priority: CardPriority; onPress?: () => void }
+>(function PriorityValue({ priority, onPress }, ref) {
+    if (priority === 'none') {
+        if (!onPress) return <EmptyValue />
+        return <GhostChip ref={ref} label="Set priority" onPress={onPress} />
+    }
 
-        const label = priorityLabel(priority)
-        const chipContent = (
-            <>
-                <PriorityGlyph priority={priority} size={12} />
-                <Text className="text-[12.5px] font-medium text-foreground">{label}</Text>
-            </>
-        )
+    const label = priorityLabel(priority)
+    const chipContent = (
+        <>
+            <PriorityGlyph priority={priority} size={12} />
+            <Text className="text-[12.5px] font-medium text-foreground">{label}</Text>
+        </>
+    )
 
-        if (!onPress) {
-            return (
-                <View className="flex-row items-center gap-[5px] rounded-md px-2 py-[3px] bg-foreground/[0.06]">
-                    {chipContent}
-                </View>
-            )
-        }
-
+    if (!onPress) {
         return (
-            <Pressable
-                ref={ref}
-                accessibilityRole="button"
-                accessibilityLabel={`Priority ${label}. Change priority`}
-                onPress={onPress}
-                className="flex-row items-center gap-[5px] rounded-md px-2 py-[3px] bg-foreground/[0.06] web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
-            >
+            <View className="flex-row items-center gap-[5px] rounded-md px-2 py-[3px] bg-foreground/[0.06]">
                 {chipContent}
-            </Pressable>
+            </View>
         )
     }
-)
+
+    return (
+        <Pressable
+            ref={ref}
+            accessibilityRole="button"
+            accessibilityLabel={`Priority ${label}. Change priority`}
+            onPress={onPress}
+            className="flex-row items-center gap-[5px] rounded-md px-2 py-[3px] bg-foreground/[0.06] web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring"
+        >
+            {chipContent}
+        </Pressable>
+    )
+})
 
 /** What an empty property shows on a read-only card, in place of a ghost chip. */
 export function EmptyValue() {
@@ -206,7 +206,7 @@ export function EmptyValue() {
  * only true of bootstrap-written rows.
  */
 export const ReporterValue = forwardRef<
-    View,
+    ViewInstance,
     { card: Pick<BoardCardView, 'reporter'>; onPress?: () => void }
 >(function ReporterValue({ card, onPress }, ref) {
     const reporter = card.reporter
@@ -245,7 +245,7 @@ export const ReporterValue = forwardRef<
  * a ref, and a fragment has neither.
  */
 export const AssigneesValue = forwardRef<
-    View,
+    ViewInstance,
     { card: Pick<BoardCardView, 'assignees'>; onPress?: () => void }
 >(function AssigneesValue({ card, onPress }, ref) {
     // No onPress means no picker wrapped this value (read-only card):
@@ -315,7 +315,7 @@ function AssigneeChips({ card }: { card: Pick<BoardCardView, 'assignees'> }) {
 
 /** The label chips, and the LabelPicker's trigger. See AssigneesValue. */
 export const LabelsValue = forwardRef<
-    View,
+    ViewInstance,
     { card: Pick<BoardCardView, 'labels'>; onPress?: () => void }
 >(function LabelsValue({ card, onPress }, ref) {
     if (!onPress) {
@@ -355,7 +355,7 @@ function LabelChips({ card }: { card: Pick<BoardCardView, 'labels'> }) {
 }
 
 /** The start chip — the DueValue shape, always a plain day. */
-export const StartValue = forwardRef<View, { start?: Date; onPress?: () => void }>(
+export const StartValue = forwardRef<ViewInstance, { start?: Date; onPress?: () => void }>(
     function StartValue({ start, onPress }, ref) {
         const mutedColor = useThemeColor('muted')
         if (!start) {
@@ -398,58 +398,59 @@ export const StartValue = forwardRef<View, { start?: Date; onPress?: () => void 
  * Pressable in both states: the picker clones its trigger to inject onPress and
  * a ref, so a plain View here would render a chip that cannot be opened.
  */
-export const DueValue = forwardRef<View, { due?: Date; dueHasTime: boolean; onPress?: () => void }>(
-    function DueValue({ due, dueHasTime, onPress }, ref) {
-        const warningColor = useThemeColor('warning')
-        const dangerColor = useThemeColor('danger')
-        const mutedColor = useThemeColor('muted')
+export const DueValue = forwardRef<
+    ViewInstance,
+    { due?: Date; dueHasTime: boolean; onPress?: () => void }
+>(function DueValue({ due, dueHasTime, onPress }, ref) {
+    const warningColor = useThemeColor('warning')
+    const dangerColor = useThemeColor('danger')
+    const mutedColor = useThemeColor('muted')
 
-        if (!due) {
-            if (!onPress) return <EmptyValue />
-            return <GhostChip ref={ref} label="Set due date" onPress={onPress} />
-        }
+    if (!due) {
+        if (!onPress) return <EmptyValue />
+        return <GhostChip ref={ref} label="Set due date" onPress={onPress} />
+    }
 
-        const state = dueStateFor(due, undefined, dueHasTime)
-        const isOverdue = state === 'overdue'
-        const color = isOverdue ? dangerColor : state === 'soon' ? warningColor : mutedColor
-        const Icon = isOverdue ? Clock : CalendarDays
-        const text = formatSchedule(undefined, due, dueHasTime)
-        const label = isOverdue ? `${text} · overdue` : text
-        const stateClass = isOverdue
-            ? 'bg-danger/10'
-            : state === 'soon'
-              ? 'bg-warning/10'
-              : 'bg-foreground/[0.06]'
-        const chipContent = (
-            <>
-                <Icon size={12} color={color} strokeWidth={2.2} />
-                <Text className="text-[12.5px] font-medium" style={{ color }}>
-                    {label}
-                </Text>
-            </>
-        )
+    const state = dueStateFor(due, undefined, dueHasTime)
+    const isOverdue = state === 'overdue'
+    const color = isOverdue ? dangerColor : state === 'soon' ? warningColor : mutedColor
+    const Icon = isOverdue ? Clock : CalendarDays
+    const text = formatSchedule(undefined, due, dueHasTime)
+    const label = isOverdue ? `${text} · overdue` : text
+    const stateClass = isOverdue
+        ? 'bg-danger/10'
+        : state === 'soon'
+          ? 'bg-warning/10'
+          : 'bg-foreground/[0.06]'
+    const chipContent = (
+        <>
+            <Icon size={12} color={color} strokeWidth={2.2} />
+            <Text className="text-[12.5px] font-medium" style={{ color }}>
+                {label}
+            </Text>
+        </>
+    )
 
-        if (!onPress) {
-            return (
-                <View
-                    accessibilityLabel={`Due ${label}`}
-                    className={`flex-row items-center gap-[5px] rounded-md px-2 py-[3px] ${stateClass}`}
-                >
-                    {chipContent}
-                </View>
-            )
-        }
-
+    if (!onPress) {
         return (
-            <Pressable
-                ref={ref}
-                accessibilityRole="button"
-                accessibilityLabel={`Due ${label}. Change due date`}
-                onPress={onPress}
-                className={`flex-row items-center gap-[5px] rounded-md px-2 py-[3px] web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${stateClass}`}
+            <View
+                accessibilityLabel={`Due ${label}`}
+                className={`flex-row items-center gap-[5px] rounded-md px-2 py-[3px] ${stateClass}`}
             >
                 {chipContent}
-            </Pressable>
+            </View>
         )
     }
-)
+
+    return (
+        <Pressable
+            ref={ref}
+            accessibilityRole="button"
+            accessibilityLabel={`Due ${label}. Change due date`}
+            onPress={onPress}
+            className={`flex-row items-center gap-[5px] rounded-md px-2 py-[3px] web:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring ${stateClass}`}
+        >
+            {chipContent}
+        </Pressable>
+    )
+})

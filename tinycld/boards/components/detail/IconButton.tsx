@@ -1,6 +1,6 @@
 import { Tooltip } from '@tinycld/core/components/Tooltip'
 import { forwardRef, type ReactNode } from 'react'
-import { Pressable, type View } from 'react-native'
+import { Pressable, type ViewInstance } from 'react-native'
 
 interface IconButtonProps {
     label: string
@@ -17,7 +17,7 @@ interface IconButtonProps {
  * Fragment on native, so a surface cloning it would hand the onPress and the
  * measurement ref to the Fragment and the menu would never open.
  */
-export const IconButton = forwardRef<View, IconButtonProps>(function IconButton(
+export const IconButton = forwardRef<ViewInstance, IconButtonProps>(function IconButton(
     { label, onPress, children },
     ref
 ) {

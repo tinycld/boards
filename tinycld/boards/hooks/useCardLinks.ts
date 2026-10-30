@@ -121,6 +121,7 @@ export function useCardLinks(
         'boards_lists'
     )
     const { data: farRows, isReady: farReady } = useLiveQuery({
+        queryKey: ['boards.card-links.far-cards', farIds],
         query: query => {
             if (farIds.length === 0) return null
             return query

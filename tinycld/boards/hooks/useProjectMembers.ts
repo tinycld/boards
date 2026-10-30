@@ -38,6 +38,7 @@ export function useProjectMembers(projectId: string) {
     const [membersCollection, usersCollection] = useStore('boards_project_members', 'users')
 
     const { data: rows, isReady } = useLiveQuery({
+        queryKey: ['boards.project-members', projectId],
         query: query => {
             if (!projectId) return null
             return (

@@ -52,10 +52,11 @@ function DeleteBoardDialogBody({
         pluralize(project.members.length, 'member'),
     ].join(', ')
 
-    const confirm = handleSubmit(() => {
-        if (deleteProject.isPending) return
-        deleteProject.mutate(project.id, { onSuccess: onClose })
-    })
+    const confirm = () =>
+        void handleSubmit(() => {
+            if (deleteProject.isPending) return
+            deleteProject.mutate(project.id, { onSuccess: onClose })
+        })()
 
     return (
         <Dialog

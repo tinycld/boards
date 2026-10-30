@@ -2,7 +2,7 @@ import { Tooltip } from '@tinycld/core/components/Tooltip'
 import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { ListFilter } from 'lucide-react-native'
 import { forwardRef } from 'react'
-import { Pressable, Text, View } from 'react-native'
+import { Pressable, Text, View, type ViewInstance } from 'react-native'
 
 interface FilterButtonProps {
     activeCount: number
@@ -18,7 +18,7 @@ interface FilterButtonProps {
  * forwardRef + optional onPress because it is the filter Popover's trigger,
  * which clones it to inject both.
  */
-export const FilterButton = forwardRef<View, FilterButtonProps>(function FilterButton(
+export const FilterButton = forwardRef<ViewInstance, FilterButtonProps>(function FilterButton(
     { activeCount, onPress },
     ref
 ) {

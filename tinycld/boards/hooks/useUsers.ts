@@ -31,16 +31,18 @@ import { useBoardLiveQuery } from './useBoardLiveQuery'
  */
 export function useUserRows() {
     const [usersCollection] = useStore('users')
-    const { data } = useBoardLiveQuery(query =>
-        query.from({ user: usersCollection }).select(({ user }) => ({
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            avatar: user.avatar,
-            avatar_crop: user.avatar_crop,
-            avatar_color: user.avatar_color,
-            avatar_emoji: user.avatar_emoji,
-        }))
+    const { data } = useBoardLiveQuery(
+        query =>
+            query.from({ user: usersCollection }).select(({ user }) => ({
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                avatar: user.avatar,
+                avatar_crop: user.avatar_crop,
+                avatar_color: user.avatar_color,
+                avatar_emoji: user.avatar_emoji,
+            })),
+        { queryKey: ['boards.users'] }
     )
     return data
 }

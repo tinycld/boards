@@ -6,7 +6,7 @@ import { useThemeColor } from '@tinycld/core/lib/use-app-theme'
 import { PromptDialog } from '@tinycld/core/ui/PromptDialog'
 import { X } from 'lucide-react-native'
 import { type ReactNode, type RefObject, useRef, useState } from 'react'
-import { Platform, Pressable, Text, View, type ViewStyle } from 'react-native'
+import { Platform, Pressable, Text, View, type ViewInstance, type ViewStyle } from 'react-native'
 import type { Awareness } from 'y-protocols/awareness'
 import type * as Y from 'yjs'
 import type { PresenceUser } from '../../hooks/useBoardPresence'
@@ -144,7 +144,7 @@ export function useDescriptionEditor({
     description,
     readView,
 }: DescriptionEditorProps): DescriptionEditorSlots {
-    const containerRef = useRef<View>(null)
+    const containerRef = useRef<ViewInstance>(null)
     const [isImagePickerOpen, setIsImagePickerOpen] = useState(false)
     const [isLinkOpen, setIsLinkOpen] = useState(false)
 
@@ -422,7 +422,7 @@ function DescriptionBody({
     isLinkOpen,
     setIsLinkOpen,
 }: {
-    containerRef: RefObject<View | null>
+    containerRef: RefObject<ViewInstance | null>
     slots: LazyEditorSlots
     commandsRef: RefObject<EditorCommands | null>
     mention: ReturnType<typeof useMentionTrigger>

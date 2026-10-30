@@ -41,11 +41,13 @@ export function useMembershipSync() {
         'boards_attachments'
     )
 
-    const { data: mine, isReady } = useMyLiveQuery((query, { userId }) =>
-        query
-            .from({ member: membersCollection })
-            .where(({ member }) => eq(member.user, userId))
-            .select(({ member }) => ({ project: member.project }))
+    const { data: mine, isReady } = useMyLiveQuery(
+        (query, { userId }) =>
+            query
+                .from({ member: membersCollection })
+                .where(({ member }) => eq(member.user, userId))
+                .select(({ member }) => ({ project: member.project })),
+        { queryKey: ['boards.membership-sync.mine'] }
     )
 
     // Sorted + joined so an order-only difference in query emission is not a

@@ -1,7 +1,7 @@
 import { EmptyState } from '@tinycld/core/components/EmptyState'
 import { useBreakpoint } from '@tinycld/core/components/workspace/useBreakpoint'
 import { useCallback, useMemo, useRef } from 'react'
-import { Animated, ScrollView } from 'react-native'
+import { Animated, ScrollView, type ScrollViewInstance } from 'react-native'
 import { useBoardShortcuts } from '../../hooks/useBoardShortcuts'
 import { useCardNavigation } from '../../hooks/useCardNavigation'
 import { useProjectRole } from '../../hooks/useProjectRole'
@@ -45,7 +45,7 @@ export function BoardTimeline({ project }: { project: BoardProject }) {
     // once, when the scroller mounts, which is the only time it should.
     const { todayCol } = timeline
     const scrollToToday = useCallback(
-        (node: ScrollView | null) => {
+        (node: ScrollViewInstance | null) => {
             if (!node) return
             node.scrollTo({ x: Math.max(0, (todayCol - 2) * metrics.dayWidth), animated: false })
         },

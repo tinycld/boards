@@ -5,7 +5,7 @@ import type {
     LayoutChangeEvent,
     NativeScrollEvent,
     NativeSyntheticEvent,
-    ScrollView,
+    ScrollViewInstance,
 } from 'react-native'
 import type {
     DraxMonitorDragDropEventData,
@@ -35,7 +35,7 @@ const EDGE_SCROLL_INTERVAL_MS = 250
 
 export interface BoardDnd {
     board: SortableBoardHandle<BoardCardView>
-    canvasRef: React.RefObject<ScrollView | null>
+    canvasRef: React.RefObject<ScrollViewInstance | null>
     /** Monitor callbacks for the SortableBoardContainer's DraxView. */
     monitorProps: Partial<DraxViewProps>
     /** Columns register their Drax re-measure function here (null to remove). */
@@ -69,7 +69,7 @@ export interface BoardDnd {
  */
 export function useBoardDnd(project: BoardProject, canEdit: boolean): BoardDnd {
     const moveCard = useMoveCard()
-    const canvasRef = useRef<ScrollView>(null)
+    const canvasRef = useRef<ScrollViewInstance>(null)
 
     const measureFnsRef = useRef(new Map<string, () => void>())
     const isDraggingRef = useRef(false)
