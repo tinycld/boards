@@ -48,12 +48,6 @@ func setupOTPEnv(t *testing.T) *otpEnv {
 	t.Helper()
 	env := &otpEnv{cardsEnv: setupCardsEnv(t)}
 
-	// Every test in this file shares one httptest RemoteAddr, so without a
-	// reset the tenth case starts with nine strikes and fails for reasons that
-	// have nothing to do with what it tests.
-	otpLimiter.Reset()
-	shareLinkLimiter.Reset()
-
 	env.app.OnRecordCreate("_otps").BindFunc(func(e *core.RecordEvent) error {
 		env.mu.Lock()
 		env.lastCode = e.Record.GetString("password")

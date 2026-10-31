@@ -12,6 +12,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/pocketbase/pocketbase/core"
+	"tinycld.org/core/appstate"
 )
 
 // Minting GitHub App installation tokens.
@@ -52,13 +53,21 @@ type installationToken struct {
 }
 
 // tokenCache holds one cached token per installation, in memory only — never
-// persisted, and never logged (see githubInstallationToken).
+// persisted, and never logged (see githubInstallationToken). Each app has its
+// own: the token is minted with that app's GitHub App key, and an
+// installation id can appear in more than one app.
 type tokenCache struct {
 	mu     sync.Mutex
 	tokens map[string]installationToken
 }
 
-var githubTokenCache = &tokenCache{tokens: map[string]installationToken{}}
+var githubTokenCacheKey = appstate.NewKey[*tokenCache]("boards.githubTokens")
+
+func githubTokenCacheFor(app core.App) *tokenCache {
+	return githubTokenCacheKey.GetOrInit(app, func() *tokenCache {
+		return &tokenCache{tokens: map[string]installationToken{}}
+	})
+}
 
 func (c *tokenCache) get(installationID string) (string, bool) {
 	c.mu.Lock()
@@ -83,7 +92,7 @@ func (c *tokenCache) set(installationID, token string, expiresAt time.Time) {
 // Never logs the private key or the minted token — both are bearer
 // credentials for the life of their validity window.
 func githubInstallationToken(app core.App, installationID string) (string, error) {
-	if cached, ok := githubTokenCache.get(installationID); ok {
+	if cached, ok := githubTokenCacheFor(app).get(installationID); ok {
 		return cached, nil
 	}
 
@@ -106,7 +115,7 @@ func githubInstallationToken(app core.App, installationID string) (string, error
 		return "", fmt.Errorf("minting installation token: %w", err)
 	}
 
-	githubTokenCache.set(installationID, token, expiresAt)
+	githubTokenCacheFor(app).set(installationID, token, expiresAt)
 	return token, nil
 }
 

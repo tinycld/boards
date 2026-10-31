@@ -103,7 +103,8 @@ func isProjectOwner(app core.App, projectID, userID string) bool {
 // shareLinkLimiter bounds minting and listing per IP. The public read path is
 // not limited here — it is the collection rules, i.e. ordinary REST, and
 // limiting it would mean limiting every authenticated board read too.
-var shareLinkLimiter = ratelimit.New(60, time.Minute)
+// Per app: two apps must not share a budget.
+var shareLinkLimiter = ratelimit.NewPerApp("boards.share", 60, time.Minute)
 
 // otpLimiter is deliberately far stricter, and the arithmetic is why: an OTP is
 // six digits, a ~10^6 keyspace. At 60/min a single IP gets roughly 900 guesses
@@ -114,7 +115,8 @@ var shareLinkLimiter = ratelimit.New(60, time.Minute)
 // It is one layer, not the defence. Single-use deletion on success and the TTL
 // are what make the code safe; this bounds how fast someone can attack it from
 // one host, and in-memory state does not hold across instances.
-var otpLimiter = ratelimit.New(10, time.Minute)
+// Per app: two apps must not share a budget.
+var otpLimiter = ratelimit.NewPerApp("boards.share.otp", 10, time.Minute)
 
 // maxEmbedDomains bounds how many origins one link may name. A closed bound,
 // like allowedExpiryDays: a board is framed on a handful of pages, and an

@@ -1,8 +1,6 @@
 package boards
 
 import (
-	"sync"
-
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 )
@@ -28,8 +26,6 @@ import (
 // archived card is off the board and neither done nor outstanding. The
 // lifecycle stamps (committed_*, completed_*) are NOT written here — they are
 // the sprint's numbers at a moment, not its numbers now.
-
-var sprintRecountLocks sync.Map // sprintID → *sync.Mutex
 
 func registerSprintRollup(app core.App) {
 	app.OnRecordAfterCreateSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
@@ -60,8 +56,7 @@ func recountSprint(app core.App, sprintID string) {
 		return
 	}
 
-	gate, _ := sprintRecountLocks.LoadOrStore(sprintID, &sync.Mutex{})
-	lock := gate.(*sync.Mutex)
+	lock := idLock(app, sprintRecountLocksKey, sprintID)
 	lock.Lock()
 	defer lock.Unlock()
 

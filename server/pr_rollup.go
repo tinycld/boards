@@ -1,8 +1,6 @@
 package boards
 
 import (
-	"sync"
-
 	"github.com/pocketbase/pocketbase/core"
 )
 
@@ -23,10 +21,9 @@ import (
 // the same value, so they cannot disagree the way Jira's panel and its
 // automation do.
 
-// prRecountLocks serializes recountCardPRs per card. Per CARD rather than one
+// prRecountLocksKey (id_locks.go) serializes recountCardPRs per card. Per CARD rather than one
 // global lock: different cards touch disjoint rows and should still recount
-// concurrently. epic_rollup.go's epicRecountLocks, same reasoning.
-var prRecountLocks sync.Map // cardID → *sync.Mutex
+// concurrently. epic_rollup.go's epicRecountLocksKey, same reasoning.
 
 // registerPRRollup keeps the two derived columns current.
 //
@@ -64,8 +61,7 @@ func recountCardPRs(app core.App, cardID string) {
 		return
 	}
 
-	lockAny, _ := prRecountLocks.LoadOrStore(cardID, &sync.Mutex{})
-	lock := lockAny.(*sync.Mutex)
+	lock := idLock(app, prRecountLocksKey, cardID)
 	lock.Lock()
 	defer lock.Unlock()
 

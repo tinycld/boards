@@ -120,7 +120,7 @@ func resolveLiveLink(app core.App, token string) (*core.Record, *core.Record, in
 // A wrong or dead token is a 404/410 exactly as it is everywhere else, so this
 // is not an oracle for guessing tokens either.
 func handleShareLinkMetadata(app core.App, re *core.RequestEvent) error {
-	if !shareLinkLimiter.AllowOrLog(ratelimit.ClientIP(re.Request), "boards.share.metadata") {
+	if !shareLinkLimiter.For(app).AllowOrLog(ratelimit.ClientIP(re.Request), "boards.share.metadata") {
 		return re.JSON(http.StatusTooManyRequests,
 			shareLinkErrorResponse{Error: "rate limit exceeded"})
 	}
@@ -161,7 +161,7 @@ func handleShareLinkMetadata(app core.App, re *core.RequestEvent) error {
 // nothing: an unverified user with no membership has no access, so
 // request-but-never-verify leaves nothing behind worth having.
 func handleShareOTPRequest(app core.App, re *core.RequestEvent) error {
-	if !otpLimiter.AllowOrLog(ratelimit.ClientIP(re.Request), "boards.share.otp.request") {
+	if !otpLimiter.For(app).AllowOrLog(ratelimit.ClientIP(re.Request), "boards.share.otp.request") {
 		return re.JSON(http.StatusTooManyRequests,
 			shareLinkErrorResponse{Error: "rate limit exceeded"})
 	}
@@ -207,7 +207,7 @@ func handleShareOTPRequest(app core.App, re *core.RequestEvent) error {
 
 // handleShareOTPVerify exchanges a code for a real session and a membership.
 func handleShareOTPVerify(app core.App, re *core.RequestEvent) error {
-	if !otpLimiter.AllowOrLog(ratelimit.ClientIP(re.Request), "boards.share.otp.verify") {
+	if !otpLimiter.For(app).AllowOrLog(ratelimit.ClientIP(re.Request), "boards.share.otp.verify") {
 		return re.JSON(http.StatusTooManyRequests,
 			shareLinkErrorResponse{Error: "rate limit exceeded"})
 	}
