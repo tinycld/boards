@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { appShell, login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import { addCard, boardCard, createBoard, uniqueNumber, uniqueStamp } from './helpers'
+import { addCard, boardCard, createBoard, uniqueSlug, uniqueStamp } from './helpers'
 
 // Card keys — OTTER-123 — end to end: the key is suggested from the board name,
 // numbers are allocated by the server, and a key resolves as a URL.
@@ -26,7 +26,7 @@ test('suggests a key from the board name and lets it be replaced', async ({ page
 
     // Typing over the suggestion takes ownership of the field: editing the
     // name afterwards must leave the key alone.
-    const key = `OTTER${uniqueNumber() % 10000}`
+    const key = uniqueSlug('OTTER')
     await page.getByTestId('slug').fill(key)
     await page.getByPlaceholder('Product launch').fill('Otter Launch Renamed')
     await expect(page.getByTestId('slug')).toHaveValue(key)
@@ -44,7 +44,7 @@ test('numbers cards in creation order and never reuses a number', async ({ page 
     await login(page)
     await navigateToPackage(page, 'boards')
 
-    const key = `SEQ${uniqueNumber() % 100000}`
+    const key = uniqueSlug('SEQ')
     await createBoard(page, boardName('seq'), key)
 
     await addCard(page, 0, 'Card one')
@@ -70,7 +70,7 @@ test('refuses a key another board already uses', async ({ page }) => {
     await login(page)
     await navigateToPackage(page, 'boards')
 
-    const key = `DUP${uniqueNumber() % 100000}`
+    const key = uniqueSlug('DUP')
     await createBoard(page, boardName('dup-first'), key)
 
     await page.getByText('+ New board', { exact: true }).click()
@@ -88,7 +88,7 @@ test('opens a card from its key in the address bar', async ({ page }) => {
     await login(page)
     await navigateToPackage(page, 'boards')
 
-    const key = `URL${uniqueNumber() % 100000}`
+    const key = uniqueSlug('URL')
     await createBoard(page, boardName('url'), key)
     await addCard(page, 0, 'Deep linked card')
     await expect(boardCard(page, 'Deep linked card').getByTestId('boards-card-key')).toHaveText(

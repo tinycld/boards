@@ -11,7 +11,7 @@ import {
     openCard,
     pageUrl,
     peekUrl,
-    uniqueNumber,
+    uniqueSlug,
     uniqueStamp,
 } from './helpers'
 
@@ -68,7 +68,7 @@ for (const spelling of ['canonical', 'old', 'focused'] as const) {
     }) => {
         await login(page)
         await navigateToPackage(page, 'boards')
-        const key = `LINK${uniqueNumber() % 100000}`
+        const key = uniqueSlug('LINK')
         await createBoard(page, `deep-link-${uniqueStamp()}`, key)
         await addCard(page, 0, 'Linked card')
 
@@ -107,7 +107,7 @@ for (const spelling of ['canonical', 'old', 'focused'] as const) {
 test('Back from a sub-task’s page returns to its parent’s page', async ({ page }) => {
     await login(page)
     await navigateToPackage(page, 'boards')
-    const key = `PAGE${uniqueNumber() % 100000}`
+    const key = uniqueSlug('PAGE')
     await createBoard(page, `back-page-${uniqueStamp()}`, key)
     await addCard(page, 0, 'Parent')
     await addSubtask(page, 'Parent', 'Child')
@@ -228,7 +228,7 @@ test('j, goBack, j on the peek steps on from the card Back returned to', async (
 test('Back walks peeks, then the board', async ({ page }) => {
     await login(page)
     await navigateToPackage(page, 'boards')
-    const key = `WALK${uniqueNumber() % 100000}`
+    const key = uniqueSlug('WALK')
     await createBoard(page, `back-walk-${uniqueStamp()}`, key)
     await addCard(page, 0, 'Parent')
     await addSubtask(page, 'Parent', 'Child')
@@ -306,7 +306,7 @@ test('j pushes on the peek and on the page', async ({ page }) => {
 test('a deep-linked page has the board beneath', async ({ page }) => {
     await login(page)
     await navigateToPackage(page, 'boards')
-    const key = `DEEP${uniqueNumber() % 100000}`
+    const key = uniqueSlug('DEEP')
     await createBoard(page, `deep-page-${uniqueStamp()}`, key)
     await addCard(page, 0, 'Alpha')
 
@@ -379,10 +379,10 @@ test('a search hit on another board lands on it, and Back returns to the card', 
     await login(page)
     await navigateToPackage(page, 'boards')
     const target = `Focus target ${uniqueStamp()}`
-    const farKey = `FOCB${uniqueNumber() % 100000}`
+    const farKey = uniqueSlug('FOCB')
     await createBoard(page, `focus-far-${uniqueStamp()}`, farKey)
     await addCard(page, 0, target)
-    const homeKey = `FOCA${uniqueNumber() % 100000}`
+    const homeKey = uniqueSlug('FOCA')
     const home = `focus-home-${uniqueStamp()}`
     await createBoard(page, home, homeKey)
     await addCard(page, 0, 'Alpha')
@@ -423,8 +423,8 @@ test('switching boards from the sidebar, then Back, returns to the card on the f
     await navigateToPackage(page, 'boards')
     const first = `swap-a-${uniqueStamp()}`
     const second = `swap-b-${uniqueStamp()}`
-    const firstKey = `SWAPA${uniqueNumber() % 100000}`
-    const secondKey = `SWAPB${uniqueNumber() % 100000}`
+    const firstKey = uniqueSlug('SWAPA')
+    const secondKey = uniqueSlug('SWAPB')
     await createBoard(page, first, firstKey)
     await addCard(page, 0, 'Alpha')
     await createBoard(page, second, secondKey)
@@ -495,8 +495,8 @@ test('leaving Boards and coming back keeps the open card, its draft and its sock
 test('picking the board on screen in the sidebar adds no history', async ({ page }) => {
     await login(page)
     await navigateToPackage(page, 'boards')
-    const firstKey = `SAMEA${uniqueNumber() % 100000}`
-    const secondKey = `SAMEB${uniqueNumber() % 100000}`
+    const firstKey = uniqueSlug('SAMEA')
+    const secondKey = uniqueSlug('SAMEB')
     const second = `same-b-${uniqueStamp()}`
     await createBoard(page, `same-a-${uniqueStamp()}`, firstKey)
     await createBoard(page, second, secondKey)
@@ -532,7 +532,7 @@ test('a page link on a missing board says the board is missing', async ({ page }
     await login(page)
     await navigateToPackage(page, 'boards')
     // An initial-load deep link is the subject, not in-app navigation.
-    await page.goto(`/a/boards/GONE${uniqueNumber() % 100000}/12`)
+    await page.goto(`/a/boards/${uniqueSlug('GONE')}/12`)
     const notFound = page.getByText('This board doesn’t exist or you don’t have access to it')
     await expect(notFound).toBeVisible()
     // Visible is not enough: an opaque page laid over it still counts as
@@ -573,7 +573,7 @@ async function expectBareBoard(page: Page, key: string) {
 async function boardWithThreeCards(page: Page, name: string): Promise<string> {
     await login(page)
     await navigateToPackage(page, 'boards')
-    const key = `STEP${uniqueNumber() % 100000}`
+    const key = uniqueSlug('STEP')
     await createBoard(page, `${name}-${uniqueStamp()}`, key)
     await addCard(page, 0, 'Alpha')
     await addCard(page, 0, 'Beta')

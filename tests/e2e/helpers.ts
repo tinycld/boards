@@ -62,10 +62,25 @@ export function uniqueStamp(): string {
     return `${Date.now()}-${test.info().workerIndex}`
 }
 
-/** `uniqueStamp` as a number, for names built with arithmetic. The worker
- * index lives in the last two digits, so a modulus keeps it. */
-export function uniqueNumber(): number {
-    return Date.now() * 100 + test.info().workerIndex
+let lastSlugTime = 0
+
+/**
+ * A board key: `prefix` plus the clock and the worker index in base 36, cut to
+ * the ten characters a slug may carry.
+ *
+ * Keys are globally unique and every spec shares one database per run. A
+ * decimal modulus of the clock kept only its last few digits — the millisecond
+ * within the second — so two boards one worker made in the same run collided
+ * one time in a thousand (one in a hundred at `% 10000`) and the dialog refused
+ * the second as a duplicate. Base 36 keeps enough of the clock that a repeat
+ * needs two boards exactly one wrap (ten minutes for a five-letter prefix)
+ * apart, and the counter keeps two calls in the same millisecond apart.
+ */
+export function uniqueSlug(prefix: string): string {
+    lastSlugTime = Math.max(Date.now(), lastSlugTime + 1)
+    const width = 10 - prefix.length
+    const n = (lastSlugTime * 100 + test.info().workerIndex) % 36 ** width
+    return `${prefix}${n.toString(36).toUpperCase()}`
 }
 
 /**

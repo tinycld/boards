@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tests"
 
 	"tinycld.org/core/readonly"
 	"tinycld.org/core/readonly/readonlytest"
@@ -26,14 +27,14 @@ func TestNotification_WaitsForReadOnlyToEnd(t *testing.T) {
 	env := setupNotifyEnv(t)
 	comment := cardsComment(t, env.app, env.project, env.card, env.editor, "hello")
 	reaction := seedReaction(t, env, comment.Id, env.commentor.Id, "👍")
-	readonly.Enter()
-	t.Cleanup(readonly.Leave)
+	readonly.Enter(env.app)
+	t.Cleanup(func() { readonly.Leave(env.app) })
 
 	probe, waiting := readonlytest.WaitProbe(t)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		notifyWhenWritable(probe, "boards reaction notification", reaction.Id, func() {
+		notifyWhenWritable(probe, env.app, "boards reaction notification", reaction.Id, func() {
 			notifyReaction(env.app, reaction)
 		})
 	}()
@@ -46,7 +47,7 @@ func TestNotification_WaitsForReadOnlyToEnd(t *testing.T) {
 	}
 	requireTypes(t, notificationTypes(t, env.app, env.editor.Id))
 
-	readonly.Leave()
+	readonly.Leave(env.app)
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
@@ -60,12 +61,12 @@ func TestNotification_DroppedAndLoggedWhenReadOnlyOutlastsTheWait(t *testing.T) 
 	comment := cardsComment(t, env.app, env.project, env.card, env.editor, "hello")
 	reaction := seedReaction(t, env, comment.Id, env.commentor.Id, "👍")
 	logs := readonlytest.CaptureLogs(t)
-	readonly.Enter()
-	t.Cleanup(readonly.Leave)
+	readonly.Enter(env.app)
+	t.Cleanup(func() { readonly.Leave(env.app) })
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	notifyWhenWritable(ctx, "boards reaction notification", reaction.Id, func() {
+	notifyWhenWritable(ctx, env.app, "boards reaction notification", reaction.Id, func() {
 		notifyReaction(env.app, reaction)
 	})
 
@@ -94,8 +95,8 @@ func TestNotificationHooks_WaitWhileReadOnlyAndDropAtTerminate(t *testing.T) {
 	registerCardNotifications(env.app)
 	registerSprintNotifications(env.app)
 	logs := readonlytest.CaptureLogs(t)
-	readonly.Enter()
-	t.Cleanup(readonly.Leave)
+	readonly.Enter(env.app)
+	t.Cleanup(func() { readonly.Leave(env.app) })
 
 	card := loaded(t, env.app, env.card.Id)
 	card.Set("title", "renamed while read-only")
@@ -137,15 +138,20 @@ func TestNotificationHooks_WaitWhileReadOnlyAndDropAtTerminate(t *testing.T) {
 // not queued: once the mode ends, the next tick runs the sweep once. The fake
 // clock makes "it did not run for three ticks" exact.
 func TestSweepEvery_SkipsTicksWhileReadOnlyAndRunsAfter(t *testing.T) {
-	t.Cleanup(readonly.Leave)
-	readonly.Enter() // outside the bubble: the mode's channel is process-wide
+	app, err := tests.NewTestApp()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(app.Cleanup)
+	readonly.Enter(app) // outside the bubble: the mode's channel is made outside it
+	t.Cleanup(func() { readonly.Leave(app) })
 	synctest.Test(t, func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		var ran atomic.Int32
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
-			sweepEvery(ctx, "probe", time.Minute, func(time.Time) { ran.Add(1) })
+			sweepEvery(ctx, app, "probe", time.Minute, func(time.Time) { ran.Add(1) })
 		}()
 
 		time.Sleep(3*time.Minute + time.Second)
@@ -154,7 +160,7 @@ func TestSweepEvery_SkipsTicksWhileReadOnlyAndRunsAfter(t *testing.T) {
 			t.Fatalf("the sweep ran %d times while read-only", got)
 		}
 
-		readonly.Leave()
+		readonly.Leave(app)
 		time.Sleep(time.Minute)
 		synctest.Wait()
 		if got := ran.Load(); got != 1 {
@@ -171,8 +177,8 @@ func TestDueNotices_WriteNothingWhileReadOnly(t *testing.T) {
 	env := setupDueEnv(t)
 	now := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
 	setDue(t, env.app, env.card.Id, now.AddDate(0, 0, -1), env.editor.Id)
-	readonly.Enter()
-	t.Cleanup(readonly.Leave)
+	readonly.Enter(env.app)
+	t.Cleanup(func() { readonly.Leave(env.app) })
 
 	checkDueNotices(env.app, now)
 	requireTypes(t, notificationTypes(t, env.app, env.editor.Id))
@@ -180,7 +186,7 @@ func TestDueNotices_WriteNothingWhileReadOnly(t *testing.T) {
 		t.Fatal("the overdue stamp was written while read-only")
 	}
 
-	readonly.Leave()
+	readonly.Leave(env.app)
 	checkDueNotices(env.app, now)
 	requireTypes(t, notificationTypes(t, env.app, env.editor.Id), notifyTypeDue)
 }
@@ -189,15 +195,15 @@ func TestAutoArchive_WritesNothingWhileReadOnly(t *testing.T) {
 	now := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
 	env := setupAutoArchive(t, 7)
 	card := agedCard(t, env, env.done, "old done", 8*24*time.Hour, now)
-	readonly.Enter()
-	t.Cleanup(readonly.Leave)
+	readonly.Enter(env.app)
+	t.Cleanup(func() { readonly.Leave(env.app) })
 
 	sweepAutoArchive(env.app, now)
 	if isArchived(t, env.app, card.Id) {
 		t.Fatal("a card was archived while read-only")
 	}
 
-	readonly.Leave()
+	readonly.Leave(env.app)
 	sweepAutoArchive(env.app, now)
 	if !isArchived(t, env.app, card.Id) {
 		t.Fatal("the card was not archived after read-only mode ended")
@@ -213,10 +219,10 @@ func TestAutoArchive_StopsWhenReadOnlyStartsMidSweep(t *testing.T) {
 	day := 24 * time.Hour
 	first := agedCard(t, env, env.done, "old done", 8*day, now)
 	second := agedCard(t, env, env.canceled, "old canceled", 8*day, now)
-	t.Cleanup(readonly.Leave)
+	t.Cleanup(func() { readonly.Leave(env.app) })
 	env.app.OnRecordAfterUpdateSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		if e.Record.GetBool("archived") {
-			readonly.Enter()
+			readonly.Enter(env.app)
 		}
 		return e.Next()
 	})
@@ -232,7 +238,7 @@ func TestAutoArchive_StopsWhenReadOnlyStartsMidSweep(t *testing.T) {
 		t.Fatalf("archived %d cards, want the sweep to stop after the first", archived)
 	}
 
-	readonly.Leave()
+	readonly.Leave(env.app)
 	sweepAutoArchive(env.app, now)
 	if !isArchived(t, env.app, first.Id) || !isArchived(t, env.app, second.Id) {
 		t.Fatal("the next sweep after read-only did not archive the rest")
@@ -242,15 +248,15 @@ func TestAutoArchive_StopsWhenReadOnlyStartsMidSweep(t *testing.T) {
 func TestSprintSweep_WritesNothingWhileReadOnly(t *testing.T) {
 	env := setupSweepEnv(t, true, false, "next")
 	sprint := datedSprint(t, env, "Today", "a0", "2026-09-04 00:00:00.000Z", "2026-09-17 00:00:00.000Z")
-	readonly.Enter()
-	t.Cleanup(readonly.Leave)
+	readonly.Enter(env.app)
+	t.Cleanup(func() { readonly.Leave(env.app) })
 
 	sweepSprints(env.app, env.now)
 	if reloadSprint(t, env.app, sprint.Id).GetString("state") != sprintPlanned {
 		t.Fatal("a sprint was started while read-only")
 	}
 
-	readonly.Leave()
+	readonly.Leave(env.app)
 	sweepSprints(env.app, env.now)
 	if reloadSprint(t, env.app, sprint.Id).GetString("state") != sprintActive {
 		t.Fatal("the sprint was not started after read-only mode ended")

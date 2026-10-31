@@ -1,8 +1,6 @@
 package boards
 
 import (
-	"sync"
-
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 )
@@ -27,10 +25,9 @@ import (
 // is safer — a bulk re-file writes many cards at once — so the lock is here
 // rather than after the bug.
 
-// epicRecountLocks serializes recountEpic per epic. Per EPIC rather than one
+// epicRecountLocksKey (id_locks.go) serializes recountEpic per epic. Per EPIC rather than one
 // global lock: different epics touch disjoint rows and should still recount
 // concurrently. counters.go's recountLocks, same reasoning.
-var epicRecountLocks sync.Map // epicID → *sync.Mutex
 
 // registerEpicRollup keeps points_total / points_done current.
 //
@@ -81,8 +78,7 @@ func recountEpic(app core.App, epicID string) {
 		return
 	}
 
-	gate, _ := epicRecountLocks.LoadOrStore(epicID, &sync.Mutex{})
-	lock := gate.(*sync.Mutex)
+	lock := idLock(app, epicRecountLocksKey, epicID)
 	lock.Lock()
 	defer lock.Unlock()
 

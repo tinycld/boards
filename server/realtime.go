@@ -40,10 +40,10 @@ func registerRealtime(app core.App) *boardRealtime {
 	runtime.SetBootstrap(makeBootstrap(app, state))
 
 	checkpoints := realtime.NewPocketBaseCheckpointStore(app)
-	saveCoordinator := realtime.NewSaveCoordinator(makeFlush(app, state))
+	saveCoordinator := realtime.NewSaveCoordinator(app, makeFlush(app, state))
 	saveCoordinator.SetKind(roomKindBoards)
 
-	realtime.RegisterRoomKindWith(roomKindBoards, realtime.RoomKindOptions{
+	realtime.RegisterRoomKindWith(app, roomKindBoards, realtime.RoomKindOptions{
 		Authorize:              makeAuthorize(app),
 		RuntimeProvider:        runtime,
 		Checkpoints:            checkpoints,
@@ -81,7 +81,7 @@ func registerRealtime(app core.App) *boardRealtime {
 	// A deleted board leaves nothing behind: its parked document is closed
 	// and its checkpoint row removed.
 	app.OnRecordAfterDeleteSuccess("boards_projects").BindFunc(func(e *core.RecordEvent) error {
-		if err := realtime.DropRoom(roomKindBoards, e.Record.Id); err != nil {
+		if err := realtime.DropRoom(app, roomKindBoards, e.Record.Id); err != nil {
 			activityLog.Warn("could not drop the document of a deleted board",
 				"projectID", e.Record.Id, "err", err)
 		}

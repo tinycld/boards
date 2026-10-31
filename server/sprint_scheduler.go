@@ -34,7 +34,7 @@ func sweepSprints(app core.App, now time.Time) {
 	}
 	today := utcDay(now)
 	for _, project := range projects {
-		if sweepInterrupted() {
+		if sweepInterrupted(app) {
 			return
 		}
 		sweepProjectSprints(app, project, now, today)

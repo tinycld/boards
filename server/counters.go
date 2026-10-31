@@ -1,8 +1,6 @@
 package boards
 
 import (
-	"sync"
-
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
@@ -69,8 +67,8 @@ func registerBoardCounters(app *pocketbase.PocketBase) {
 // Per CARD rather than one global lock: recounts for different cards touch
 // disjoint rows and should still run concurrently. The map only ever grows by
 // the number of cards written concurrently, and LoadOrStore keeps that
-// allocation-free on the common uncontended path.
-var recountLocks sync.Map // cardID → *sync.Mutex
+// allocation-free on the common uncontended path. The locks live on the app
+// (idLock): a card id is unique only in its app.
 
 // recountCard recomputes every counter on one card from its children.
 //
@@ -82,8 +80,7 @@ func recountCard(app core.App, cardID string) {
 		return
 	}
 
-	gate, _ := recountLocks.LoadOrStore(cardID, &sync.Mutex{})
-	lock := gate.(*sync.Mutex)
+	lock := idLock(app, recountLocksKey, cardID)
 	lock.Lock()
 	defer lock.Unlock()
 

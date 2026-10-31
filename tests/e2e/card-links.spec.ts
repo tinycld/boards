@@ -9,7 +9,7 @@ import {
     openBoard,
     peekUrl,
     sectionControl,
-    uniqueNumber,
+    uniqueSlug,
     uniqueStamp,
 } from './helpers'
 
@@ -237,11 +237,11 @@ test('files a link to a card on another board, and both ends read it', async ({ 
 test('a link to a card on another board opens it there, and Back returns to the card', async ({
     page,
 }) => {
-    const farKey = `FAR${uniqueNumber() % 100000}`
+    const farKey = uniqueSlug('FAR')
     const far = `links-far-${uniqueStamp()}-${run++}`
     await createBoard(page, far, farKey)
     await addCard(page, 0, 'Far side work')
-    const homeKey = `HOME${uniqueNumber() % 100000}`
+    const homeKey = uniqueSlug('HOME')
     await createBoard(page, `links-home-${uniqueStamp()}-${run++}`, homeKey)
     await addCard(page, 0, BLOCKER)
     await addLink(page, BLOCKER, 'Blocks', 'Far side work', far)

@@ -31,7 +31,7 @@ const embedRoutePrefix = "/p/boards/"
 
 // registerEmbedPolicy teaches core which origins may frame a shared board.
 func registerEmbedPolicy(app core.App) {
-	embedpolicy.Register(func(r *http.Request) []string {
+	embedpolicy.Register(app, func(r *http.Request) []string {
 		token := embedTokenFromRequest(r)
 		if token == "" {
 			return nil

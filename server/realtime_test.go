@@ -20,12 +20,10 @@ import (
 // later test in this package starts clean.
 func authorizeCardsRoom(t *testing.T, env *cardsEnv) realtime.AuthorizeFn {
 	t.Helper()
-	realtime.ResetRegistryForTest()
-	t.Cleanup(realtime.ResetRegistryForTest)
 
 	registerRealtime(env.app)
 
-	opts, ok := realtime.LookupOptionsForTest(roomKindBoards)
+	opts, ok := realtime.LookupOptionsForTest(env.app, roomKindBoards)
 	if !ok {
 		t.Fatalf("registerRealtime did not register room kind %q", roomKindBoards)
 	}
