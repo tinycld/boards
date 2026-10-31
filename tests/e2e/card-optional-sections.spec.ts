@@ -1,14 +1,7 @@
 import type { Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { login, navigateToPackage } from '@tinycld/core/e2e-helpers'
-import {
-    addCard,
-    boardCard,
-    closeCardPeek,
-    createBoard,
-    uniqueNumber,
-    uniqueStamp,
-} from './helpers'
+import { addCard, boardCard, closeCardPeek, createBoard, uniqueSlug, uniqueStamp } from './helpers'
 
 // Attachments, Checklist, Sub-tasks and Links are opt-in: hidden until the card
 // has one, or until the reader asks for one from the chip row.
@@ -165,7 +158,7 @@ test.describe('optional card sections', () => {
     // a chip beside it claiming the card is bare. Navigating in-app cannot
     // reach this — the queries are already warm by the time the peek opens.
     test('a checklist survives a cold load of the card URL', async ({ page }) => {
-        const key = `SEC${uniqueNumber() % 100000}`
+        const key = uniqueSlug('SEC')
         await createBoard(page, `sections-cold-${uniqueStamp()}`, key)
         await addCard(page, 0, CARD)
         await openCard(page, CARD)
@@ -186,7 +179,7 @@ test.describe('optional card sections', () => {
     })
 
     test('a link survives a cold load of the card URL', async ({ page }) => {
-        const key = `SEL${uniqueNumber() % 100000}`
+        const key = uniqueSlug('SEL')
         await createBoard(page, `sections-cold-link-${uniqueStamp()}`, key)
         await addCard(page, 0, CARD)
         await addCard(page, 0, OTHER)
@@ -214,7 +207,7 @@ test.describe('optional card sections', () => {
     // array is filtered by the reader's board filter and is not necessarily
     // delivered on a cold load, so counting it loses the section.
     test('a sub-task survives a cold load of the card URL', async ({ page }) => {
-        const key = `SES${uniqueNumber() % 100000}`
+        const key = uniqueSlug('SES')
         await createBoard(page, `sections-cold-sub-${uniqueStamp()}`, key)
         await addCard(page, 0, CARD)
         await openCard(page, CARD)

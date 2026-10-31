@@ -10,7 +10,7 @@ import {
     openCard,
     pageUrl,
     peekUrl,
-    uniqueNumber,
+    uniqueSlug,
     uniqueStamp,
 } from './helpers'
 
@@ -27,7 +27,7 @@ import {
 let run = 0
 
 async function freshBoard(page: Page, label: string): Promise<string> {
-    const key = `MODE${(uniqueNumber() % 10000) + run}`
+    const key = uniqueSlug('MODE')
     await createBoard(page, `mode-${label}-${uniqueStamp()}-${run++}`, key)
     return key
 }

@@ -7,7 +7,7 @@ import {
     cardsInColumn,
     createBoard,
     sectionControl,
-    uniqueNumber,
+    uniqueSlug,
     uniqueStamp,
 } from './helpers'
 
@@ -24,11 +24,7 @@ let run = 0
 async function freshBoard(page: Page, key: string): Promise<string> {
     run += 1
     const name = `${key.toLowerCase()}-${uniqueStamp()}-${run}`
-    await createBoard(
-        page,
-        name,
-        `${key}${(uniqueNumber() % 100000).toString(36)}`.toUpperCase().slice(0, 10)
-    )
+    await createBoard(page, name, uniqueSlug(key))
     return name
 }
 

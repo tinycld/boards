@@ -11,7 +11,7 @@ import {
     holdRequests,
     openCard,
     pageUrl,
-    uniqueNumber,
+    uniqueSlug,
     uniqueStamp,
 } from './helpers'
 
@@ -27,7 +27,7 @@ import {
 let run = 0
 
 async function freshBoard(page: Parameters<typeof createBoard>[0]): Promise<string> {
-    const key = `SAVE${(uniqueNumber() % 10000) + run}`
+    const key = uniqueSlug('SAVE')
     await createBoard(page, `before-save-${uniqueStamp()}-${run++}`, key)
     return key
 }
