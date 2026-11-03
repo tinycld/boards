@@ -1,9 +1,8 @@
+import { MAX_EMBED_ORIGINS } from '@tinycld/core/lib/embed-origins'
 import { describe, expect, it } from 'vitest'
 import {
     dueTimeSchema,
     embedDomainsSchema,
-    embedOriginProblem,
-    MAX_EMBED_DOMAINS,
     moveToBoardSchemaFor,
     newEpicSchema,
     newLabelSchema,
@@ -91,25 +90,6 @@ describe('repoSchema', () => {
     })
 })
 
-describe('embedOriginProblem', () => {
-    it('accepts an origin, with or without a trailing slash or a port', () => {
-        expect(embedOriginProblem('https://example.com')).toBeNull()
-        expect(embedOriginProblem('https://example.com/')).toBeNull()
-        expect(embedOriginProblem('http://localhost:3000')).toBeNull()
-    })
-
-    it('names each refusal the way the server does', () => {
-        expect(embedOriginProblem('example.com')).toContain('must include a scheme')
-        expect(embedOriginProblem('ftp://example.com')).toContain('must use http or https')
-        expect(embedOriginProblem('https://')).toContain('missing a host')
-        expect(embedOriginProblem('https://example.com/page')).toContain('origin only')
-        expect(embedOriginProblem('https://user@example.com')).toContain('origin only')
-        expect(embedOriginProblem('https://example.com?x=1')).toContain('origin only')
-        expect(embedOriginProblem('https://*.example.com')).toContain('wildcard')
-        expect(embedOriginProblem("https://example.com;'")).toContain('unsupported character')
-    })
-})
-
 describe('embedDomainsSchema', () => {
     it('allows empty, which means not embeddable', () => {
         expect(embedDomainsSchema.safeParse('').success).toBe(true)
@@ -129,11 +109,11 @@ describe('embedDomainsSchema', () => {
 
     it('caps the number of origins', () => {
         const many = Array.from(
-            { length: MAX_EMBED_DOMAINS + 1 },
+            { length: MAX_EMBED_ORIGINS + 1 },
             (_, i) => `https://s${i}.example.com`
         )
         expect(firstMessage(embedDomainsSchema.safeParse(many.join(' ')))).toBe(
-            `At most ${MAX_EMBED_DOMAINS} websites`
+            `At most ${MAX_EMBED_ORIGINS} websites`
         )
     })
 })

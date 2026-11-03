@@ -127,7 +127,7 @@ export interface CreateShareLinkInput {
      * Origins allowed to frame the link, space or newline separated. Left
      * empty the link is not embeddable, which is the default everywhere.
      *
-     * The SERVER (parseEmbedDomains) is the authority: the value ends up in a
+     * The SERVER (core's embedpolicy.ParseOrigins) is the authority: the value ends up in a
      * CSP directive, which has no escaping, so the check must live on the side
      * that cannot be bypassed. The form's embedDomainsSchema mirrors it only
      * so a typo shows before the round trip; a server refusal still reaches

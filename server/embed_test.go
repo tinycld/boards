@@ -3,10 +3,12 @@ package boards
 import (
 	"net/http/httptest"
 	"testing"
+
+	"tinycld.org/core/embedpolicy"
 )
 
 // The domain list ends up verbatim in a `frame-ancestors` directive, and CSP
-// has no escaping — so a value that survives parseEmbedDomains must be safe to
+// has no escaping — so a value that survives embedpolicy.ParseOrigins must be safe to
 // concatenate. These cases are the ones that would not be.
 func TestParseEmbedDomainsRejectsUnsafeOrigins(t *testing.T) {
 	cases := []struct {
@@ -26,8 +28,8 @@ func TestParseEmbedDomainsRejectsUnsafeOrigins(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got, err := parseEmbedDomains(tc.in); err == nil {
-				t.Fatalf("parseEmbedDomains(%q) = %q, want an error", tc.in, got)
+			if got, err := embedpolicy.ParseOrigins(tc.in); err == nil {
+				t.Fatalf("embedpolicy.ParseOrigins(%q) = %q, want an error", tc.in, got)
 			}
 		})
 	}
@@ -38,34 +40,34 @@ func TestParseEmbedDomainsRejectsUnsafeOrigins(t *testing.T) {
 // would fail every ordinary mint.
 func TestParseEmbedDomainsTreatsEmptyAsNotEmbeddable(t *testing.T) {
 	for _, in := range []string{"", "   ", "\n\t"} {
-		got, err := parseEmbedDomains(in)
+		got, err := embedpolicy.ParseOrigins(in)
 		if err != nil {
-			t.Fatalf("parseEmbedDomains(%q) errored: %v", in, err)
+			t.Fatalf("embedpolicy.ParseOrigins(%q) errored: %v", in, err)
 		}
 		if got != "" {
-			t.Errorf("parseEmbedDomains(%q) = %q, want empty", in, got)
+			t.Errorf("embedpolicy.ParseOrigins(%q) = %q, want empty", in, got)
 		}
 	}
 }
 
 func TestParseEmbedDomainsNormalizes(t *testing.T) {
-	got, err := parseEmbedDomains("https://a.example.com\n  http://localhost:3000 https://a.example.com")
+	got, err := embedpolicy.ParseOrigins("https://a.example.com\n  http://localhost:3000 https://a.example.com")
 	if err != nil {
-		t.Fatalf("parseEmbedDomains: %v", err)
+		t.Fatalf("embedpolicy.ParseOrigins: %v", err)
 	}
 	// Deduplicated, whitespace-normalized, order preserved.
 	want := "https://a.example.com http://localhost:3000"
 	if got != want {
-		t.Errorf("parseEmbedDomains = %q, want %q", got, want)
+		t.Errorf("embedpolicy.ParseOrigins = %q, want %q", got, want)
 	}
 }
 
 func TestParseEmbedDomainsCapsTheCount(t *testing.T) {
 	in := ""
-	for i := 0; i <= maxEmbedDomains; i++ {
+	for i := 0; i <= embedpolicy.MaxOrigins; i++ {
 		in += "https://x" + string(rune('a'+i)) + ".example.com "
 	}
-	if _, err := parseEmbedDomains(in); err == nil {
+	if _, err := embedpolicy.ParseOrigins(in); err == nil {
 		t.Fatal("want an error past the cap")
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 
+	"tinycld.org/core/appstate"
 	"tinycld.org/core/realtime"
 	"tinycld.org/core/yjsdoc"
 )
@@ -29,6 +30,10 @@ import (
 //
 // Must match the roomKind string in hooks/useBoardPresence.ts.
 const roomKindBoards = "boards"
+
+// realtimeKey holds the app's board realtime handles for code that runs
+// outside a route, such as a rule's create-card action seeding an open board.
+var realtimeKey = appstate.NewKey[*boardRealtime]("boards.realtime")
 
 // registerRealtime wires /api/realtime/boards/<projectID> and returns
 // the handles the cross-board move endpoint needs to flush a source room and
@@ -88,7 +93,9 @@ func registerRealtime(app core.App) *boardRealtime {
 		return e.Next()
 	})
 
-	return &boardRealtime{state: state, runtime: runtime, flushNow: saveCoordinator.FlushNow}
+	rt := &boardRealtime{state: state, runtime: runtime, flushNow: saveCoordinator.FlushNow}
+	realtimeKey.Set(app, rt)
+	return rt
 }
 
 // makeFingerprint identifies the records a board's document was seeded

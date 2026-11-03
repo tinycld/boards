@@ -28,7 +28,8 @@ const automation = {
             on: 'create',
             fields: [
                 'title',
-                'description',
+                // Already markdown: a create-card description copies it as it is.
+                { key: 'description', label: 'Description', markdown: true },
                 { key: 'list', label: 'List' },
                 { key: 'project', label: 'Board' },
                 'due',
@@ -518,6 +519,10 @@ const automation = {
                 // card's fields. Clipped to the column's max in Go, because a
                 // template can expand far past anything typed here.
                 { key: 'title', type: 'text', label: 'Title' },
+                // Markdown. Templatable, so a form answer or the trigger card
+                // reaches it; the server escapes every value a template puts
+                // in, so an answer reads as text, never as an image or a link.
+                { key: 'description', type: 'text', label: 'Description', markdown: true },
                 {
                     key: 'list',
                     type: 'relation',

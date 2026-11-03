@@ -1,13 +1,17 @@
 package boards
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tools/filesystem"
 	"tinycld.org/core/automation"
+	"tinycld.org/core/markdown"
+	"tinycld.org/core/yjsdoc"
 )
 
 // boards:create-card and boards:set-due-date — the two actions that need Go.
@@ -321,4 +325,138 @@ func projectNextNumber(t *testing.T, app core.App, projectID string) int {
 		t.Fatalf("read next_number: %v", err)
 	}
 	return n
+}
+
+func TestCreateCard_StoresAClippedDescription(t *testing.T) {
+	env := setupCardsAutomation(t)
+	long := strings.Repeat("y", descriptionRuneLimit+50)
+	req := automation.ActionRequest{
+		OwnerID: env.owner.Id,
+		Params:  map[string]string{"title": "With text", "list": env.todo.Id, "description": long},
+	}
+	if err := createCard(env.app, req); err != nil {
+		t.Fatalf("create card: %v", err)
+	}
+	made := cardsInList(t, env.app, env.todo.Id, "With text")
+	if n := len([]rune(made.GetString("description"))); n == 0 || n > descriptionRuneLimit {
+		t.Fatalf("description has %d runes, want 1..%d", n, descriptionRuneLimit)
+	}
+}
+
+func TestCreateCard_SeedsTheDescriptionIntoAnOpenBoard(t *testing.T) {
+	env := setupCardsAutomation(t)
+	state := newBoardDocState()
+	runtime := yjsdoc.NewRuntime()
+	runtime.SetBootstrap(makeBootstrap(env.app, state))
+	openRoom(t, runtime, env.project.Id)
+	realtimeKey.Set(env.app, &boardRealtime{state: state, runtime: runtime})
+
+	req := automation.ActionRequest{
+		OwnerID: env.owner.Id,
+		Params:  map[string]string{"title": "Live", "list": env.todo.Id, "description": "From the form."},
+	}
+	if err := createCard(env.app, req); err != nil {
+		t.Fatalf("create card: %v", err)
+	}
+	made := cardsInList(t, env.app, env.todo.Id, "Live")
+	var pm markdown.PMNode
+	if err := json.Unmarshal(readNamedFragment(t, runtime.HandleFor(env.project.Id), cardFragment(made.Id)), &pm); err != nil {
+		t.Fatal(err)
+	}
+	if got := markdown.FromPM(&pm); got != "From the form.\n" {
+		t.Errorf("open room fragment = %q, want the description", got)
+	}
+}
+
+// A fictional trigger collection with a files provider, as a web form host
+// registers one, so the test names no web form.
+func filesTrigger(t *testing.T, env *cardsAutomationEnv, names ...string) *core.Record {
+	t.Helper()
+	// Only this provider is dropped afterwards: a registry reset would also
+	// drop what the boards package registered.
+	t.Cleanup(func() { automation.RegisterFilesProvider("gizmos_items", nil) })
+	col := core.NewBaseCollection("gizmos_items")
+	col.Fields.Add(&core.TextField{Name: "label"})
+	if err := env.app.Save(col); err != nil {
+		t.Fatal(err)
+	}
+	files := core.NewBaseCollection("gizmos_files")
+	files.Fields.Add(&core.TextField{Name: "item"}, &core.TextField{Name: "name"},
+		&core.NumberField{Name: "size"}, &core.FileField{Name: "file", MaxSelect: 1, MaxSize: 1 << 20})
+	if err := env.app.Save(files); err != nil {
+		t.Fatal(err)
+	}
+	item := core.NewRecord(col)
+	if err := env.app.Save(item); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range names {
+		f := core.NewRecord(files)
+		blob, _ := filesystem.NewFileFromBytes([]byte("content of "+n), n)
+		f.Set("item", item.Id)
+		f.Set("name", n)
+		f.Set("size", len("content of "+n))
+		f.Set("file", blob)
+		if err := env.app.Save(f); err != nil {
+			t.Fatal(err)
+		}
+	}
+	automation.RegisterFilesProvider("gizmos_items", func(app core.App, r *core.Record) ([]automation.TriggerFile, error) {
+		rows, err := app.FindRecordsByFilter("gizmos_files", "item = {:id}", "", 0, 0, map[string]any{"id": r.Id})
+		if err != nil {
+			return nil, err
+		}
+		out := []automation.TriggerFile{}
+		for _, row := range rows {
+			out = append(out, automation.TriggerFile{Field: "doc", Name: row.GetString("name"), Size: int64(row.GetInt("size")), Record: row, FileField: "file"})
+		}
+		return out, nil
+	})
+	return item
+}
+
+func TestCreateCard_CopiesTheTriggersFiles(t *testing.T) {
+	env := setupCardsAutomation(t)
+	item := filesTrigger(t, env, "cv.pdf", "letter.txt")
+	req := automation.ActionRequest{OwnerID: env.owner.Id, Record: item,
+		Params: map[string]string{"title": "Applicant", "list": env.todo.Id}}
+	if err := createCard(env.app, req); err != nil {
+		t.Fatalf("create card: %v", err)
+	}
+	made := cardsInList(t, env.app, env.todo.Id, "Applicant")
+	rows, _ := env.app.FindRecordsByFilter("boards_attachments", "card = {:c}", "name", 0, 0, map[string]any{"c": made.Id})
+	if len(rows) != 2 || rows[0].GetString("name") != "cv.pdf" {
+		t.Fatalf("want the two files on the card, got %d", len(rows))
+	}
+	for _, r := range rows {
+		if r.GetString("uploaded_by") != env.owner.Id || r.GetString("project") != env.project.Id || r.GetString("field") != "" {
+			t.Fatalf("attachment owner/board/field wrong: %v", r.FieldsData())
+		}
+	}
+}
+
+func TestCreateCard_NoCardWhenAFileCannotBeCopied(t *testing.T) {
+	env := setupCardsAutomation(t)
+	item := filesTrigger(t, env, "gone.pdf")
+	fsys, err := env.app.NewFilesystem()
+	if err != nil {
+		t.Fatal(err)
+	}
+	row, err := env.app.FindFirstRecordByData("gizmos_files", "name", "gone.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := fsys.Delete(row.BaseFilesPath() + "/" + row.GetString("file")); err != nil {
+		t.Fatal(err)
+	}
+	fsys.Close()
+
+	req := automation.ActionRequest{OwnerID: env.owner.Id, Record: item,
+		Params: map[string]string{"title": "Half made", "list": env.todo.Id}}
+	if err := createCard(env.app, req); err == nil {
+		t.Fatal("a file that cannot be read fails the action")
+	}
+	if n, _ := env.app.CountRecords("boards_cards", dbx.HashExp{"title": "Half made"}); n != 0 {
+		t.Fatal("no card without its files: retry must make exactly one")
+	}
 }
