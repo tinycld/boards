@@ -6,7 +6,14 @@ import {
     publishForm,
     visitAnonymously,
 } from '@tinycld/core/e2e-helpers'
-import { boardCard, cardSurface, createBoard, openBoardNamed, openCard, uniqueStamp } from './helpers'
+import {
+    boardCard,
+    cardSurface,
+    createBoard,
+    openBoardNamed,
+    openCard,
+    uniqueStamp,
+} from './helpers'
 
 /**
  * The contact-form case end to end: a web form's destination makes a card
