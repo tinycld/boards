@@ -355,11 +355,29 @@ func createCard(app core.App, req automation.ActionRequest) error {
 	// write, and history reads created_by.
 	card.Set("created_by", req.OwnerID)
 
+	// Read before the save, so a file that cannot be read makes no card.
+	attachments, err := triggerAttachments(app, req, card)
+	if err != nil {
+		return err
+	}
+
 	// boards:card-created is a trigger, so this create re-enters the engine.
 	// Unstamped it would arrive as an ordinary user create at depth 0 and a
 	// create-on-create rule would never terminate — see appendRelation.
 	err = automation.MarkEngineWrite(app, req, card.Id, func() error {
-		return app.SaveWithContext(req.Context(), card)
+		// One transaction: a failed copy would otherwise leave a card without
+		// the files it was made for, and a retry would then make a second.
+		return app.RunInTransaction(func(tx core.App) error {
+			if err := tx.SaveWithContext(req.Context(), card); err != nil {
+				return err
+			}
+			for _, a := range attachments {
+				if err := tx.SaveWithContext(req.Context(), a); err != nil {
+					return fmt.Errorf("attach %s: %w", a.GetString("name"), err)
+				}
+			}
+			return nil
+		})
 	})
 	if err != nil {
 		return err
@@ -368,6 +386,40 @@ func createCard(app core.App, req automation.ActionRequest) error {
 		seedCardInOpenRoom(app, realtimeKey.Get(app), card.GetString("project"), card)
 	}
 	return nil
+}
+
+// triggerAttachments builds one card attachment for each file of the record
+// that started the rule (a web form submission's uploads), unsaved.
+func triggerAttachments(app core.App, req automation.ActionRequest, card *core.Record) ([]*core.Record, error) {
+	files, err := automation.TriggerFiles(app, req.Record)
+	if err != nil {
+		return nil, fmt.Errorf("boards:create-card: list the trigger's files: %w", err)
+	}
+	if len(files) == 0 {
+		return nil, nil
+	}
+	col, err := app.FindCollectionByNameOrId("boards_attachments")
+	if err != nil {
+		return nil, fmt.Errorf("boards_attachments: %w", err)
+	}
+	out := make([]*core.Record, 0, len(files))
+	for _, f := range files {
+		blob, err := automation.ReadTriggerFile(app, f)
+		if err != nil {
+			return nil, fmt.Errorf("boards:create-card: read %s: %w", f.Name, err)
+		}
+		a := core.NewRecord(col)
+		a.Set("card", card.Id)
+		a.Set("project", card.GetString("project"))
+		a.Set("file", blob)
+		a.Set("size", f.Size)
+		a.Set("name", f.Name)
+		// The rule's owner, as the card's author is: the visitor who sent the
+		// form has no user.
+		a.Set("uploaded_by", req.OwnerID)
+		out = append(out, a)
+	}
+	return out, nil
 }
 
 // setDueDate moves the trigger card's deadline by a number of days.
