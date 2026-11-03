@@ -1,6 +1,7 @@
 package boards
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -8,6 +9,8 @@ import (
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 	"tinycld.org/core/automation"
+	"tinycld.org/core/markdown"
+	"tinycld.org/core/yjsdoc"
 )
 
 // boards:create-card and boards:set-due-date — the two actions that need Go.
@@ -321,4 +324,45 @@ func projectNextNumber(t *testing.T, app core.App, projectID string) int {
 		t.Fatalf("read next_number: %v", err)
 	}
 	return n
+}
+
+func TestCreateCard_StoresAClippedDescription(t *testing.T) {
+	env := setupCardsAutomation(t)
+	long := strings.Repeat("y", descriptionRuneLimit+50)
+	req := automation.ActionRequest{
+		OwnerID: env.owner.Id,
+		Params:  map[string]string{"title": "With text", "list": env.todo.Id, "description": long},
+	}
+	if err := createCard(env.app, req); err != nil {
+		t.Fatalf("create card: %v", err)
+	}
+	made := cardsInList(t, env.app, env.todo.Id, "With text")
+	if n := len([]rune(made.GetString("description"))); n == 0 || n > descriptionRuneLimit {
+		t.Fatalf("description has %d runes, want 1..%d", n, descriptionRuneLimit)
+	}
+}
+
+func TestCreateCard_SeedsTheDescriptionIntoAnOpenBoard(t *testing.T) {
+	env := setupCardsAutomation(t)
+	state := newBoardDocState()
+	runtime := yjsdoc.NewRuntime()
+	runtime.SetBootstrap(makeBootstrap(env.app, state))
+	openRoom(t, runtime, env.project.Id)
+	realtimeKey.Set(env.app, &boardRealtime{state: state, runtime: runtime})
+
+	req := automation.ActionRequest{
+		OwnerID: env.owner.Id,
+		Params:  map[string]string{"title": "Live", "list": env.todo.Id, "description": "From the form."},
+	}
+	if err := createCard(env.app, req); err != nil {
+		t.Fatalf("create card: %v", err)
+	}
+	made := cardsInList(t, env.app, env.todo.Id, "Live")
+	var pm markdown.PMNode
+	if err := json.Unmarshal(readNamedFragment(t, runtime.HandleFor(env.project.Id), cardFragment(made.Id)), &pm); err != nil {
+		t.Fatal(err)
+	}
+	if got := markdown.FromPM(&pm); got != "From the form.\n" {
+		t.Errorf("open room fragment = %q, want the description", got)
+	}
 }

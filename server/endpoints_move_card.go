@@ -518,13 +518,22 @@ func handoffDescription(app core.App, rt *boardRealtime, source, target string, 
 			rt.state.setBaseline(source, seed.fragment, normalizedText(seed.format, seed.text))
 		}
 	}
-	if rt.runtime == nil || len(seeds) == 0 {
+	seedCardInOpenRoom(app, rt, target, card)
+}
+
+// seedCardInOpenRoom puts a card's text into its board's open document: the
+// room was seeded before the card existed there (a move, or a card a rule
+// made), so without this the editor shows it empty and the first keystroke
+// replaces the stored text. A closed room needs nothing; bootstrap seeds it.
+func seedCardInOpenRoom(app core.App, rt *boardRealtime, projectID string, card *core.Record) {
+	if rt == nil || rt.runtime == nil {
 		return
 	}
-	handle := rt.runtime.HandleFor(target)
+	handle := rt.runtime.HandleFor(projectID)
 	if handle == nil {
 		return
 	}
+	seeds := cardSeeds(card, newFormCache(app))
 	seeded := false
 	for _, seed := range seeds {
 		pm := fragmentPM(seed.format, seed.text)
@@ -536,21 +545,21 @@ func handoffDescription(app core.App, rt *boardRealtime, source, target string, 
 			return yjsdoc.SeedFragmentFromPMJSON(doc, seed.fragment, pmJSON)
 		})
 		if err != nil {
-			activityLog.Warn("move: could not seed the target fragment", "card", card.Id, "fragment", seed.fragment, "error", err)
+			activityLog.Warn("could not seed a card's fragment into its open board", "card", card.Id, "fragment", seed.fragment, "error", err)
 			continue
 		}
 		seeded = true
 		if rt.state != nil {
-			rt.state.setBaseline(target, seed.fragment, fragmentText(seed.format, pm))
+			rt.state.setBaseline(projectID, seed.fragment, fragmentText(seed.format, pm))
 		}
 	}
 	if !seeded {
 		return
 	}
-	if room := rt.runtime.RoomFor(target); room != nil {
+	if room := rt.runtime.RoomFor(projectID); room != nil {
 		if update, err := handle.EncodeStateAsUpdate(); err == nil {
 			if err := room.PublishDocUpdate(update); err != nil {
-				activityLog.Warn("move: could not publish the seeded fragments", "card", card.Id, "error", err)
+				activityLog.Warn("could not publish a card's seeded fragments", "card", card.Id, "error", err)
 			}
 		}
 	}

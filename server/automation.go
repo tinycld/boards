@@ -325,6 +325,7 @@ func createCard(app core.App, req automation.ActionRequest) error {
 	// column's max it would return max+1 runes and the save would fail
 	// validation, which is the outcome truncating exists to avoid.
 	title = truncateRunes(title, cardTitleRuneLimit-1)
+	description := truncateRunes(strings.TrimSpace(req.Params["description"]), descriptionRuneLimit-1)
 
 	list, err := app.FindRecordById("boards_lists", listID)
 	if err != nil {
@@ -347,6 +348,7 @@ func createCard(app core.App, req automation.ActionRequest) error {
 	card.Set("project", list.GetString("project"))
 	card.Set("list", listID)
 	card.Set("title", title)
+	card.Set("description", description)
 	card.Set("position", position)
 	// The rule's owner is the author. Attributing to the person whose edit
 	// happened to trip the rule would credit them with a card they did not
@@ -356,9 +358,16 @@ func createCard(app core.App, req automation.ActionRequest) error {
 	// boards:card-created is a trigger, so this create re-enters the engine.
 	// Unstamped it would arrive as an ordinary user create at depth 0 and a
 	// create-on-create rule would never terminate — see appendRelation.
-	return automation.MarkEngineWrite(app, req, card.Id, func() error {
+	err = automation.MarkEngineWrite(app, req, card.Id, func() error {
 		return app.SaveWithContext(req.Context(), card)
 	})
+	if err != nil {
+		return err
+	}
+	if description != "" {
+		seedCardInOpenRoom(app, realtimeKey.Get(app), card.GetString("project"), card)
+	}
+	return nil
 }
 
 // setDueDate moves the trigger card's deadline by a number of days.
