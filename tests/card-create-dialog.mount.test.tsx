@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react'
 import { OverlayProvider } from '@tinycld/core/ui/overlay'
 import type { ReactNode } from 'react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -159,16 +159,18 @@ function wrapper({ children }: { children: ReactNode }) {
     )
 }
 
-/** Core's select input is a list of option buttons: press the one with this label. */
+/** Core's select input is a dropdown: open it, then press the option with this label. */
 async function pickSelect(container: HTMLElement, key: string, label: string) {
     const input = await waitFor(() => {
         const found = q(container, `form-input-${key}`)
         if (!found) throw new Error(`no input for ${key}`)
         return found
     })
-    const option = [...input.querySelectorAll('rn-pressable')].find(el => el.textContent === label)
-    if (!option) throw new Error(`no option "${label}" in ${key}`)
-    fireEvent.click(option)
+    const trigger = input.querySelector('[accessibilityLabel]') as HTMLElement | null
+    if (!trigger) throw new Error(`no dropdown trigger for ${key}`)
+    fireEvent.click(trigger)
+    // The menu renders in an overlay, outside the field.
+    fireEvent.click(await within(document.body).findByText(label))
 }
 
 function addChecklistItem(container: HTMLElement, text: string) {
