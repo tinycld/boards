@@ -28,7 +28,8 @@ const automation = {
             on: 'create',
             fields: [
                 'title',
-                'description',
+                // Already markdown: a create-card description copies it as it is.
+                { key: 'description', label: 'Description', markdown: true },
                 { key: 'list', label: 'List' },
                 { key: 'project', label: 'Board' },
                 'due',

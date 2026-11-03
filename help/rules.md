@@ -81,9 +81,11 @@ whoever is already there. **Add a label to the card** does the same for labels.
 can quote the card that started the rule — `Follow up: {{title}}` — and the
 list may be on a different board, as long as you can add cards to that board
 yourself. **Description** is the new card's description; it can quote the
-trigger too. Text a placeholder puts in shows exactly as written, so an answer
-from a web form cannot add a link or an image. When the rule starts from a web
-form, the files the visitor sent are attached to the new card.
+trigger too. Text a placeholder puts in shows as written, so an answer from a
+web form cannot add an image or formatting. A web address in an answer stays
+plain text until someone edits the description; after that it can show as a
+link. When the rule starts from a web form, the files the visitor sent are
+attached to the new card.
 
 **Move the due date** shifts the card's deadline by a number of days: `7` for a
 week later, `-1` for a day earlier. A card with no due date gets one counted
