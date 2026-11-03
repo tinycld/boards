@@ -1,3 +1,4 @@
+import { embedOriginsSchema } from '@tinycld/core/lib/embed-origins'
 import { z } from '@tinycld/core/ui/form'
 import { parseTimeText } from './due-time'
 
@@ -77,50 +78,8 @@ export const repoSchema = z.object({
         .regex(/^[a-zA-Z0-9._-]+$/, 'Only letters, numbers, dots, hyphens, underscores'),
 })
 
-/** The server's cap on origins per link (sharelink.go, maxEmbedDomains). */
-export const MAX_EMBED_DOMAINS = 10
-
-/**
- * Why one origin cannot frame a board, or null when it can.
- *
- * Mirrors the server's parseEmbedOrigin so a person sees the problem while
- * typing. The server still checks, because the value ends up in a CSP header
- * and this form is not the only way to send it.
- */
-export function embedOriginProblem(raw: string): string | null {
-    const schemeEnd = raw.indexOf('://')
-    if (schemeEnd === -1) return `"${raw}" must include a scheme, e.g. https://${raw}`
-    const scheme = raw.slice(0, schemeEnd).toLowerCase()
-    if (scheme !== 'http' && scheme !== 'https') return `"${raw}" must use http or https`
-    const host = raw.slice(schemeEnd + 3).replace(/\/$/, '')
-    if (host === '') return `"${raw}" is missing a host`
-    if (/[/?#@]/.test(host)) return `"${raw}" must be an origin only, with no path or credentials`
-    if (host.includes('*')) return `"${raw}" may not use a wildcard`
-    if (/[;,'"]/.test(host)) return `"${raw}" contains an unsupported character`
-    return null
-}
-
-/** A space or newline separated list of origins; empty means not embeddable. */
-export const embedDomainsSchema = z
-    .string()
-    .max(2000, 'At most 2000 characters')
-    .superRefine((raw, ctx) => {
-        const origins = raw.split(/\s+/).filter(Boolean)
-        if (origins.length > MAX_EMBED_DOMAINS) {
-            ctx.addIssue({
-                code: 'custom',
-                message: `At most ${MAX_EMBED_DOMAINS} websites`,
-            })
-            return
-        }
-        for (const origin of origins) {
-            const problem = embedOriginProblem(origin)
-            if (problem) {
-                ctx.addIssue({ code: 'custom', message: problem })
-                return
-            }
-        }
-    })
+/** A space or newline separated list of origins; empty means the board is not embeddable. */
+export const embedDomainsSchema = embedOriginsSchema
 
 export const embedPolicySchema = z.object({
     embedDomains: embedDomainsSchema,

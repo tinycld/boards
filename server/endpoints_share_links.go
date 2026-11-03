@@ -6,6 +6,7 @@ import (
 
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
+	"tinycld.org/core/embedpolicy"
 	"tinycld.org/core/ratelimit"
 )
 
@@ -30,7 +31,7 @@ type createShareLinkRequest struct {
 	// clock-skew dependent and forgeable into the far future.
 	ExpiresInDays int `json:"expires_in_days"`
 	// EmbedDomains is a space-separated list of origins allowed to frame this
-	// link (see parseEmbedDomains). Empty — the default — means the link is
+	// link (see embedpolicy.ParseOrigins). Empty — the default — means the link is
 	// not embeddable at all.
 	EmbedDomains string `json:"embed_domains"`
 	// EmbedLive opts an embed into realtime. Off by default: a framed board
@@ -118,7 +119,7 @@ func handleCreateShareLink(app core.App, re *core.RequestEvent) error {
 	// written into a header: CSP has no escaping, so a malformed origin cannot
 	// be made safe downstream, and this is the only place the error can reach
 	// the person who typed it.
-	embedDomains, err := parseEmbedDomains(body.EmbedDomains)
+	embedDomains, err := embedpolicy.ParseOrigins(body.EmbedDomains)
 	if err != nil {
 		return re.BadRequestError(err.Error(), nil)
 	}
@@ -226,7 +227,7 @@ func handleUpdateShareLink(app core.App, re *core.RequestEvent) error {
 	}
 	// Validated before the record is loaded, matching mint: the same parser,
 	// so an origin that is refused at mint is refused here in the same words.
-	embedDomains, err := parseEmbedDomains(body.EmbedDomains)
+	embedDomains, err := embedpolicy.ParseOrigins(body.EmbedDomains)
 	if err != nil {
 		return re.BadRequestError(err.Error(), nil)
 	}
