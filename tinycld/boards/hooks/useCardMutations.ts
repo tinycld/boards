@@ -129,6 +129,12 @@ export function useCreateCard(projectId: string) {
 
     return useMutation<string, Error, CreateCardInput>({
         mutationKey: ['boards', 'card', 'create'],
+        // One create of a board at a time, in the order they were asked for.
+        // The server numbers a card when its create arrives (card_number.go),
+        // so two creates in flight together could be numbered out of order.
+        // The cost: a card typed while the one before it still saves shows
+        // only when that save returns.
+        scope: { id: `boards.card.create.${projectId}` },
         mutationFn: mutation(function* (input: CreateCardInput) {
             const cardId = newRecordId()
 
