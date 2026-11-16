@@ -880,19 +880,26 @@ export async function pickCardType(page: Page, name: string) {
     await expect(pill).toHaveAttribute('aria-selected', 'true')
 }
 
-/** A choice field's options, in a form cell. */
-function choiceInput(scope: Page | Locator, key: string): Locator {
-    return scope.getByTestId(`form-input-${key}`)
+/**
+ * A choice field's dropdown trigger, in a form cell. A select field is a
+ * dropdown: the trigger is labelled "<field>: <chosen option>" and shows the
+ * chosen option's label; the options are in a menu that opens from it.
+ */
+function choiceTrigger(scope: Page | Locator, key: string): Locator {
+    return scope.getByTestId(`form-input-${key}`).locator('[aria-label*=": "]')
 }
 
 /** Choose the option labelled `label` on a choice field. */
 export async function pickOption(scope: Page | Locator, key: string, label: string) {
-    await choiceInput(scope, key).getByText(label, { exact: true }).click()
+    const trigger = choiceTrigger(scope, key)
+    await trigger.click()
+    // The menu is drawn in an overlay, outside the cell and the dialog.
+    await trigger.page().getByRole('menuitem', { name: label, exact: true }).click()
 }
 
-/** The option a choice field has checked; its text is the option's label. */
+/** The option a choice field has chosen; its text is the option's label. */
 export function selectedOption(scope: Page | Locator, key: string): Locator {
-    return choiceInput(scope, key).locator('[aria-checked="true"]')
+    return choiceTrigger(scope, key)
 }
 
 /** Change the open card's type from its actions menu. */
