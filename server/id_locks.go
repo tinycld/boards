@@ -12,10 +12,8 @@ import (
 // app: a row id is unique only in its app, and the map — which grows by one
 // entry per row ever recounted — is freed with the app.
 var (
-	recountLocksKey       = appstate.NewKey[*sync.Map]("boards.recountLocks")
-	prRecountLocksKey     = appstate.NewKey[*sync.Map]("boards.prRecountLocks")
-	epicRecountLocksKey   = appstate.NewKey[*sync.Map]("boards.epicRecountLocks")
-	sprintRecountLocksKey = appstate.NewKey[*sync.Map]("boards.sprintRecountLocks")
+	recountLocksKey   = appstate.NewKey[*sync.Map]("boards.recountLocks")
+	prRecountLocksKey = appstate.NewKey[*sync.Map]("boards.prRecountLocks")
 )
 
 // idLock returns app's mutex for id in the map that key names.

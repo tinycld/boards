@@ -10,9 +10,10 @@ import (
 //
 // epic_rollup.go's shape — bound on boards_cards, two recounts on an update
 // (the sprint a card left and the one it joined, which also catches an
-// estimate edit or a move into a done list), a per-sprint lock from the first
-// commit, counters.go's recompute-never-delta and never-fail-the-write — with
-// one difference in the arithmetic.
+// estimate edit or a move into a done list), every recount in a transaction
+// and one recount for each transaction (rollup_recount.go), counters.go's
+// recompute-never-delta and never-fail-the-write — with one difference in the
+// arithmetic.
 //
 // POINTS ARE RAW: no 1-point floor for an unestimated card. A sprint carries
 // a COUNT beside its points, and the header shows points only when the board
@@ -28,18 +29,15 @@ import (
 // the sprint's numbers at a moment, not its numbers now.
 
 func registerSprintRollup(app core.App) {
-	app.OnRecordAfterCreateSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
-		recountSprint(e.App, e.Record.GetString("sprint"))
-		return e.Next()
+	app.OnRecordCreate("boards_cards").BindFunc(func(e *core.RecordEvent) error {
+		return recountAfterWrite(e, "sprint", recountSprint, e.Record.GetString("sprint"))
 	})
-	app.OnRecordAfterUpdateSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
-		recountSprint(e.App, e.Record.Original().GetString("sprint"))
-		recountSprint(e.App, e.Record.GetString("sprint"))
-		return e.Next()
+	app.OnRecordUpdate("boards_cards").BindFunc(func(e *core.RecordEvent) error {
+		return recountAfterWrite(e, "sprint", recountSprint,
+			e.Record.Original().GetString("sprint"), e.Record.GetString("sprint"))
 	})
-	app.OnRecordAfterDeleteSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
-		recountSprint(e.App, e.Record.GetString("sprint"))
-		return e.Next()
+	app.OnRecordDelete("boards_cards").BindFunc(func(e *core.RecordEvent) error {
+		return recountAfterWrite(e, "sprint", recountSprint, e.Record.GetString("sprint"))
 	})
 }
 
@@ -55,11 +53,10 @@ func recountSprint(app core.App, sprintID string) {
 	if sprintID == "" {
 		return
 	}
+	recountInTx(app, func(tx core.App) { recountSprintIn(tx, sprintID) })
+}
 
-	lock := idLock(app, sprintRecountLocksKey, sprintID)
-	lock.Lock()
-	defer lock.Unlock()
-
+func recountSprintIn(app core.App, sprintID string) {
 	sprint, err := app.FindRecordById("boards_sprints", sprintID)
 	if err != nil {
 		return

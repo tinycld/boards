@@ -23,7 +23,7 @@ import (
 
 // prRecountLocksKey (id_locks.go) serializes recountCardPRs per card. Per CARD rather than one
 // global lock: different cards touch disjoint rows and should still recount
-// concurrently. epic_rollup.go's epicRecountLocksKey, same reasoning.
+// concurrently. counters.go's recountLocks, same reasoning.
 
 // registerPRRollup keeps the two derived columns current.
 //
