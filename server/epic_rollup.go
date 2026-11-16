@@ -17,19 +17,20 @@ import (
 // that hides when its total is zero, while this is a ratio that must mean
 // something on every board — see lib/estimate.ts and 1980000017.
 //
-// A PER-EPIC LOCK, from the first commit. The recount is a read-modify-write
+// SERIALIZED, from the first commit. The recount is a read-modify-write
 // (find, sum, save) exactly as counters.go's is, and counters.go shipped
-// without one: parallel child writes both summed before either row was
+// without a guard: parallel child writes both summed before either row was
 // visible, and the second Save clobbered the first with a stale total. The
 // duplicate-card path made that reachable in production. Nothing about epics
-// is safer — a bulk re-file writes many cards at once — so the lock is here
-// rather than after the bug.
-
-// epicRecountLocksKey (id_locks.go) serializes recountEpic per epic. Per EPIC rather than one
-// global lock: different epics touch disjoint rows and should still recount
-// concurrently. counters.go's recountLocks, same reasoning.
+// is safer — a bulk re-file writes many cards at once — so every recount runs
+// in a transaction (rollup_recount.go), and the database's one write
+// connection lets no other recount in between its sum and its save.
 
 // registerEpicRollup keeps points_total / points_done current.
+//
+// Model hooks, not after-success hooks: a card write inside a transaction
+// recounts its epic one time before that transaction commits
+// (recountAfterWrite), however many cards of the epic it wrote.
 //
 // The re-file case is why the update hook recounts TWO epics: a card moving
 // between epics changes both the one it left and the one it joined, and the
@@ -43,11 +44,10 @@ import (
 // Bound on boards_cards only. An epic's own row carries the counters but never
 // contributes to them, so writing an epic cannot change any total.
 func registerEpicRollup(app core.App) {
-	app.OnRecordAfterCreateSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
-		recountEpic(e.App, e.Record.GetString("epic"))
-		return e.Next()
+	app.OnRecordCreate("boards_cards").BindFunc(func(e *core.RecordEvent) error {
+		return recountAfterWrite(e, "epic", recountEpic, e.Record.GetString("epic"))
 	})
-	app.OnRecordAfterUpdateSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordUpdate("boards_cards").BindFunc(func(e *core.RecordEvent) error {
 		// Both epics: the one this card left, and the one it joined. When the
 		// epic did not change these are the same id and the second call exits
 		// at the unchanged check.
@@ -55,13 +55,11 @@ func registerEpicRollup(app core.App) {
 		// This also covers the two OTHER ways a total moves without the epic
 		// changing at all — an estimate edited, or a card moved into a done
 		// list — because both are updates to a card that names the epic.
-		recountEpic(e.App, e.Record.Original().GetString("epic"))
-		recountEpic(e.App, e.Record.GetString("epic"))
-		return e.Next()
+		return recountAfterWrite(e, "epic", recountEpic,
+			e.Record.Original().GetString("epic"), e.Record.GetString("epic"))
 	})
-	app.OnRecordAfterDeleteSuccess("boards_cards").BindFunc(func(e *core.RecordEvent) error {
-		recountEpic(e.App, e.Record.GetString("epic"))
-		return e.Next()
+	app.OnRecordDelete("boards_cards").BindFunc(func(e *core.RecordEvent) error {
+		return recountAfterWrite(e, "epic", recountEpic, e.Record.GetString("epic"))
 	})
 }
 
@@ -77,11 +75,10 @@ func recountEpic(app core.App, epicID string) {
 	if epicID == "" {
 		return
 	}
+	recountInTx(app, func(tx core.App) { recountEpicIn(tx, epicID) })
+}
 
-	lock := idLock(app, epicRecountLocksKey, epicID)
-	lock.Lock()
-	defer lock.Unlock()
-
+func recountEpicIn(app core.App, epicID string) {
 	epic, err := app.FindRecordById("boards_epics", epicID)
 	if err != nil {
 		return

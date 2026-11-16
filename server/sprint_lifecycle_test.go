@@ -7,6 +7,7 @@ import (
 
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tools/hook"
 )
 
 // The two transitions, driven as the endpoints and the sweep drive them.
@@ -188,6 +189,40 @@ func TestCompleteSprint_RollsUnfinishedToTheNextSprint(t *testing.T) {
 	// Opening point at start, closing point at completion.
 	if n := snapshotCount(t, env.app, sprint.Id); n != 2 {
 		t.Fatalf("snapshots = %d, want 2", n)
+	}
+}
+
+// The rollover writes its cards in one transaction, and both sprints are
+// recounted inside it: the counters commit with the cards. The first hook that
+// runs after the commit already reads the final numbers of both sprints.
+func TestCompleteSprint_CountersCommitWithTheRolledCards(t *testing.T) {
+	env := setupLifecycleEnv(t)
+	sprint, _, _, _ := seedActive(t, env)
+	next := cardsSprint(t, env.app, env.project, "Sprint two", "a1")
+
+	var seen []int
+	env.app.OnRecordAfterUpdateSuccess("boards_cards").Bind(&hook.Handler[*core.RecordEvent]{
+		// Ahead of every hook of the package, so nothing after the commit
+		// has recounted yet.
+		Priority: -1000,
+		Func: func(e *core.RecordEvent) error {
+			if seen == nil {
+				seen = []int{
+					reloadSprint(t, e.App, sprint.Id).GetInt("card_total"),
+					reloadSprint(t, e.App, next.Id).GetInt("card_total"),
+				}
+			}
+			return e.Next()
+		},
+	})
+
+	_, err := completeSprint(env.app, sprint, env.now, env.owner.Id,
+		sprintRollover{Target: rolloverNext, SprintID: next.Id})
+	if err != nil {
+		t.Fatalf("complete: %v", err)
+	}
+	if len(seen) != 2 || seen[0] != 1 || seen[1] != 2 {
+		t.Fatalf("card totals at the commit = %v, want [1 2] (completed sprint, next sprint)", seen)
 	}
 }
 
