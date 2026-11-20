@@ -125,8 +125,11 @@ export async function holdRequests(
     return release
 }
 
-/** A card's create request — what `holdRequests` holds to keep a card unsaved. */
-export const CARD_CREATE = '**/api/collections/boards_cards/records'
+/**
+ * A card's create request — what `holdRequests` holds to keep a card unsaved.
+ * A card and its checklist are created in one batch request (useCreateCard).
+ */
+export const CARD_CREATE = '**/api/batch'
 
 /** A card's update request. */
 export const CARD_UPDATE = '**/api/collections/boards_cards/records/*'

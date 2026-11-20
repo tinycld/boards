@@ -66,6 +66,35 @@ test('numbers cards in creation order and never reuses a number', async ({ page 
     )
 })
 
+// The server numbers a card when its create arrives, so two creates that are in
+// flight together are numbered in arrival order, not in the order they were
+// typed. Holding the first create back makes that order certain: without the
+// one-at-a-time scope on the create mutation, the second card takes number 1.
+test('numbers cards in the order they were typed when the first save is slow', async ({ page }) => {
+    await login(page)
+    await navigateToPackage(page, 'boards')
+
+    const key = uniqueSlug('ORD')
+    await createBoard(page, boardName('ord'), key)
+
+    await page.route('**/api/**', async route => {
+        const request = route.request()
+        const createsFirstCard =
+            request.method() === 'POST' && (request.postData() ?? '').includes('Typed first')
+        if (createsFirstCard) await new Promise(resolve => setTimeout(resolve, 1500))
+        await route.continue()
+    })
+
+    await addCard(page, 0, 'Typed first')
+    await addCard(page, 0, 'Typed second')
+    await expect(boardCard(page, 'Typed first').getByTestId('boards-card-key')).toHaveText(
+        `${key}-1`
+    )
+    await expect(boardCard(page, 'Typed second').getByTestId('boards-card-key')).toHaveText(
+        `${key}-2`
+    )
+})
+
 test('refuses a key another board already uses', async ({ page }) => {
     await login(page)
     await navigateToPackage(page, 'boards')
