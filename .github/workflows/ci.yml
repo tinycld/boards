@@ -170,11 +170,19 @@ jobs:
         run: go test -timeout 25m ./...
 
   e2e:
-    name: E2E
+    name: E2E (shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
     # Without an explicit cap a hung job rides GitHub's 6-hour default,
     # blocking the PR and burning a runner the whole time.
     timeout-minutes: 30
+    # The Playwright run is most of this job's time, and one runner took more
+    # than 12 minutes for it. Each shard builds its own bundle and seeds its own
+    # database, so the shards share nothing. fail-fast off so one red shard
+    # does not hide the result of the others.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -261,7 +269,7 @@ jobs:
           # The bundle was built by the action above; reuse it (the webServer
           # still seeds + promotes + serves, just doesn't export a second time).
           TINYCLD_E2E_SKIP_EXPORT: '1'
-        run: pnpm exec tinycld-pkg test:e2e
+        run: pnpm exec tinycld-pkg test:e2e -- --shard=${{ matrix.shard }}/4
       # Capture Playwright's per-failure artifacts (trace, screenshot, video,
       # error-context.md) so a CI failure can be diagnosed without a re-run.
       # `if: failure()` skips the upload on green runs to save bandwidth.
@@ -269,7 +277,7 @@ jobs:
         if: failure() && steps.specs.outputs.found == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-artifacts
+          name: playwright-artifacts-shard-${{ matrix.shard }}
           path: |
             ws/${{ env.PACKAGE }}/test-results/
             ws/${{ env.PACKAGE }}/playwright-report/
