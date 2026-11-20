@@ -53,15 +53,28 @@ func registerActorCapture(app core.App) {
 func captureActor(e *core.RecordRequestEvent) error {
 	// Users only: a superuser token is an admin session, not a member, and
 	// attributing a card move to it would name nobody the board knows.
-	if e.Auth != nil && e.Auth.Collection().Name == "users" {
-		pendingActors.Store(e.Record, e.Auth.Id)
+	if e.Auth == nil || e.Auth.Collection().Name != "users" {
+		return e.Next()
 	}
-	// The after-success hooks run INSIDE e.Next() (Save fires them before
-	// returning, absent an enclosing transaction), so every reader — the
-	// history hook, the notification hook — sees the entry, and it is gone
-	// the moment the request is done whether the write succeeded or not.
+	rec := e.Record
+	pendingActors.Store(rec, e.Auth.Id)
 	err := e.Next()
-	pendingActors.Delete(e.Record)
+
+	// Outside a transaction the after-success hooks ran inside e.Next(), so
+	// every reader — the history hook, the notification hook — has seen the
+	// entry. Inside one (a batch request) they run at commit, after this
+	// returns, so the entry must stay until then. OnComplete callbacks run in
+	// the order they were registered, and the save registered its
+	// after-success hooks first. It also runs on a rollback, so the entry
+	// never outlives the request.
+	if txInfo := e.App.TxInfo(); err == nil && txInfo != nil {
+		txInfo.OnComplete(func(error) error {
+			pendingActors.Delete(rec)
+			return nil
+		})
+		return nil
+	}
+	pendingActors.Delete(rec)
 	return err
 }
 
