@@ -135,6 +135,45 @@ func TestCardsNumbers_CreateHookAssignsANumber(t *testing.T) {
 	}
 }
 
+// The batch API saves its records inside one transaction, and that is the path
+// a card create from the app takes. The allocator must read and move the
+// counter through the transaction, or the second card of a transaction would
+// read the counter the first one has not committed yet.
+func TestCardsNumbers_CardsOfOneTransactionGetNumbersInOrder(t *testing.T) {
+	env := setupCardsEnv(t)
+	bindNumbers(t, env)
+
+	col := mustCollection(t, env.app, "boards_cards")
+	inTx := make([]*core.Record, 0, 2)
+	err := env.app.RunInTransaction(func(txApp core.App) error {
+		for i, title := range []string{"first", "second"} {
+			r := core.NewRecord(col)
+			r.Set("project", env.project.Id)
+			r.Set("list", env.list.Id)
+			r.Set("title", title)
+			r.Set("position", []string{"a0", "a1"}[i])
+			r.Set("created_by", env.owner.Id)
+			if err := txApp.Save(r); err != nil {
+				return err
+			}
+			inTx = append(inTx, r)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("transaction: %v", err)
+	}
+	if inTx[0].GetInt("number") != 1 || inTx[1].GetInt("number") != 2 {
+		t.Fatalf("numbers in the transaction = %d, %d; want 1, 2",
+			inTx[0].GetInt("number"), inTx[1].GetInt("number"))
+	}
+
+	after := newNumberedCard(t, env, "after", "a2")
+	if got := after.GetInt("number"); got != 3 {
+		t.Fatalf("number after the transaction = %d, want 3", got)
+	}
+}
+
 // A number in the request body is overwritten, not honored. No rule pins this
 // field (it is a scalar, not a relation), so the hook is the entire protection
 // — the same exposure counters_test.go documents for comment_count.

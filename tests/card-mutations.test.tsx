@@ -90,6 +90,12 @@ vi.mock('@tinycld/core/lib/pocketbase', async () => {
     }
 })
 
+vi.mock('pbtsdb', async importOriginal => {
+    const actual = await importOriginal<typeof import('pbtsdb')>()
+    const { localStagedBatch } = await import('./local-staged-batch')
+    return { ...actual, stagedBatch: localStagedBatch }
+})
+
 import {
     useCreateCard,
     useDuplicateCard,

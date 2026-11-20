@@ -1,7 +1,7 @@
 import { useAuth } from '@tinycld/core/lib/auth'
 import { toDateString } from '@tinycld/core/lib/dates'
 import { parseFormRows } from '@tinycld/core/lib/forms/use-forms-of-host'
-import { mutation, useMutation } from '@tinycld/core/lib/mutations'
+import { mutation, useMutation, useStagedMutation } from '@tinycld/core/lib/mutations'
 import { useStore } from '@tinycld/core/lib/pocketbase'
 import { newRecordId } from 'pbtsdb/core'
 import { CARD_HOST_KEY } from '../forms/hosts'
@@ -127,18 +127,19 @@ export function useCreateCard(projectId: string) {
     const { user } = useAuth({ throwIfAnon: false })
     const [cardsCollection, itemsCollection] = useStore('boards_cards', 'boards_checklist_items')
 
-    return useMutation<string, Error, CreateCardInput>({
+    return useStagedMutation<string, Error, CreateCardInput>({
         mutationKey: ['boards', 'card', 'create'],
-        // One create of a board at a time, in the order they were asked for.
-        // The server numbers a card when its create arrives (card_number.go),
-        // so two creates in flight together could be numbered out of order.
-        // The cost: a card typed while the one before it still saves shows
-        // only when that save returns.
+        // The creates of a board reach the server one at a time, in the order
+        // they were asked for. The server numbers a card when its create
+        // arrives (card_number.go), so two creates in flight together could
+        // be numbered out of order. Staged, so a card typed while the one
+        // before it still saves is on the board at once; only its request
+        // waits. The card and its checklist are one request, all or none.
         scope: { id: `boards.card.create.${projectId}` },
-        mutationFn: mutation(function* (input: CreateCardInput) {
+        stage: (input: CreateCardInput) => {
             const cardId = newRecordId()
 
-            yield cardsCollection.insert({
+            cardsCollection.insert({
                 id: cardId,
                 project: projectId,
                 list: input.listId,
@@ -192,7 +193,7 @@ export function useCreateCard(projectId: string) {
             for (const item of input.checklist ?? []) {
                 const position = rankBetween(previous, null)
                 previous = position
-                yield itemsCollection.insert({
+                itemsCollection.insert({
                     id: newRecordId(),
                     card: cardId,
                     project: projectId,
@@ -203,7 +204,7 @@ export function useCreateCard(projectId: string) {
             }
 
             return cardId
-        }),
+        },
     })
 }
 
