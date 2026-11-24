@@ -91,7 +91,7 @@ const manifest = {
     // an issue" item is gated off entirely — boards was the only member missing
     // it, so the affordance simply did not exist here.
     repository: { url: 'https://github.com/tinycld/boards' },
-    peerVersions: { '@tinycld/core': '>=0.11.0 <0.12.0' },
+    peerVersions: { '@tinycld/core': '>=0.12.0 <0.13.0' },
 }
 
 export default manifest
