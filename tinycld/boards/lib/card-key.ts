@@ -7,6 +7,8 @@
  * by hand (there is no captured-vector fixture as there is for rank.ts).
  */
 
+import { deriveCode } from '@tinycld/core/lib/short-code'
+
 /**
  * Longest slug a board may carry.
  *
@@ -78,27 +80,14 @@ export function parseCardKey(input: string): ParsedCardKey | null {
  *
  * A SUGGESTION, not a derivation: the field it fills is editable, and someone
  * naming a board "Q3 Platform Engineering" is expected to shorten it to
- * something they would actually type. So this optimizes for "recognizable at a
- * glance", not for uniqueness — the unique index owns uniqueness, and a
+ * something they would actually type. The unique index owns uniqueness, and a
  * collision surfaces on the field rather than being silently disambiguated here.
  *
- * Multi-word names take each word's INITIALS (Product Launch -> PL), which is
- * how people abbreviate a project out loud; a single word takes its first
- * letters (Roadmap -> ROADMAP). Diacritics fold first so "Café" yields CAFE
- * rather than CAF.
- *
- * May return '' — for a name with no alphanumerics at all, or one that yields
- * fewer than MIN_SLUG_LENGTH characters. The dialog then leaves the field empty
- * rather than offering a one-character key, and the board can be created
- * without one.
+ * The rule (each word's initials, or a single word itself) is core's short code
+ * (`@tinycld/core/lib/short-code`), which other packages share. It may return
+ * '' (fewer than MIN_SLUG_LENGTH characters); the dialog then leaves the field
+ * empty and the board can be created without a key.
  */
 export function deriveSlug(name: string): string {
-    const folded = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    const words = folded.split(/[^A-Za-z0-9]+/).filter(Boolean)
-    if (words.length === 0) return ''
-
-    const raw = words.length > 1 ? words.map(word => word[0]).join('') : (words[0] ?? '')
-
-    const slug = raw.toUpperCase().slice(0, MAX_SLUG_LENGTH)
-    return slug.length >= MIN_SLUG_LENGTH ? slug : ''
+    return deriveCode(name, { max: MAX_SLUG_LENGTH })
 }
